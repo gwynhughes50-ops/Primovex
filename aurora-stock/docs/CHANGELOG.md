@@ -52,3 +52,14 @@
 - Converted navigation to use icon keys instead of direct icon component references.
 - Added Icon Lab preview inside Theme Lab.
 - Added icon system documentation and ADR-009.
+
+## Sprint 22 - Identity & Access Platform
+
+- Added capability-based permission engine.
+- Added role templates and capability catalogue.
+- Added `can()` and `canAny()` helpers to AuthContext.
+- Added permission-aware desktop and mobile navigation.
+- Added AccessDenied and PermissionGate components.
+- Added MedTrak Connect Firestore rules using capability checks.
+- Added audit event foundation.
+- Added Identity & Access documentation and ADR-010.

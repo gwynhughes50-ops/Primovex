@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { getCapabilitiesForProfile, hasCapability, hasAnyCapability } from "@/core/identity/capabilities";
 
 const AuthContext = createContext(null);
 
@@ -68,6 +69,9 @@ export function AuthProvider({ children }) {
   }, []);
 
   const role = profile?.role || null;
+  const capabilities = getCapabilitiesForProfile(profile);
+  const can = (required) => hasCapability(capabilities, required);
+  const canAny = (required = []) => hasAnyCapability(capabilities, required);
   const displayName =
     profile?.displayName ||
     user?.displayName ||
@@ -75,20 +79,23 @@ export function AuthProvider({ children }) {
     user?.email ||
     "";
 
-  const isAdmin = role === "System Admin";
+  const isAdmin = role === "System Admin" || can("admin.access");
 
   const value = useMemo(
     () => ({
       user,
       profile,
       role,
+      capabilities,
+      can,
+      canAny,
       displayName,
       isAdmin,
       loading: loading || profileLoading,
       error,
       signOut: () => fbSignOut(auth),
     }),
-    [user, profile, role, displayName, isAdmin, loading, profileLoading, error]
+    [user, profile, role, capabilities, displayName, isAdmin, loading, profileLoading, error]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

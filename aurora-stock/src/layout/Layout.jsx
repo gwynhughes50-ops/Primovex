@@ -16,12 +16,12 @@ export default function Layout() {
   const navigate = useNavigate();
 
   // ✅ From AuthContext
-  const { user, displayName, role, isAdmin, loading } = useAuth();
+  const { user, displayName, role, isAdmin, capabilities, loading } = useAuth();
 
   // ✅ Unread count (safe if not signed in)
   const { unreadCount } = useNotifications(user?.uid);
 
-  const navItems = getDesktopNavigation({ isAdmin });
+  const navItems = getDesktopNavigation({ isAdmin, capabilities });
  
   async function handleSignOut() {
     try {

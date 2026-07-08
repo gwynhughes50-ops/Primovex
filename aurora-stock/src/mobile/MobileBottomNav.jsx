@@ -1,11 +1,15 @@
-import { mobileNavigation } from "@/config/navigation";
+import { getMobileNavigation } from "@/config/navigation";
 import { resolveIcon } from "@/config/medtrakIcons";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function MobileBottomNav({ activeKey = "home", onNavigate, onScanClick }) {
+  const { capabilities } = useAuth();
+  const navItems = getMobileNavigation({ capabilities });
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-800 bg-slate-950/95 px-3 pb-3 pt-2 text-slate-100 backdrop-blur">
       <div className="mx-auto flex max-w-md items-end justify-around">
-        {mobileNavigation.map((item) => {
+        {navItems.map((item) => {
           const Icon = resolveIcon(item.icon, "helpCircle");
           const isActive = activeKey === item.key;
 

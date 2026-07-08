@@ -53,6 +53,8 @@ import AddUser from "./admin/AddUser";
 // ✅ Firestore activity feed
 import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { CAPABILITY_CATALOG, ROLE_TEMPLATES } from "@/core/identity/capabilities";
+import { useAuth } from "@/contexts/AuthContext";
 
 // --------------------------
 // ✅ Route Guard (Admin only)
@@ -72,36 +74,21 @@ function RequireAdmin({ isAdmin, loading, children }) {
 // --------------------------
 // Helpers / Defaults
 // --------------------------
-const defaultRoles = [
-  {
-    id: "role-user",
-    name: "User",
-    description: "Standard access for stock tasks.",
-    permissions: ["stock:read", "stock:write"],
-    protected: true,
-  },
-  {
-    id: "role-readonly",
-    name: "ReadOnly",
-    description: "View-only access.",
-    permissions: ["stock:read"],
-    protected: true,
-  },
-  {
-    id: "role-admin",
-    name: "System Admin",
-    description: "Full access including admin tools.",
-    permissions: ["*"],
-    protected: true,
-  },
-];
+const defaultRoles = Object.entries(ROLE_TEMPLATES).map(([name, permissions]) => ({
+  id: `role-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+  name,
+  description:
+    name === "System Admin"
+      ? "Full platform access including identity, permissions and admin tools."
+      : name === "Practice Manager"
+        ? "Operational management access across MedTrak+ modules."
+        : `${name} capability template.`,
+  permissions,
+  protected: ["System Admin", "User", "ReadOnly"].includes(name),
+}));
 
-// ✅ Human-friendly permission labels (values stay the same)
-const PERMISSIONS = [
-  { id: "stock:read", label: "View stock" },
-  { id: "stock:write", label: "Edit stock" },
-  { id: "admin:read", label: "Access admin tools" },
-];
+// Capability catalogue drives Role Builder and keeps permissions consistent.
+const PERMISSIONS = CAPABILITY_CATALOG;
 
 function slugifyRole(name) {
   return String(name || "")
@@ -210,9 +197,7 @@ function prettyPermissions(perms = []) {
 }
 
 export default function AdminDashboard() {
-  // NOTE: Scaffold admin
-  const isAdmin = true;
-  const authLoading = false;
+  const { isAdmin, loading: authLoading, can } = useAuth();
 
   const { totalItems, lowStockItems, loading: stockLoading } = useStockSummary();
 
@@ -320,7 +305,7 @@ export default function AdminDashboard() {
   const [newRole, setNewRole] = useState({
     name: "",
     description: "",
-    permissions: ["stock:read"],
+    permissions: ["inventory.read"],
   });
 
   // Role assignment modal
@@ -513,7 +498,7 @@ export default function AdminDashboard() {
       },
     ]);
 
-    setNewRole({ name: "", description: "", permissions: ["stock:read"] });
+    setNewRole({ name: "", description: "", permissions: ["inventory.read"] });
     setIsAddRoleOpen(false);
   };
 
@@ -1488,7 +1473,7 @@ export default function AdminDashboard() {
                 variant="outline"
                 className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
                 onClick={() => {
-                  setNewRole({ name: "", description: "", permissions: ["stock:read"] });
+                  setNewRole({ name: "", description: "", permissions: ["inventory.read"] });
                   setIsAddRoleOpen(false);
                 }}
               >

@@ -16,6 +16,8 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import useConnectedDevices from "@/hooks/useConnectedDevices";
+import { useAuth } from "@/contexts/AuthContext";
+import AccessDenied from "@/components/security/AccessDenied";
 import { buildDeviceHistory, getDeviceStatus } from "@/services/connectService";
 
 function ConnectBadge({ device }) {
@@ -185,7 +187,14 @@ function DeviceDetail({ device }) {
 }
 
 export default function Connect() {
+  const { can } = useAuth();
+  const canViewConnect = can("connect.view");
+  const canManageDevices = can("connect.manageDevices");
   const { devices, loading, error, intelligence } = useConnectedDevices();
+
+  if (!canViewConnect) {
+    return <AccessDenied title="MedTrak Connect access restricted" message="You do not currently have permission to view connected devices. Ask a System Admin or Practice Manager to grant the connect.view capability." />;
+  }
   const [selectedId, setSelectedId] = useState(devices[0]?.id);
   const selectedDevice = devices.find((d) => d.id === selectedId) || devices[0];
 
@@ -201,9 +210,11 @@ export default function Connect() {
             Live device monitoring for cold-chain, rooms and future smart practice hardware. This sprint uses simulated readings so the workflow is ready before physical sensors are selected.
           </p>
         </div>
-        <Button className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 px-5 font-semibold text-slate-950 shadow-lg shadow-emerald-500/30">
-          <Router className="mr-2 h-4 w-4" /> Add Device
-        </Button>
+        {canManageDevices && (
+          <Button className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 px-5 font-semibold text-slate-950 shadow-lg shadow-emerald-500/30">
+            <Router className="mr-2 h-4 w-4" /> Add Device
+          </Button>
+        )}
       </div>
 
       {error && (

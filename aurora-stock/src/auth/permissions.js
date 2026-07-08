@@ -1,11 +1,15 @@
+import { getCapabilitiesForProfile, hasCapability } from "@/core/identity/capabilities";
+
 export function getRole(user) {
-    // dev default: admin when no auth wired
-    if (!user) return "admin";
-    return user.role || "staff";
-  }
-  
-  export const canArchive = (role) => role === "admin" || role === "manager";
-  export const canEdit = (role) => role === "admin" || role === "manager";
-  export const canAdjust = (role) => role === "admin" || role === "manager";
-  export const canMoveStock = (role) => role === "admin" || role === "manager" || role === "staff";
-  
+  if (!user) return "System Admin";
+  return user.role || "User";
+}
+
+function capsFromRole(role) {
+  return getCapabilitiesForProfile({ role });
+}
+
+export const canArchive = (role) => hasCapability(capsFromRole(role), "inventory.delete");
+export const canEdit = (role) => hasCapability(capsFromRole(role), "inventory.write");
+export const canAdjust = (role) => hasCapability(capsFromRole(role), "inventory.adjust");
+export const canMoveStock = (role) => hasCapability(capsFromRole(role), "inventory.write");
