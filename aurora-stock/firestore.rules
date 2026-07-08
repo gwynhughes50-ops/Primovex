@@ -194,6 +194,43 @@ match /practice_roles/{roleId} {
   allow delete: if isAdmin();
 }
 
+
+// -------------------------
+// GOVERNANCE INTELLIGENCE - LISTENING TO PEOPLE CONCERNS
+// -------------------------
+match /governance_concerns/{concernId} {
+  allow get, list: if signedIn();
+  allow create, update: if signedIn();
+  allow delete: if isAdmin();
+}
+
+match /governance_concern_timeline/{timelineId} {
+  allow get, list: if signedIn();
+  allow create: if signedIn();
+  allow update, delete: if isAdmin();
+}
+
+match /governance_concern_learning_actions/{actionId} {
+  allow get, list: if signedIn();
+  allow create, update: if signedIn();
+  allow delete: if isAdmin();
+}
+
+// -------------------------
+// SAR GOVERNANCE COLLECTIONS (new module names)
+// -------------------------
+match /governance_sars/{sarId} {
+  allow get, list: if signedIn();
+  allow create, update: if signedIn();
+  allow delete: if isAdmin();
+}
+
+match /governance_sar_activity/{activityId} {
+  allow get, list: if signedIn();
+  allow create: if signedIn();
+  allow update, delete: if isAdmin();
+}
+
 // -------------------------
 // SUBJECT ACCESS REQUESTS
 // -------------------------

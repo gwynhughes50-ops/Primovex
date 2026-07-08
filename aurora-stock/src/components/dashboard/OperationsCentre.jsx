@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import SectionCard from "@/components/common/SectionCard";
@@ -7,6 +7,7 @@ import NotificationItem from "@/components/notifications/NotificationItem";
 import { useAuth } from "@/contexts/AuthContext";
 import useNotifications from "@/hooks/useNotifications";
 import { Icons } from "@/config/medtrakIcons";
+import { buildGovernancePrompts, getConcernMetrics, subscribeConcerns } from "@/modules/governance/services/concernService";
 
 function greetingName(displayName, email) {
   const raw = displayName || email || "there";
@@ -23,6 +24,12 @@ export default function OperationsCentre() {
   const navigate = useNavigate();
   const { user, displayName, role } = useAuth();
   const { summary, snooze, complete, loading } = useNotifications(user?.uid);
+  const [concerns, setConcerns] = useState([]);
+
+  useEffect(() => {
+    const unsub = subscribeConcerns(setConcerns, () => setConcerns([]));
+    return () => unsub?.();
+  }, []);
 
   const counts = summary?.counts || { critical: 0, high: 0, routine: 0, info: 0, total: 0 };
   const active = summary?.active || [];
@@ -34,6 +41,8 @@ export default function OperationsCentre() {
   }, [counts]);
 
   const pulse = getPulseTone(pulseScore);
+  const governanceMetrics = useMemo(() => getConcernMetrics(concerns), [concerns]);
+  const governancePrompts = useMemo(() => buildGovernancePrompts(concerns).slice(0, 2), [concerns]);
   const firstName = greetingName(displayName, user?.email);
 
   const openNotification = (item) => {
@@ -93,6 +102,43 @@ export default function OperationsCentre() {
           <p className="mt-1 text-3xl font-black">{counts.info || 0}</p>
         </div>
       </section>
+
+
+      <SectionCard
+        title="Governance Intelligence"
+        description="Listening to People case health, deadlines and learning actions."
+        actions={
+          <Button variant="outline" className="rounded-full border-slate-700 bg-slate-950/40 text-slate-100 hover:bg-slate-800" onClick={() => navigate("/governance/concerns")}>
+            Open concerns
+          </Button>
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-4">
+          <div className="rounded-2xl border border-sky-400/30 bg-sky-500/10 p-4 text-sky-100">
+            <p className="text-xs font-semibold uppercase tracking-wide text-sky-200/80">Open</p>
+            <p className="mt-1 text-3xl font-black">{governanceMetrics.open}</p>
+          </div>
+          <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4 text-rose-100">
+            <p className="text-xs font-semibold uppercase tracking-wide text-rose-200/80">High</p>
+            <p className="mt-1 text-3xl font-black">{governanceMetrics.high}</p>
+          </div>
+          <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-amber-100">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-200/80">Due week</p>
+            <p className="mt-1 text-3xl font-black">{governanceMetrics.dueWeek}</p>
+          </div>
+          <div className="rounded-2xl border border-emerald-400/30 bg-emerald-500/10 p-4 text-emerald-100">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-200/80">Health</p>
+            <p className="mt-1 text-3xl font-black">{governanceMetrics.avgHealth}%</p>
+          </div>
+        </div>
+        <div className="mt-3 grid gap-2 lg:grid-cols-2">
+          {governancePrompts.map((prompt) => (
+            <div key={prompt} className="rounded-2xl border border-violet-400/20 bg-violet-500/10 p-3 text-sm text-violet-100">
+              {prompt}
+            </div>
+          ))}
+        </div>
+      </SectionCard>
 
       <SectionCard
         title="Today's priorities"

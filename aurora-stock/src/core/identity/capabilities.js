@@ -37,6 +37,7 @@ export const CAPABILITIES = {
     write: "governance.write",
     manageSars: "governance.manageSars",
     manageComplaints: "governance.manageComplaints",
+    manageConcerns: "governance.manageConcerns",
   },
   connect: {
     view: "connect.view",
@@ -101,6 +102,7 @@ export const CAPABILITY_CATALOG = [
   { id: "governance.write", label: "Update governance records", group: "Governance" },
   { id: "governance.manageSars", label: "Manage SARs", group: "Governance" },
   { id: "governance.manageComplaints", label: "Manage complaints", group: "Governance" },
+  { id: "governance.manageConcerns", label: "Manage Listening to People concerns", group: "Governance" },
 
   { id: "connect.view", label: "View MedTrak Connect", group: "Connect" },
   { id: "connect.manageDevices", label: "Add/edit connected devices", group: "Connect" },
@@ -148,6 +150,7 @@ export const ROLE_TEMPLATES = {
     "governance.write",
     "governance.manageSars",
     "governance.manageComplaints",
+    "governance.manageConcerns",
     "connect.view",
     "connect.manageDevices",
     "connect.acknowledgeAlerts",
@@ -218,6 +221,7 @@ export const ROLE_TEMPLATES = {
     "purchasing.read",
     "governance.read",
     "governance.write",
+    "governance.manageConcerns",
     "connect.view",
     "mobile.access",
   ],

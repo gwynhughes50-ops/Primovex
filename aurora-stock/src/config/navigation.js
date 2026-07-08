@@ -7,6 +7,7 @@ const desktopNavigationConfig = [
   { to: "/reorder-centre", label: "Reorder Centre", iconKey: "reorder", group: "inventory", capability: "purchasing.read" },
   { to: "/purchasing", label: "Purchasing", iconKey: "purchasing", group: "purchasing", capability: "purchasing.read" },
   { to: "/suppliers", label: "Suppliers", iconKey: "suppliers", group: "purchasing", capability: "suppliers.read" },
+  { to: "/governance/concerns", label: "Concerns", iconKey: "governance", group: "governance", capability: "governance.manageConcerns" },
   { to: "/governance/sars", label: "SARs", iconKey: "sar", group: "governance", capability: "governance.manageSars" },
   { to: "/practice-admin", label: "Practice Admin", iconKey: "practiceAdmin", group: "admin", capability: "practiceAdmin.read" },
   { to: "/alerts", label: "Operations", iconKey: "alerts", group: "operations", capability: "operations.read" },

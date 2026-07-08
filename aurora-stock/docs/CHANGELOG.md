@@ -1,3 +1,13 @@
+
+## v0.9.24 - MedTrak Mobile 3.0
+
+- Redesigned MedTrak Mobile home into a task-first operational workspace.
+- Added MedAI mobile brief with estimated admin time.
+- Added quick actions for scan, stock, Connect and manual search.
+- Added dedicated Stock and Me mobile modes.
+- Improved mobile summary cards for stock, governance and cold-chain status.
+- Build passed.
+
 ## Sprint 21A - Theme Hardening
 
 - Added `/theme-lab` for checking theme readability across components.
@@ -63,3 +73,11 @@
 - Added MedTrak Connect Firestore rules using capability checks.
 - Added audit event foundation.
 - Added Identity & Access documentation and ADR-010.
+
+## Sprint 23 - Governance Intelligence
+
+- Added Listening to People concern workflow.
+- Added anonymised concern identifiers: EMIS first, initials + DOB fallback.
+- Added traffic-light concern priorities and Case Health.
+- Added governance MedAI prompts and Operations Centre widget.
+- Added concern timeline and learning action foundation.

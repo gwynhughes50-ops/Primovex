@@ -19,6 +19,7 @@ import SupplierDirectory from "@/pages/SupplierDirectory";
 import Purchasing from "@/pages/Purchasing";
 import PracticeAdministration from "@/pages/PracticeAdministration";
 import GovernanceSARs from "@/pages/GovernanceSARs";
+import GovernanceConcerns from "@/pages/GovernanceConcerns";
 import Connect from "@/pages/Connect";
 import ThemeLab from "@/pages/ThemeLab";
 import MobileLayout from "./mobile/MobileLayout";
@@ -69,6 +70,7 @@ function AppRouter() {
         <Route path="purchasing" element={<Purchasing />} />
         <Route path="suppliers" element={<SupplierDirectory />} />
         <Route path="practice-admin" element={<PracticeAdministration />} />
+        <Route path="governance/concerns" element={<GovernanceConcerns />} />
         <Route path="governance/sars" element={<GovernanceSARs />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="connect" element={<Connect />} />

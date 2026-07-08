@@ -164,26 +164,12 @@ export default function MobileLayout() {
     <div className="min-h-screen bg-slate-950 text-white pb-20">
       {activeTab === "connect" ? (
         <MobileConnect />
-      ) : activeTab === "stock" ? (
-        <MobileHome
-          mode="stock"
-          onSelectItem={(item) => {
-            setUseQty(1);
-            setScanError("");
-            setScannedItem(item);
-          }}
-        />
-      ) : activeTab === "me" ? (
-        <MobileHome
-          mode="me"
-          onSelectItem={(item) => {
-            setUseQty(1);
-            setScanError("");
-            setScannedItem(item);
-          }}
-        />
       ) : (
         <MobileHome
+          mode={activeTab}
+          onNavigate={setActiveTab}
+          onScan={() => document.querySelector("[data-mobile-scan-button]")?.click()}
+          onSearch={() => setShowSearch(true)}
           onSelectItem={(item) => {
             setUseQty(1);
             setScanError("");
