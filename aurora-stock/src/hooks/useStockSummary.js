@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { isSafeSyntheticMode } from "@/config/platformMode";
+import { getDemoStockSummary } from "@/data/demoDataset";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
 
@@ -14,6 +16,13 @@ export default function useStockSummary() {
   });
 
   useEffect(() => {
+    if (isSafeSyntheticMode()) {
+      setSummary(getDemoStockSummary());
+      setLoading(false);
+      setError(null);
+      return () => {};
+    }
+
     setLoading(true);
 
     const unsub = onSnapshot(

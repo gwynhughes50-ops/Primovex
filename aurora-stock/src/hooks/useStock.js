@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { isSafeSyntheticMode } from "@/config/platformMode";
+import { demoStockItems } from "@/data/demoDataset";
 import {
   subscribeToStock,
 
@@ -71,6 +73,13 @@ function useStockImpl(options = {}) {
   };
 
   useEffect(() => {
+    if (isSafeSyntheticMode()) {
+      setItems(demoStockItems.filter((item) => includeArchived || !item.archived));
+      setLoading(false);
+      setError(null);
+      return () => {};
+    }
+
     setLoading(true);
     setError(null);
 

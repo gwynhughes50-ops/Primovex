@@ -15,6 +15,8 @@ import {
 } from "firebase/firestore";
 import { buildSnoozeUpdate, NOTIFICATION_STATUS, summariseNotifications } from "@/services/notificationCentreService";
 import { db } from "@/lib/firebase";
+import { isSafeSyntheticMode } from "@/config/platformMode";
+import { demoNotifications } from "@/data/demoDataset";
 
 export default function useNotifications(uid) {
   const [rows, setRows] = useState([]);
@@ -25,6 +27,12 @@ export default function useNotifications(uid) {
     // reset when uid changes
     setRows([]);
     setError(null);
+
+    if (isSafeSyntheticMode()) {
+      setRows(demoNotifications);
+      setLoading(false);
+      return;
+    }
 
     if (!uid) {
       setLoading(false);
@@ -66,6 +74,7 @@ export default function useNotifications(uid) {
   const markRead = useCallback(
     async (nid) => {
       if (!uid || !nid) return;
+      if (isSafeSyntheticMode()) return;
 
       await updateDoc(doc(db, "users", uid, "notifications", nid), {
         read: true,
@@ -78,6 +87,7 @@ export default function useNotifications(uid) {
   const clearOne = useCallback(
     async (nid) => {
       if (!uid || !nid) return;
+      if (isSafeSyntheticMode()) return;
       await deleteDoc(doc(db, "users", uid, "notifications", nid));
     },
     [uid]
@@ -88,6 +98,7 @@ export default function useNotifications(uid) {
   const snooze = useCallback(
     async (nid, option = "tomorrow") => {
       if (!uid || !nid) return;
+      if (isSafeSyntheticMode()) return;
       await updateDoc(doc(db, "users", uid, "notifications", nid), buildSnoozeUpdate(option));
     },
     [uid]
@@ -96,6 +107,7 @@ export default function useNotifications(uid) {
   const complete = useCallback(
     async (nid) => {
       if (!uid || !nid) return;
+      if (isSafeSyntheticMode()) return;
       await updateDoc(doc(db, "users", uid, "notifications", nid), {
         status: NOTIFICATION_STATUS.completed,
         read: true,
@@ -112,6 +124,7 @@ export default function useNotifications(uid) {
    */
   const clearAll = useCallback(async () => {
     if (!uid) return;
+    if (isSafeSyntheticMode()) { setRows([]); return; }
 
     // safer than relying on React state: re-fetch ids to delete
     const colRef = collection(db, "users", uid, "notifications");

@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { Icons } from "@/config/medtrakIcons";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import PlatformModeControls from "@/components/platform/PlatformModeControls";
+import { getPlatformModeConfig, getStoredPlatformMode } from "@/config/platformMode";
 import {
   addDepartment,
   addPracticeRole,
@@ -41,6 +44,7 @@ const tabs = [
   { key: "departments", label: "Departments", icon: Icons.departments },
   { key: "roles", label: "Roles", icon: Icons.roles },
   { key: "pulse", label: "Pulse", icon: Icons.pulse },
+  { key: "platform", label: "Platform Mode", icon: Icons.settings },
 ];
 
 function docsFromSnapshot(snapshot) {
@@ -61,6 +65,7 @@ function SectionHeader({ title, children }) {
 }
 
 export default function PracticeAdministration() {
+  const location = useLocation();
   const { user, displayName, isAdmin } = useAuth();
   const actor = useMemo(
     () => ({ uid: user?.uid || null, displayName: displayName || user?.email || "Unknown", email: user?.email || null }),
@@ -96,6 +101,16 @@ export default function PracticeAdministration() {
       return acc;
     }, {})
   );
+
+  const currentPlatformMode = getPlatformModeConfig(getStoredPlatformMode());
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const requestedTab = params.get("tab");
+    if (requestedTab && tabs.some((tab) => tab.key === requestedTab)) {
+      setActiveTab(requestedTab);
+    }
+  }, [location.search]);
 
   useEffect(() => {
     const unsubConfig = subscribePracticeConfig(
@@ -264,7 +279,7 @@ export default function PracticeAdministration() {
             </div>
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Practice Administration</h1>
             <p className="mt-1 max-w-2xl text-sm text-slate-400">
-              Set up your practice structure, sites, departments, roles and Pulse weighting. This is the foundation that future MedTrak+ modules will use.
+              Set up your practice structure, sites, departments, roles, Pulse weighting and platform modes. This is the foundation that future MedTrak+ modules will use.
             </p>
           </div>
 
@@ -315,6 +330,18 @@ export default function PracticeAdministration() {
                   <div className="flex justify-between"><span className="text-slate-400">Roles</span><span>{roles.length}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Users</span><span>{users.length}</span></div>
                 </div>
+              </Card>
+
+              <Card className="rounded-2xl border border-slate-800 bg-slate-900 p-4 text-slate-100">
+                <SectionHeader title="Platform Mode" />
+                <div className={`rounded-2xl border p-4 ${currentPlatformMode.bannerClass}`}>
+                  <div className="flex items-center gap-2 text-xs font-black uppercase tracking-[0.18em]">
+                    <span className={`h-2.5 w-2.5 rounded-full ${currentPlatformMode.dotClass}`} />
+                    {currentPlatformMode.shortLabel}
+                  </div>
+                  <p className="mt-3 text-sm leading-6 opacity-90">{currentPlatformMode.description}</p>
+                </div>
+                <Button className="mt-4 rounded-full" onClick={() => setActiveTab("platform")}>Manage Platform Mode</Button>
               </Card>
 
               <Card className="rounded-2xl border border-slate-800 bg-slate-900 p-4 text-slate-100 lg:col-span-2">
@@ -484,6 +511,17 @@ export default function PracticeAdministration() {
                 ))}
               </div>
               <Button className="mt-4" onClick={savePulse} disabled={busy}>Save Pulse Weighting</Button>
+            </Card>
+          )}
+
+
+          {activeTab === "platform" && (
+            <Card className="rounded-2xl border border-slate-800 bg-slate-900 p-4 text-slate-100">
+              <SectionHeader title="Platform Mode & Demo Controls" />
+              <p className="mb-4 text-sm leading-6 text-slate-400">
+                Switch safely between Live, Demo, Training and Staging. Demo and Training are designed for product walkthroughs and staff onboarding using synthetic data only.
+              </p>
+              <PlatformModeControls />
             </Card>
           )}
         </>

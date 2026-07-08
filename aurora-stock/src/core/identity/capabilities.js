@@ -77,6 +77,10 @@ export const CAPABILITIES = {
     read: "audit.read",
     write: "audit.write",
   },
+  security: {
+    read: "security.read",
+    manage: "security.manage",
+  },
 };
 
 export const ALL_CAPABILITIES = Object.values(CAPABILITIES).flatMap((group) => Object.values(group));
@@ -128,6 +132,8 @@ export const CAPABILITY_CATALOG = [
   { id: "admin.manageSettings", label: "Manage system settings", group: "System" },
   { id: "audit.read", label: "View audit logs", group: "System" },
   { id: "audit.write", label: "Write audit events", group: "System" },
+  { id: "security.read", label: "View Security Centre", group: "System" },
+  { id: "security.manage", label: "Manage security settings", group: "System" },
 ];
 
 export const ROLE_TEMPLATES = {
@@ -171,6 +177,8 @@ export const ROLE_TEMPLATES = {
     "admin.manageSettings",
     "audit.read",
     "audit.write",
+    "security.read",
+    "security.manage",
   ],
   "User": [
     "dashboard.read",

@@ -12,6 +12,8 @@ import {
 } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
+import { isSafeSyntheticMode } from "@/config/platformMode";
+import { demoGovernanceCases, demoConcernTimeline, demoLearningActions } from "@/data/demoDataset";
 
 export const CONCERNS_COLLECTION = "governance_concerns";
 export const CONCERN_TIMELINE_COLLECTION = "governance_concern_timeline";
@@ -214,6 +216,7 @@ export function validateConcernForm(form) {
 }
 
 export async function addConcernTimeline(concernId, event = {}) {
+  if (isSafeSyntheticMode()) return `demo-timeline-${Date.now()}`;
   if (!concernId) return null;
   const ref = await addDoc(collection(db, CONCERN_TIMELINE_COLLECTION), {
     concernId,
@@ -228,6 +231,11 @@ export async function addConcernTimeline(concernId, event = {}) {
 }
 
 export async function createConcern(form, actor = {}) {
+  if (isSafeSyntheticMode()) {
+    const errors = validateConcernForm(form);
+    if (errors.length) throw new Error(errors.join(" "));
+    return `demo-created-${Date.now()}`;
+  }
   const errors = validateConcernForm(form);
   if (errors.length) throw new Error(errors.join(" "));
   const payload = buildConcernPayload(form, actor);
@@ -242,6 +250,7 @@ export async function createConcern(form, actor = {}) {
 }
 
 export async function updateConcern(concernId, patch = {}, actor = {}) {
+  if (isSafeSyntheticMode()) return;
   if (!concernId) return;
   await updateDoc(doc(db, CONCERNS_COLLECTION, concernId), {
     ...patch,
@@ -276,6 +285,7 @@ export async function closeConcern(concern, actor = {}) {
 }
 
 export async function addLearningAction(concernId, action = {}, actor = {}) {
+  if (isSafeSyntheticMode()) return `demo-learning-${Date.now()}`;
   const ref = await addDoc(collection(db, CONCERN_LEARNING_COLLECTION), {
     concernId,
     title: action.title || "Learning action",
@@ -295,6 +305,10 @@ export async function addLearningAction(concernId, action = {}, actor = {}) {
 }
 
 export function subscribeConcerns(callback, onError) {
+  if (isSafeSyntheticMode()) {
+    const timer = setTimeout(() => callback(demoGovernanceCases), 50);
+    return () => clearTimeout(timer);
+  }
   const q = query(collection(db, CONCERNS_COLLECTION), orderBy("receivedAt", "desc"));
   return onSnapshot(q, (snapshot) => {
     callback(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
@@ -302,6 +316,13 @@ export function subscribeConcerns(callback, onError) {
 }
 
 export function subscribeConcernTimeline(concernId, callback, onError) {
+  if (isSafeSyntheticMode()) {
+    const rows = demoConcernTimeline[concernId] || [
+      { id: "demo-tl-created", type: "created", title: "Concern received", message: "Synthetic case opened for demonstration.", actorName: "Demo User", createdAt: new Date() },
+    ];
+    const timer = setTimeout(() => callback(rows), 50);
+    return () => clearTimeout(timer);
+  }
   if (!concernId) return () => {};
   const q = query(collection(db, CONCERN_TIMELINE_COLLECTION), where("concernId", "==", concernId), orderBy("createdAt", "desc"));
   return onSnapshot(q, (snapshot) => {
@@ -310,6 +331,11 @@ export function subscribeConcernTimeline(concernId, callback, onError) {
 }
 
 export function subscribeLearningActions(concernId, callback, onError) {
+  if (isSafeSyntheticMode()) {
+    const rows = demoLearningActions[concernId] || [];
+    const timer = setTimeout(() => callback(rows), 50);
+    return () => clearTimeout(timer);
+  }
   if (!concernId) return () => {};
   const q = query(collection(db, CONCERN_LEARNING_COLLECTION), where("concernId", "==", concernId), orderBy("createdAt", "desc"));
   return onSnapshot(q, (snapshot) => {

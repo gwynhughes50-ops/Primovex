@@ -1,0 +1,19 @@
+{
+  "name": "medtrak-connect-cloud-functions",
+  "version": "0.9.27",
+  "private": true,
+  "description": "Firebase Cloud Functions for MedTrak Connect Cloud provider synchronisation and alerting.",
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "lint": "node --check index.js && node --check providers/providerFactory.js && node --check providers/simulatorProvider.js && node --check providers/tuyaProvider.js && node --check services/deviceSyncService.js && node --check services/alertService.js && node --check services/eventBus.js",
+    "serve": "firebase emulators:start --only functions,firestore",
+    "deploy": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.2"
+  }
+}

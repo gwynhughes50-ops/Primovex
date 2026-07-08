@@ -26,10 +26,9 @@ export default function ForgotPassword() {
   const normalizeFirebaseError = (err) => {
     const code = String(err?.code || "");
     if (code === "auth/invalid-email") return "That email address doesn’t look valid.";
-    if (code === "auth/user-not-found") return "No account found with that email address.";
     if (code === "auth/too-many-requests")
       return "Too many attempts. Please wait a moment and try again.";
-    return String(err?.message || err || "Something went wrong.");
+    return "We could not send a reset link right now. Please check the email address and try again.";
   };
 
   const onSubmit = async (e) => {
@@ -75,11 +74,12 @@ export default function ForgotPassword() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-72px)] flex items-center justify-center p-6">
-      <Card className={`${cardBase} w-full max-w-md p-5`}>
-        <div className="text-lg font-semibold text-slate-50">Reset password</div>
+    <div className="min-h-screen flex items-center justify-center bg-slate-950 p-6">
+      <Card className={`${cardBase} w-full max-w-md p-6 shadow-2xl shadow-slate-950/30`}>
+        <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-400/10 text-teal-200"><span className="text-lg">🔐</span></div>
+        <div className="text-2xl font-semibold text-slate-50">Reset password</div>
         <div className="text-sm text-slate-400 mt-1">
-          Enter your email address and we’ll email you a reset link.
+          Enter your email address and we’ll send a reset link if an account exists. For security, this page will not confirm whether an email is registered.
         </div>
 
         <form className="mt-4 space-y-3" onSubmit={onSubmit}>

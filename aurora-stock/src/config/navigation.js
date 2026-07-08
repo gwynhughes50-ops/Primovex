@@ -16,6 +16,7 @@ const desktopNavigationConfig = [
   { to: "/compliance", label: "Compliance", iconKey: "compliance", group: "compliance", capability: "compliance.read" },
   { to: "/help", label: "Help", iconKey: "help", group: "support" },
   { to: "/theme-lab", label: "Theme Lab", iconKey: "settings", group: "admin", capability: "theme.lab" },
+  { to: "/security-centre", label: "Security", iconKey: "security", group: "admin", capability: "security.read" },
   { to: "/reports", label: "Reports", iconKey: "reports", group: "insight", capability: "reports.read" },
 ];
 

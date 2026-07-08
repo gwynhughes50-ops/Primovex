@@ -23,6 +23,8 @@ import useNotifications from "@/hooks/useNotifications";
 import useConnectedDevices from "@/hooks/useConnectedDevices";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
+import { buildMedAIContext } from "@/services/medai";
+import { priorityTone } from "@/services/medai/priorityEngine";
 
 function safeDateLabel(value) {
   const date = value?.toDate?.() || (value ? new Date(value) : null);
@@ -227,22 +229,28 @@ export default function MobileHome({ mode = "home", onSelectItem, onNavigate, on
       ? "Stable, with work due"
       : "Operating normally";
 
-  const dailyBrief = [
-    notificationCounts.total > 0
-      ? `${notificationCounts.total} assigned item${notificationCounts.total === 1 ? "" : "s"} need attention.`
-      : "No assigned notification queue items currently need action.",
-    lowStockCount > 0
-      ? `${lowStockCount} stock item${lowStockCount === 1 ? " is" : "s are"} at or below minimum level.`
-      : "Stock alerts are quiet.",
-    connectIntelligence?.headline || "Connected devices are ready for review.",
-    governanceSummary.open > 0
-      ? `${governanceSummary.open} governance case${governanceSummary.open === 1 ? " is" : "s are"} open.`
-      : "No open governance cases detected in the mobile summary.",
-  ];
+  const medai = useMemo(() => buildMedAIContext({
+    firstName: firstName(displayName),
+    notificationsSummary: notificationSummary,
+    governanceMetrics: {
+      open: governanceSummary.open,
+      high: governanceSummary.high,
+      dueWeek: governanceSummary.dueSoon,
+      overdue: 0,
+      listeningMissing: 0,
+      avgHealth: governanceSummary.open ? 88 : 100,
+    },
+    governancePrompts: [],
+    connectIntelligence,
+    stockItems: allItems,
+  }), [displayName, notificationSummary, governanceSummary, connectIntelligence, allItems]);
+
+  const dailyBrief = medai.brief.lines;
 
   const estimatedWorkMins = Math.max(
     2,
-    notificationCounts.total * 4 + lowStockCount * 2 + governanceSummary.dueSoon * 8 + (connectIntelligence?.critical?.length || 0) * 5
+    Number(String(medai.brief.estimatedAdminTime || "0").match(/(\d+)/)?.[1] || 0) ||
+      notificationCounts.total * 4 + lowStockCount * 2 + governanceSummary.dueSoon * 8 + (connectIntelligence?.critical?.length || 0) * 5
   );
 
   if (mode === "stock") {
@@ -336,12 +344,31 @@ export default function MobileHome({ mode = "home", onSelectItem, onNavigate, on
             <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-teal-100" />
             <div>
               <p className="font-black text-white">MedAI mobile brief</p>
-              <p className="mt-1 text-sm leading-6 text-slate-300">{dailyBrief[0]} {dailyBrief[1]} {dailyBrief[2]}</p>
-              <p className="mt-2 text-xs font-semibold text-teal-100">Estimated admin time: {estimatedWorkMins} mins</p>
+              <p className="mt-1 text-sm leading-6 text-slate-300">{dailyBrief.slice(0, 3).join(" ")}</p>
+              <p className="mt-2 text-xs font-semibold text-teal-100">Recommended focus: {medai.brief.recommendedFocus}</p>
+              <p className="mt-1 text-xs font-semibold text-slate-400">Estimated admin time: {estimatedWorkMins} mins</p>
             </div>
           </div>
         </div>
       </div>
+
+      <Section title="MedAI next best action">
+        {medai.recommendations.slice(0, 1).map((item) => {
+          const tone = priorityTone(item.priority);
+          return (
+            <button key={item.id} type="button" className={`w-full rounded-3xl border p-4 text-left ${tone.card}`} onClick={() => item.sourceUrl && onNavigate?.(item.domain === "Connect" ? "connect" : item.domain === "Inventory" ? "stock" : "home")}>
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <span className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${tone.badge}`}>{item.priority} · {item.score}</span>
+                  <p className="mt-3 font-black text-white">{item.title}</p>
+                  <p className="mt-1 text-sm text-slate-300">{item.summary}</p>
+                </div>
+                <span className="rounded-full border border-white/10 bg-slate-950/50 px-3 py-1 text-xs font-bold text-slate-200">{item.estimate}</span>
+              </div>
+            </button>
+          );
+        })}
+      </Section>
 
       <Section title="Quick actions">
         <div className="grid grid-cols-2 gap-3">

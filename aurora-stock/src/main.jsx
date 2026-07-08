@@ -22,6 +22,8 @@ import GovernanceSARs from "@/pages/GovernanceSARs";
 import GovernanceConcerns from "@/pages/GovernanceConcerns";
 import Connect from "@/pages/Connect";
 import ThemeLab from "@/pages/ThemeLab";
+import DemoMode from "@/pages/DemoMode";
+import SecurityCentre from "@/pages/SecurityCentre";
 import MobileLayout from "./mobile/MobileLayout";
 
 import Help from "./pages/Help";
@@ -42,6 +44,7 @@ function AppRouter() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/demo" element={<DemoMode />} />
       <Route path="/loading" element={<LoadingPage />} />
 
       {/* PRIVATE MOBILE APP */}
@@ -75,6 +78,7 @@ function AppRouter() {
         <Route path="alerts" element={<Alerts />} />
         <Route path="connect" element={<Connect />} />
         <Route path="theme-lab" element={<ThemeLab />} />
+        <Route path="security-centre" element={<SecurityCentre />} />
         <Route path="temperature" element={<TemperatureLog />} />
         <Route path="compliance" element={<Compliance />} />
         <Route path="admin/*" element={<AdminDashboard />} />

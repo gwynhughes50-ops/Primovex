@@ -64,6 +64,7 @@ export const Icons = {
   reports: BarChart3,
   reorder: ClipboardList,
   roles: ShieldCheck,
+  security: ShieldCheck,
   setupComplete: CheckCircle2,
   check: CheckCircle2,
   sites: MapPin,
@@ -84,7 +85,7 @@ export const Icons = {
 export const iconGroups = {
   navigation: ["dashboard", "inventory", "reorder", "purchasing", "suppliers", "sar", "practiceAdmin", "alerts", "connect", "temperature", "compliance", "reports", "settings", "help"],
   inventory: ["inventory", "stock", "package", "barcodeScan", "reorder"],
-  governance: ["governance", "sar", "compliance", "check"],
+  governance: ["governance", "sar", "compliance", "check", "security"],
   connect: ["connect", "wifi", "temperature", "activity", "alerts"],
   mobile: ["home", "stock", "barcodeScan", "connect", "user", "login", "logout"],
   actions: ["add", "check", "trash", "notifications", "settings"],

@@ -1,3 +1,23 @@
+## v0.9.32 - MedTrak Assets: Clinical Readiness
+
+- Redesigned Emergency Drugs & Equipment as a clinical readiness asset dashboard.
+- Redesigned Anaphylaxis Boxes with kit-level QR identity and verification workflow.
+- Added MedTrak Asset IDs for emergency kits and anaphylaxis boxes.
+- Added printable QR label generation for physical kit labels.
+- Added readiness scoring and MedAI-style readiness notes.
+- Preserved existing Firestore collections and monthly check workflow.
+- Improved theme-aware fonts, cards, inputs and responsive layout across both tabs.
+- Build passed.
+
+
+## v0.9.30 - Platform Modes & Demo Centre 2.0
+
+- Added Live, Demo, Training and Staging platform modes.
+- Added global mode banner across the authenticated app.
+- Added Practice Administration controls to switch modes safely.
+- Added scenario-aware demo/training selector and reset controls.
+- Updated Login and Demo Centre to support simple product demonstrations and staff training.
+
 
 ## v0.9.24 - MedTrak Mobile 3.0
 
@@ -81,3 +101,60 @@
 - Added traffic-light concern priorities and Case Health.
 - Added governance MedAI prompts and Operations Centre widget.
 - Added concern timeline and learning action foundation.
+
+## v0.9.25 - MedTrak Connect Provider Layer
+
+- Added provider-based MedTrak Connect architecture.
+- Added Simulator provider for development and demonstrations.
+- Added Tuya provider shell with backend-ready configuration fields.
+- Added provider manager UI to the Connect page.
+- Added device registry concepts for provider, firmware, equipment and integration status.
+- Added -40°C freezer simulation so ultra-low temperature workflows can be tested.
+- Added secure provider guidance: API secrets must not be stored in the React frontend.
+- Added Firestore rule for `connect_provider_settings` metadata.
+
+## v0.9.26 - MedAI Core
+
+- Added a dedicated MedAI service layer under `src/services/medai`.
+- Added Daily Brief, Recommendation, Insight and Priority engines.
+- Updated Operations Centre so MedAI generates its brief and next-best actions from notifications, inventory, governance and Connect data.
+- Added explainable recommendations with priority scores, estimated completion time and reasons.
+- Updated MedTrak Mobile to consume the same MedAI core rather than using a separate static mobile brief.
+- Established the principle that MedAI inherits user-permitted data and explains every recommendation.
+
+## v0.9.28 - Demo & Security Hardening
+
+- Added an anonymised public demo page for safe product demonstrations without live patient data.
+- Polished login and password reset screens with safer messaging and clearer security guidance.
+- Added Security Centre with release-readiness, audit, demo safety and DPIA preparation checks.
+- Added demo-mode configuration via `VITE_DEMO_MODE=true`.
+- Added synthetic demo governance cases and Connect devices.
+- Added `security.read` and `security.manage` capabilities and Security navigation.
+- Added ADR-015 for demo safety and governance security hardening.
+
+## v0.9.29 - Demo Centre
+
+- Reworked `/demo` into a Demo Centre rather than a single static preview page.
+- Added selectable demo scenarios: GP Practice, Research Practice, Large Health Centre and Training Mode.
+- Added a local demo reset action so each demonstration can start from a clean synthetic baseline.
+- Added scenario-specific MedAI briefs, platform statistics and product positioning.
+- Added the public `/demo` route so the login page Demo Centre link works without authentication.
+- Updated demo configuration helpers for active scenario selection and reset tracking.
+
+## v0.9.30b - Platform Modes Login and Demo Fix
+
+- Rebuilt the login page into a full-width, professional access screen.
+- Fixed Demo Centre launch flow so synthetic demo/training data is visible immediately.
+- Added synthetic-mode authentication so Demo, Training and Staging can open without live Firebase login.
+- Improved Platform Mode controls with clearer launch button and active mode behaviour.
+- Updated sign-out to respect synthetic modes and safely return to Live.
+
+
+## v0.9.31 - Project Renaissance Demo Experience
+
+- Rebuilt the login screen into a wider, premium product landing experience inspired by the MedTrak+ concept direction.
+- Added one-click "Experience MedTrak+" entry from the login screen into a safe synthetic workspace.
+- Expanded the Demo Centre into a richer fictional practice environment with stock, governance, Connect, activity and security data.
+- Added a substantial synthetic dataset for Oakfield Medical Centre, including stock records, connected devices, governance cases, activity events and MedAI-ready metrics.
+- Connected demo/training/staging modes into stock, notifications, governance and Connect data flows so screens are populated without live Firebase data.
+- Added no-op safety handling for governance writes in synthetic modes so demo users do not touch live Firestore records.

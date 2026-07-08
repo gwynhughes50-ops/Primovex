@@ -2,11 +2,9 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
-import { signOut } from "firebase/auth";
-import { auth } from "@/lib/firebase";
-
 import useNotifications from "@/hooks/useNotifications";
 import PulseWidget from "@/components/pulse/PulseWidget";
+import PlatformModeBanner from "@/components/platform/PlatformModeBanner";
 
 import { Icons, resolveIcon } from "@/config/medtrakIcons";
 import { getDesktopNavigation } from "@/config/navigation";
@@ -16,7 +14,7 @@ export default function Layout() {
   const navigate = useNavigate();
 
   // ✅ From AuthContext
-  const { user, displayName, role, isAdmin, capabilities, loading } = useAuth();
+  const { user, displayName, role, isAdmin, capabilities, loading, signOut } = useAuth();
 
   // ✅ Unread count (safe if not signed in)
   const { unreadCount } = useNotifications(user?.uid);
@@ -25,7 +23,7 @@ export default function Layout() {
  
   async function handleSignOut() {
     try {
-      await signOut(auth);
+      await signOut();
       navigate("/login", { replace: true });
     } catch (e) {
       console.error("Sign out failed:", e);
@@ -120,6 +118,8 @@ export default function Layout() {
             )}
           </div>
         </header>
+
+        <PlatformModeBanner compact />
 
         {/* nav */}
         <nav className="mb-5 flex flex-wrap gap-2">

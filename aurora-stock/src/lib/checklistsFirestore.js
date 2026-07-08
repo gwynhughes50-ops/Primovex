@@ -86,7 +86,7 @@ export async function createMonthlyCheck(parentCollection, parentId, payload) {
 }
 
 export async function fetchSeedJson() {
-  const mod = await import("@/assets/seed_checklists.json");
+  const mod = await import("@/data/seed_checklists.json");
   return mod.default || mod;
 }
 

@@ -8,6 +8,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import useNotifications from "@/hooks/useNotifications";
 import { Icons } from "@/config/medtrakIcons";
 import { buildGovernancePrompts, getConcernMetrics, subscribeConcerns } from "@/modules/governance/services/concernService";
+import useConnectedDevices from "@/hooks/useConnectedDevices";
+import useStock from "@/hooks/useStock";
+import { buildMedAIContext } from "@/services/medai";
+import { priorityTone } from "@/services/medai/priorityEngine";
 
 function greetingName(displayName, email) {
   const raw = displayName || email || "there";
@@ -24,6 +28,8 @@ export default function OperationsCentre() {
   const navigate = useNavigate();
   const { user, displayName, role } = useAuth();
   const { summary, snooze, complete, loading } = useNotifications(user?.uid);
+  const { intelligence: connectIntelligence } = useConnectedDevices();
+  const { allItems: stockItems = [] } = useStock({ includeArchived: false });
   const [concerns, setConcerns] = useState([]);
 
   useEffect(() => {
@@ -44,6 +50,14 @@ export default function OperationsCentre() {
   const governanceMetrics = useMemo(() => getConcernMetrics(concerns), [concerns]);
   const governancePrompts = useMemo(() => buildGovernancePrompts(concerns).slice(0, 2), [concerns]);
   const firstName = greetingName(displayName, user?.email);
+  const medai = useMemo(() => buildMedAIContext({
+    firstName,
+    notificationsSummary: summary,
+    governanceMetrics,
+    governancePrompts,
+    connectIntelligence,
+    stockItems,
+  }), [firstName, summary, governanceMetrics, governancePrompts, connectIntelligence, stockItems]);
 
   const openNotification = (item) => {
     if (item?.actionUrl) navigate(item.actionUrl);
@@ -83,6 +97,93 @@ export default function OperationsCentre() {
           </div>
         </div>
       </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.4fr_0.9fr]">
+        <SectionCard
+          title="MedAI Daily Brief"
+          description="MedAI reads the user-permitted operational picture and turns it into a practical morning briefing."
+          actions={
+            <span className="inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-violet-100">
+              <Icons.pulse className="h-3.5 w-3.5" /> {medai.score}% confidence
+            </span>
+          }
+        >
+          <div className="rounded-3xl border border-violet-400/20 bg-gradient-to-br from-violet-500/15 via-slate-950/50 to-teal-500/10 p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-200/80">{medai.brief.headline}</p>
+                <h2 className="mt-2 text-2xl font-black text-white">{medai.brief.title}</h2>
+                <div className="mt-4 space-y-2 text-sm leading-6 text-slate-200">
+                  {medai.brief.lines.map((line) => (
+                    <p key={line} className="flex gap-2">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-300" />
+                      <span>{line}</span>
+                    </p>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-200 lg:w-56">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Estimated admin time</p>
+                <p className="mt-1 text-3xl font-black text-white">{medai.brief.estimatedAdminTime}</p>
+                <p className="mt-3 text-xs text-slate-400">Recommended focus</p>
+                <p className="mt-1 font-semibold text-teal-100">{medai.brief.recommendedFocus}</p>
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+
+        <SectionCard title="MedAI Insights" description="Cross-module signals that may deserve management attention.">
+          <div className="space-y-3">
+            {medai.insights.map((insight) => (
+              <div key={insight.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{insight.domain}</p>
+                  <span className={`h-2.5 w-2.5 rounded-full ${insight.tone === "success" ? "bg-emerald-300" : "bg-amber-300"}`} />
+                </div>
+                <p className="mt-2 font-bold text-white">{insight.title}</p>
+                <p className="mt-1 text-sm text-slate-400">{insight.body}</p>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      </section>
+
+      <SectionCard
+        title="MedAI Recommendations"
+        description="Explainable next-best actions. MedAI suggests, people decide."
+      >
+        <div className="grid gap-3 lg:grid-cols-2">
+          {medai.recommendations.slice(0, 4).map((item) => {
+            const tone = priorityTone(item.priority);
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => item.sourceUrl && navigate(item.sourceUrl)}
+                className={`rounded-3xl border p-4 text-left transition hover:scale-[1.01] ${tone.card}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <span className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-black uppercase tracking-wide ${tone.badge}`}>
+                      <span className={`h-2 w-2 rounded-full ${tone.dot}`} />
+                      {item.priority} · {item.score}
+                    </span>
+                    <h3 className="mt-3 font-black text-white">{item.title}</h3>
+                    <p className="mt-1 text-sm text-slate-300">{item.summary}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-white/10 bg-slate-950/50 px-3 py-1 text-xs font-bold text-slate-200">{item.estimate}</span>
+                </div>
+                <div className="mt-3 rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-xs text-slate-300">
+                  <p className="font-bold text-slate-100">Why MedAI surfaced this</p>
+                  <ul className="mt-1 list-disc space-y-1 pl-4">
+                    {(item.reasons.length ? item.reasons : [item.summary]).slice(0, 2).map((reason) => <li key={reason}>{reason}</li>)}
+                  </ul>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </SectionCard>
 
       <section className="grid gap-3 sm:grid-cols-4">
         <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-rose-100">

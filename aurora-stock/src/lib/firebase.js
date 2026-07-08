@@ -3,6 +3,7 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getFunctions } from "firebase/functions";
 
 // 🔐 Firebase configuration
 // (These values are safe to be public in a frontend app)
@@ -23,6 +24,9 @@ export const db = getFirestore(app);
 
 // 👤 Firebase Authentication
 export const auth = getAuth(app);
+
+// ☁️ Firebase Functions - Europe/UK region for MedTrak Connect Cloud
+export const functions = getFunctions(app, "europe-west2");
 
 // (Optional future exports)
 // export const storage = getStorage(app);

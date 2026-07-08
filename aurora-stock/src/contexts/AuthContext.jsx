@@ -1,27 +1,77 @@
 // src/contexts/AuthContext.jsx
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
-import { doc, getDoc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { getCapabilitiesForProfile, hasCapability, hasAnyCapability } from "@/core/identity/capabilities";
+import { getStoredPlatformMode, isSafeSyntheticMode, setPlatformMode } from "@/config/platformMode";
+import { getActiveDemoProfile } from "@/config/demoMode";
 
 const AuthContext = createContext(null);
 
+function createSyntheticUser(mode) {
+  const profile = getActiveDemoProfile();
+  const label = mode === "training" ? "Training User" : mode === "staging" ? "Staging User" : "Demo User";
+
+  return {
+    user: {
+      uid: `synthetic-${mode}-user`,
+      email: `${mode}@medtrak.local`,
+      displayName: label,
+      isAnonymous: true,
+    },
+    profile: {
+      id: `synthetic-${mode}-user`,
+      uid: `synthetic-${mode}-user`,
+      email: `${mode}@medtrak.local`,
+      displayName: label,
+      role: "System Admin",
+      organisationName: profile?.organisationName || "MedTrak Demo Practice",
+      platformMode: mode,
+      permissions: ["*"],
+    },
+  };
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null); // firebase auth user
-  const [profile, setProfile] = useState(null); // firestore /users/{uid}
+  const [platformMode, setPlatformModeState] = useState(() => getStoredPlatformMode());
+  const [user, setUser] = useState(null); // firebase auth user or synthetic demo user
+  const [profile, setProfile] = useState(null); // firestore /users/{uid} or synthetic profile
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    function handleModeChange(event) {
+      setPlatformModeState(event?.detail?.mode || getStoredPlatformMode());
+    }
+
+    window.addEventListener("medtrak:platform-mode-changed", handleModeChange);
+    window.addEventListener("storage", handleModeChange);
+
+    return () => {
+      window.removeEventListener("medtrak:platform-mode-changed", handleModeChange);
+      window.removeEventListener("storage", handleModeChange);
+    };
+  }, []);
+
+  useEffect(() => {
     let unsubscribeProfile = null;
+
+    if (isSafeSyntheticMode(platformMode)) {
+      const synthetic = createSyntheticUser(platformMode);
+      setUser(synthetic.user);
+      setProfile(synthetic.profile);
+      setError("");
+      setProfileLoading(false);
+      setLoading(false);
+      return () => {};
+    }
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       setError("");
 
-      // Reset profile state when auth changes
       if (unsubscribeProfile) {
         unsubscribeProfile();
         unsubscribeProfile = null;
@@ -36,7 +86,6 @@ export function AuthProvider({ children }) {
 
       setProfileLoading(true);
 
-      // Live subscribe to profile doc so UI updates immediately after role changes
       const ref = doc(db, "users", u.uid);
 
       unsubscribeProfile = onSnapshot(
@@ -66,7 +115,7 @@ export function AuthProvider({ children }) {
       if (unsubscribeProfile) unsubscribeProfile();
       unsubscribeAuth();
     };
-  }, []);
+  }, [platformMode]);
 
   const role = profile?.role || null;
   const capabilities = getCapabilitiesForProfile(profile);
@@ -81,6 +130,15 @@ export function AuthProvider({ children }) {
 
   const isAdmin = role === "System Admin" || can("admin.access");
 
+  async function signOut() {
+    if (isSafeSyntheticMode(platformMode)) {
+      setPlatformMode("live");
+      setPlatformModeState("live");
+      return;
+    }
+    return fbSignOut(auth);
+  }
+
   const value = useMemo(
     () => ({
       user,
@@ -91,11 +149,13 @@ export function AuthProvider({ children }) {
       canAny,
       displayName,
       isAdmin,
+      platformMode,
+      isSyntheticMode: isSafeSyntheticMode(platformMode),
       loading: loading || profileLoading,
       error,
-      signOut: () => fbSignOut(auth),
+      signOut,
     }),
-    [user, profile, role, capabilities, displayName, isAdmin, loading, profileLoading, error]
+    [user, profile, role, capabilities, displayName, isAdmin, platformMode, loading, profileLoading, error]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -106,4 +166,3 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
   return ctx;
 }
-
