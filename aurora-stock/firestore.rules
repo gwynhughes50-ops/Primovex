@@ -379,6 +379,29 @@ match /subject_access_requests/{requestId} {
     }
 
 
+
+    // -------------------------
+    // COMPLIANCE QR / NFC ENGINE
+    // -------------------------
+    match /compliance_assets/{assetId} {
+      allow get, list: if signedIn() && (hasPermission("compliance", "read") || isCaretaker() || isAdmin());
+      allow create, update: if signedIn() && (hasPermission("compliance", "manageAssets") || isCaretaker() || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /compliance_checks/{checkId} {
+      allow get, list: if signedIn() && (hasPermission("compliance", "read") || isCaretaker() || isAdmin());
+      allow create: if signedIn() && (hasPermission("compliance", "recordChecks") || hasPermission("compliance", "read") || isCaretaker() || isAdmin());
+      allow update, delete: if false; // compliance checks are immutable audit records
+    }
+
+    match /pulse_events/{eventId} {
+      allow get, list: if signedIn() && (hasPermission("operations", "read") || hasPermission("compliance", "read") || isAdmin());
+      allow create: if signedIn();
+      allow update: if signedIn() && (hasPermission("operations", "manage") || hasPermission("compliance", "recordChecks") || isAdmin());
+      allow delete: if isAdmin();
+    }
+
     // -------------------------
     // SETTINGS
     // -------------------------

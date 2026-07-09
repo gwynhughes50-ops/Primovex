@@ -52,6 +52,8 @@ export const CAPABILITIES = {
   compliance: {
     read: "compliance.read",
     write: "compliance.write",
+    recordChecks: "compliance.recordChecks",
+    manageAssets: "compliance.manageAssets",
   },
   practiceAdmin: {
     read: "practiceAdmin.read",
@@ -117,6 +119,8 @@ export const CAPABILITY_CATALOG = [
   { id: "temperature.resolveIncident", label: "Resolve temperature incidents", group: "Compliance" },
   { id: "compliance.read", label: "View compliance", group: "Compliance" },
   { id: "compliance.write", label: "Update compliance", group: "Compliance" },
+  { id: "compliance.recordChecks", label: "Record QR/NFC compliance checks", group: "Compliance" },
+  { id: "compliance.manageAssets", label: "Manage QR/NFC compliance assets", group: "Compliance" },
 
   { id: "practiceAdmin.read", label: "View practice admin", group: "Administration" },
   { id: "practiceAdmin.write", label: "Update practice admin", group: "Administration" },
@@ -165,6 +169,8 @@ export const ROLE_TEMPLATES = {
     "temperature.resolveIncident",
     "compliance.read",
     "compliance.write",
+    "compliance.recordChecks",
+    "compliance.manageAssets",
     "practiceAdmin.read",
     "practiceAdmin.write",
     "reports.read",
@@ -193,6 +199,7 @@ export const ROLE_TEMPLATES = {
     "temperature.read",
     "temperature.write",
     "compliance.read",
+    "compliance.recordChecks",
     "mobile.access",
     "mobile.biometricUnlock",
   ],
@@ -207,6 +214,7 @@ export const ROLE_TEMPLATES = {
     "temperature.write",
     "temperature.resolveIncident",
     "compliance.read",
+    "compliance.recordChecks",
     "mobile.access",
     "mobile.biometricUnlock",
   ],
@@ -241,6 +249,8 @@ export const ROLE_TEMPLATES = {
     "temperature.write",
     "compliance.read",
     "compliance.write",
+    "compliance.recordChecks",
+    "compliance.manageAssets",
     "mobile.access",
   ],
   "ReadOnly": [

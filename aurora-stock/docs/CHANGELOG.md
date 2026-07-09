@@ -1,3 +1,14 @@
+## v0.9.33 - Sprint 25 Compliance QR Engine
+
+- Added QR/NFC compliance asset register.
+- Added mobile Compliance QR workflow for fire and water checks.
+- Added one-tap fire point pass/fail recording.
+- Added water outlet temperature recording with automatic range checking.
+- Added printable QR label generation.
+- Added Web NFC read foundation and manual asset fallback.
+- Failed checks now raise Pulse Events automatically.
+- Added Firestore rules and capability updates for compliance assets/checks.
+
 ## v0.9.32 - MedTrak Assets: Clinical Readiness
 
 - Redesigned Emergency Drugs & Equipment as a clinical readiness asset dashboard.

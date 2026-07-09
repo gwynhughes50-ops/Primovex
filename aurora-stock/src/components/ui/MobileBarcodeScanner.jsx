@@ -11,7 +11,7 @@ import { X, Camera, Keyboard } from "lucide-react";
  * Props:
  * - onScan(code: string)
  */
-export default function MobileBarcodeScanner({ onScan }) {
+export default function MobileBarcodeScanner({ onScan, triggerAttribute = "data-mobile-scan-button", title = "Scan barcode", helper = "Rear camera scanning with manual fallback." }) {
   const [open, setOpen] = useState(false);
   const [status, setStatus] = useState("");
   const [errText, setErrText] = useState("");
@@ -159,7 +159,7 @@ export default function MobileBarcodeScanner({ onScan }) {
   return (
     <>
       <Button
-  data-mobile-scan-button
+  {...{ [triggerAttribute]: true }}
   onClick={() => setOpen(true)}
   className="hidden"
   variant="outline"
@@ -173,9 +173,9 @@ export default function MobileBarcodeScanner({ onScan }) {
           <div className="w-full max-w-md rounded-2xl border border-slate-700/70 bg-slate-900/95 p-4 shadow-2xl text-slate-100">
             <div className="mb-3 flex items-center justify-between">
               <div>
-                <p className="text-sm font-semibold">Scan barcode</p>
+                <p className="text-sm font-semibold">{title}</p>
                 <p className="text-xs text-slate-400">
-                  Rear camera scanning with manual fallback.
+                  {helper}
                 </p>
               </div>
 

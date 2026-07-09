@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Grip, Minus, X } from 'lucide-react';
+import { Activity, ChevronRight, ExternalLink, Move, RotateCcw, Settings, X } from 'lucide-react';
 
 import usePulse from '@/hooks/usePulse';
 import { getPulseBand } from '@/services/pulseService';
 
-const STORAGE_KEY = 'medtrak_pulse_widget_v1';
+const STORAGE_KEY = 'medtrak_pulse_nexus_v3';
+const LEGACY_STORAGE_KEY = 'medtrak_pulse_widget_v1';
 
 const DEFAULT_STATE = {
   enabled: true,
@@ -13,6 +14,10 @@ const DEFAULT_STATE = {
   x: null,
   y: null,
   size: 'medium',
+  snapToEdge: false,
+  reducedMotion: false,
+  settingsOpen: false,
+  hintDismissed: false,
 };
 
 const MODULE_ROUTES = {
@@ -22,14 +27,73 @@ const MODULE_ROUTES = {
   assets: '/compliance',
   estates: '/compliance',
   workforce: '/reports',
-  governance: '/reports',
+  governance: '/governance/sars',
+  connect: '/connect',
+};
+
+const TONES = {
+  green: {
+    id: 'excellent',
+    name: 'Excellent',
+    accent: '#35e6d3',
+    soft: '#1ad6bd',
+    deep: '#0b766d',
+    aura: 'rgba(45, 212, 191, 0.22)',
+    glass: 'rgba(13, 148, 136, 0.18)',
+    badge: 'bg-teal-400 text-slate-950',
+    label: 'Excellent',
+  },
+  amber: {
+    id: 'attention',
+    name: 'Attention',
+    accent: '#facc15',
+    soft: '#fbbf24',
+    deep: '#92400e',
+    aura: 'rgba(250, 204, 21, 0.22)',
+    glass: 'rgba(146, 64, 14, 0.22)',
+    badge: 'bg-amber-300 text-slate-950',
+    label: 'Attention',
+  },
+  orange: {
+    id: 'at-risk',
+    name: 'At Risk',
+    accent: '#fb923c',
+    soft: '#f97316',
+    deep: '#9a3412',
+    aura: 'rgba(249, 115, 22, 0.25)',
+    glass: 'rgba(154, 52, 18, 0.24)',
+    badge: 'bg-orange-400 text-white',
+    label: 'At Risk',
+  },
+  red: {
+    id: 'critical',
+    name: 'Critical',
+    accent: '#fb7185',
+    soft: '#ef4444',
+    deep: '#991b1b',
+    aura: 'rgba(244, 63, 94, 0.28)',
+    glass: 'rgba(127, 29, 29, 0.24)',
+    badge: 'bg-rose-500 text-white',
+    label: 'Critical',
+  },
+  violet: {
+    id: 'event-pulse',
+    name: 'Event Pulse',
+    accent: '#a78bfa',
+    soft: '#8b5cf6',
+    deep: '#5b21b6',
+    aura: 'rgba(139, 92, 246, 0.28)',
+    glass: 'rgba(91, 33, 182, 0.24)',
+    badge: 'bg-violet-500 text-white',
+    label: 'Event Pulse',
+  },
 };
 
 function loadState() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return DEFAULT_STATE;
-    return { ...DEFAULT_STATE, ...JSON.parse(raw) };
+    return { ...DEFAULT_STATE, ...JSON.parse(raw), expanded: false, settingsOpen: false };
   } catch {
     return DEFAULT_STATE;
   }
@@ -51,234 +115,496 @@ function formatTime(value) {
   }
 }
 
-function sizeClasses(size) {
-  if (size === 'small') return { box: 'h-16 w-16', ring: 15, text: 'text-sm', label: 'hidden' };
-  if (size === 'large') return { box: 'h-24 w-24', ring: 17, text: 'text-xl', label: 'text-[10px]' };
-  return { box: 'h-20 w-20', ring: 16, text: 'text-lg', label: 'text-[9px]' };
+function sizeSpec(size) {
+  if (size === 'small') return { box: 70, score: 'text-2xl', icon: 'h-4 w-4', stroke: 9 };
+  if (size === 'large') return { box: 108, score: 'text-4xl', icon: 'h-5 w-5', stroke: 10 };
+  return { box: 88, score: 'text-3xl', icon: 'h-4 w-4', stroke: 9.5 };
+}
+
+function getTone(score) {
+  const band = getPulseBand(score);
+  return TONES[band.tone] || TONES.green;
+}
+
+function eventSeverityClass(score) {
+  if (score < 50) return TONES.red.badge;
+  if (score < 75) return TONES.orange.badge;
+  if (score < 90) return TONES.amber.badge;
+  return TONES.violet.badge;
 }
 
 export default function PulseWidget({ variant = 'desktop' }) {
   const navigate = useNavigate();
   const pulse = usePulse();
   const widgetRef = useRef(null);
-  const dragRef = useRef({ dragging: false, startX: 0, startY: 0, originX: 0, originY: 0 });
-  const [state, setState] = useState(loadState);
+  const orbRef = useRef(null);
+  const dragRef = useRef({
+    pressed: false,
+    dragging: false,
+    startX: 0,
+    startY: 0,
+    originX: 0,
+    originY: 0,
+    pointerId: null,
+    timer: null,
+  });
 
-  const band = pulse.band || getPulseBand(pulse.score || 100);
-  const classes = sizeClasses(variant === 'mobile' ? 'small' : state.size);
-  const score = Number.isFinite(Number(pulse.score)) ? Number(pulse.score) : 100;
+  const [state, setState] = useState(loadState);
+  const [hovered, setHovered] = useState(false);
+  const [dragging, setDragging] = useState(false);
+
+  const score = Number.isFinite(Number(pulse.score)) ? Math.round(Number(pulse.score)) : 100;
+  const issues = Array.isArray(pulse.issues) ? pulse.issues : [];
+  const issueCount = issues.length;
+  const band = pulse.band || getPulseBand(score);
+  const tone = getTone(score);
+  const spec = sizeSpec(variant === 'mobile' ? 'small' : state.size);
+
   const radius = 42;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
 
   const positionStyle = useMemo(() => {
-    if (variant === 'mobile') {
-      return { right: 16, bottom: 92 };
-    }
-
-    if (Number.isFinite(state.x) && Number.isFinite(state.y)) {
-      return { left: state.x, top: state.y };
-    }
-
-    return { right: 24, top: 96 };
+    if (variant === 'mobile') return { left: '50%', bottom: 88, transform: 'translateX(-50%)' };
+    if (Number.isFinite(state.x) && Number.isFinite(state.y)) return { left: state.x, top: state.y };
+    return { left: 'calc(50% - 44px)', top: 108 };
   }, [state.x, state.y, variant]);
+
+  const drawerSide = useMemo(() => {
+    if (variant === 'mobile') return 'mobile';
+    const x = Number.isFinite(state.x) ? state.x : window.innerWidth / 2;
+    return x > window.innerWidth - 520 ? 'left' : 'right';
+  }, [state.x, variant]);
+
+  const updateState = (patch) => setState((prev) => ({ ...prev, ...patch }));
 
   useEffect(() => {
     saveState(state);
   }, [state]);
 
-  const updateState = (patch) => {
-    setState((prev) => ({ ...prev, ...patch }));
+  useEffect(() => {
+    if (!state.expanded) return;
+
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') updateState({ expanded: false, settingsOpen: false });
+    };
+
+    const onPointerDown = (event) => {
+      if (!widgetRef.current?.contains(event.target)) {
+        updateState({ expanded: false, settingsOpen: false });
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [state.expanded]);
+
+  const beginDrag = () => {
+    const current = dragRef.current;
+    if (!current.pressed || current.dragging) return;
+    current.dragging = true;
+    setDragging(true);
+    updateState({ expanded: false, settingsOpen: false, hintDismissed: true });
+    document.body.style.cursor = 'grabbing';
   };
 
-  const onPointerDown = (event) => {
-    if (variant === 'mobile' || state.expanded) return;
-    if (!widgetRef.current) return;
+  const finishDrag = () => {
+    const current = dragRef.current;
+    if (current.timer) clearTimeout(current.timer);
 
-    const rect = widgetRef.current.getBoundingClientRect();
+    if (current.dragging && state.snapToEdge && widgetRef.current) {
+      const rect = widgetRef.current.getBoundingClientRect();
+      const snapX = rect.left + rect.width / 2 < window.innerWidth / 2 ? 12 : window.innerWidth - rect.width - 12;
+      updateState({ x: snapX, y: Math.max(12, Math.min(window.innerHeight - rect.height - 12, rect.top)) });
+    }
+
+    current.pressed = false;
+    current.dragging = false;
+    current.pointerId = null;
+    setDragging(false);
+    document.body.style.cursor = '';
+  };
+
+  useEffect(() => {
+    const onMove = (event) => {
+      const current = dragRef.current;
+      if (!current.pressed || variant === 'mobile') return;
+
+      const dx = event.clientX - current.startX;
+      const dy = event.clientY - current.startY;
+      if (!current.dragging && Math.hypot(dx, dy) > 5) beginDrag();
+      if (!current.dragging) return;
+
+      const box = spec.box;
+      const nextX = Math.max(8, Math.min(window.innerWidth - box - 8, current.originX + dx));
+      const nextY = Math.max(8, Math.min(window.innerHeight - box - 8, current.originY + dy));
+      updateState({ x: nextX, y: nextY });
+    };
+
+    const onUp = () => finishDrag();
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [spec.box, state.snapToEdge, variant]);
+
+  const onOrbPointerDown = (event) => {
+    if (variant === 'mobile' || event.button !== 0) return;
+    const rect = orbRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
     dragRef.current = {
-      dragging: true,
+      pressed: true,
+      dragging: false,
       startX: event.clientX,
       startY: event.clientY,
       originX: rect.left,
       originY: rect.top,
+      pointerId: event.pointerId,
+      timer: window.setTimeout(beginDrag, 150),
     };
-
-    widgetRef.current.setPointerCapture?.(event.pointerId);
   };
 
-  const onPointerMove = (event) => {
-    if (!dragRef.current.dragging) return;
-
-    const dx = event.clientX - dragRef.current.startX;
-    const dy = event.clientY - dragRef.current.startY;
-    const nextX = Math.max(8, Math.min(window.innerWidth - 120, dragRef.current.originX + dx));
-    const nextY = Math.max(8, Math.min(window.innerHeight - 120, dragRef.current.originY + dy));
-
-    updateState({ x: nextX, y: nextY });
+  const onOrbDoubleClick = (event) => {
+    event.preventDefault();
+    if (dragRef.current.dragging) return;
+    updateState({ expanded: !state.expanded, settingsOpen: false, hintDismissed: true });
   };
 
-  const onPointerUp = (event) => {
-    dragRef.current.dragging = false;
-    widgetRef.current?.releasePointerCapture?.(event.pointerId);
+  const onContextMenu = (event) => {
+    event.preventDefault();
+    updateState({ settingsOpen: !state.settingsOpen, expanded: true, hintDismissed: true });
   };
 
-  if (!state.enabled) {
-    return null;
-  }
+  const resetPosition = () => updateState({ x: null, y: null, snapToEdge: false });
+
+  if (!state.enabled) return null;
+
+  const showHint = !state.hintDismissed && variant !== 'mobile' && !state.expanded;
+  const showPreview = hovered && !dragging && variant !== 'mobile' && !state.expanded;
 
   return (
-    <div
-      ref={widgetRef}
-      className={`fixed z-[90] select-none ${state.expanded ? 'w-[min(92vw,420px)]' : ''}`}
-      style={positionStyle}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-    >
-      {!state.expanded ? (
-        <button
-          type="button"
-          onClick={() => updateState({ expanded: true })}
-          onPointerDown={onPointerDown}
-          title="MedTrak Pulse"
-          className={`${classes.box} group relative rounded-full border bg-slate-950/90 p-2 text-white shadow-2xl backdrop-blur ${band.borderClass} ${band.glowClass}`}
-        >
-          {variant !== 'mobile' && (
-            <span className="absolute -left-1 -top-1 hidden rounded-full border border-slate-700 bg-slate-900 p-1 text-slate-500 group-hover:block">
-              <Grip className="h-3 w-3" />
-            </span>
-          )}
-
-          <svg viewBox="0 0 100 100" className="absolute inset-1 h-[calc(100%-0.5rem)] w-[calc(100%-0.5rem)] -rotate-90">
-            <circle cx="50" cy="50" r={radius} fill="none" stroke="currentColor" strokeWidth="8" className="text-slate-800" />
-            <circle
-              cx="50"
-              cy="50"
-              r={radius}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={classes.ring}
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={offset}
-              className={`transition-all duration-700 ${band.ringClass}`}
+    <div ref={widgetRef} className="fixed z-[90] select-none" style={positionStyle}>
+      <div
+        ref={orbRef}
+        role="button"
+        tabIndex={0}
+        aria-label="Pulse Nexus. Double click to open. Drag to move."
+        onPointerDown={onOrbPointerDown}
+        onDoubleClick={onOrbDoubleClick}
+        onContextMenu={onContextMenu}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            updateState({ expanded: !state.expanded, settingsOpen: false });
+          }
+        }}
+        className="group relative grid place-items-center rounded-full outline-none"
+        style={{
+          width: spec.box,
+          height: spec.box,
+          cursor: dragging ? 'grabbing' : 'grab',
+          filter: `drop-shadow(0 0 22px ${tone.aura})`,
+        }}
+      >
+        {!state.reducedMotion && (
+          <>
+            <span
+              className="absolute inset-[-10px] rounded-full opacity-70 blur-xl"
+              style={{ background: `radial-gradient(circle, ${tone.aura}, transparent 62%)` }}
             />
-          </svg>
+            <span
+              className="absolute inset-[-6px] rounded-full opacity-30"
+              style={{
+                border: `1px solid ${tone.accent}`,
+                animation: 'pulseNexusBreath 6s ease-in-out infinite',
+              }}
+            />
+          </>
+        )}
 
-          <span className="relative flex h-full flex-col items-center justify-center leading-none">
-            <span className={`font-black ${classes.text}`}>{pulse.loading ? '—' : `${score}%`}</span>
-            <span className={`mt-1 uppercase tracking-wide text-slate-400 ${classes.label}`}>Pulse</span>
+        <div
+          className="absolute inset-0 rounded-full border border-white/10 bg-slate-950/90 shadow-2xl backdrop-blur-xl"
+          style={{
+            background: `radial-gradient(circle at 50% 38%, rgba(255,255,255,0.11), transparent 22%), radial-gradient(circle at center, rgba(2,6,23,0.95) 0%, rgba(2,6,23,0.92) 54%, ${tone.glass} 100%)`,
+          }}
+        />
+
+        <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full -rotate-90">
+          <defs>
+            <linearGradient id={`pulse-nexus-${tone.id}`} x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stopColor={tone.accent} stopOpacity="1" />
+              <stop offset="55%" stopColor={tone.soft} stopOpacity="0.9" />
+              <stop offset="100%" stopColor={tone.deep} stopOpacity="0.75" />
+            </linearGradient>
+          </defs>
+          <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(15,23,42,0.95)" strokeWidth="10" />
+          <circle
+            cx="50"
+            cy="50"
+            r="42"
+            fill="none"
+            stroke={`url(#pulse-nexus-${tone.id})`}
+            strokeWidth={spec.stroke}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={offset}
+            style={{ transition: 'stroke-dashoffset 700ms ease' }}
+          />
+          <circle
+            cx="50"
+            cy="50"
+            r="35"
+            fill="none"
+            stroke={tone.accent}
+            strokeOpacity="0.18"
+            strokeWidth="1.5"
+            strokeDasharray="7 8"
+          />
+        </svg>
+
+        <div className="relative z-10 flex flex-col items-center justify-center text-center leading-none text-white">
+          <Activity className={`${spec.icon} mb-1`} style={{ color: tone.accent }} />
+          <span className={`${spec.score} font-black tracking-tight drop-shadow`}>{pulse.loading ? '—' : score}</span>
+          <span className="mt-1 text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: tone.accent }}>
+            Pulse
           </span>
-        </button>
-      ) : (
-        <div className="rounded-3xl border border-slate-800 bg-slate-950/95 p-4 text-white shadow-2xl shadow-black/50 backdrop-blur">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className={`h-2.5 w-2.5 rounded-full ${band.dotClass}`} />
-                <h2 className="font-bold text-white">MedTrak Pulse</h2>
-              </div>
-              <p className="mt-1 text-xs text-slate-400">Updated {formatTime(pulse.updatedAt || new Date())}</p>
-            </div>
+        </div>
 
-            <div className="flex gap-1">
-              {variant !== 'mobile' && (
-                <button
-                  type="button"
-                  onClick={() => updateState({ expanded: false })}
-                  className="rounded-full p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
-                  title="Minimise"
-                >
-                  <Minus className="h-4 w-4" />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => updateState({ expanded: false })}
-                className="rounded-full p-2 text-slate-400 hover:bg-slate-800 hover:text-white"
-                title="Close"
-              >
-                <X className="h-4 w-4" />
-              </button>
+        {issueCount > 0 && (
+          <span className={`absolute -right-1 -top-1 z-20 grid h-7 min-w-7 place-items-center rounded-full px-2 text-xs font-black shadow-lg ${eventSeverityClass(score)}`}>
+            {issueCount}
+          </span>
+        )}
+      </div>
+
+      {showHint && (
+        <div className="absolute left-1/2 top-[calc(100%+10px)] z-[95] w-56 -translate-x-1/2 rounded-2xl border border-cyan-300/20 bg-slate-950/95 px-3 py-2 text-center text-xs text-cyan-50 shadow-2xl shadow-cyan-950/40 backdrop-blur">
+          Drag anywhere · Double-click to open
+        </div>
+      )}
+
+      {showPreview && (
+        <div className="absolute left-1/2 top-[calc(100%+10px)] z-[95] w-56 -translate-x-1/2 rounded-2xl border border-slate-700/70 bg-slate-950/95 p-3 text-white shadow-2xl shadow-black/50 backdrop-blur">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Pulse</span>
+            <span className="text-xs font-bold" style={{ color: tone.accent }}>{tone.label}</span>
+          </div>
+          <div className="mt-2 flex items-end justify-between">
+            <div className="text-3xl font-black">{score}</div>
+            <div className="text-right text-xs text-slate-400">
+              <div>{issueCount} Pulse Event{issueCount === 1 ? '' : 's'}</div>
+              <div>Double-click to open</div>
             </div>
           </div>
+        </div>
+      )}
 
-          <div className="grid grid-cols-[110px_1fr] gap-4">
-            <div className="relative h-28 w-28 rounded-full">
-              <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full -rotate-90">
-                <circle cx="50" cy="50" r={radius} fill="none" stroke="currentColor" strokeWidth="8" className="text-slate-800" />
-                <circle
-                  cx="50"
-                  cy="50"
-                  r={radius}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="12"
-                  strokeLinecap="round"
-                  strokeDasharray={circumference}
-                  strokeDashoffset={offset}
-                  className={`transition-all duration-700 ${band.ringClass}`}
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-3xl font-black">{pulse.loading ? '—' : `${score}%`}</div>
-                <div className="text-[10px] uppercase tracking-wide text-slate-400">Practice Health</div>
+      {state.expanded && variant !== 'mobile' && (
+        <PulseDrawer
+          side={drawerSide}
+          pulse={pulse}
+          score={score}
+          tone={tone}
+          band={band}
+          state={state}
+          updateState={updateState}
+          resetPosition={resetPosition}
+          navigate={navigate}
+        />
+      )}
+
+      {state.expanded && variant === 'mobile' && (
+        <div className="fixed inset-x-3 bottom-20 z-[100] rounded-3xl border border-slate-700/80 bg-slate-950/95 p-4 text-white shadow-2xl backdrop-blur-xl">
+          <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} compact />
+        </div>
+      )}
+
+      <style>{`
+        @keyframes pulseNexusBreath {
+          0%, 100% { transform: scale(0.98); opacity: 0.22; }
+          50% { transform: scale(1.08); opacity: 0.5; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+function PulseDrawer({ side, pulse, score, tone, band, state, updateState, resetPosition, navigate }) {
+  const sideClass = side === 'left' ? 'right-[calc(100%+14px)]' : 'left-[calc(100%+14px)]';
+  return (
+    <div className={`absolute top-0 z-[92] w-[min(92vw,430px)] rounded-3xl border border-slate-700/80 bg-slate-950/95 p-4 text-white shadow-2xl shadow-black/60 backdrop-blur-xl ${sideClass}`}>
+      <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} />
+      {state.settingsOpen && (
+        <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-950/10 p-3">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-bold text-cyan-100"><Settings className="h-4 w-4" /> Pulse Settings</div>
+            <button type="button" className="rounded-full p-1 text-slate-400 hover:bg-slate-800 hover:text-white" onClick={() => updateState({ settingsOpen: false })}><X className="h-4 w-4" /></button>
+          </div>
+          <div className="space-y-2 text-sm">
+            <Toggle label="Snap to screen edge" checked={state.snapToEdge} onChange={() => updateState({ snapToEdge: !state.snapToEdge })} />
+            <Toggle label="Reduced motion" checked={state.reducedMotion} onChange={() => updateState({ reducedMotion: !state.reducedMotion })} />
+            <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2">
+              <span className="text-slate-300">Orb size</span>
+              <div className="flex gap-1">
+                {['small', 'medium', 'large'].map((size) => (
+                  <button key={size} type="button" onClick={() => updateState({ size })} className={`rounded-full px-2 py-1 text-xs ${state.size === size ? 'bg-cyan-400 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>{size}</button>
+                ))}
               </div>
             </div>
-
-            <div>
-              <div className="font-semibold text-white">{band.label}</div>
-              <p className="mt-1 text-sm text-slate-400">{band.message}</p>
-              <p className="mt-3 text-xs text-slate-500">
-                This foundation score currently uses Inventory, Purchasing and Compliance signals. Assets, Estates, Workforce and Governance are ready for future modules.
-              </p>
-            </div>
+            <button type="button" onClick={resetPosition} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-200 hover:border-cyan-400/50 hover:text-cyan-100"><RotateCcw className="h-4 w-4" /> Reset position</button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
-          <div className="mt-4 space-y-2">
-            {pulse.modules.map((module) => {
+function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, compact = false }) {
+  const modules = Array.isArray(pulse.modules) ? pulse.modules : [];
+  const issues = Array.isArray(pulse.issues) ? pulse.issues : [];
+  const timeline = makeTimeline(issues);
+
+  return (
+    <>
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4" style={{ color: tone.accent }} />
+            <h2 className="font-bold text-white">Practice Pulse</h2>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">Updated {formatTime(pulse.updatedAt || new Date())}</p>
+        </div>
+        <div className="flex gap-1">
+          {!compact && (
+            <button type="button" onClick={() => updateState({ settingsOpen: true })} className="rounded-full p-2 text-slate-400 hover:bg-slate-800 hover:text-white" title="Pulse settings"><Settings className="h-4 w-4" /></button>
+          )}
+          <button type="button" onClick={() => updateState({ expanded: false, settingsOpen: false })} className="rounded-full p-2 text-slate-400 hover:bg-slate-800 hover:text-white" title="Close"><X className="h-4 w-4" /></button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[112px_1fr] gap-4">
+        <div className="relative grid h-28 w-28 place-items-center rounded-full" style={{ filter: `drop-shadow(0 0 18px ${tone.aura})` }}>
+          <div className="absolute inset-0 rounded-full border border-white/10 bg-slate-950" />
+          <div className="relative z-10 text-center">
+            <div className="text-4xl font-black">{score}</div>
+            <div className="text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: tone.accent }}>Pulse</div>
+          </div>
+        </div>
+        <div>
+          <div className="inline-flex rounded-full border px-3 py-1 text-xs font-bold" style={{ borderColor: tone.accent, color: tone.accent }}>{band.label || tone.label}</div>
+          <p className="mt-3 text-sm text-slate-300">{band.message || 'Live operational health for the practice.'}</p>
+          <p className="mt-3 text-xs text-slate-500">Pulse reflects Inventory, Compliance, Governance, Connect and future operational signals.</p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Modules</div>
+          <div className="mt-2 space-y-2">
+            {modules.map((module) => {
               const moduleBand = getPulseBand(module.score);
+              const moduleTone = TONES[moduleBand.tone] || TONES.green;
               const route = MODULE_ROUTES[module.key] || '/dashboard';
-
               return (
                 <button
                   key={module.key}
                   type="button"
                   onClick={() => {
-                    updateState({ expanded: false });
+                    updateState({ expanded: false, settingsOpen: false });
                     navigate(route);
                   }}
-                  className="flex w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-left hover:bg-slate-800"
+                  className="flex w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-left hover:border-cyan-400/40 hover:bg-slate-900"
                 >
-                  <span className="flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${moduleBand.dotClass}`} />
-                    <span className="text-sm text-slate-200">{module.label}</span>
+                  <span className="flex items-center gap-2 text-sm text-slate-200">
+                    <span className="h-2 w-2 rounded-full" style={{ background: moduleTone.accent }} />
+                    {module.label}
                   </span>
-                  <span className="flex items-center gap-2 text-sm font-bold text-white">
-                    {module.score}% <ChevronRight className="h-4 w-4 text-slate-500" />
-                  </span>
+                  <span className="flex items-center gap-2 text-sm font-bold text-white">{module.score}<ChevronRight className="h-4 w-4 text-slate-500" /></span>
                 </button>
               );
             })}
           </div>
-
-          <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900 p-3">
-            <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Attention</div>
-            {pulse.issues.length === 0 ? (
-              <p className="mt-1 text-sm text-slate-300">No current issues detected.</p>
-            ) : (
-              <div className="mt-2 space-y-2">
-                {pulse.issues.slice(0, 4).map((issue, index) => (
-                  <div key={`${issue.moduleKey}-${index}`} className="text-sm text-slate-300">
-                    <span className="font-semibold text-slate-100">{issue.moduleLabel}:</span> {issue.text}
-                  </div>
-                ))}
-                {pulse.issues.length > 4 && <div className="text-xs text-slate-500">+ {pulse.issues.length - 4} more</div>}
-              </div>
-            )}
-          </div>
         </div>
-      )}
-    </div>
+
+        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Why?</div>
+          {issues.length === 0 ? (
+            <div className="mt-3 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-100">No active issues detected.</div>
+          ) : (
+            <div className="mt-2 space-y-2">
+              {issues.slice(0, 4).map((issue, index) => (
+                <div key={`${issue.moduleKey}-${index}`} className="rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-300">
+                  <span className="font-semibold text-slate-100">{issue.moduleLabel}:</span> {issue.text}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Pulse Events</div>
+        <div className="mt-2 space-y-2">
+          {timeline.map((item) => (
+            <div key={item.id} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm">
+              <div>
+                <div className="text-slate-200">{item.title}</div>
+                <div className="text-xs text-slate-500">{item.time} · {item.module}</div>
+              </div>
+              <span className={`rounded-full px-2 py-1 text-xs font-black ${item.delta > 0 ? 'bg-emerald-400/15 text-emerald-200' : 'bg-rose-400/15 text-rose-200'}`}>{item.delta > 0 ? `+${item.delta}` : item.delta}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          updateState({ expanded: false, settingsOpen: false });
+          navigate('/alerts');
+        }}
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-400/40 bg-cyan-400/15 px-4 py-3 text-sm font-bold text-cyan-100 hover:bg-cyan-400/25"
+      >
+        Open Operations Centre <ExternalLink className="h-4 w-4" />
+      </button>
+    </>
+  );
+}
+
+function makeTimeline(issues) {
+  if (!issues.length) {
+    return [
+      { id: 'healthy', time: formatTime(new Date()), title: 'Practice operating steadily', module: 'Operations', delta: 1 },
+      { id: 'checks', time: 'Today', title: 'Routine monitoring active', module: 'Pulse', delta: 0 },
+    ];
+  }
+  return issues.slice(0, 3).map((issue, index) => ({
+    id: `${issue.moduleKey}-${index}`,
+    time: index === 0 ? formatTime(new Date()) : 'Today',
+    title: issue.text,
+    module: issue.moduleLabel,
+    delta: issue.score < 75 ? -2 : -1,
+  }));
+}
+
+function Toggle({ label, checked, onChange }) {
+  return (
+    <button type="button" onClick={onChange} className="flex w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-left">
+      <span className="text-slate-300">{label}</span>
+      <span className={`relative h-6 w-11 rounded-full transition ${checked ? 'bg-cyan-400' : 'bg-slate-700'}`}>
+        <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${checked ? 'left-6' : 'left-1'}`} />
+      </span>
+    </button>
   );
 }

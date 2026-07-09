@@ -19,6 +19,7 @@ import {
   Printer,
   X,
   Mail,
+  QrCode,
 } from "lucide-react";
 import { db } from "../lib/firebase";
 import {
@@ -33,6 +34,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
+import ComplianceQrEngine from "@/components/compliance/ComplianceQrEngine";
 
 // ---------- UI helpers ----------
 function TabButton({ active, onClick, icon: Icon, label }) {
@@ -184,7 +186,7 @@ function isValidEmail(email) {
 // ---------- Page ----------
 export default function Compliance() {
   const SITE_ID = "main_branch";
-  const [tab, setTab] = useState("fire"); // fire | water | pat
+  const [tab, setTab] = useState("qr"); // qr | fire | water | pat
 
   // For printing we keep our own “recent” datasets at page level
   const [printFireChecks, setPrintFireChecks] = useState([]);
@@ -598,7 +600,7 @@ export default function Compliance() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-100">Compliance</h1>
-          <p className="text-sm text-slate-400">Water Temps • Fire Checks • PAT</p>
+          <p className="text-sm text-slate-400">QR/NFC Rounds • Water Temps • Fire Checks • PAT</p>
         </div>
 
         <Button
@@ -613,12 +615,14 @@ export default function Compliance() {
 
       <Card className="border border-white/10 bg-slate-900/70 backdrop-blur p-2 shadow-lg">
         <div className="flex flex-wrap gap-2">
+          <TabButton active={tab === "qr"} onClick={() => setTab("qr")} icon={QrCode} label="QR/NFC Rounds" />
           <TabButton active={tab === "fire"} onClick={() => setTab("fire")} icon={Flame} label="Fire Checks" />
           <TabButton active={tab === "water"} onClick={() => setTab("water")} icon={Droplets} label="Water Temps" />
           <TabButton active={tab === "pat"} onClick={() => setTab("pat")} icon={PlugZap} label="PAT Testing" />
         </div>
       </Card>
 
+      {tab === "qr" && <ComplianceQrEngine />}
       {tab === "fire" && <FireChecksTab />}
       {tab === "water" && <WaterTempsTab />}
       {tab === "pat" && <PatTestingTab />}

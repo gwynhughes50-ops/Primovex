@@ -8,7 +8,7 @@ export default function MobileBottomNav({ activeKey = "home", onNavigate, onScan
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-800 bg-slate-950/95 px-3 pb-3 pt-2 text-slate-100 backdrop-blur">
-      <div className="mx-auto flex max-w-md items-end justify-around">
+      <div className="mx-auto flex max-w-lg items-end justify-around">
         {navItems.map((item) => {
           const Icon = resolveIcon(item.icon, "helpCircle");
           const isActive = activeKey === item.key;

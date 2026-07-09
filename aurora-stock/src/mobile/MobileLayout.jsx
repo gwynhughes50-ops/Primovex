@@ -6,6 +6,7 @@ import MobileBottomNav from "./MobileBottomNav";
 import MobileBarcodeScanner from "@/components/ui/MobileBarcodeScanner";
 import PulseWidget from "@/components/pulse/PulseWidget";
 import MobileConnect from "./MobileConnect";
+import MobileCompliance from "./MobileCompliance";
 import MobileSessionShell from "./MobileSessionShell";
 
 import {
@@ -164,6 +165,8 @@ export default function MobileLayout() {
     <div className="min-h-screen bg-slate-950 text-white pb-20">
       {activeTab === "connect" ? (
         <MobileConnect />
+      ) : activeTab === "compliance" ? (
+        <MobileCompliance />
       ) : (
         <MobileHome
           mode={activeTab}

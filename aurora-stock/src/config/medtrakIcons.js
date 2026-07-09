@@ -31,6 +31,10 @@ import {
   Trash2,
   UserPlus,
   Users,
+  QrCode,
+  SmartphoneNfc,
+  Flame,
+  Droplets,
 } from "lucide-react";
 
 /**
@@ -80,6 +84,10 @@ export const Icons = {
   gauge: Gauge,
   connect: RadioTower,
   wifi: Wifi,
+  qrCode: QrCode,
+  nfc: SmartphoneNfc,
+  fire: Flame,
+  water: Droplets,
 };
 
 export const iconGroups = {
@@ -87,8 +95,8 @@ export const iconGroups = {
   inventory: ["inventory", "stock", "package", "barcodeScan", "reorder"],
   governance: ["governance", "sar", "compliance", "check", "security"],
   connect: ["connect", "wifi", "temperature", "activity", "alerts"],
-  mobile: ["home", "stock", "barcodeScan", "connect", "user", "login", "logout"],
-  actions: ["add", "check", "trash", "notifications", "settings"],
+  mobile: ["home", "stock", "barcodeScan", "connect", "qrCode", "nfc", "user", "login", "logout"],
+  actions: ["add", "check", "trash", "notifications", "settings", "qrCode", "nfc"],
   people: ["user", "userPlus", "departments", "roles"],
   insight: ["pulse", "gauge", "reports", "activity"],
 };

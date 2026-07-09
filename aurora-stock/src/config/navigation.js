@@ -46,6 +46,7 @@ const mobileNavigationConfig = [
   { key: "stock", label: "Stock", iconKey: "stock", capability: "inventory.read" },
   { key: "scan", label: "Scan", iconKey: "barcodeScan", primary: true, capability: "inventory.write" },
   { key: "connect", label: "Connect", iconKey: "connect", capability: "connect.view" },
+  { key: "compliance", label: "Checks", iconKey: "qrCode", capability: "compliance.read" },
   { key: "me", label: "Me", iconKey: "user", capability: "mobile.access" },
 ];
 
