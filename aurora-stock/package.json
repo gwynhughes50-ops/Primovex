@@ -1,6 +1,6 @@
 {
-  "name": "aurora-stock",
-  "version": "0.0.1",
+  "name": "primovex",
+  "version": "1.0.0-alpha.28",
   "private": true,
   "scripts": {
     "dev": "vite",

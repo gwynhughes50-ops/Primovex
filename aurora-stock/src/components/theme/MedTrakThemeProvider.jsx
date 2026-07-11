@@ -5,8 +5,8 @@ const STORAGE_KEY = "medtrak-theme";
 export const MEDTRAK_THEMES = [
   {
     id: "aurora",
-    name: "Aurora Teal",
-    description: "Original MedTrak+ dark teal.",
+    name: "Primovex Midnight",
+    description: "Official Primovex blue, violet and cyan dark theme.",
     light: false,
     bg: "#020617",
     panel: "#0f172a",
@@ -14,8 +14,8 @@ export const MEDTRAK_THEMES = [
     border: "rgba(148, 163, 184, 0.22)",
     text: "#f8fafc",
     muted: "#94a3b8",
-    accent: "#2dd4bf",
-    accent2: "#34d399",
+    accent: "#2563eb",
+    accent2: "#7c3aed",
   },
   {
     id: "nhs-blue",
@@ -518,6 +518,188 @@ html:not(.medtrak-light) .medtrak-temperature-card * {
 
     html[data-medtrak-theme] [data-theme-critical-text="true"] {
       color: var(--mt-text-primary) !important;
+    }
+
+    /* Sprint 25: typography and control-state hardening. */
+    html[data-medtrak-theme],
+    html[data-medtrak-theme] body,
+    html[data-medtrak-theme] button,
+    html[data-medtrak-theme] input,
+    html[data-medtrak-theme] select,
+    html[data-medtrak-theme] textarea {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+    }
+
+    html[data-medtrak-theme] body {
+      font-weight: 400;
+      letter-spacing: -0.005em;
+    }
+
+    html[data-medtrak-theme] h1,
+    html[data-medtrak-theme] h2,
+    html[data-medtrak-theme] h3,
+    html[data-medtrak-theme] h4,
+    html[data-medtrak-theme] h5,
+    html[data-medtrak-theme] h6 {
+      color: var(--mt-text-primary);
+      text-wrap: balance;
+    }
+
+    html[data-medtrak-theme] button {
+      font-weight: 650;
+    }
+
+    html[data-medtrak-theme] [data-mt-button] {
+      border-color: var(--mt-border) !important;
+      color: var(--mt-text-primary) !important;
+      box-shadow: none;
+    }
+
+    html[data-medtrak-theme] [data-mt-button="default"] {
+      background: linear-gradient(135deg, var(--mt-accent), var(--mt-accent-2)) !important;
+      color: var(--mt-on-accent) !important;
+      border-color: color-mix(in srgb, var(--mt-accent) 55%, transparent) !important;
+      box-shadow: 0 10px 28px color-mix(in srgb, var(--mt-accent) 20%, transparent) !important;
+    }
+
+    html[data-medtrak-theme] [data-mt-button="default"]:hover {
+      filter: brightness(1.08) saturate(1.04);
+      transform: translateY(-1px);
+    }
+
+    html[data-medtrak-theme] [data-mt-button="outline"],
+    html[data-medtrak-theme] [data-mt-button="secondary"] {
+      background: color-mix(in srgb, var(--mt-card-strong) 86%, var(--mt-accent) 8%) !important;
+      color: var(--mt-text-primary) !important;
+    }
+
+    html[data-medtrak-theme] [data-mt-button="outline"]:hover,
+    html[data-medtrak-theme] [data-mt-button="secondary"]:hover,
+    html[data-medtrak-theme] [data-mt-button="ghost"]:hover {
+      background: color-mix(in srgb, var(--mt-card-strong) 72%, var(--mt-accent) 18%) !important;
+      color: var(--mt-text-primary) !important;
+    }
+
+    html[data-medtrak-theme] [data-mt-button="ghost"] {
+      background: transparent !important;
+      color: var(--mt-text-secondary) !important;
+      border-color: transparent !important;
+    }
+
+    html[data-medtrak-theme] [data-mt-button="link"] {
+      background: transparent !important;
+      color: var(--mt-accent) !important;
+      border-color: transparent !important;
+    }
+
+    html[data-medtrak-theme] [data-mt-button="destructive"] {
+      background: #e11d48 !important;
+      color: #ffffff !important;
+      border-color: #be123c !important;
+    }
+
+    html[data-medtrak-theme] [data-mt-button]:focus-visible,
+    html[data-medtrak-theme] button:focus-visible,
+    html[data-medtrak-theme] input:focus-visible,
+    html[data-medtrak-theme] select:focus-visible,
+    html[data-medtrak-theme] textarea:focus-visible {
+      outline: 3px solid color-mix(in srgb, var(--mt-accent) 72%, white 28%) !important;
+      outline-offset: 2px !important;
+      box-shadow: none !important;
+    }
+
+    html[data-medtrak-theme] [data-mt-button]:disabled,
+    html[data-medtrak-theme] button:disabled {
+      opacity: 0.52 !important;
+      cursor: not-allowed !important;
+      filter: grayscale(0.18);
+      transform: none !important;
+    }
+
+    html.medtrak-light .text-white:not([data-preserve-colour]),
+    html.medtrak-light .text-black:not([data-preserve-colour]) {
+      color: var(--mt-text-primary) !important;
+    }
+
+    html.medtrak-light .font-black { font-weight: 800 !important; }
+    html.medtrak-light .font-bold { font-weight: 700 !important; }
+    html.medtrak-light .font-semibold { font-weight: 600 !important; }
+
+    html[data-medtrak-theme="high-contrast"] [data-mt-button] {
+      border-width: 2px !important;
+    }
+
+    html[data-medtrak-theme="high-contrast"] [data-mt-button="default"] {
+      background: #facc15 !important;
+      color: #000000 !important;
+      border-color: #ffffff !important;
+    }
+
+    /* Sprint 26A: semantic pills, tabs and AI surfaces. */
+    html[data-medtrak-theme] .mt-pill {
+      background: color-mix(in srgb, var(--mt-card-strong) 84%, var(--mt-accent) 10%) !important;
+      border-color: var(--mt-border) !important;
+      color: var(--mt-text-primary) !important;
+    }
+
+    html[data-medtrak-theme] .mt-pill-muted {
+      background: color-mix(in srgb, var(--mt-card-strong) 92%, var(--mt-accent) 5%) !important;
+      border-color: var(--mt-border) !important;
+      color: var(--mt-text-secondary) !important;
+    }
+
+    html[data-medtrak-theme] .mt-tab {
+      background: color-mix(in srgb, var(--mt-card-strong) 90%, var(--mt-accent) 5%) !important;
+      border-color: var(--mt-border) !important;
+      color: var(--mt-text-secondary) !important;
+    }
+
+    html[data-medtrak-theme] .mt-tab:hover {
+      background: color-mix(in srgb, var(--mt-card-strong) 76%, var(--mt-accent) 18%) !important;
+      color: var(--mt-text-primary) !important;
+    }
+
+    html[data-medtrak-theme] .mt-tab-active {
+      background: linear-gradient(135deg, var(--mt-accent), var(--mt-accent-2)) !important;
+      border-color: color-mix(in srgb, var(--mt-accent) 65%, transparent) !important;
+      color: var(--mt-on-accent) !important;
+      box-shadow: 0 8px 22px color-mix(in srgb, var(--mt-accent) 18%, transparent) !important;
+    }
+
+    html[data-medtrak-theme] .mt-ai-badge {
+      background: color-mix(in srgb, var(--mt-card-strong) 82%, var(--mt-accent-2) 14%) !important;
+      border-color: color-mix(in srgb, var(--mt-accent-2) 38%, var(--mt-border)) !important;
+      color: var(--mt-text-primary) !important;
+    }
+
+    html[data-medtrak-theme] .mt-ai-surface {
+      background: linear-gradient(135deg,
+        color-mix(in srgb, var(--mt-card-strong) 88%, var(--mt-accent-2) 12%),
+        color-mix(in srgb, var(--mt-card-strong) 94%, var(--mt-accent) 6%)) !important;
+      border-color: color-mix(in srgb, var(--mt-accent-2) 30%, var(--mt-border)) !important;
+      color: var(--mt-text-primary) !important;
+    }
+
+    html[data-medtrak-theme] .mt-ai-surface .mt-ai-heading,
+    html[data-medtrak-theme] .mt-ai-surface .mt-ai-body,
+    html[data-medtrak-theme] .mt-ai-surface .mt-ai-focus {
+      color: var(--mt-text-primary) !important;
+    }
+
+    html[data-medtrak-theme] .mt-ai-surface .mt-ai-kicker,
+    html[data-medtrak-theme] .mt-ai-surface .mt-ai-label {
+      color: var(--mt-text-secondary) !important;
+    }
+
+    html.medtrak-light .mt-tab-active,
+    html.medtrak-light .mt-button-primary,
+    html.medtrak-light .mt-brand-gradient {
+      color: #ffffff !important;
+    }
+
+    html[data-medtrak-theme="high-contrast"] .mt-tab-active,
+    html[data-medtrak-theme="high-contrast"] .mt-ai-badge {
+      border-width: 2px !important;
     }
 
   `;

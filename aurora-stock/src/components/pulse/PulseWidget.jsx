@@ -4,6 +4,7 @@ import { Activity, ChevronRight, ExternalLink, Move, RotateCcw, Settings, X } fr
 
 import usePulse from '@/hooks/usePulse';
 import { getPulseBand } from '@/services/pulseService';
+import { useMedTrakTheme } from '@/components/theme/MedTrakThemeProvider';
 
 const STORAGE_KEY = 'medtrak_pulse_nexus_v3';
 const LEGACY_STORAGE_KEY = 'medtrak_pulse_widget_v1';
@@ -121,20 +122,45 @@ function sizeSpec(size) {
   return { box: 88, score: 'text-3xl', icon: 'h-4 w-4', stroke: 9.5 };
 }
 
-function getTone(score) {
+function hexToRgba(hex, alpha) {
+  const value = String(hex || '').replace('#', '');
+  if (!/^[0-9a-fA-F]{6}$/.test(value)) return `rgba(0, 94, 184, ${alpha})`;
+  const number = Number.parseInt(value, 16);
+  const red = (number >> 16) & 255;
+  const green = (number >> 8) & 255;
+  const blue = number & 255;
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+function getTone(score, theme) {
   const band = getPulseBand(score);
-  return TONES[band.tone] || TONES.green;
+  const base = TONES[band.tone] || TONES.green;
+
+  // A healthy Pulse follows the selected application theme. Warning and
+  // critical states retain their semantic colours for patient-safety clarity.
+  if (band.tone !== 'green') return base;
+
+  return {
+    ...base,
+    accent: theme.accent,
+    soft: theme.accent2,
+    deep: theme.accent2,
+    aura: hexToRgba(theme.accent, 0.28),
+    glass: hexToRgba(theme.accent, theme.light ? 0.10 : 0.24),
+    badge: 'mt-pulse-badge',
+  };
 }
 
 function eventSeverityClass(score) {
   if (score < 50) return TONES.red.badge;
   if (score < 75) return TONES.orange.badge;
   if (score < 90) return TONES.amber.badge;
-  return TONES.violet.badge;
+  return 'mt-pulse-badge';
 }
 
 export default function PulseWidget({ variant = 'desktop' }) {
   const navigate = useNavigate();
+  const { theme } = useMedTrakTheme();
   const pulse = usePulse();
   const widgetRef = useRef(null);
   const orbRef = useRef(null);
@@ -157,7 +183,7 @@ export default function PulseWidget({ variant = 'desktop' }) {
   const issues = Array.isArray(pulse.issues) ? pulse.issues : [];
   const issueCount = issues.length;
   const band = pulse.band || getPulseBand(score);
-  const tone = getTone(score);
+  const tone = getTone(score, theme);
   const spec = sizeSpec(variant === 'mobile' ? 'small' : state.size);
 
   const radius = 42;
@@ -334,9 +360,9 @@ export default function PulseWidget({ variant = 'desktop' }) {
         )}
 
         <div
-          className="absolute inset-0 rounded-full border border-white/10 bg-slate-950/90 shadow-2xl backdrop-blur-xl"
+          className="absolute inset-0 rounded-full border shadow-2xl backdrop-blur-xl mt-pulse-orb-core"
           style={{
-            background: `radial-gradient(circle at 50% 38%, rgba(255,255,255,0.11), transparent 22%), radial-gradient(circle at center, rgba(2,6,23,0.95) 0%, rgba(2,6,23,0.92) 54%, ${tone.glass} 100%)`,
+            background: `radial-gradient(circle at 50% 38%, rgba(255,255,255,0.16), transparent 22%), radial-gradient(circle at center, var(--pulse-orb-centre) 0%, var(--pulse-orb-centre) 54%, ${tone.glass} 100%)`,
           }}
         />
 
@@ -348,7 +374,7 @@ export default function PulseWidget({ variant = 'desktop' }) {
               <stop offset="100%" stopColor={tone.deep} stopOpacity="0.75" />
             </linearGradient>
           </defs>
-          <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(15,23,42,0.95)" strokeWidth="10" />
+          <circle cx="50" cy="50" r="42" fill="none" stroke="var(--pulse-orb-track)" strokeWidth="10" />
           <circle
             cx="50"
             cy="50"
@@ -373,7 +399,7 @@ export default function PulseWidget({ variant = 'desktop' }) {
           />
         </svg>
 
-        <div className="relative z-10 flex flex-col items-center justify-center text-center leading-none text-white">
+        <div className="relative z-10 flex flex-col items-center justify-center text-center leading-none mt-pulse-text">
           <Activity className={`${spec.icon} mb-1`} style={{ color: tone.accent }} />
           <span className={`${spec.score} font-black tracking-tight drop-shadow`}>{pulse.loading ? '—' : score}</span>
           <span className="mt-1 text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: tone.accent }}>
@@ -389,20 +415,20 @@ export default function PulseWidget({ variant = 'desktop' }) {
       </div>
 
       {showHint && (
-        <div className="absolute left-1/2 top-[calc(100%+10px)] z-[95] w-56 -translate-x-1/2 rounded-2xl border border-cyan-300/20 bg-slate-950/95 px-3 py-2 text-center text-xs text-cyan-50 shadow-2xl shadow-cyan-950/40 backdrop-blur">
+        <div className="absolute left-1/2 top-[calc(100%+10px)] z-[95] w-56 -translate-x-1/2 rounded-2xl border px-3 py-2 text-center text-xs shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
           Drag anywhere · Double-click to open
         </div>
       )}
 
       {showPreview && (
-        <div className="absolute left-1/2 top-[calc(100%+10px)] z-[95] w-56 -translate-x-1/2 rounded-2xl border border-slate-700/70 bg-slate-950/95 p-3 text-white shadow-2xl shadow-black/50 backdrop-blur">
+        <div className="absolute left-1/2 top-[calc(100%+10px)] z-[95] w-56 -translate-x-1/2 rounded-2xl border p-3 shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Pulse</span>
+            <span className="text-xs font-semibold uppercase tracking-[0.18em] mt-pulse-muted">Pulse</span>
             <span className="text-xs font-bold" style={{ color: tone.accent }}>{tone.label}</span>
           </div>
           <div className="mt-2 flex items-end justify-between">
             <div className="text-3xl font-black">{score}</div>
-            <div className="text-right text-xs text-slate-400">
+            <div className="text-right text-xs mt-pulse-muted">
               <div>{issueCount} Pulse Event{issueCount === 1 ? '' : 's'}</div>
               <div>Double-click to open</div>
             </div>
@@ -421,12 +447,15 @@ export default function PulseWidget({ variant = 'desktop' }) {
           updateState={updateState}
           resetPosition={resetPosition}
           navigate={navigate}
+          theme={theme}
         />
       )}
 
       {state.expanded && variant === 'mobile' && (
-        <div className="fixed inset-x-3 bottom-20 z-[100] rounded-3xl border border-slate-700/80 bg-slate-950/95 p-4 text-white shadow-2xl backdrop-blur-xl">
-          <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} compact />
+        <div className="fixed inset-x-3 bottom-20 top-16 z-[100] flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-xl mt-pulse-panel mt-pulse-text">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pr-3 [scrollbar-gutter:stable]">
+            <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} theme={theme} compact />
+          </div>
         </div>
       )}
 
@@ -440,37 +469,41 @@ export default function PulseWidget({ variant = 'desktop' }) {
   );
 }
 
-function PulseDrawer({ side, pulse, score, tone, band, state, updateState, resetPosition, navigate }) {
+function PulseDrawer({ side, pulse, score, tone, band, state, updateState, resetPosition, navigate, theme }) {
   const sideClass = side === 'left' ? 'right-[calc(100%+14px)]' : 'left-[calc(100%+14px)]';
   return (
-    <div className={`absolute top-0 z-[92] w-[min(92vw,430px)] rounded-3xl border border-slate-700/80 bg-slate-950/95 p-4 text-white shadow-2xl shadow-black/60 backdrop-blur-xl ${sideClass}`}>
-      <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} />
+    <div className={`absolute top-0 z-[92] flex max-h-[min(82dvh,760px)] w-[min(92vw,430px)] flex-col overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-xl mt-pulse-panel mt-pulse-text ${sideClass}`}>
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pr-3 [scrollbar-gutter:stable]">
+        <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} theme={theme} />
+      </div>
       {state.settingsOpen && (
-        <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-950/10 p-3">
+        <div className="shrink-0 border-t p-4 mt-pulse-panel">
+          <div className="rounded-2xl border p-3 mt-pulse-surface">
           <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm font-bold text-cyan-100"><Settings className="h-4 w-4" /> Pulse Settings</div>
-            <button type="button" className="rounded-full p-1 text-slate-400 hover:bg-slate-800 hover:text-white" onClick={() => updateState({ settingsOpen: false })}><X className="h-4 w-4" /></button>
+            <div className="flex items-center gap-2 text-sm font-bold mt-pulse-accent-text"><Settings className="h-4 w-4" /> Pulse Settings</div>
+            <button type="button" className="rounded-full p-1 mt-pulse-icon-button" onClick={() => updateState({ settingsOpen: false })}><X className="h-4 w-4" /></button>
           </div>
           <div className="space-y-2 text-sm">
             <Toggle label="Snap to screen edge" checked={state.snapToEdge} onChange={() => updateState({ snapToEdge: !state.snapToEdge })} />
             <Toggle label="Reduced motion" checked={state.reducedMotion} onChange={() => updateState({ reducedMotion: !state.reducedMotion })} />
-            <div className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2">
-              <span className="text-slate-300">Orb size</span>
+            <div className="flex items-center justify-between rounded-xl border px-3 py-2 mt-pulse-surface">
+              <span className="mt-pulse-secondary">Orb size</span>
               <div className="flex gap-1">
                 {['small', 'medium', 'large'].map((size) => (
-                  <button key={size} type="button" onClick={() => updateState({ size })} className={`rounded-full px-2 py-1 text-xs ${state.size === size ? 'bg-cyan-400 text-slate-950' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>{size}</button>
+                  <button key={size} type="button" onClick={() => updateState({ size })} className={`rounded-full px-2 py-1 text-xs ${state.size === size ? 'mt-pulse-accent-fill' : 'mt-pulse-choice'}`}>{size}</button>
                 ))}
               </div>
             </div>
-            <button type="button" onClick={resetPosition} className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-slate-200 hover:border-cyan-400/50 hover:text-cyan-100"><RotateCcw className="h-4 w-4" /> Reset position</button>
+            <button type="button" onClick={resetPosition} className="flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 mt-pulse-action-secondary"><RotateCcw className="h-4 w-4" /> Reset position</button>
           </div>
+        </div>
         </div>
       )}
     </div>
   );
 }
 
-function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, compact = false }) {
+function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, theme, compact = false }) {
   const modules = Array.isArray(pulse.modules) ? pulse.modules : [];
   const issues = Array.isArray(pulse.issues) ? pulse.issues : [];
   const timeline = makeTimeline(issues);
@@ -481,21 +514,21 @@ function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, c
         <div>
           <div className="flex items-center gap-2">
             <Activity className="h-4 w-4" style={{ color: tone.accent }} />
-            <h2 className="font-bold text-white">Practice Pulse</h2>
+            <h2 className="font-bold mt-pulse-text">Practice Pulse</h2>
           </div>
-          <p className="mt-1 text-xs text-slate-400">Updated {formatTime(pulse.updatedAt || new Date())}</p>
+          <p className="mt-1 text-xs mt-pulse-muted">Updated {formatTime(pulse.updatedAt || new Date())}</p>
         </div>
         <div className="flex gap-1">
           {!compact && (
-            <button type="button" onClick={() => updateState({ settingsOpen: true })} className="rounded-full p-2 text-slate-400 hover:bg-slate-800 hover:text-white" title="Pulse settings"><Settings className="h-4 w-4" /></button>
+            <button type="button" onClick={() => updateState({ settingsOpen: true })} className="rounded-full p-2 mt-pulse-icon-button" title="Pulse settings"><Settings className="h-4 w-4" /></button>
           )}
-          <button type="button" onClick={() => updateState({ expanded: false, settingsOpen: false })} className="rounded-full p-2 text-slate-400 hover:bg-slate-800 hover:text-white" title="Close"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={() => updateState({ expanded: false, settingsOpen: false })} className="rounded-full p-2 mt-pulse-icon-button" title="Close"><X className="h-4 w-4" /></button>
         </div>
       </div>
 
       <div className="grid grid-cols-[112px_1fr] gap-4">
         <div className="relative grid h-28 w-28 place-items-center rounded-full" style={{ filter: `drop-shadow(0 0 18px ${tone.aura})` }}>
-          <div className="absolute inset-0 rounded-full border border-white/10 bg-slate-950" />
+          <div className="absolute inset-0 rounded-full border mt-pulse-orb-core" />
           <div className="relative z-10 text-center">
             <div className="text-4xl font-black">{score}</div>
             <div className="text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: tone.accent }}>Pulse</div>
@@ -503,18 +536,18 @@ function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, c
         </div>
         <div>
           <div className="inline-flex rounded-full border px-3 py-1 text-xs font-bold" style={{ borderColor: tone.accent, color: tone.accent }}>{band.label || tone.label}</div>
-          <p className="mt-3 text-sm text-slate-300">{band.message || 'Live operational health for the practice.'}</p>
-          <p className="mt-3 text-xs text-slate-500">Pulse reflects Inventory, Compliance, Governance, Connect and future operational signals.</p>
+          <p className="mt-3 text-sm mt-pulse-secondary">{band.message || 'Live operational health for the practice.'}</p>
+          <p className="mt-3 text-xs mt-pulse-muted">Pulse reflects Inventory, Compliance, Governance, Connect and future operational signals.</p>
         </div>
       </div>
 
       <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Modules</div>
+        <div className="rounded-2xl border p-3 mt-pulse-surface">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] mt-pulse-muted">Modules</div>
           <div className="mt-2 space-y-2">
             {modules.map((module) => {
               const moduleBand = getPulseBand(module.score);
-              const moduleTone = TONES[moduleBand.tone] || TONES.green;
+              const moduleTone = moduleBand.tone === 'green' ? getTone(module.score, theme) : (TONES[moduleBand.tone] || TONES.green);
               const route = MODULE_ROUTES[module.key] || '/dashboard';
               return (
                 <button
@@ -524,28 +557,28 @@ function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, c
                     updateState({ expanded: false, settingsOpen: false });
                     navigate(route);
                   }}
-                  className="flex w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-left hover:border-cyan-400/40 hover:bg-slate-900"
+                  className="flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left mt-pulse-row"
                 >
-                  <span className="flex items-center gap-2 text-sm text-slate-200">
+                  <span className="flex items-center gap-2 text-sm mt-pulse-secondary">
                     <span className="h-2 w-2 rounded-full" style={{ background: moduleTone.accent }} />
                     {module.label}
                   </span>
-                  <span className="flex items-center gap-2 text-sm font-bold text-white">{module.score}<ChevronRight className="h-4 w-4 text-slate-500" /></span>
+                  <span className="flex items-center gap-2 text-sm font-bold mt-pulse-text">{module.score}<ChevronRight className="h-4 w-4 mt-pulse-muted" /></span>
                 </button>
               );
             })}
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Why?</div>
+        <div className="rounded-2xl border p-3 mt-pulse-surface">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] mt-pulse-muted">Why?</div>
           {issues.length === 0 ? (
-            <div className="mt-3 rounded-xl border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-sm text-emerald-100">No active issues detected.</div>
+            <div className="mt-3 rounded-xl border px-3 py-2 text-sm mt-pulse-success">No active issues detected.</div>
           ) : (
             <div className="mt-2 space-y-2">
               {issues.slice(0, 4).map((issue, index) => (
-                <div key={`${issue.moduleKey}-${index}`} className="rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-300">
-                  <span className="font-semibold text-slate-100">{issue.moduleLabel}:</span> {issue.text}
+                <div key={`${issue.moduleKey}-${index}`} className="rounded-xl border px-3 py-2 text-sm mt-pulse-row mt-pulse-secondary">
+                  <span className="font-semibold mt-pulse-text">{issue.moduleLabel}:</span> {issue.text}
                 </div>
               ))}
             </div>
@@ -553,14 +586,14 @@ function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, c
         </div>
       </div>
 
-      <div className="mt-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
-        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Pulse Events</div>
+      <div className="mt-3 rounded-2xl border p-3 mt-pulse-surface">
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] mt-pulse-muted">Pulse Events</div>
         <div className="mt-2 space-y-2">
           {timeline.map((item) => (
-            <div key={item.id} className="flex items-center justify-between rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm">
+            <div key={item.id} className="flex items-center justify-between rounded-xl border px-3 py-2 text-sm mt-pulse-row">
               <div>
-                <div className="text-slate-200">{item.title}</div>
-                <div className="text-xs text-slate-500">{item.time} · {item.module}</div>
+                <div className="mt-pulse-secondary">{item.title}</div>
+                <div className="text-xs mt-pulse-muted">{item.time} · {item.module}</div>
               </div>
               <span className={`rounded-full px-2 py-1 text-xs font-black ${item.delta > 0 ? 'bg-emerald-400/15 text-emerald-200' : 'bg-rose-400/15 text-rose-200'}`}>{item.delta > 0 ? `+${item.delta}` : item.delta}</span>
             </div>
@@ -574,7 +607,7 @@ function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, c
           updateState({ expanded: false, settingsOpen: false });
           navigate('/alerts');
         }}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-cyan-400/40 bg-cyan-400/15 px-4 py-3 text-sm font-bold text-cyan-100 hover:bg-cyan-400/25"
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold mt-pulse-action-primary"
       >
         Open Operations Centre <ExternalLink className="h-4 w-4" />
       </button>
@@ -600,10 +633,10 @@ function makeTimeline(issues) {
 
 function Toggle({ label, checked, onChange }) {
   return (
-    <button type="button" onClick={onChange} className="flex w-full items-center justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-left">
-      <span className="text-slate-300">{label}</span>
-      <span className={`relative h-6 w-11 rounded-full transition ${checked ? 'bg-cyan-400' : 'bg-slate-700'}`}>
-        <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition ${checked ? 'left-6' : 'left-1'}`} />
+    <button type="button" onClick={onChange} className="flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left mt-pulse-surface">
+      <span className="mt-pulse-secondary">{label}</span>
+      <span className={`relative h-6 w-11 rounded-full transition ${checked ? 'mt-pulse-toggle-on' : 'mt-pulse-toggle-off'}`}>
+        <span className={`absolute top-1 h-4 w-4 rounded-full mt-pulse-toggle-thumb transition ${checked ? 'left-6' : 'left-1'}`} />
       </span>
     </button>
   );

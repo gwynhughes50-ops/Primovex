@@ -741,13 +741,15 @@ export default function Alerts() {
               <p className="mt-1 max-w-3xl text-sm text-slate-400">
                 A live operational workspace for stock, temperature, governance, purchasing and daily practice priorities.
               </p>
-              <p className="mt-2 text-[11px] text-slate-500">
-                {authLoading
-                  ? "Checking sign-in…"
-                  : authUser
-                    ? `Signed in as ${resolvedByLabel}${isAdmin ? " • System Admin" : ""}`
-                    : "Not signed in"}
-              </p>
+              <div className="mt-2">
+                <span className="mt-pill-muted inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium">
+                  {authLoading
+                    ? "Checking sign-in…"
+                    : authUser
+                      ? `Signed in as ${resolvedByLabel}${isAdmin ? " • System Admin" : ""}`
+                      : "Not signed in"}
+                </span>
+              </div>
             </div>
           </div>
 

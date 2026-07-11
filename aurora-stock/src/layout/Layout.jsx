@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import useNotifications from "@/hooks/useNotifications";
 import PulseWidget from "@/components/pulse/PulseWidget";
 import PlatformModeBanner from "@/components/platform/PlatformModeBanner";
+import PrimovexLogo from "@/components/brand/PrimovexLogo";
 
 import { Icons, resolveIcon } from "@/config/medtrakIcons";
 import { getDesktopNavigation } from "@/config/navigation";
@@ -36,26 +37,16 @@ export default function Layout() {
     <div className={`min-h-screen ${medtrakTheme.app.background}`}>
       {/* background glow */}
       <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
-        <div className="absolute -top-40 -left-32 h-80 w-80 rounded-full bg-teal-500/10 blur-3xl" />
-        <div className="absolute top-1/3 -right-24 h-72 w-72 rounded-full bg-emerald-400/10 blur-3xl" />
+        <div className="absolute inset-0 bg-gradient-to-br from-[#020617] via-[#081B33] to-[#020617]" />
+        <div className="absolute -top-40 -left-32 h-80 w-80 rounded-full bg-blue-500/10 blur-3xl" />
+        <div className="absolute top-1/3 -right-24 h-72 w-72 rounded-full bg-cyan-400/10 blur-3xl" />
         <div className="absolute bottom-0 left-1/4 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
       </div>
 
       <div className="mx-auto flex min-h-screen w-full max-w-[1800px] flex-col px-4 pb-10 pt-4 sm:px-6 lg:px-8">
         {/* header */}
-        <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-400 via-emerald-400 to-cyan-500 shadow-[0_0_35px_rgba(34,211,238,0.6)]">
-              <Icons.stock className="h-5 w-5 text-slate-950" />
-            </div>
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">MedTrak+</h1>
-              <p className="text-xs text-slate-400 sm:text-sm">
-                Operational intelligence for primary care.
-              </p>
-            </div>
-          </div>
+        <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <PrimovexLogo compact className="drop-shadow-[0_8px_24px_rgba(37,99,235,0.2)]" />
 
           <div className="flex items-center gap-2">
             {/* ✅ Notifications button now routes */}
@@ -65,7 +56,7 @@ export default function Layout() {
                 Notifications
 
                 {!!unreadCount && unreadCount > 0 && (
-                  <span className="ml-1 rounded-full bg-teal-500/20 px-2 py-0.5 text-[11px] text-teal-200">
+                  <span className="ml-1 rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] text-violet-100">
                     {unreadCount}
                   </span>
                 )}
@@ -85,7 +76,7 @@ export default function Layout() {
                 <NavLink to="/register">
                   <Button
                     variant="default"
-                    className="gap-2 rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 px-3 py-1.5 text-slate-950 shadow-lg shadow-emerald-500/40"
+                    className="gap-2 rounded-full bg-gradient-to-r from-[#2563EB] via-[#6D4DFF] to-[#00B8F0] px-3 py-1.5 text-white shadow-lg shadow-violet-500/25"
                   >
                     <Icons.userPlus className="h-4 w-4" />
                     Register
@@ -101,7 +92,7 @@ export default function Layout() {
                   {role && (
                     <span
                       className={`ml-1 rounded-full px-2 py-0.5 ${
-                        isAdmin ? "bg-teal-500/15 text-teal-200" : "bg-slate-800/60 text-slate-200"
+                        isAdmin ? "bg-violet-500/15 text-violet-100" : "bg-slate-800/60 text-slate-200"
                       }`}
                       title={role}
                     >
@@ -132,7 +123,7 @@ export default function Layout() {
                     variant={isActive ? "default" : "ghost"}
                     className={`gap-2 rounded-full px-3 py-1.5 text-xs ${
                       isActive
-                        ? "bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/40"
+                        ? "bg-gradient-to-r from-[#2563EB] via-[#6D4DFF] to-[#00B8F0] text-white shadow-lg shadow-violet-500/25"
                         : "text-slate-200"
                     }`}
                   >

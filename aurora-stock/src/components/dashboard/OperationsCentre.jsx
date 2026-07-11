@@ -68,7 +68,7 @@ export default function OperationsCentre() {
       <section className="rounded-3xl border border-slate-800/70 bg-slate-900/70 p-5 text-slate-100 shadow-xl backdrop-blur">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-teal-400/30 bg-teal-400/10 px-3 py-1 text-xs font-semibold text-teal-200">
+            <div className="mt-pill inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold">
               <Icons.dashboard className="h-3.5 w-3.5" /> Operations Centre
             </div>
             <h1 className="mt-3 text-2xl font-black tracking-tight text-slate-50 sm:text-3xl">
@@ -103,17 +103,17 @@ export default function OperationsCentre() {
           title="MedAI Daily Brief"
           description="MedAI reads the user-permitted operational picture and turns it into a practical morning briefing."
           actions={
-            <span className="inline-flex items-center gap-2 rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wide text-violet-100">
+            <span className="mt-ai-badge inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wide">
               <Icons.pulse className="h-3.5 w-3.5" /> {medai.score}% confidence
             </span>
           }
         >
-          <div className="rounded-3xl border border-violet-400/20 bg-gradient-to-br from-violet-500/15 via-slate-950/50 to-teal-500/10 p-5">
+          <div className="mt-ai-surface rounded-3xl border p-5">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-violet-200/80">{medai.brief.headline}</p>
-                <h2 className="mt-2 text-2xl font-black text-white">{medai.brief.title}</h2>
-                <div className="mt-4 space-y-2 text-sm leading-6 text-slate-200">
+                <p className="mt-ai-kicker text-xs font-black uppercase tracking-[0.18em]">{medai.brief.headline}</p>
+                <h2 className="mt-ai-heading mt-2 text-2xl font-black">{medai.brief.title}</h2>
+                <div className="mt-ai-body mt-4 space-y-2 text-sm leading-6">
                   {medai.brief.lines.map((line) => (
                     <p key={line} className="flex gap-2">
                       <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-300" />
@@ -122,11 +122,11 @@ export default function OperationsCentre() {
                   ))}
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-200 lg:w-56">
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Estimated admin time</p>
-                <p className="mt-1 text-3xl font-black text-white">{medai.brief.estimatedAdminTime}</p>
-                <p className="mt-3 text-xs text-slate-400">Recommended focus</p>
-                <p className="mt-1 font-semibold text-teal-100">{medai.brief.recommendedFocus}</p>
+              <div className="mt-card-strong rounded-2xl border p-4 text-sm lg:w-56">
+                <p className="mt-ai-label text-xs font-bold uppercase tracking-wide">Estimated admin time</p>
+                <p className="mt-ai-heading mt-1 text-3xl font-black">{medai.brief.estimatedAdminTime}</p>
+                <p className="mt-ai-label mt-3 text-xs">Recommended focus</p>
+                <p className="mt-ai-focus mt-1 font-semibold">{medai.brief.recommendedFocus}</p>
               </div>
             </div>
           </div>

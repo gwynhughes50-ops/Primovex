@@ -1,7 +1,7 @@
 import { getCapabilitiesForProfile, hasCapability } from "@/core/identity/capabilities";
 
 export function getRole(user) {
-  if (!user) return "System Admin";
+  if (!user) return "User";
   return user.role || "User";
 }
 

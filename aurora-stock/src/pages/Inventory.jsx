@@ -15,8 +15,8 @@ import EmergencyMonthlyChecklistTab from "@/components/Inventory/EmergencyMonthl
 import AnaphylaxisBoxesTab from "@/components/Inventory/AnaphylaxisBoxesTab";
 
 import useStock from "@/hooks/useStock";
-import { getRole, canArchive, canEdit, canMoveStock } from "@/auth/permissions";
-import { auth, db } from "@/lib/firebase";
+import { useAuth } from "@/contexts/AuthContext";
+import { db } from "@/lib/firebase";
 import { collection, onSnapshot, query } from "firebase/firestore";
 
 import { Search, Package, Pencil, History, Trash2, Archive, RotateCcw } from "lucide-react";
@@ -35,9 +35,7 @@ function TabButton({ active, onClick, children }) {
       onClick={onClick}
       className={[
         "px-3 py-2 rounded-xl text-sm border transition",
-        active
-          ? "bg-teal-600/20 border-teal-500/60 text-teal-100"
-          : "bg-slate-900/30 border-slate-800 text-slate-200 hover:bg-slate-900/50",
+        active ? "mt-tab-active" : "mt-tab",
       ].join(" ")}
     >
       {children}
@@ -56,21 +54,22 @@ function productSubtitle(item) {
 }
 
 export default function Inventory() {
-  /* auth */
-  const user = auth.currentUser ?? null;
+  /* auth — Firestore-backed profile and capability source */
+  const { user, profile, can, loading: authLoading } = useAuth();
 
   const actorUser = {
-    uid: user?.uid || null,
-    displayName: user?.displayName || user?.name || "Unknown",
-    email: user?.email || null,
+    uid: user?.uid || profile?.uid || null,
+    displayName:
+      profile?.displayName ||
+      user?.displayName ||
+      profile?.email ||
+      user?.email ||
+      "Unknown",
+    email: profile?.email || user?.email || null,
   };
 
-  let role = "staff";
-  try {
-    role = getRole(user) || "staff";
-  } catch {
-    role = "staff";
-  }
+  const canWriteInventory = !authLoading && can("inventory.write");
+  const canDeleteInventory = !authLoading && can("inventory.delete");
 
   /* tabs */
   const [tab, setTab] = useState("stock"); // "stock" | "emergency" | "anaphylaxis"
@@ -210,7 +209,7 @@ const handleBarcodeScan = (code) => {
 };
   /* handlers */
   const openDelete = (item) => {
-    if (!canArchive(role)) return;
+    if (!canDeleteInventory) return;
     setDeleteItem(item);
     setDeleteOpen(true);
   };
@@ -240,7 +239,7 @@ const handleBarcodeScan = (code) => {
   };
 
   const openEdit = (item) => {
-    if (!canEdit(role)) return;
+    if (!canWriteInventory) return;
     setEditItem(item);
     setEditForm({
       name: item?.name ?? "",
@@ -461,10 +460,10 @@ const handleBarcodeScan = (code) => {
 
                   {!archived && (
                     <div className="mt-3 grid grid-cols-2 gap-2">
-                      <Button variant="outline" onClick={() => openUse(item)} disabled={!canMoveStock(role)}>
+                      <Button variant="outline" onClick={() => openUse(item)} disabled={!canWriteInventory}>
                         - Use
                       </Button>
-                      <Button onClick={() => openReceive(item)} disabled={!canMoveStock(role)}>
+                      <Button onClick={() => openReceive(item)} disabled={!canWriteInventory}>
                         + Receive
                       </Button>
                     </div>
@@ -485,7 +484,7 @@ const handleBarcodeScan = (code) => {
                         size="icon"
                         variant="ghost"
                         onClick={() => openEdit(item)}
-                        disabled={!canEdit(role)}
+                        disabled={!canWriteInventory}
                         title="Edit"
                       >
                         <Pencil className="h-4 w-4" />
@@ -495,7 +494,7 @@ const handleBarcodeScan = (code) => {
                         size="icon"
                         variant="ghost"
                         onClick={() => openDelete(item)}
-                        disabled={!canArchive(role)}
+                        disabled={!canDeleteInventory}
                         title="Archive (via confirm)"
                       >
                         <Trash2 className="h-4 w-4" />
