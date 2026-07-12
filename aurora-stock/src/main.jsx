@@ -36,6 +36,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import { AuthProvider } from "./contexts/AuthContext.jsx";
 import RequireAuth from "./routes/RequireAuth.jsx";
 import { MedTrakThemeProvider } from "./components/theme/MedTrakThemeProvider";
+import PermissionGate from "@/components/security/PermissionGate";
 
 function AppRouter() {
   return (
@@ -72,7 +73,7 @@ function AppRouter() {
         <Route path="reorder-centre" element={<ReorderCentre />} />
         <Route path="purchasing" element={<Purchasing />} />
         <Route path="suppliers" element={<SupplierDirectory />} />
-        <Route path="practice-admin" element={<PracticeAdministration />} />
+        <Route path="practice-admin" element={<PermissionGate capability="practiceAdmin.read"><PracticeAdministration /></PermissionGate>} />
         <Route path="governance/concerns" element={<GovernanceConcerns />} />
         <Route path="governance/sars" element={<GovernanceSARs />} />
         <Route path="alerts" element={<Alerts />} />

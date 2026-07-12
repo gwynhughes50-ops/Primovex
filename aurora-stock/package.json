@@ -1,11 +1,14 @@
 {
   "name": "primovex",
-  "version": "1.0.0-alpha.28",
+  "version": "0.9.18",
   "private": true,
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -31,6 +34,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "@types/babel__core": "^7.20.5",
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.20",

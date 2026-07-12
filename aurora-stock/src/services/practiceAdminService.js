@@ -1,5 +1,6 @@
 import {
   addDoc,
+  getDocs,
   collection,
   doc,
   onSnapshot,
@@ -30,32 +31,32 @@ export const DEFAULT_ROLE_TEMPLATES = [
   {
     name: "Practice Manager",
     department: "Management Team",
-    permissions: ["dashboard", "inventory", "purchasing", "suppliers", "compliance", "governance", "reports", "practice_admin"],
+    permissions: ["dashboard.read", "operations.read", "operations.manage", "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete", "purchasing.read", "purchasing.write", "purchasing.approve", "suppliers.read", "suppliers.write", "compliance.read", "compliance.write", "governance.read", "governance.write", "reports.read", "practiceAdmin.read", "practiceAdmin.write"],
   },
   {
     name: "Management Team",
     department: "Management Team",
-    permissions: ["dashboard", "inventory", "purchasing", "suppliers", "governance", "reports"],
+    permissions: ["dashboard.read", "operations.read", "inventory.read", "inventory.write", "purchasing.read", "purchasing.write", "suppliers.read", "suppliers.write", "governance.read", "governance.write", "reports.read", "practiceAdmin.read"],
   },
   {
     name: "Practice Nurse",
     department: "Nursing",
-    permissions: ["dashboard", "inventory", "temperature", "compliance"],
+    permissions: ["dashboard.read", "operations.read", "inventory.read", "inventory.write", "inventory.verify", "temperature.read", "temperature.write", "temperature.resolveIncident", "compliance.read", "compliance.recordChecks", "mobile.access"],
   },
   {
     name: "Healthcare Assistant",
     department: "Nursing",
-    permissions: ["dashboard", "inventory", "reorder", "deliveries"],
+    permissions: ["dashboard.read", "operations.read", "inventory.read", "inventory.write", "inventory.verify", "purchasing.read", "purchasing.write", "mobile.access"],
   },
   {
     name: "Caretaker",
     department: "Facilities",
-    permissions: ["dashboard", "compliance", "estates", "assets"],
+    permissions: ["dashboard.read", "operations.read", "temperature.read", "temperature.write", "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets", "mobile.access"],
   },
   {
     name: "Read Only",
     department: "Administration",
-    permissions: ["dashboard", "inventory", "reports"],
+    permissions: ["dashboard.read", "inventory.read", "reports.read"],
   },
 ];
 
@@ -108,6 +109,22 @@ export async function addDepartment(payload, actor = null) {
   });
 }
 
+export async function updatePracticeSite(siteId, payload, actor = null) {
+  return updateDoc(doc(db, "practice_sites", siteId), {
+    ...payload,
+    updated_at: serverTimestamp(),
+    updated_by: actor,
+  });
+}
+
+export async function updateDepartment(departmentId, payload, actor = null) {
+  return updateDoc(doc(db, "practice_departments", departmentId), {
+    ...payload,
+    updated_at: serverTimestamp(),
+    updated_by: actor,
+  });
+}
+
 export async function addPracticeRole(payload, actor = null) {
   return addDoc(collection(db, "practice_roles"), {
     ...payload,
@@ -127,22 +144,39 @@ export async function updatePracticeRole(roleId, payload, actor = null) {
 
 export async function seedPracticeDefaults(actor = null) {
   const nowActor = actor || null;
+  const [departmentSnapshot, roleSnapshot] = await Promise.all([
+    getDocs(collection(db, "practice_departments")),
+    getDocs(collection(db, "practice_roles")),
+  ]);
+
+  const existingDepartments = new Set(
+    departmentSnapshot.docs.map((row) => String(row.data()?.name || "").trim().toLowerCase())
+  );
+  const existingRoles = new Set(
+    roleSnapshot.docs.map((row) => String(row.data()?.name || "").trim().toLowerCase())
+  );
+
+  const missingDepartments = DEFAULT_DEPARTMENTS.filter(
+    (name) => !existingDepartments.has(name.trim().toLowerCase())
+  );
+  const missingRoles = DEFAULT_ROLE_TEMPLATES.filter(
+    (role) => !existingRoles.has(role.name.trim().toLowerCase())
+  );
 
   await Promise.all(
-    DEFAULT_DEPARTMENTS.map((name) =>
+    missingDepartments.map((name) =>
       addDepartment({ name, description: "", order: 0 }, nowActor)
     )
   );
 
   await Promise.all(
-    DEFAULT_ROLE_TEMPLATES.map((role) =>
-      addPracticeRole({ ...role, description: "Default MedTrak+ role template" }, nowActor)
+    missingRoles.map((role) =>
+      addPracticeRole({ ...role, description: "Default Primovex role template" }, nowActor)
     )
   );
 
   await savePracticeConfig(
     {
-      setup_complete: true,
       setup_started: true,
       pulse_weights: PULSE_AREAS.reduce((acc, area) => {
         acc[area.key] = area.defaultWeight;
@@ -151,4 +185,9 @@ export async function seedPracticeDefaults(actor = null) {
     },
     nowActor
   );
+
+  return {
+    departmentsAdded: missingDepartments.length,
+    rolesAdded: missingRoles.length,
+  };
 }
