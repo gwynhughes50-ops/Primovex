@@ -25,6 +25,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
 import { buildMedAIContext } from "@/services/medai";
 import { priorityTone } from "@/services/medai/priorityEngine";
+import useOperationsSummary from "@/operations/hooks/useOperationsSummary";
+import { buildOperationsTimeline } from "@/operations/engine/operationsTimeline";
 
 function safeDateLabel(value) {
   const date = value?.toDate?.() || (value ? new Date(value) : null);
@@ -161,6 +163,20 @@ export default function MobileHome({ mode = "home", onSelectItem, onNavigate, on
   }, [allItems]);
 
   const lowStockCount = lowStockList.length;
+
+  const operationsContext = useMemo(() => ({
+    inventory: { totalItems: allItems.length, lowStockItems: lowStockCount, expiringSoon: 0, loading },
+    temperature: {
+      loading: tempLoading,
+      hasReading: Boolean(latestTemp),
+      within: latestTemp?.within_range ?? latestTemp?.withinRange,
+      detail: latestTemp?.temp !== undefined ? `${Number(latestTemp.temp).toFixed(1)}°C` : undefined,
+      readingAt: latestTemp?.measured_at,
+    },
+    recentMoves,
+  }), [allItems.length, lowStockCount, loading, tempLoading, latestTemp, recentMoves]);
+  const operationsSummary = useOperationsSummary(operationsContext);
+  const operationsTimeline = useMemo(() => buildOperationsTimeline(operationsContext).slice(0, 3), [operationsContext]);
 
   useEffect(() => {
     const qTemp = query(collection(db, "temperature_logs"), orderBy("measured_at", "desc"), limit(1));
@@ -351,6 +367,30 @@ export default function MobileHome({ mode = "home", onSelectItem, onNavigate, on
           </div>
         </div>
       </div>
+
+      <Section title="Morning operations brief">
+        <div className="rounded-3xl border border-white/10 bg-slate-900 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-black text-white">{operationsSummary.headline}</p>
+              <p className="mt-1 text-xs text-slate-400">Based on {operationsSummary.connectedModules} connected areas</p>
+            </div>
+            <div className="rounded-2xl border border-teal-400/20 bg-teal-500/10 px-3 py-2 text-xl font-black text-teal-100">
+              {operationsSummary.readiness.overall ?? "—"}{operationsSummary.readiness.overall !== null ? "%" : ""}
+            </div>
+          </div>
+          <div className="mt-4 space-y-2">
+            {operationsSummary.priorities.slice(0, 3).map((item) => (
+              <div key={item.id} className="flex items-start gap-2 rounded-2xl bg-white/[0.04] p-3">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-200" />
+                <div className="min-w-0"><p className="truncate text-sm font-bold text-white">{item.title}</p><p className="truncate text-xs text-slate-400">{item.detail}</p></div>
+              </div>
+            ))}
+            {!operationsSummary.priorities.length && <div className="flex items-center gap-2 rounded-2xl bg-emerald-500/10 p-3 text-sm text-emerald-100"><CheckCircle2 className="h-4 w-4" /> No connected priorities need attention.</div>}
+          </div>
+          {operationsTimeline.length > 0 && <div className="mt-4 border-t border-white/10 pt-3"><p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">Latest changes</p>{operationsTimeline.map((item) => <div key={item.id} className="mt-2 flex items-center gap-2 text-xs text-slate-300"><Clock3 className="h-3.5 w-3.5 text-teal-200" /><span className="truncate">{item.title}</span></div>)}</div>}
+        </div>
+      </Section>
 
       <Section title="MedAI next best action">
         {medai.recommendations.slice(0, 1).map((item) => {

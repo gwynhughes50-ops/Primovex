@@ -6,6 +6,7 @@ import useNotifications from "@/hooks/useNotifications";
 import PulseWidget from "@/components/pulse/PulseWidget";
 import PlatformModeBanner from "@/components/platform/PlatformModeBanner";
 import PrimovexLogo from "@/components/brand/PrimovexLogo";
+import AskPrimovexPanel from "@/ai/components/AskPrimovexPanel";
 
 import { Icons, resolveIcon } from "@/config/medtrakIcons";
 import { getDesktopNavigation } from "@/config/navigation";
@@ -56,7 +57,7 @@ export default function Layout() {
                 Notifications
 
                 {!!unreadCount && unreadCount > 0 && (
-                  <span className="ml-1 rounded-full bg-violet-500/20 px-2 py-0.5 text-[11px] text-violet-100">
+                  <span className="mt-notification-badge ml-1 rounded-full border px-2 py-0.5 text-[11px] font-bold">
                     {unreadCount}
                   </span>
                 )}
@@ -91,9 +92,7 @@ export default function Layout() {
 
                   {role && (
                     <span
-                      className={`ml-1 rounded-full px-2 py-0.5 ${
-                        isAdmin ? "bg-violet-500/15 text-violet-100" : "bg-slate-800/60 text-slate-200"
-                      }`}
+                      className={`ml-1 rounded-full border px-2 py-0.5 font-semibold ${isAdmin ? "mt-role-badge-admin" : "mt-role-badge"}`}
                       title={role}
                     >
                       {isAdmin ? "System Admin" : role}
@@ -143,6 +142,7 @@ export default function Layout() {
       </div>
 
       <PulseWidget />
+      <AskPrimovexPanel />
     </div>
   );
 }

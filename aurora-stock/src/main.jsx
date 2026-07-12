@@ -24,6 +24,7 @@ import Connect from "@/pages/Connect";
 import ThemeLab from "@/pages/ThemeLab";
 import DemoMode from "@/pages/DemoMode";
 import SecurityCentre from "@/pages/SecurityCentre";
+import Facilities from "@/pages/Facilities";
 import MobileLayout from "./mobile/MobileLayout";
 
 import Help from "./pages/Help";
@@ -37,6 +38,7 @@ import { AuthProvider } from "./contexts/AuthContext.jsx";
 import RequireAuth from "./routes/RequireAuth.jsx";
 import { MedTrakThemeProvider } from "./components/theme/MedTrakThemeProvider";
 import PermissionGate from "@/components/security/PermissionGate";
+import { PrimovexAIProvider } from "@/ai/context/PrimovexAIContext";
 
 function AppRouter() {
   return (
@@ -80,6 +82,7 @@ function AppRouter() {
         <Route path="connect" element={<Connect />} />
         <Route path="theme-lab" element={<ThemeLab />} />
         <Route path="security-centre" element={<SecurityCentre />} />
+        <Route path="facilities" element={<Facilities />} />
         <Route path="temperature" element={<TemperatureLog />} />
         <Route path="compliance" element={<Compliance />} />
         <Route path="admin/*" element={<AdminDashboard />} />
@@ -99,7 +102,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <MedTrakThemeProvider>
       <BrowserRouter>
         <AuthProvider>
-          <AppRouter />
+          <PrimovexAIProvider>
+            <AppRouter />
+          </PrimovexAIProvider>
         </AuthProvider>
       </BrowserRouter>
     </MedTrakThemeProvider>

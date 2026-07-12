@@ -702,6 +702,68 @@ html:not(.medtrak-light) .medtrak-temperature-card * {
       border-width: 2px !important;
     }
 
+    /* Sprint 32.3: semantic badges and light-theme contrast hardening. */
+    html[data-medtrak-theme] .mt-role-badge,
+    html[data-medtrak-theme] .mt-role-badge-admin,
+    html[data-medtrak-theme] .mt-notification-badge,
+    html[data-medtrak-theme] .mt-stock-badge {
+      border-style: solid !important;
+      box-shadow: none !important;
+      text-shadow: none !important;
+    }
+
+    html[data-medtrak-theme] .mt-role-badge {
+      background: color-mix(in srgb, var(--mt-card-strong) 82%, var(--mt-accent) 12%) !important;
+      border-color: color-mix(in srgb, var(--mt-accent) 35%, var(--mt-border)) !important;
+      color: var(--mt-text-primary) !important;
+    }
+
+    html[data-medtrak-theme] .mt-role-badge-admin {
+      background: color-mix(in srgb, var(--mt-card-strong) 78%, var(--mt-accent-2) 18%) !important;
+      border-color: color-mix(in srgb, var(--mt-accent-2) 48%, var(--mt-border)) !important;
+      color: var(--mt-text-primary) !important;
+    }
+
+    html[data-medtrak-theme] .mt-notification-badge {
+      background: var(--mt-accent) !important;
+      border-color: color-mix(in srgb, var(--mt-accent) 72%, var(--mt-border)) !important;
+      color: var(--mt-on-accent) !important;
+    }
+
+    html[data-medtrak-theme] .mt-stock-badge-low {
+      background: #fee2e2 !important;
+      border-color: #f87171 !important;
+      color: #991b1b !important;
+    }
+
+    html[data-medtrak-theme] .mt-stock-badge-ok {
+      background: #dcfce7 !important;
+      border-color: #4ade80 !important;
+      color: #166534 !important;
+    }
+
+    html:not(.medtrak-light) .mt-stock-badge-low {
+      background: rgba(244, 63, 94, 0.18) !important;
+      border-color: rgba(251, 113, 133, 0.58) !important;
+      color: #fecdd3 !important;
+    }
+
+    html:not(.medtrak-light) .mt-stock-badge-ok {
+      background: rgba(34, 197, 94, 0.16) !important;
+      border-color: rgba(74, 222, 128, 0.52) !important;
+      color: #bbf7d0 !important;
+    }
+
+    html[data-medtrak-theme="high-contrast"] .mt-role-badge,
+    html[data-medtrak-theme="high-contrast"] .mt-role-badge-admin,
+    html[data-medtrak-theme="high-contrast"] .mt-notification-badge,
+    html[data-medtrak-theme="high-contrast"] .mt-stock-badge {
+      background: #000000 !important;
+      border-color: #ffffff !important;
+      color: #ffffff !important;
+      border-width: 2px !important;
+    }
+
   `;
 
   document.head.appendChild(style);

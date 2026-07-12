@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, ChevronRight, ExternalLink, Move, RotateCcw, Settings, X } from 'lucide-react';
+import { Activity, ChevronRight, ExternalLink, Move, RotateCcw, Settings, Sparkles, X } from 'lucide-react';
 
 import usePulse from '@/hooks/usePulse';
 import { getPulseBand } from '@/services/pulseService';
 import { useMedTrakTheme } from '@/components/theme/MedTrakThemeProvider';
+import usePrimovexAI from '@/ai/hooks/usePrimovexAI';
 
 const STORAGE_KEY = 'medtrak_pulse_nexus_v3';
 const LEGACY_STORAGE_KEY = 'medtrak_pulse_widget_v1';
@@ -161,6 +162,7 @@ function eventSeverityClass(score) {
 export default function PulseWidget({ variant = 'desktop' }) {
   const navigate = useNavigate();
   const { theme } = useMedTrakTheme();
+  const primovexAI = usePrimovexAI();
   const pulse = usePulse();
   const widgetRef = useRef(null);
   const orbRef = useRef(null);
@@ -448,13 +450,14 @@ export default function PulseWidget({ variant = 'desktop' }) {
           resetPosition={resetPosition}
           navigate={navigate}
           theme={theme}
+          primovexAI={primovexAI}
         />
       )}
 
       {state.expanded && variant === 'mobile' && (
         <div className="fixed inset-x-3 bottom-20 top-16 z-[100] flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-xl mt-pulse-panel mt-pulse-text">
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pr-3 [scrollbar-gutter:stable]">
-            <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} theme={theme} compact />
+            <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} theme={theme} primovexAI={primovexAI} compact />
           </div>
         </div>
       )}
@@ -469,12 +472,12 @@ export default function PulseWidget({ variant = 'desktop' }) {
   );
 }
 
-function PulseDrawer({ side, pulse, score, tone, band, state, updateState, resetPosition, navigate, theme }) {
+function PulseDrawer({ side, pulse, score, tone, band, state, updateState, resetPosition, navigate, theme, primovexAI }) {
   const sideClass = side === 'left' ? 'right-[calc(100%+14px)]' : 'left-[calc(100%+14px)]';
   return (
     <div className={`absolute top-0 z-[92] flex max-h-[min(82dvh,760px)] w-[min(92vw,430px)] flex-col overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-xl mt-pulse-panel mt-pulse-text ${sideClass}`}>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pr-3 [scrollbar-gutter:stable]">
-        <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} theme={theme} />
+        <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} theme={theme} primovexAI={primovexAI} />
       </div>
       {state.settingsOpen && (
         <div className="shrink-0 border-t p-4 mt-pulse-panel">
@@ -503,7 +506,7 @@ function PulseDrawer({ side, pulse, score, tone, band, state, updateState, reset
   );
 }
 
-function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, theme, compact = false }) {
+function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, theme, primovexAI, compact = false }) {
   const modules = Array.isArray(pulse.modules) ? pulse.modules : [];
   const issues = Array.isArray(pulse.issues) ? pulse.issues : [];
   const timeline = makeTimeline(issues);
@@ -601,16 +604,28 @@ function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, t
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => {
-          updateState({ expanded: false, settingsOpen: false });
-          navigate('/alerts');
-        }}
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold mt-pulse-action-primary"
-      >
-        Open Operations Centre <ExternalLink className="h-4 w-4" />
-      </button>
+      <div className="mt-4 grid gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            updateState({ expanded: false, settingsOpen: false });
+            primovexAI.open();
+          }}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold mt-pulse-action-primary"
+        >
+          Ask Primovex <Sparkles className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            updateState({ expanded: false, settingsOpen: false });
+            navigate('/alerts');
+          }}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold mt-pulse-action-secondary"
+        >
+          Open Operations Centre <ExternalLink className="h-4 w-4" />
+        </button>
+      </div>
     </>
   );
 }

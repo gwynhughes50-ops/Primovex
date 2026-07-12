@@ -11,6 +11,7 @@ const desktopNavigationConfig = [
   { to: "/governance/sars", label: "SARs", iconKey: "sar", group: "governance", capability: "governance.manageSars" },
   { to: "/practice-admin", label: "Practice Admin", iconKey: "practiceAdmin", group: "admin", capability: "practiceAdmin.read" },
   { to: "/alerts", label: "Operations", iconKey: "alerts", group: "operations", capability: "operations.read" },
+  { to: "/facilities", label: "Facilities", iconKey: "facilities", group: "operations" },
   { to: "/connect", label: "Connect", iconKey: "connect", group: "operations", capability: "connect.view" },
   { to: "/temperature", label: "Temperature", iconKey: "temperature", group: "compliance", capability: "temperature.read" },
   { to: "/compliance", label: "Compliance", iconKey: "compliance", group: "compliance", capability: "compliance.read" },

@@ -61,6 +61,7 @@ export const Icons = {
   notifications: Bell,
   package: Package,
   practice: Building2,
+  facilities: Building2,
   practiceAdmin: Settings,
   settings: Settings,
   purchasing: ShoppingCart,

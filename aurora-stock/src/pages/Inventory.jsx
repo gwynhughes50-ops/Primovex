@@ -25,7 +25,7 @@ import { Search, Package, Pencil, History, Trash2, Archive, RotateCcw } from "lu
 const getStockBadge = (qty, min) => {
   const q = Number(qty ?? 0);
   const m = Number(min ?? 0);
-  return q <= m ? "bg-rose-500/20 text-rose-300" : "bg-emerald-500/20 text-emerald-300";
+  return q <= m ? "mt-stock-badge mt-stock-badge-low" : "mt-stock-badge mt-stock-badge-ok";
 };
 
 function TabButton({ active, onClick, children }) {
@@ -448,7 +448,7 @@ const handleBarcodeScan = (code) => {
                     </div>
 
                     <span
-                      className={`shrink-0 px-2 py-0.5 text-xs rounded-full ${getStockBadge(
+                      className={`shrink-0 inline-flex min-h-7 min-w-8 items-center justify-center rounded-full border px-2 py-1 text-xs font-bold leading-none ${getStockBadge(
                         item.current_stock,
                         item.min_stock
                       )}`}

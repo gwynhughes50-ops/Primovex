@@ -22,6 +22,8 @@ import { ThemePickerButton } from "@/components/theme/MedTrakThemeProvider";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import MobileBarcodeScanner from "@/components/ui/MobileBarcodeScanner";
 import OperationsCentre from "@/components/dashboard/OperationsCentre";
+import OperationsBrief from "@/operations/components/OperationsBrief";
+import OperationsTimeline from "@/operations/components/OperationsTimeline";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -546,6 +548,14 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5">
+      <OperationsBrief
+        inventory={{ totalItems, lowStockItems, expiringSoon: expiringSoon.length, loading: stockLoading || expLoading }}
+        temperature={{ loading: tempLoading, hasReading: Boolean(latestTemp), within: tempStatus?.within, detail: tempStatus?.sub, readingAt: latestTemp?.measured_at }}
+        recentMoves={recentMoves}
+      />
+
+      <OperationsTimeline context={{ recentMoves, temperature: { loading: tempLoading, hasReading: Boolean(latestTemp), within: tempStatus?.within, detail: tempStatus?.sub, readingAt: latestTemp?.measured_at } }} compact />
+
       <OperationsCentre />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

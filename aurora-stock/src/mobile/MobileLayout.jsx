@@ -8,6 +8,7 @@ import PulseWidget from "@/components/pulse/PulseWidget";
 import MobileConnect from "./MobileConnect";
 import MobileCompliance from "./MobileCompliance";
 import MobileSessionShell from "./MobileSessionShell";
+import AskPrimovexPanel from "@/ai/components/AskPrimovexPanel";
 
 import {
   findStockItemByBarcode,
@@ -398,6 +399,7 @@ export default function MobileLayout() {
       <MobileBarcodeScanner onScan={handleMobileScan} />
 
       <PulseWidget variant="mobile" />
+      <AskPrimovexPanel variant="mobile" />
 
       <MobileBottomNav
         activeKey={activeTab}
