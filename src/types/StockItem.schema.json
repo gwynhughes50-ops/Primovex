@@ -1,0 +1,83 @@
+{
+  "name": "StockItem",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Item name"
+    },
+    "barcode": {
+      "type": "string",
+      "description": "Barcode number for scanning"
+    },
+    "category": {
+      "type": "string",
+      "enum": [
+        "non_medical",
+        "medicinal",
+        "vaccines",
+        "emergency_drugs",
+        "dressings",
+        "equipment"
+      ],
+      "description": "Stock category"
+    },
+    "batch_number": {
+      "type": "string",
+      "description": "Batch/Lot number"
+    },
+    "expiry_date": {
+      "type": "string",
+      "format": "date",
+      "description": "Expiration date"
+    },
+    "site_id": {
+      "type": "string",
+      "description": "Site where item is stored"
+    },
+    "location_id": {
+      "type": "string",
+      "description": "Specific location within site"
+    },
+    "photo_url": {
+      "type": "string",
+      "description": "Photo of the item"
+    },
+    "current_stock": {
+      "type": "number",
+      "default": 0,
+      "description": "Current quantity in stock"
+    },
+    "min_stock": {
+      "type": "number",
+      "default": 1,
+      "description": "Minimum stock level (alert threshold)"
+    },
+    "max_stock": {
+      "type": "number",
+      "default": 100,
+      "description": "Maximum stock level"
+    },
+    "unit": {
+      "type": "string",
+      "default": "units",
+      "description": "Unit of measurement (units, boxes, packs, etc.)"
+    },
+    "supplier": {
+      "type": "string",
+      "description": "Supplier name"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes"
+    },
+    "is_active": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "required": [
+    "name",
+    "category"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Primovex desktop and mobile application permissions",
+  "windows": ["main"],
+  "permissions": [
+  "core:default",
+  "deep-link:default",
+  "process:default",
+  "os:default"
+]
+}

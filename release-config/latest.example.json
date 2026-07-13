@@ -1,0 +1,11 @@
+{
+  "version": "0.10.0",
+  "notes": "Primovex beta release notes",
+  "pub_date": "2026-07-13T20:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "signature": "CONTENTS_OF_THE_GENERATED_SIG_FILE",
+      "url": "https://github.com/gwynhughes50-ops/Primovex/releases/download/app-v0.10.0/Primovex_0.10.0_x64-setup.exe"
+    }
+  }
+}

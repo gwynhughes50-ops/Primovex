@@ -1,0 +1,47 @@
+name: Build Primovex Android Beta
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'android-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    runs-on: ubuntu-22.04
+    env:
+      VITE_APP_VERSION: ${{ github.ref_name }}
+      VITE_PRIMOVEX_RELEASE_CHANNEL: beta
+      VITE_PRIMOVEX_UPDATES_ENABLED: 'false'
+      NDK_HOME: ${{ env.ANDROID_NDK_HOME }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: android-actions/setup-android@v3
+      - name: Install Android SDK packages
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.0.11902837'
+      - name: Install dependencies
+        run: npm ci
+      - name: Initialise Android project when absent
+        run: test -d src-tauri/gen/android || npm run android:init -- --ci
+      - name: Build debug APK for internal testing
+        run: npm run android:build:debug
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: primovex-android-beta
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error

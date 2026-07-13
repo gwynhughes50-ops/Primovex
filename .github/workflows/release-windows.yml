@@ -1,0 +1,45 @@
+name: Release Primovex Windows
+
+on:
+  push:
+    tags:
+      - 'app-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+      VITE_APP_VERSION: ${{ github.ref_name }}
+      VITE_PRIMOVEX_RELEASE_CHANNEL: beta
+      VITE_PRIMOVEX_UPDATES_ENABLED: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate web build
+        run: npm run build
+      - name: Create signed updater configuration
+        run: npm run release:config
+      - name: Build and publish Windows installer
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: app-v__VERSION__
+          releaseName: 'Primovex v__VERSION__'
+          releaseBody: 'See the included Primovex release notes.'
+          releaseDraft: true
+          prerelease: true
+          args: '--config src-tauri/tauri.release.conf.json'

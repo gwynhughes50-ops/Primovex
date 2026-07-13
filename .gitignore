@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+.firebase/
+firebase-debug.log
+npm-debug.log*
+src-tauri/target/
+.vite/
+.DS_Store
+Thumbs.db
+
+# Primovex release signing and generated platform files
+src-tauri/tauri.release.conf.json
+src-tauri/gen/
+*.jks
+*.keystore
+keystore.properties

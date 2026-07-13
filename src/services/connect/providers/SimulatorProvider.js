@@ -1,0 +1,117 @@
+export const SIMULATOR_PROVIDER_ID = "simulator";
+
+const now = Date.now();
+
+export const SIMULATED_CONNECT_DEVICES = [
+  {
+    id: "sim-vaccine-fridge-1",
+    provider: SIMULATOR_PROVIDER_ID,
+    providerLabel: "Simulator",
+    name: "Vaccine Fridge 1",
+    type: "fridge",
+    site: "Main Branch",
+    room: "Treatment Room 1",
+    equipment: "Cold chain storage",
+    currentValue: 4.2,
+    humidity: 42,
+    unit: "°C",
+    min: 2,
+    max: 8,
+    battery: 98,
+    signal: 92,
+    firmware: "sim-1.0.0",
+    lastSeen: new Date(now - 40_000),
+    lastSeenMinutes: 1,
+    integrationStatus: "active",
+  },
+  {
+    id: "sim-vaccine-fridge-2",
+    provider: SIMULATOR_PROVIDER_ID,
+    providerLabel: "Simulator",
+    name: "Vaccine Fridge 2",
+    type: "fridge",
+    site: "Main Branch",
+    room: "Nurses Room",
+    equipment: "Cold chain storage",
+    currentValue: 5.1,
+    humidity: 44,
+    unit: "°C",
+    min: 2,
+    max: 8,
+    battery: 91,
+    signal: 88,
+    firmware: "sim-1.0.0",
+    lastSeen: new Date(now - 120_000),
+    lastSeenMinutes: 2,
+    integrationStatus: "active",
+  },
+  {
+    id: "sim-minus-40-freezer",
+    provider: SIMULATOR_PROVIDER_ID,
+    providerLabel: "Simulator",
+    name: "-40°C Freezer",
+    type: "freezer",
+    site: "Main Branch",
+    room: "Cold Store",
+    equipment: "Ultra-low temperature freezer",
+    currentValue: -40.6,
+    unit: "°C",
+    min: -45,
+    max: -35,
+    battery: 100,
+    signal: 84,
+    firmware: "sim-1.0.0",
+    lastSeen: new Date(now - 180_000),
+    lastSeenMinutes: 3,
+    integrationStatus: "active",
+  },
+  {
+    id: "sim-treatment-room-sensor",
+    provider: SIMULATOR_PROVIDER_ID,
+    providerLabel: "Simulator",
+    name: "Treatment Room Sensor",
+    type: "environment",
+    site: "Main Branch",
+    room: "Treatment Room 2",
+    equipment: "Room environment",
+    currentValue: 21.4,
+    humidity: 54,
+    unit: "°C",
+    min: 16,
+    max: 26,
+    battery: 27,
+    signal: 64,
+    firmware: "sim-1.0.0",
+    lastSeen: new Date(now - 720_000),
+    lastSeenMinutes: 12,
+    integrationStatus: "active",
+  },
+];
+
+export const SimulatorProvider = {
+  id: SIMULATOR_PROVIDER_ID,
+  label: "Simulator",
+  shortLabel: "Simulator",
+  status: "online",
+  mode: "local",
+  description: "Local simulated devices for development, demonstrations and offline testing.",
+  needsBackend: false,
+  supports: ["temperature", "humidity", "battery", "signal", "alerts"],
+  securityNote: "No external credentials required.",
+  async getDevices() {
+    return SIMULATED_CONNECT_DEVICES;
+  },
+  async getLatestReading(deviceId) {
+    return SIMULATED_CONNECT_DEVICES.find((device) => device.id === deviceId) || null;
+  },
+  async getProviderHealth() {
+    return {
+      providerId: SIMULATOR_PROVIDER_ID,
+      status: "online",
+      lastSyncLabel: "just now",
+      message: "Simulator provider ready.",
+    };
+  },
+};
+
+export default SimulatorProvider;

@@ -1,0 +1,399 @@
+   }
+
+    return logs;
+  }, [auditLogs, filters]);
+
+  const paginatedLogs = filteredLogs.slice(page * pageSize, (page + 1) * pageSize);
+  const totalPages = Math.ceil(filteredLogs.length / pageSize);
+
+  const handleExport = () => {
+    const exportData = filteredLogs.map(log => ({
+      date: log.created_date ? format(parseISO(log.created_date), "yyyy-MM-dd HH:mm:ss") : "",
+      action: getActionLabel(log.action),
+      entity_type: log.entity_type,
+      entity_name: log.entity_name || "",
+      site: log.site_name || "",
+      location: log.location_name || "",
+      quantity_before: log.quantity_before ?? "",
+      quantity_after: log.quantity_after ?? "",
+      quantity_changed: log.quantity_changed ?? "",
+      performed_by: log.performed_by_name || log.performed_by || "",
+      details: log.details || ""
+    }));
+
+    exportToCSV(exportData, "audit_log", [
+      { key: "date", label: "Date & Time" },
+      { key: "action", label: "Action" },
+      { key: "entity_type", label: "Entity Type" },
+      { key: "entity_name", label: "Item/Entity" },
+      { key: "site", label: "Site" },
+      { key: "location", label: "Location" },
+      { key: "quantity_before", label: "Qty Before" },
+      { key: "quantity_after", label: "Qty After" },
+      { key: "quantity_changed", label: "Qty Changed" },
+      { key: "performed_by", label: "User" },
+      { key: "details", label: "Details" }
+    ]);
+  };
+
+  const resetFilters = () => {
+    setFilters({
+      startDate: format(subDays(new Date(), 30), "yyyy-MM-dd"),
+      endDate: format(new Date(), "yyyy-MM-dd"),
+      user: "all",
+      site: "all",
+      action: "all",
+      search: ""
+    });
+    setPage(0);
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-xl bg-slate-100">
+              <ClipboardList className="h-6 w-6 text-slate-600" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Audit Log</h1>
+              <p className="text-slate-500">Track all inventory changes and user actions</p>
+            </div>
+          </div>
+          <Button variant="outline" onClick={handleExport} className="gap-2">
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
+        </div>
+
+        {/* Filters */}
+        <Card className="p-4 border-0 shadow-sm mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+            <div>
+              <Label className="text-xs text-slate-500 mb-1.5 block">Start Date</Label>
+              <Input
+                type="date"
+                value={filters.startDate}
+                onChange={(e) => {
+                  setFilters(f => ({ ...f, startDate: e.target.value }));
+                  setPage(0);
+                }}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-500 mb-1.5 block">End Date</Label>
+              <Input
+                type="date"
+                value={filters.endDate}
+                onChange={(e) => {
+                  setFilters(f => ({ ...f, endDate: e.target.value }));
+                  setPage(0);
+                }}
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-slate-500 mb-1.5 block">User</Label>
+              <Select value={filters.user} onValueChange={(v) => { setFilters(f => ({ ...f, user: v })); setPage(0); }}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Users</SelectItem>
+                  {uniqueUsers.map(([email, name]) => (
+                    <SelectItem key={email} value={email}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-slate-500 mb-1.5 block">Site</Label>
+              <Select value={filters.site} onValueChange={(v) => { setFilters(f => ({ ...f, site: v })); setPage(0); }}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Sites</SelectItem>
+                  {sites.map(site => (
+                    <SelectItem key={site.id} value={site.id}>{site.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-slate-500 mb-1.5 block">Action</Label>
+              <Select value={filters.action} onValueChange={(v) => { setFilters(f => ({ ...f, action: v })); setPage(0); }}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Actions</SelectItem>
+                  <SelectItem value="created">Created</SelectItem>
+                  <SelectItem value="edited">Edited</SelectItem>
+                  <SelectItem value="stock_in">Stock In</SelectItem>
+                  <SelectItem value="stock_out">Stock Out</SelectItem>
+                  <SelectItem value="deleted">Deleted</SelectItem>
+                  <SelectItem value="moved">Moved</SelectItem>
+                  <SelectItem value="adjusted">Adjusted</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs text-slate-500 mb-1.5 block">Search</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Input
+                  placeholder="Search..."
+                  value={filters.search}
+                  onChange={(e) => {
+                    setFilters(f => ({ ...f, search: e.target.value }));
+                    setPage(0);
+                  }}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between mt-4 pt-4 border-t">
+            <p className="text-sm text-slate-500">
+              Showing {filteredLogs.length} record{filteredLogs.length !== 1 ? 's' : ''}
+            </p>
+            <Button variant="ghost" size="sm" onClick={resetFilters}>
+              Reset Filters
+            </Button>
+          </div>
+        </Card>
+
+        {/* Table */}
+        <Card className="border-0 shadow-sm overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-[180px]">Date & Time</TableHead>
+                <TableHead>Action</TableHead>
+                <TableHead>Item / Entity</TableHead>
+                <TableHead>Site / Location</TableHead>
+                <TableHead className="text-center">Quantity</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead className="w-[60px]"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {paginatedLogs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-12 text-slate-500">
+                    <ClipboardList className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p className="font-medium">No audit records found</p>
+                    <p className="text-sm">Try adjusting your filters</p>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginatedLogs.map(log => {
+                  const ActionIcon = actionIcons[log.action] || Edit;
+                  return (
+                    <TableRow key={log.id} className="hover:bg-slate-50">
+                      <TableCell className="text-sm">
+                        <div>
+                          <p className="font-medium text-slate-900">
+                            {log.created_date ? format(parseISO(log.created_date), "dd MMM yyyy") : "—"}
+                          </p>
+                          <p className="text-slate-500">
+                            {log.created_date ? format(parseISO(log.created_date), "HH:mm:ss") : ""}
+                          </p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getActionColor(log.action)}>
+                          <ActionIcon className="h-3 w-3 mr-1" />
+                          {getActionLabel(log.action)}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <p className="font-medium text-slate-900">{log.entity_name || "—"}</p>
+                          <p className="text-xs text-slate-500 capitalize">{log.entity_type?.replace(/_/g, " ")}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          <p className="text-slate-900">{log.site_name || "—"}</p>
+                          {log.location_name && (
+                            <p className="text-slate-500">{log.location_name}</p>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {log.quantity_changed !== undefined && log.quantity_changed !== null ? (
+                          <div>
+                            <span className={`font-semibold ${log.quantity_changed > 0 ? "text-emerald-600" : log.quantity_changed < 0 ? "text-amber-600" : "text-slate-600"}`}>
+                              {log.quantity_changed > 0 ? "+" : ""}{log.quantity_changed}
+                            </span>
+                            <p className="text-xs text-slate-500">
+                              {log.quantity_before} → {log.quantity_after}
+                            </p>
+                          </div>
+                        ) : (
+                          <span className="text-slate-400">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="h-7 w-7 rounded-full bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-600">
+                            {(log.performed_by_name || log.performed_by || "?")?.[0]?.toUpperCase()}
+                          </div>
+                          <span className="text-sm text-slate-700 truncate max-w-[120px]">
+                            {log.performed_by_name || log.performed_by?.split("@")[0] || "—"}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => setSelectedLog(log)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t">
+              <p className="text-sm text-slate-500">
+                Page {page + 1} of {totalPages}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(p => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Detail Dialog */}
+      <Dialog open={!!selectedLog} onOpenChange={() => setSelectedLog(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Audit Log Details</DialogTitle>
+          </DialogHeader>
+          {selectedLog && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs text-slate-500">Date & Time</Label>
+                  <p className="font-medium">
+                    {selectedLog.created_date ? format(parseISO(selectedLog.created_date), "dd MMM yyyy, HH:mm:ss") : "—"}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-xs text-slate-500">Action</Label>
+                  <Badge className={getActionColor(selectedLog.action)}>
+                    {getActionLabel(selectedLog.action)}
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-xs text-slate-500">Entity Type</Label>
+                  <p className="capitalize">{selectedLog.entity_type?.replace(/_/g, " ")}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-slate-500">Entity Name</Label>
+                  <p className="font-medium">{selectedLog.entity_name || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-slate-500">Site</Label>
+                  <p>{selectedLog.site_name || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-slate-500">Location</Label>
+                  <p>{selectedLog.location_name || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-slate-500">Performed By</Label>
+                  <p>{selectedLog.performed_by_name || selectedLog.performed_by || "—"}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-slate-500">User Email</Label>
+                  <p className="text-sm">{selectedLog.performed_by || "—"}</p>
+                </div>
+              </div>
+
+              {(selectedLog.quantity_before !== undefined || selectedLog.quantity_after !== undefined) && (
+                <div className="p-4 bg-slate-50 rounded-lg">
+                  <Label className="text-xs text-slate-500 mb-2 block">Quantity Change</Label>
+                  <div className="flex items-center gap-4">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-slate-600">{selectedLog.quantity_before ?? "—"}</p>
+                      <p className="text-xs text-slate-500">Before</p>
+                    </div>
+                    <div className="text-2xl text-slate-400">→</div>
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-slate-900">{selectedLog.quantity_after ?? "—"}</p>
+                      <p className="text-xs text-slate-500">After</p>
+                    </div>
+                    {selectedLog.quantity_changed !== undefined && (
+                      <div className="ml-auto text-center">
+                        <p className={`text-2xl font-bold ${selectedLog.quantity_changed > 0 ? "text-emerald-600" : "text-amber-600"}`}>
+                          {selectedLog.quantity_changed > 0 ? "+" : ""}{selectedLog.quantity_changed}
+                        </p>
+                        <p className="text-xs text-slate-500">Change</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {selectedLog.details && (
+                <div>
+                  <Label className="text-xs text-slate-500">Details</Label>
+                  <p className="mt-1 text-sm text-slate-700 bg-slate-50 p-3 rounded-lg">{selectedLog.details}</p>
+                </div>
+              )}
+
+              {selectedLog.changes && (
+                <div>
+                  <Label className="text-xs text-slate-500">Field Changes</Label>
+                  <pre className="mt-1 text-xs bg-slate-50 p-3 rounded-lg overflow-auto max-h-40">
+                    {typeof selectedLog.changes === 'string' 
+                      ? JSON.stringify(JSON.parse(selectedLog.changes), null, 2)
+                      : JSON.stringify(selectedLog.changes, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

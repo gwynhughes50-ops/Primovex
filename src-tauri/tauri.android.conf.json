@@ -1,0 +1,9 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "build": {
+    "beforeDevCommand": "npm run dev:android",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build:android",
+    "frontendDist": "../dist"
+  }
+}

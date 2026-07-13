@@ -1,0 +1,427 @@
+import { useState, useMemo, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
+import { Link } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import StatsCard from "@/components/ui/StatsCard";
+import StockItemCard from "@/components/stock/StockItemCard";
+import AlertItem from "@/components/alerts/AlertItem";
+import StockItemForm from "@/components/stock/StockItemForm";
+import StockTransactionDialog from "@/components/stock/StockTransactionDialog";
+import MobileBarcodeScanner from "@/components/stock/MobileBarcodeScanner";
+import { checkAndNotify } from "@/components/notifications/PushNotificationManager";
+import { logAuditEvent } from "@/components/audit/AuditLogService";
+import { usePermissions, PermissionGate } from "@/components/permissions/PermissionsContext";
+import { 
+  Package, AlertTriangle, Calendar, TrendingDown, Plus, 
+  ArrowRight, Building2, Scan, Search
+} from "lucide-react";
+import { differenceInDays, parseISO } from "date-fns";
+import { Input } from "@/components/ui/input";
+
+export default function Dashboard() {
+  const [selectedSite, setSelectedSite] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [itemFormOpen, setItemFormOpen] = useState(false);
+  const [transactionDialog, setTransactionDialog] = useState({ open: false, item: null, type: "received" });
+  const [editingItem, setEditingItem] = useState(null);
+
+  const { data: sites = [] } = useQuery({
+    queryKey: ["sites"],
+    queryFn: () => base44.entities.Site.list()
+  });
+
+  const { data: locations = [] } = useQuery({
+    queryKey: ["locations"],
+    queryFn: () => base44.entities.Location.list()
+  });
+
+  const { data: stockItems = [], refetch: refetchStock } = useQuery({
+    queryKey: ["stockItems"],
+    queryFn: () => base44.entities.StockItem.list()
+  });
+
+  const { data: user } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me()
+  });
+
+  const { data: temperatureLogs = [] } = useQuery({
+    queryKey: ["temperatureLogs"],
+    queryFn: () => base44.entities.TemperatureLog.list("-recorded_at", 10)
+  });
+
+  const { hasPermission } = usePermissions();
+
+  // Check and send notifications when data changes
+  useEffect(() => {
+    if (stockItems.length > 0) {
+      checkAndNotify(stockItems, temperatureLogs);
+    }
+  }, [stockItems, temperatureLogs]);
+
+  // Calculate stats and alerts
+  const stats = useMemo(() => {
+    const filteredItems = selectedSite === "all" 
+      ? stockItems 
+      : stockItems.filter(item => item.site_id === selectedSite);
+
+    const lowStock = filteredItems.filter(item => item.current_stock <= item.min_stock && item.current_stock > 0);
+    const outOfStock = filteredItems.filter(item => item.current_stock === 0);
+    const expiringSoon = filteredItems.filter(item => {
+      if (!item.expiry_date) return false;
+      const days = differenceInDays(parseISO(item.expiry_date), new Date());
+      return days >= 0 && days <= 30;
+    });
+    const expired = filteredItems.filter(item => {
+      if (!item.expiry_date) return false;
+      return differenceInDays(parseISO(item.expiry_date), new Date()) < 0;
+    });
+
+    return {
+      total: filteredItems.length,
+      lowStock,
+      outOfStock,
+      expiringSoon,
+      expired
+    };
+  }, [stockItems, selectedSite]);
+
+  // Generate alerts
+  const alerts = useMemo(() => {
+    const alertList = [];
+    
+    stats.outOfStock.forEach(item => {
+      alertList.push({
+        id: `out-${item.id}`,
+        type: "out_of_stock",
+        title: "Out of Stock",
+        message: `${item.name} is out of stock`,
+        item,
+        timestamp: new Date()
+      });
+    });
+
+    stats.lowStock.forEach(item => {
+      alertList.push({
+        id: `low-${item.id}`,
+        type: "low_stock",
+        title: "Low Stock Warning",
+        message: `${item.name} is running low (${item.current_stock} remaining)`,
+        item,
+        timestamp: new Date()
+      });
+    });
+
+    stats.expired.forEach(item => {
+      alertList.push({
+        id: `expired-${item.id}`,
+        type: "expired",
+        title: "Item Expired",
+        message: `${item.name} has expired`,
+        item,
+        timestamp: new Date()
+      });
+    });
+
+    stats.expiringSoon.forEach(item => {
+      const days = differenceInDays(parseISO(item.expiry_date), new Date());
+      alertList.push({
+        id: `expiring-${item.id}`,
+        type: "expiring_soon",
+        title: "Expiring Soon",
+        message: `${item.name} expires in ${days} day${days !== 1 ? 's' : ''}`,
+        item,
+        timestamp: new Date()
+      });
+    });
+
+    return alertList.slice(0, 5);
+  }, [stats]);
+
+  // Search and filter items
+  const filteredItems = useMemo(() => {
+    let items = selectedSite === "all" 
+      ? stockItems 
+      : stockItems.filter(item => item.site_id === selectedSite);
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      items = items.filter(item => 
+        item.name?.toLowerCase().includes(query) ||
+        item.barcode?.toLowerCase().includes(query) ||
+        item.batch_number?.toLowerCase().includes(query)
+      );
+    }
+
+    return items;
+  }, [stockItems, selectedSite, searchQuery]);
+
+  const handleBarcodeScanned = (barcode) => {
+    setSearchQuery(barcode);
+  };
+
+  const handleSaveItem = async (data) => {
+    const site = sites.find(s => s.id === data.site_id);
+    const location = locations.find(l => l.id === data.location_id);
+    
+    if (editingItem) {
+      await base44.entities.StockItem.update(editingItem.id, data);
+      await logAuditEvent({
+        action: "edited",
+        entityType: "stock_item",
+        entityId: editingItem.id,
+        entityName: data.name,
+        siteId: data.site_id,
+        siteName: site?.name,
+        locationId: data.location_id,
+        locationName: location?.name,
+        user
+      });
+    } else {
+      const created = await base44.entities.StockItem.create(data);
+      await logAuditEvent({
+        action: "created",
+        entityType: "stock_item",
+        entityId: created.id,
+        entityName: data.name,
+        siteId: data.site_id,
+        siteName: site?.name,
+        locationId: data.location_id,
+        locationName: location?.name,
+        quantityAfter: data.current_stock,
+        user
+      });
+    }
+    refetchStock();
+    setEditingItem(null);
+  };
+
+  const handleTransaction = async (transaction) => {
+    const item = transactionDialog.item;
+    const site = sites.find(s => s.id === item.site_id);
+    const location = locations.find(l => l.id === item.location_id);
+    
+    await base44.entities.StockTransaction.create({
+      ...transaction,
+      performed_by: user?.email
+    });
+    await base44.entities.StockItem.update(item.id, {
+      current_stock: transaction.new_stock
+    });
+    
+    await logAuditEvent({
+      action: transaction.type === "received" ? "stock_in" : "stock_out",
+      entityType: "stock_item",
+      entityId: item.id,
+      entityName: item.name,
+      siteId: item.site_id,
+      siteName: site?.name,
+      locationId: item.location_id,
+      locationName: location?.name,
+      quantityBefore: transaction.previous_stock,
+      quantityAfter: transaction.new_stock,
+      details: transaction.notes,
+      user
+    });
+    
+    refetchStock();
+  };
+
+  const getSite = (siteId) => sites.find(s => s.id === siteId);
+  const getLocation = (locationId) => locations.find(l => l.id === locationId);
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
+            <p className="text-slate-500 mt-1">Monitor your inventory at a glance</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Select value={selectedSite} onValueChange={setSelectedSite}>
+              <SelectTrigger className="w-48">
+                <Building2 className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Select site" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sites</SelectItem>
+                {sites.map(site => (
+                  <SelectItem key={site.id} value={site.id}>{site.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {hasPermission("inventory_add") && (
+              <Button 
+                className="bg-teal-600 hover:bg-teal-700"
+                onClick={() => {
+                  setEditingItem(null);
+                  setItemFormOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Item
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <StatsCard
+            title="Total Items"
+            value={stats.total}
+            icon={Package}
+            iconBg="bg-teal-50"
+            iconColor="text-teal-600"
+          />
+          <StatsCard
+            title="Low Stock"
+            value={stats.lowStock.length}
+            icon={TrendingDown}
+            iconBg="bg-amber-50"
+            iconColor="text-amber-600"
+            trend={stats.lowStock.length > 0 ? "Needs attention" : null}
+          />
+          <StatsCard
+            title="Out of Stock"
+            value={stats.outOfStock.length}
+            icon={AlertTriangle}
+            iconBg="bg-rose-50"
+            iconColor="text-rose-600"
+            trend={stats.outOfStock.length > 0 ? "Critical" : null}
+          />
+          <StatsCard
+            title="Expiring Soon"
+            value={stats.expiringSoon.length}
+            icon={Calendar}
+            iconBg="bg-orange-50"
+            iconColor="text-orange-600"
+            trend={stats.expiringSoon.length > 0 ? "Within 30 days" : null}
+          />
+        </div>
+
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Alerts Section */}
+          <div className="lg:col-span-1">
+            <Card className="p-6 border-0 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-slate-900">Active Alerts</h2>
+                <Link to={createPageUrl("Alerts")}>
+                  <Button variant="ghost" size="sm" className="text-teal-600">
+                    View All <ArrowRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </Link>
+              </div>
+              <div className="space-y-3">
+                {alerts.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500">
+                    <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No active alerts</p>
+                  </div>
+                ) : (
+                  alerts.map(alert => (
+                    <AlertItem key={alert.id} alert={alert} compact />
+                  ))
+                )}
+              </div>
+            </Card>
+          </div>
+
+          {/* Stock Items Section */}
+          <div className="lg:col-span-2">
+            <Card className="p-6 border-0 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <h2 className="text-lg font-semibold text-slate-900">Stock Overview</h2>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1 sm:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <Input
+                      placeholder="Search items..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <MobileBarcodeScanner onScan={handleBarcodeScanned} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {filteredItems.slice(0, 6).map(item => (
+                  <StockItemCard
+                    key={item.id}
+                    item={item}
+                    site={getSite(item.site_id)}
+                    location={getLocation(item.location_id)}
+                    onEdit={hasPermission("inventory_edit") ? (item) => {
+                      setEditingItem(item);
+                      setItemFormOpen(true);
+                    } : undefined}
+                    onReceive={hasPermission("stock_in") ? (item) => setTransactionDialog({ open: true, item, type: "received" }) : undefined}
+                    onUse={hasPermission("stock_out") ? (item) => setTransactionDialog({ open: true, item, type: "used" }) : undefined}
+                    compact
+                  />
+                ))}
+              </div>
+
+              {filteredItems.length > 6 && (
+                <div className="mt-6 text-center">
+                  <Link to={createPageUrl("Inventory")}>
+                    <Button variant="outline">
+                      View All {filteredItems.length} Items
+                      <ArrowRight className="h-4 w-4 ml-2" />
+                    </Button>
+                  </Link>
+                </div>
+              )}
+
+              {filteredItems.length === 0 && (
+                <div className="text-center py-12 text-slate-500">
+                  <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p className="text-lg font-medium">No items found</p>
+                  <p className="text-sm">Add your first stock item to get started</p>
+                  {hasPermission("inventory_add") && (
+                    <Button 
+                      className="mt-4 bg-teal-600 hover:bg-teal-700"
+                      onClick={() => {
+                        setEditingItem(null);
+                        setItemFormOpen(true);
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Item
+                    </Button>
+                  )}
+                </div>
+              )}
+            </Card>
+          </div>
+        </div>
+      </div>
+
+      <StockItemForm
+        open={itemFormOpen}
+        onOpenChange={setItemFormOpen}
+        item={editingItem}
+        sites={sites}
+        locations={locations}
+        onSave={handleSaveItem}
+      />
+
+      <StockTransactionDialog
+        open={transactionDialog.open}
+        onOpenChange={(open) => setTransactionDialog(prev => ({ ...prev, open }))}
+        item={transactionDialog.item}
+        type={transactionDialog.type}
+        onSubmit={handleTransaction}
+      />
+    </div>
+  );
+}

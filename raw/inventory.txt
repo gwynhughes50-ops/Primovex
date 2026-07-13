@@ -1,0 +1,1468 @@
+import { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import StockItemCard from "@/components/stock/StockItemCard";
+import StockItemForm from "@/components/stock/StockItemForm";
+import StockTransactionDialog from "@/components/stock/StockTransactionDialog";
+import { logAuditEvent } from "@/components/audit/AuditLogService";
+import { usePermissions } from "@/components/permissions/PermissionsContext";
+import MobileBarcodeScanner from "@/components/stock/MobileBarcodeScanner";
+import { categoryConfig } from "@/components/stock/CategoryBadge";
+import {
+  Plus, Search, Building2, Filter, Grid, List, Package,
+  Loader2, Trash2
+} from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+const categories = [
+  { value: "all", label: "All Categories" },
+  { value: "non_medical", label: "Non-Medical" },
+  { value: "medicinal", label: "Medicinal" },
+  { value: "vaccines", label: "Vaccines" },
+  { value: "emergency_drugs", label: "Emergency Drugs" },
+  { value: "dressings", label: "Dressings" },
+  { value: "equipment", label: "Equipment" }
+];
+
+export default function Inventory() {
+  const [selectedSite, setSelectedSite] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState("grid");
+  const [sortBy, setSortBy] = useState("name");
+  const [itemFormOpen, setItemFormOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [transactionDialog, setTransactionDialog] = useState({ open: false, item: null, type: "received" });
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, item: null });
+
+  const queryClient = useQueryClient();
+
+  const { data: sites = [] } = useQuery({
+    queryKey: ["sites"],
+    queryFn: () => base44.entities.Site.list()
+  });
+
+  const { data: locations = [] } = useQuery({
+    queryKey: ["locations"],
+    queryFn: () => base44.entities.Location.list()
+  });
+
+  const { data: stockItems = [], isLoading } = useQuery({
+    queryKey: ["stockItems"],
+    queryFn: () => base44.entities.StockItem.list()
+  });
+
+  const { data: user } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me()
+  });
+
+  const { hasPermission } = usePermissions();
+
+  const saveItemMutation = useMutation({
+    mutationFn: async (data) => {
+      const site = sites.find(s => s.id === data.site_id);
+      const location = locations.find(l => l.id === data.location_id);
+      
+      if (editingItem) {
+        await base44.entities.StockItem.update(editingItem.id, data);
+        await logAuditEvent({
+          action: "edited",
+          entityType: "stock_item",
+          entityId: editingItem.id,
+          entityName: data.name,
+          siteId: data.site_id,
+          siteName: site?.name,
+          locationId: data.location_id,
+          locationName: location?.name,
+          user
+        });
+        return;
+      }
+      const created = await base44.entities.StockItem.create(data);
+      await logAuditEvent({
+        action: "created",
+        entityType: "stock_item",
+        entityId: created.id,
+        entityName: data.name,
+        siteId: data.site_id,
+        siteName: site?.name,
+        locationId: data.location_id,
+        locationName: location?.name,
+        quantityAfter: data.current_stock,
+        user
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stockItems"] });
+      setEditingItem(null);
+    }
+  });
+
+  const deleteItemMutation = useMutation({
+    mutationFn: async (item) => {
+      const site = sites.find(s => s.id === item.site_id);
+      await base44.entities.StockItem.delete(item.id);
+      await logAuditEvent({
+        action: "deleted",
+        entityType: "stock_item",
+        entityId: item.id,
+        entityName: item.name,
+        siteId: item.site_id,
+        siteName: site?.name,
+        quantityBefore: item.current_stock,
+        quantityAfter: 0,
+        user
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stockItems"] });
+    }
+  });
+
+  const transactionMutation = useMutation({
+    mutationFn: async ({ transaction, item }) => {
+      const site = sites.find(s => s.id === item?.site_id);
+      const location = locations.find(l => l.id === item?.location_id);
+      
+      await base44.entities.StockTransaction.create({
+        ...transaction,
+        performed_by: user?.email
+      });
+      await base44.entities.StockItem.update(item.id, {
+        current_stock: transaction.new_stock
+      });
+      
+      await logAuditEvent({
+        action: transaction.type === "received" ? "stock_in" : "stock_out",
+        entityType: "stock_item",
+        entityId: item?.id,
+        entityName: item?.name,
+        siteId: item?.site_id,
+        siteName: site?.name,
+        locationId: item?.location_id,
+        locationName: location?.name,
+        quantityBefore: transaction.previous_stock,
+        quantityAfter: transaction.new_stock,
+        details: transaction.notes,
+        user
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stockItems"] });
+    }
+  });
+
+  const filteredItems = useMemo(() => {
+    let items = [...stockItems];
+
+    // Filter by site
+    if (selectedSite !== "all") {
+      items = items.filter(item => item.site_id === selectedSite);
+    }
+
+    // Filter by category
+    if (selectedCategory !== "all") {
+      items = items.filter(item => item.category === selectedCategory);
+    }
+
+    // Search
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      items = items.filter(item =>
+        item.name?.toLowerCase().includes(query) ||
+        item.barcode?.toLowerCase().includes(query) ||
+        item.batch_number?.toLowerCase().includes(query) ||
+        item.supplier?.toLowerCase().includes(query)
+      );
+    }
+
+    // Sort
+    items.sort((a, b) => {
+      switch (sortBy) {
+        case "name":
+          return (a.name || "").localeCompare(b.name || "");
+        case "stock_low":
+          return (a.current_stock || 0) - (b.current_stock || 0);
+        case "stock_high":
+          return (b.current_stock || 0) - (a.current_stock || 0);
+        case "expiry":
+          if (!a.expiry_date) return 1;
+          if (!b.expiry_date) return -1;
+          return new Date(a.expiry_date) - new Date(b.expiry_date);
+        default:
+          return 0;
+      }
+    });
+
+    return items;
+  }, [stockItems, selectedSite, selectedCategory, searchQuery, sortBy]);
+
+  const getSite = (siteId) => sites.find(s => s.id === siteId);
+  const getLocation = (locationId) => locations.find(l => l.id === locationId);
+
+  const handleBarcodeScanned = (barcode) => {
+    setSearchQuery(barcode);
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Inventory</h1>
+            <p className="text-slate-500 mt-1">
+              {filteredItems.length} items {selectedSite !== "all" && `at ${getSite(selectedSite)?.name}`}
+            </p>
+          </div>
+          {hasPermission("inventory_add") && (
+            <Button
+              className="bg-teal-600 hover:bg-teal-700"
+              onClick={() => {
+                setEditingItem(null);
+                setItemFormOpen(true);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Item
+            </Button>
+          )}
+        </div>
+
+        {/* Filters */}
+        <Card className="p-4 border-0 shadow-sm mb-6">
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Search */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <Input
+                placeholder="Search by name, barcode, batch..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+
+            {/* Scanner */}
+            <MobileBarcodeScanner onScan={handleBarcodeScanned} />
+
+            {/* Site Filter */}
+            <Select value={selectedSite} onValueChange={setSelectedSite}>
+              <SelectTrigger className="w-48">
+                <Building2 className="h-4 w-4 mr-2" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sites</SelectItem>
+                {sites.map(site => (
+                  <SelectItem key={site.id} value={site.id}>{site.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Category Filter */}
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="w-48">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map(cat => (
+                  <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Sort */}
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="name">Name A-Z</SelectItem>
+                <SelectItem value="stock_low">Stock: Low First</SelectItem>
+                <SelectItem value="stock_high">Stock: High First</SelectItem>
+                <SelectItem value="expiry">Expiry Date</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* View Toggle */}
+            <div className="flex rounded-lg border bg-white">
+              <Button
+                variant={viewMode === "grid" ? "secondary" : "ghost"}
+                size="icon"
+                onClick={() => setViewMode("grid")}
+              >
+                <Grid className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === "list" ? "secondary" : "ghost"}
+                size="icon"
+                onClick={() => setViewMode("list")}
+              >
+                <List className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {/* Category Tabs */}
+        <Tabs value={selectedCategory} onValueChange={setSelectedCategory} className="mb-6">
+          <TabsList className="bg-white border shadow-sm h-auto flex-wrap">
+            {categories.map(cat => (
+              <TabsTrigger 
+                key={cat.value} 
+                value={cat.value}
+                className="data-[state=active]:bg-teal-50 data-[state=active]:text-teal-700"
+              >
+                {cat.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+
+        {/* Items Grid/List */}
+        {isLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+          </div>
+        ) : filteredItems.length === 0 ? (
+          <Card className="p-12 border-0 shadow-sm text-center">
+            <Package className="h-16 w-16 mx-auto mb-4 text-slate-300" />
+            <h3 className="text-xl font-semibold text-slate-900 mb-2">No items found</h3>
+            <p className="text-slate-500 mb-6">
+              {searchQuery ? "Try adjusting your search or filters" : "Add your first stock item to get started"}
+            </p>
+            {hasPermission("inventory_add") && (
+              <Button
+                className="bg-teal-600 hover:bg-teal-700"
+                onClick={() => {
+                  setEditingItem(null);
+                  setItemFormOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Item
+              </Button>
+            )}
+          </Card>
+        ) : (
+          <div className={viewMode === "grid" 
+            ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" 
+            : "space-y-4"
+          }>
+            {filteredItems.map(item => (
+              <StockItemCard
+                key={item.id}
+                item={item}
+                site={getSite(item.site_id)}
+                location={getLocation(item.location_id)}
+                compact={viewMode === "list"}
+                onEdit={hasPermission("inventory_edit") ? (item) => {
+                  setEditingItem(item);
+                  setItemFormOpen(true);
+                } : undefined}
+                onDelete={hasPermission("inventory_delete") ? (item) => setDeleteDialog({ open: true, item }) : undefined}
+                onReceive={hasPermission("stock_in") ? (item) => setTransactionDialog({ open: true, item, type: "received" }) : undefined}
+                onUse={hasPermission("stock_out") ? (item) => setTransactionDialog({ open: true, item, type: "used" }) : undefined}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <StockItemForm
+        open={itemFormOpen}
+        onOpenChange={setItemFormOpen}
+        item={editingItem}
+        sites={sites}
+        locations={locations}
+        onSave={(data) => saveItemMutation.mutateAsync(data)}
+      />
+
+      <StockTransactionDialog
+        open={transactionDialog.open}
+        onOpenChange={(open) => setTransactionDialog(prev => ({ ...prev, open }))}
+        item={transactionDialog.item}
+        type={transactionDialog.type}
+        onSubmit={(transaction) => transactionMutation.mutateAsync({ 
+          transaction, 
+          item: transactionDialog.item 
+        })}
+      />
+
+      <AlertDialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Stock Item</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{deleteDialog.item?.name}"? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-rose-600 hover:bg-rose-700"
+              onClick={() => {
+                deleteItemMutation.mutate(deleteDialog.item);
+                setDeleteDialog({ open: false, item: null });
+              }}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import AlertItem from "@/components/alerts/AlertItem";
+import StockTransactionDialog from "@/components/stock/StockTransactionDialog";
+import { 
+  Bell, Package, Calendar, AlertTriangle, CheckCircle,
+  TrendingDown, Loader2
+} from "lucide-react";
+import { differenceInDays, parseISO } from "date-fns";
+
+export default function Alerts() {
+  const [activeTab, setActiveTab] = useState("all");
+  const [transactionDialog, setTransactionDialog] = useState({ open: false, item: null, type: "received" });
+
+  const { data: stockItems = [], isLoading, refetch } = useQuery({
+    queryKey: ["stockItems"],
+    queryFn: () => base44.entities.StockItem.list()
+  });
+
+  const { data: user } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me()
+  });
+
+  // Generate all alerts
+  const alerts = useMemo(() => {
+    const alertList = [];
+
+    stockItems.forEach(item => {
+      // Out of stock
+      if (item.current_stock === 0) {
+        alertList.push({
+          id: `out-${item.id}`,
+          type: "out_of_stock",
+          severity: "critical",
+          title: "Out of Stock",
+          message: `${item.name} is completely out of stock. Reorder immediately.`,
+          item,
+          timestamp: new Date()
+        });
+      }
+      // Low stock
+      else if (item.current_stock <= item.min_stock) {
+        alertList.push({
+          id: `low-${item.id}`,
+          type: "low_stock",
+          severity: "warning",
+          title: "Low Stock Warning",
+          message: `${item.name} has only ${item.current_stock} ${item.unit} remaining (minimum: ${item.min_stock})`,
+          item,
+          timestamp: new Date()
+        });
+      }
+
+      // Expiry checks
+      if (item.expiry_date) {
+        const days = differenceInDays(parseISO(item.expiry_date), new Date());
+        
+        if (days < 0) {
+          alertList.push({
+            id: `expired-${item.id}`,
+            type: "expired",
+            severity: "critical",
+            title: "Item Expired",
+            message: `${item.name} expired ${Math.abs(days)} days ago. Remove from stock.`,
+            item,
+            timestamp: new Date()
+          });
+        } else if (days <= 7) {
+          alertList.push({
+            id: `expiring-${item.id}`,
+            type: "expiring_soon",
+            severity: "critical",
+            title: "Expiring This Week",
+            message: `${item.name} expires in ${days} day${days !== 1 ? 's' : ''}`,
+            item,
+            timestamp: new Date()
+          });
+        } else if (days <= 30) {
+          alertList.push({
+            id: `expiring30-${item.id}`,
+            type: "expiring_soon",
+            severity: "warning",
+            title: "Expiring Soon",
+            message: `${item.name} expires in ${days} days`,
+            item,
+            timestamp: new Date()
+          });
+        }
+      }
+    });
+
+    // Sort by severity
+    alertList.sort((a, b) => {
+      const severityOrder = { critical: 0, warning: 1, info: 2 };
+      return severityOrder[a.severity] - severityOrder[b.severity];
+    });
+
+    return alertList;
+  }, [stockItems]);
+
+  // Filter alerts by tab
+  const filteredAlerts = useMemo(() => {
+    if (activeTab === "all") return alerts;
+    if (activeTab === "stock") return alerts.filter(a => a.type === "low_stock" || a.type === "out_of_stock");
+    if (activeTab === "expiry") return alerts.filter(a => a.type === "expiring_soon" || a.type === "expired");
+    return alerts;
+  }, [alerts, activeTab]);
+
+  const handleTransaction = async (transaction) => {
+    const item = transactionDialog.item;
+    await base44.entities.StockTransaction.create({
+      ...transaction,
+      performed_by: user?.email
+    });
+    await base44.entities.StockItem.update(item.id, {
+      current_stock: transaction.new_stock
+    });
+    refetch();
+  };
+
+  const alertCounts = {
+    all: alerts.length,
+    stock: alerts.filter(a => a.type === "low_stock" || a.type === "out_of_stock").length,
+    expiry: alerts.filter(a => a.type === "expiring_soon" || a.type === "expired").length
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 rounded-xl bg-amber-100">
+              <Bell className="h-6 w-6 text-amber-600" />
+            </div>
+            <h1 className="text-3xl font-bold text-slate-900">Alerts</h1>
+          </div>
+          <p className="text-slate-500">
+            {alerts.length} active alert{alerts.length !== 1 ? 's' : ''} requiring attention
+          </p>
+        </div>
+
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          <Card className="p-4 border-0 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-rose-100">
+                <TrendingDown className="h-5 w-5 text-rose-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-900">{alertCounts.stock}</p>
+                <p className="text-sm text-slate-500">Stock Alerts</p>
+              </div>
+            </div>
+          </Card>
+          <Card className="p-4 border-0 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-orange-100">
+                <Calendar className="h-5 w-5 text-orange-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-900">{alertCounts.expiry}</p>
+                <p className="text-sm text-slate-500">Expiry Alerts</p>
+              </div>
+            </div>
+          </Card>
+          <Card className="p-4 border-0 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-emerald-100">
+                <CheckCircle className="h-5 w-5 text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-slate-900">
+                  {stockItems.length - alerts.length}
+                </p>
+                <p className="text-sm text-slate-500">Items OK</p>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+          <TabsList className="bg-white border shadow-sm">
+            <TabsTrigger value="all" className="gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              All ({alertCounts.all})
+            </TabsTrigger>
+            <TabsTrigger value="stock" className="gap-2">
+              <Package className="h-4 w-4" />
+              Stock ({alertCounts.stock})
+            </TabsTrigger>
+            <TabsTrigger value="expiry" className="gap-2">
+              <Calendar className="h-4 w-4" />
+              Expiry ({alertCounts.expiry})
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {/* Alerts List */}
+        <div className="space-y-4">
+          {filteredAlerts.length === 0 ? (
+            <Card className="p-12 border-0 shadow-sm text-center">
+              <CheckCircle className="h-16 w-16 mx-auto mb-4 text-emerald-500" />
+              <h3 className="text-xl font-semibold text-slate-900 mb-2">All Clear!</h3>
+              <p className="text-slate-500">
+                No alerts at the moment. Your inventory is in good shape.
+              </p>
+            </Card>
+          ) : (
+            filteredAlerts.map(alert => (
+              <AlertItem
+                key={alert.id}
+                alert={alert}
+                onAction={(alert) => {
+                  if (alert.type === "low_stock" || alert.type === "out_of_stock") {
+                    setTransactionDialog({ open: true, item: alert.item, type: "received" });
+                  }
+                }}
+              />
+            ))
+          )}
+        </div>
+      </div>
+
+      <StockTransactionDialog
+        open={transactionDialog.open}
+        onOpenChange={(open) => setTransactionDialog(prev => ({ ...prev, open }))}
+        item={transactionDialog.item}
+        type={transactionDialog.type}
+        onSubmit={handleTransaction}
+      />
+    </div>
+  );
+}
+import { useState, useMemo } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import TemperatureLogForm from "@/components/temperature/TemperatureLogForm";
+import { 
+  Thermometer, Plus, CheckCircle, AlertTriangle, Calendar,
+  Loader2, TrendingUp, TrendingDown
+} from "lucide-react";
+import { format, parseISO, subDays, isWithinInterval, startOfDay, endOfDay } from "date-fns";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+
+export default function Temperature() {
+  const [logFormOpen, setLogFormOpen] = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState("all");
+  const [dateRange, setDateRange] = useState("7days");
+
+  const queryClient = useQueryClient();
+
+  const { data: locations = [] } = useQuery({
+    queryKey: ["locations"],
+    queryFn: () => base44.entities.Location.list()
+  });
+
+  const { data: temperatureLogs = [], isLoading } = useQuery({
+    queryKey: ["temperatureLogs"],
+    queryFn: () => base44.entities.TemperatureLog.list("-recorded_at")
+  });
+
+  const { data: user } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me()
+  });
+
+  const fridgeLocations = locations.filter(loc => loc.type === "fridge");
+
+  const createLogMutation = useMutation({
+    mutationFn: (data) => base44.entities.TemperatureLog.create({
+      ...data,
+      recorded_by: user?.email
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["temperatureLogs"] });
+    }
+  });
+
+  // Filter logs
+  const filteredLogs = useMemo(() => {
+    let logs = [...temperatureLogs];
+
+    if (selectedLocation !== "all") {
+      logs = logs.filter(log => log.location_id === selectedLocation);
+    }
+
+    // Date filter
+    const now = new Date();
+    let startDate;
+    switch (dateRange) {
+      case "today":
+        startDate = startOfDay(now);
+        break;
+      case "7days":
+        startDate = subDays(now, 7);
+        break;
+      case "30days":
+        startDate = subDays(now, 30);
+        break;
+      default:
+        startDate = subDays(now, 7);
+    }
+
+    logs = logs.filter(log => {
+      if (!log.recorded_at) return false;
+      const logDate = parseISO(log.recorded_at);
+      return logDate >= startDate;
+    });
+
+    return logs;
+  }, [temperatureLogs, selectedLocation, dateRange]);
+
+  // Chart data
+  const chartData = useMemo(() => {
+    const data = [...filteredLogs].reverse().map(log => ({
+      time: log.recorded_at ? format(parseISO(log.recorded_at), "MMM d, HH:mm") : "",
+      temperature: log.temperature,
+      min: log.min_acceptable || 2,
+      max: log.max_acceptable || 8
+    }));
+    return data.slice(-20); // Last 20 readings
+  }, [filteredLogs]);
+
+  // Stats
+  const stats = useMemo(() => {
+    if (filteredLogs.length === 0) return null;
+
+    const temps = filteredLogs.map(l => l.temperature).filter(t => t !== null);
+    const outOfRange = filteredLogs.filter(l => !l.is_within_range).length;
+
+    return {
+      count: filteredLogs.length,
+      average: temps.length > 0 ? (temps.reduce((a, b) => a + b, 0) / temps.length).toFixed(1) : 0,
+      min: temps.length > 0 ? Math.min(...temps).toFixed(1) : 0,
+      max: temps.length > 0 ? Math.max(...temps).toFixed(1) : 0,
+      outOfRange,
+      compliance: ((filteredLogs.length - outOfRange) / filteredLogs.length * 100).toFixed(0)
+    };
+  }, [filteredLogs]);
+
+  const getLocationName = (id) => locations.find(l => l.id === id)?.name || "Unknown";
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-xl bg-blue-100">
+              <Thermometer className="h-6 w-6 text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Temperature Log</h1>
+              <p className="text-slate-500">Monitor fridge temperatures</p>
+            </div>
+          </div>
+          <Button 
+            className="bg-blue-600 hover:bg-blue-700"
+            onClick={() => setLogFormOpen(true)}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Log Temperature
+          </Button>
+        </div>
+
+        {/* Filters */}
+        <Card className="p-4 border-0 shadow-sm mb-6">
+          <div className="flex flex-wrap gap-4">
+            <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+              <SelectTrigger className="w-48">
+                <Thermometer className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Select fridge" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Fridges</SelectItem>
+                {fridgeLocations.map(loc => (
+                  <SelectItem key={loc.id} value={loc.id}>{loc.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={dateRange} onValueChange={setDateRange}>
+              <SelectTrigger className="w-40">
+                <Calendar className="h-4 w-4 mr-2" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="today">Today</SelectItem>
+                <SelectItem value="7days">Last 7 Days</SelectItem>
+                <SelectItem value="30days">Last 30 Days</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </Card>
+
+        {/* Stats */}
+        {stats && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+            <Card className="p-4 border-0 shadow-sm">
+              <p className="text-sm text-slate-500">Average Temp</p>
+              <p className="text-2xl font-bold text-slate-900 mt-1">{stats.average}°C</p>
+            </Card>
+            <Card className="p-4 border-0 shadow-sm">
+              <p className="text-sm text-slate-500">Range</p>
+              <div className="flex items-center gap-2 mt-1">
+                <TrendingDown className="h-4 w-4 text-blue-500" />
+                <span className="font-bold">{stats.min}°C</span>
+                <span className="text-slate-400">—</span>
+                <TrendingUp className="h-4 w-4 text-rose-500" />
+                <span className="font-bold">{stats.max}°C</span>
+              </div>
+            </Card>
+            <Card className="p-4 border-0 shadow-sm">
+              <p className="text-sm text-slate-500">Readings</p>
+              <p className="text-2xl font-bold text-slate-900 mt-1">{stats.count}</p>
+            </Card>
+            <Card className="p-4 border-0 shadow-sm">
+              <p className="text-sm text-slate-500">Compliance</p>
+              <p className={`text-2xl font-bold mt-1 ${
+                parseFloat(stats.compliance) >= 90 ? "text-emerald-600" : "text-amber-600"
+              }`}>
+                {stats.compliance}%
+              </p>
+            </Card>
+          </div>
+        )}
+
+        {/* Chart */}
+        {chartData.length > 0 && (
+          <Card className="p-6 border-0 shadow-sm mb-8">
+            <h2 className="text-lg font-semibold text-slate-900 mb-4">Temperature Trend</h2>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis 
+                    dataKey="time" 
+                    tick={{ fontSize: 12 }}
+                    tickLine={false}
+                  />
+                  <YAxis 
+                    domain={[-2, 12]}
+                    tick={{ fontSize: 12 }}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip />
+                  <ReferenceLine y={2} stroke="#10b981" strokeDasharray="5 5" label="Min" />
+                  <ReferenceLine y={8} stroke="#f59e0b" strokeDasharray="5 5" label="Max" />
+                  <Line 
+                    type="monotone" 
+                    dataKey="temperature" 
+                    stroke="#3b82f6" 
+                    strokeWidth={2}
+                    dot={{ fill: "#3b82f6", strokeWidth: 0 }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        )}
+
+        {/* Logs Table */}
+        <Card className="border-0 shadow-sm overflow-hidden">
+          <div className="p-4 border-b">
+            <h2 className="text-lg font-semibold text-slate-900">Recent Readings</h2>
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import SiteLocationManager from "@/components/admin/SiteLocationManager";
+import StatsCard from "@/components/ui/StatsCard";
+import PushNotificationManager from "@/components/notifications/PushNotificationManager";
+import { 
+  Settings, Building2, Users, Package, Activity,
+  Shield, Loader2, Mail, Calendar, MoreVertical, Bell, ShieldCheck,
+  Trash2, AlertTriangle, Key, RefreshCw
+} from "lucide-react";
+import RoleManager from "@/components/admin/RoleManager";
+import { toast } from "sonner";
+import { format, parseISO } from "date-fns";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+export default function Admin() {
+  const [activeTab, setActiveTab] = useState("overview");
+  const [deleteDialog, setDeleteDialog] = useState({ open: false, type: null, item: null });
+  const [resetDialog, setResetDialog] = useState({ open: false, user: null });
+  const [hardResetDialog, setHardResetDialog] = useState({ open: false, confirmText: "" });
+  const [isResetting, setIsResetting] = useState(false);
+
+  const queryClient = useQueryClient();
+
+  const { data: currentUser } = useQuery({
+    queryKey: ["currentUser"],
+    queryFn: () => base44.auth.me()
+  });
+
+  const { data: users = [], isLoading: usersLoading } = useQuery({
+    queryKey: ["users"],
+    queryFn: () => base44.entities.User.list(),
+    enabled: currentUser?.role === "admin"
+  });
+
+  const { data: sites = [] } = useQuery({
+    queryKey: ["sites"],
+    queryFn: () => base44.entities.Site.list()
+  });
+
+  const { data: locations = [] } = useQuery({
+    queryKey: ["locations"],
+    queryFn: () => base44.entities.Location.list()
+  });
+
+  const { data: stockItems = [] } = useQuery({
+    queryKey: ["stockItems"],
+    queryFn: () => base44.entities.StockItem.list()
+  });
+
+  const { data: transactions = [] } = useQuery({
+    queryKey: ["transactions"],
+    queryFn: () => base44.entities.StockTransaction.list("-created_date", 50)
+  });
+
+  // Mutations
+  const saveSiteMutation = useMutation({
+    mutationFn: (data) => {
+      if (data.id) {
+        return base44.entities.Site.update(data.id, data);
+      }
+      return base44.entities.Site.create(data);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sites"] })
+  });
+
+  const deleteSiteMutation = useMutation({
+    mutationFn: (id) => base44.entities.Site.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["sites"] })
+  });
+
+  const saveLocationMutation = useMutation({
+    mutationFn: (data) => {
+      if (data.id) {
+        return base44.entities.Location.update(data.id, data);
+      }
+      return base44.entities.Location.create(data);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["locations"] })
+  });
+
+  const deleteLocationMutation = useMutation({
+    mutationFn: (id) => base44.entities.Location.delete(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["locations"] })
+  });
+
+  const handleDelete = async () => {
+    if (deleteDialog.type === "site") {
+      deleteSiteMutation.mutate(deleteDialog.item.id);
+    } else if (deleteDialog.type === "location") {
+      deleteLocationMutation.mutate(deleteDialog.item.id);
+    } else if (deleteDialog.type === "stockItem") {
+      await base44.entities.StockItem.delete(deleteDialog.item.id);
+      queryClient.invalidateQueries({ queryKey: ["stockItems"] });
+      toast.success("Item deleted");
+    } else if (deleteDialog.type === "user") {
+      await base44.entities.User.delete(deleteDialog.item.id);
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      toast.success("User deleted");
+    }
+    setDeleteDialog({ open: false, type: null, item: null });
+  };
+
+  const handleHardReset = async () => {
+    if (hardResetDialog.confirmText !== "DELETE ALL") return;
+    
+    setIsResetting(true);
+    try {
+      // Delete all data in sequence
+      const allStockItems = await base44.entities.StockItem.list();
+      for (const item of allStockItems) {
+        await base44.entities.StockItem.delete(item.id);
+      }
+      
+      const allTransactions = await base44.entities.StockTransaction.list();
+      for (const tx of allTransactions) {
+        await base44.entities.StockTransaction.delete(tx.id);
+      }
+      
+      const allAuditLogs = await base44.entities.AuditLog.list();
+      for (const log of allAuditLogs) {
+        await base44.entities.AuditLog.delete(log.id);
+      }
+      
+      const allTempLogs = await base44.entities.TemperatureLog.list();
+      for (const log of allTempLogs) {
+        await base44.entities.TemperatureLog.delete(log.id);
+      }
+      
+      const allLocations = await base44.entities.Location.list();
+      for (const loc of allLocations) {
+        await base44.entities.Location.delete(loc.id);
+      }
+      
+      const allSites = await base44.entities.Site.list();
+      for (const site of allSites) {
+        await base44.entities.Site.delete(site.id);
+      }
+
+      queryClient.invalidateQueries();
+      toast.success("All data has been deleted");
+    } catch (error) {
+      toast.error("Failed to delete some data");
+    }
+    setIsResetting(false);
+    setHardResetDialog({ open: false, confirmText: "" });
+  };
+
+  const handlePasswordReset = async (user) => {
+    // Note: Base44 doesn't have a direct password reset API accessible from frontend
+    // Users need to use the "Forgot Password" flow or be re-invited
+    toast.info(`Password reset link would be sent to ${user.email}. For now, ask the user to use "Forgot Password" on the login page.`);
+    setResetDialog({ open: false, user: null });
+  };
+
+  const getItemName = (id) => stockItems.find(i => i.id === id)?.name || "Unknown";
+
+  // Check if user is admin
+  if (currentUser && currentUser.role !== "admin") {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Card className="p-12 text-center max-w-md">
+          <Shield className="h-16 w-16 mx-auto mb-4 text-slate-300" />
+          <h2 className="text-2xl font-bold text-slate-900 mb-2">Access Denied</h2>
+          <p className="text-slate-500">
+            You need administrator privileges to access this page.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-8">
+          <div className="p-3 rounded-xl bg-slate-800">
+            <Settings className="h-6 w-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Admin Dashboard</h1>
+            <p className="text-slate-500">Manage sites, locations, and users</p>
+          </div>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="bg-white border shadow-sm mb-6">
+            <TabsTrigger value="overview" className="gap-2">
+              <Activity className="h-4 w-4" />
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="sites" className="gap-2">
+              <Building2 className="h-4 w-4" />
+              Sites & Locations
+            </TabsTrigger>
+            <TabsTrigger value="users" className="gap-2">
+              <Users className="h-4 w-4" />
+              Users
+            </TabsTrigger>
+            <TabsTrigger value="activity" className="gap-2">
+              <Activity className="h-4 w-4" />
+              Activity Log
+            </TabsTrigger>
+            <TabsTrigger value="notifications" className="gap-2">
+              <Bell className="h-4 w-4" />
+              Notifications
+            </TabsTrigger>
+            <TabsTrigger value="roles" className="gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Roles & Permissions
+            </TabsTrigger>
+            <TabsTrigger value="danger" className="gap-2 text-rose-600">
+              <AlertTriangle className="h-4 w-4" />
+              Danger Zone
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Overview Tab */}
+          <TabsContent value="overview">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+              <StatsCard
+                title="Total Sites"
+                value={sites.length}
+                icon={Building2}
+                iconBg="bg-blue-50"
+ import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FileText, Package, Calendar, ArrowRightLeft, Thermometer, Loader2 } from "lucide-react";
+
+import StockLevelReport from "@/components/reports/StockLevelReport";
+import ExpiryReport from "@/components/reports/ExpiryReport";
+import TransactionReport from "@/components/reports/TransactionReport";
+import TemperatureComplianceReport from "@/components/reports/TemperatureComplianceReport";
+
+export default function Reports() {
+  const [activeTab, setActiveTab] = useState("stock");
+  
+  // Stock Level Report filters
+  const [stockSite, setStockSite] = useState("all");
+  const [stockCategory, setStockCategory] = useState("all");
+  
+  // Expiry Report filters
+  const [expiryRange, setExpiryRange] = useState("30");
+  
+  // Transaction Report filters
+  const [transactionFilters, setTransactionFilters] = useState({
+    type: "all",
+    user: "all",
+    startDate: "",
+    endDate: ""
+  });
+  
+  // Temperature Report filters
+  const [temperatureFilters, setTemperatureFilters] = useState({
+    location: "all",
+    startDate: "",
+    endDate: ""
+  });
+
+  const { data: sites = [], isLoading: sitesLoading } = useQuery({
+    queryKey: ["sites"],
+    queryFn: () => base44.entities.Site.list()
+  });
+
+  const { data: locations = [], isLoading: locationsLoading } = useQuery({
+    queryKey: ["locations"],
+    queryFn: () => base44.entities.Location.list()
+  });
+
+  const { data: stockItems = [], isLoading: stockLoading } = useQuery({
+    queryKey: ["stockItems"],
+    queryFn: () => base44.entities.StockItem.list()
+  });
+
+  const { data: transactions = [], isLoading: transactionsLoading } = useQuery({
+    queryKey: ["transactions"],
+    queryFn: () => base44.entities.StockTransaction.list("-created_date", 500)
+  });
+
+  const { data: temperatureLogs = [], isLoading: tempLoading } = useQuery({
+    queryKey: ["temperatureLogs"],
+    queryFn: () => base44.entities.TemperatureLog.list("-recorded_at", 500)
+  });
+
+  const isLoading = sitesLoading || locationsLoading || stockLoading || transactionsLoading || tempLoading;
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-teal-600" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="flex items-center gap-3 mb-8">
+          <div className="p-3 rounded-xl bg-indigo-100">
+            <FileText className="h-6 w-6 text-indigo-600" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900">Reports</h1>
+            <p className="text-slate-500">Generate and export inventory reports</p>
+          </div>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="bg-white border shadow-sm mb-6 flex-wrap h-auto">
+            <TabsTrigger value="stock" className="gap-2">
+              <Package className="h-4 w-4" />
+              Stock Levels
+            </TabsTrigger>
+            <TabsTrigger value="expiry" className="gap-2">
+              <Calendar className="h-4 w-4" />
+              Expiry Report
+            </TabsTrigger>
+            <TabsTrigger value="transactions" className="gap-2">
+              <ArrowRightLeft className="h-4 w-4" />
+              Transactions
+            </TabsTrigger>
+            <TabsTrigger value="temperature" className="gap-2">
+              <Thermometer className="h-4 w-4" />
+              Temperature
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="stock">
+            <StockLevelReport
+              stockItems={stockItems}
+              sites={sites}
+              locations={locations}
+              selectedSite={stockSite}
+              setSelectedSite={setStockSite}
+              selectedCategory={stockCategory}
+              setSelectedCategory={setStockCategory}
+            />
+          </TabsContent>
+
+          <TabsContent value="expiry">
+            <ExpiryReport
+              stockItems={stockItems}
+              sites={sites}
+              locations={locations}
+              expiryRange={expiryRange}
+              setExpiryRange={setExpiryRange}
+            />
+          </TabsContent>
+
+          <TabsContent value="transactions">
+            <TransactionReport
+              transactions={transactions}
+              stockItems={stockItems}
+              filters={transactionFilters}
+              setFilters={setTransactionFilters}
+            />
+          </TabsContent>
+
+          <TabsContent value="temperature">
+            <TemperatureComplianceReport
+              temperatureLogs={temperatureLogs}
+              locations={locations}
+              filters={temperatureFilters}
+              setFilters={setTemperatureFilters}
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  );
+}
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { base44 } from "@/api/base44Client";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { 
+  ClipboardList, Search, Filter, Calendar, User, Building2, 
+  Package, ChevronLeft, ChevronRight, Eye, Download, Loader2,
+  Plus, Minus, Edit, Trash2, ArrowRightLeft, AlertTriangle
+} from "lucide-react";
+import { format, parseISO, subDays } from "date-fns";
+import { getActionLabel, getActionColor } from "@/components/audit/AuditLogService";
+import { exportToCSV } from "@/components/reports/ReportExport";
+
+const actionIcons = {
+  created: Plus,
+  edited: Edit,
+  stock_in: Plus,
+  stock_out: Minus,
+  deleted: Trash2,
+  moved: ArrowRightLeft,
+  adjusted: Edit,
+  expired: AlertTriangle,
+  disposed: Trash2
+};
+
+export default function AuditLog() {
+  const [filters, setFilters] = useState({
+    startDate: format(subDays(new Date(), 30), "yyyy-MM-dd"),
+    endDate: format(new Date(), "yyyy-MM-dd"),
+    user: "all",
+    site: "all",
+    action: "all",
+    search: ""
+  });
+  const [page, setPage] = useState(0);
+  const [selectedLog, setSelectedLog] = useState(null);
+  const pageSize = 25;
+
+  const { data: auditLogs = [], isLoading } = useQuery({
+    queryKey: ["auditLogs"],
+    queryFn: () => base44.entities.AuditLog.list("-created_date", 1000)
+  });
+
+  const { data: sites = [] } = useQuery({
+    queryKey: ["sites"],
+    queryFn: () => base44.entities.Site.list()
+  });
+
+  const uniqueUsers = useMemo(() => {
+    const users = new Map();
+    auditLogs.forEach(log => {
+      if (log.performed_by) {
+        users.set(log.performed_by, log.performed_by_name || log.performed_by);
+      }
+    });
+    return Array.from(users.entries());
+  }, [auditLogs]);
+
+  const filteredLogs = useMemo(() => {
+    let logs = [...auditLogs];
+
+    // Date filter
+    if (filters.startDate) {
+      const start = new Date(filters.startDate);
+      start.setHours(0, 0, 0, 0);
+      logs = logs.filter(log => new Date(log.created_date) >= start);
+    }
+    if (filters.endDate) {
+      const end = new Date(filters.endDate);
+      end.setHours(23, 59, 59, 999);
+      logs = logs.filter(log => new Date(log.created_date) <= end);
+    }
+
+    // User filter
+    if (filters.user !== "all") {
+      logs = logs.filter(log => log.performed_by === filters.user);
+    }
+
+    // Site filter
+    if (filters.site !== "all") {
+      logs = logs.filter(log => log.site_id === filters.site);
+    }
+
+    // Action filter
+    if (filters.action !== "all") {
+      logs = logs.filter(log => log.action === filters.action);
+    }
+
+    // Search filter
+    if (filters.search) {
+      const query = filters.search.toLowerCase();
+      logs = logs.filter(log => 
+        log.entity_name?.toLowerCase().includes(query) ||
+        log.details?.toLowerCase().includes(query) ||
+        log.performed_by_name?.toLowerCase().includes(query)
+      );
+    }
+
+    return logs;
+  }, [auditLogs, filters]);
+
+  const paginatedLogs = filteredLogs.slice(page * pageSize, (page + 1) * pageSize);
+  const totalPages = Math.ceil(filteredLogs.length / pageSize);
+
+  const handleExport = () => {
+    const exportData = filteredLogs.map(log => ({
+      date: log.created_date ? format(parseISO(log.created_date), "yyyy-MM-dd HH:mm:ss") : "",
+      action: getActionLabel(log.action),
+      entity_type: log.entity_type,
+      entity_name: log.entity_name || "",
+      site: log.site_name || "",
+      location: log.location_name || "",
+      quantity_before: log.quantity_before ?? "",
+      quantity_after: log.quantity_after ?? "",
+      quantity_changed: log.quantity_changed ?? "",
+      performed_by: log.performed_by_name || log.performed_by || "",
+      details: log.details || ""
+    }));
+
+    exportToCSV(exportData, "audit_log", [
+      { key: "date", label: "Date & Time" },
+      { key: "action", label: "Action" },
+      { key: "entity_type", label: "Entity Type" },
+      { key: "entity_name", label: "Item/Entity" },
+      { key: "site", label: "Site" },
+      { key: "location", label: "Location" },
+      { key: "quantity_before", label: "Qty Before" },
+      { key: "quantity_after", label: "Qty After" },
+      { key: "quantity_changed", label: "Qty Changed" },
+      { key: "performed_by", label: "User" },
+      { key: "details", label: "Details" }
+    ]);
+  };
+
+  const resetFilters = () => {
+    setFilters({
+      startDate: format(subDays(new Date(), 30), "yyyy-MM-dd"),
+      endDate: format(new Date(), "yyyy-MM-dd"),
+      user: "all",
+      site: "all",
+ 
+ 
+ 

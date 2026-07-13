@@ -1,0 +1,611 @@
+{
+  "emergency_assets": [
+    {
+      "id": "cmc_resus_trolley",
+      "type": "emergency_monthly",
+      "site": "main_branch",
+      "name": "CMC Resus Trolley",
+      "location": "Resus / Treatment area",
+      "frequency": "monthly",
+      "items": [
+        {
+          "section": "Top",
+          "name": "Defib",
+          "expectedQty": null,
+          "defaultBatch": "Defib checklist under defib bag",
+          "defaultExpiry": null
+        },
+        {
+          "section": "Top",
+          "name": "Adult Ambu Bag",
+          "expectedQty": "1",
+          "defaultBatch": "1000871398",
+          "defaultExpiry": "2026-07-01"
+        },
+        {
+          "section": "Top",
+          "name": "Paeds Ambu Bag",
+          "expectedQty": "1",
+          "defaultBatch": "1000815053",
+          "defaultExpiry": "2026-11-01"
+        },
+        {
+          "section": "Top",
+          "name": "Adult non rebreath Oxygen Mask",
+          "expectedQty": "1",
+          "defaultBatch": "210804024",
+          "defaultExpiry": "2026-07-01"
+        },
+        {
+          "section": "Top",
+          "name": "Paediatric Oxygen Mask",
+          "expectedQty": "1",
+          "defaultBatch": "240205",
+          "defaultExpiry": "2027-04-01"
+        },
+        {
+          "section": "Top",
+          "name": "Adrenaline 1mg/1ml injection amps",
+          "expectedQty": "10",
+          "defaultBatch": "152417",
+          "defaultExpiry": "2026-06-01"
+        },
+        {
+          "section": "Top",
+          "name": "Benzylpenicillin Injection 600mg",
+          "expectedQty": "6",
+          "defaultBatch": "MG7479",
+          "defaultExpiry": "2027-05-01"
+        },
+        {
+          "section": "Top",
+          "name": "Cefotaxime",
+          "expectedQty": "5",
+          "defaultBatch": "18Z0564",
+          "defaultExpiry": "2025-08-01"
+        },
+        {
+          "section": "Top",
+          "name": "Chlorphenamine 10mg/ml Injection amp",
+          "expectedQty": "5",
+          "defaultBatch": "133675",
+          "defaultExpiry": "2026-03-01"
+        },
+        {
+          "section": "Top",
+          "name": "Diazepam 5mg (Rectal)",
+          "expectedQty": "?",
+          "defaultBatch": "23003730",
+          "defaultExpiry": "2025-07-01"
+        },
+        {
+          "section": "Top",
+          "name": "Diazepam 10mg (Rectal)",
+          "expectedQty": "?",
+          "defaultBatch": "23002452",
+          "defaultExpiry": "2026-04-01"
+        },
+        {
+          "section": "Top",
+          "name": "Aspirin 75mg Dispersible Tablets",
+          "expectedQty": "23",
+          "defaultBatch": "PCJ22018",
+          "defaultExpiry": "2025-09-01"
+        },
+        {
+          "section": "Top",
+          "name": "Aspirin 300mg Dispersible Tablets",
+          "expectedQty": "32",
+          "defaultBatch": "230870",
+          "defaultExpiry": "2025-03-01"
+        },
+        {
+          "section": "Top",
+          "name": "Naloxone 400mg/ml",
+          "expectedQty": "10",
+          "defaultBatch": "2223111",
+          "defaultExpiry": "2025-05-01"
+        },
+        {
+          "section": "Top",
+          "name": "Glucogel",
+          "expectedQty": "3",
+          "defaultBatch": "13528",
+          "defaultExpiry": "2025-03-01"
+        },
+        {
+          "section": "Top",
+          "name": "Metoclopramide Injection 10mg/2ml",
+          "expectedQty": "10",
+          "defaultBatch": "308507",
+          "defaultExpiry": "2026-02-01"
+        },
+        {
+          "section": "Top",
+          "name": "Glyceryl Trinitate Spray (GTN)",
+          "expectedQty": "1",
+          "defaultBatch": "243A0124",
+          "defaultExpiry": "2027-01-01"
+        },
+        {
+          "section": "Top",
+          "name": "Glyceryl Trinitate Spray (GTN)",
+          "expectedQty": "1",
+          "defaultBatch": "316A0924",
+          "defaultExpiry": "2027-09-01"
+        },
+        {
+          "section": "Top",
+          "name": "Paracetamol Suspension 120mg/5ml",
+          "expectedQty": "1",
+          "defaultBatch": "T00023",
+          "defaultExpiry": "2026-06-02"
+        },
+        {
+          "section": "Top",
+          "name": "Stemetil Injection 12.5mg/ml",
+          "expectedQty": "10",
+          "defaultBatch": "4J024",
+          "defaultExpiry": "2026-12-01"
+        },
+        {
+          "section": "Top",
+          "name": "Water for Injection 2ml amps",
+          "expectedQty": "20",
+          "defaultBatch": "006502 & 313501",
+          "defaultExpiry": "Feb-25 & Mar -28"
+        },
+        {
+          "section": "Top",
+          "name": "Water for Injection 10ml amps",
+          "expectedQty": "7",
+          "defaultBatch": "314507",
+          "defaultExpiry": "2028-04-01"
+        },
+        {
+          "section": "Top",
+          "name": "Zydol Tramadol 50mg/ml",
+          "expectedQty": "5",
+          "defaultBatch": "02873V",
+          "defaultExpiry": "2028-09-01"
+        },
+        {
+          "section": "Drawer 2",
+          "name": "Oropharyngeal airway Size 00",
+          "expectedQty": "1",
+          "defaultBatch": "220802126",
+          "defaultExpiry": "2028-09-01"
+        },
+        {
+          "section": "Drawer 2",
+          "name": "Oropharyngeal airway Size 0",
+          "expectedQty": "1",
+          "defaultBatch": "211102823",
+          "defaultExpiry": "2026-10-01"
+        },
+        {
+          "section": "Drawer 2",
+          "name": "Oropharyngeal airway Size 1",
+          "expectedQty": "1",
+          "defaultBatch": "220701594",
+          "defaultExpiry": "2027-06-01"
+        },
+        {
+          "section": "Drawer 2",
+          "name": "Oropharyngeal airway Size 2",
+          "expectedQty": "1",
+          "defaultBatch": "220700102",
+          "defaultExpiry": "2027-06-01"
+        },
+        {
+          "section": "Drawer 2",
+          "name": "Oropharyngeal airway Size 3",
+          "expectedQty": "1",
+          "defaultBatch": "220301607",
+          "defaultExpiry": "2027-02-01"
+        },
+        {
+          "section": "Drawer 2",
+          "name": "Oropharyngeal airway Size 4",
+          "expectedQty": "1",
+          "defaultBatch": "220701606",
+          "defaultExpiry": "2027-06-01"
+        },
+        {
+          "section": "Drawer 2",
+          "name": "Oropharyngeal airway Size 5",
+          "expectedQty": "1",
+          "defaultBatch": "210901343",
+          "defaultExpiry": "2026-08-01"
+        },
+        {
+          "section": "Drawer 2",
+          "name": "Suction Tube",
+          "expectedQty": "1",
+          "defaultBatch": "5220660516",
+          "defaultExpiry": "2027-05-01"
+        },
+        {
+          "section": "Drawer 3",
+          "name": "Child Non-rebreathe Oxygen Mask",
+          "expectedQty": "1",
+          "defaultBatch": "240205",
+          "defaultExpiry": "2027-04-01"
+        },
+        {
+          "section": "Drawer 3",
+          "name": "Adult Non-rebreathe Oxygen Mask",
+          "expectedQty": "1",
+          "defaultBatch": "191100788",
+          "defaultExpiry": "2024-10-01"
+        },
+        {
+          "section": "Drawer 3",
+          "name": "Child Standard Oxygen Mask",
+          "expectedQty": "1",
+          "defaultBatch": "240205",
+          "defaultExpiry": "2027-04-01"
+        },
+        {
+          "section": "Drawer 3",
+          "name": "Adult Standard Oxygen Mask",
+          "expectedQty": "1",
+          "defaultBatch": "230704015",
+          "defaultExpiry": "2028-06-01"
+        },
+        {
+          "section": "Drawer 3",
+          "name": "Adult Nebuliser Mask",
+          "expectedQty": "1",
+          "defaultBatch": "200401065",
+          "defaultExpiry": "2025-03-01"
+        },
+        {
+          "section": "Drawer 3",
+          "name": "Child Nebuliser Mask",
+          "expectedQty": "1",
+          "defaultBatch": "220300372",
+          "defaultExpiry": "2027-02-01"
+        },
+        {
+          "section": "Drawer 3",
+          "name": "Pulsometer",
+          "expectedQty": "1",
+          "defaultBatch": null,
+          "defaultExpiry": null
+        },
+        {
+          "section": "Drawer 3",
+          "name": "Stethoscope",
+          "expectedQty": "1",
+          "defaultBatch": null,
+          "defaultExpiry": null
+        },
+        {
+          "section": "Drawer 3",
+          "name": "Salbutamol Nebuliser 2.5mg",
+          "expectedQty": "20",
+          "defaultBatch": "UK23D24",
+          "defaultExpiry": "2026-06-01"
+        },
+        {
+          "section": "Drawer 3",
+          "name": "Salbutamol Nebuliser 5mg",
+          "expectedQty": "19",
+          "defaultBatch": "UK23E03",
+          "defaultExpiry": "2026-01-01"
+        },
+        {
+          "section": "Drawer 3",
+          "name": "Ipratropium Bromide 250mcg",
+          "expectedQty": "6",
+          "defaultBatch": "3982203",
+          "defaultExpiry": "2025-10-01"
+        },
+        {
+          "section": "Drawer 4",
+          "name": "Sodium Chloride 0.9% Bag 500ml",
+          "expectedQty": "2",
+          "defaultBatch": "235207",
+          "defaultExpiry": "2028-04-01"
+        },
+        {
+          "section": "Drawer 4",
+          "name": "Green Needle",
+          "expectedQty": "2",
+          "defaultBatch": "2306004",
+          "defaultExpiry": "2028-05-01"
+        },
+        {
+          "section": "Drawer 4",
+          "name": "Blue Needle",
+          "expectedQty": "2",
+          "defaultBatch": "2310001",
+          "defaultExpiry": "2028-09-01"
+        },
+        {
+          "section": "Drawer 4",
+          "name": "Orange Needle",
+          "expectedQty": "2",
+          "defaultBatch": "2203009",
+          "defaultExpiry": "2027-02-01"
+        },
+        {
+          "section": "Drawer 4",
+          "name": "Syringe 20ml",
+          "expectedQty": "2",
+          "defaultBatch": "2204048",
+          "defaultExpiry": "2027-03-01"
+        },
+        {
+          "section": "Drawer 4",
+          "name": "Syringe 10ml",
+          "expectedQty": "2",
+          "defaultBatch": "2105125",
+          "defaultExpiry": "2026-04-01"
+        },
+        {
+          "section": "Drawer 4",
+          "name": "Syringe 5ml",
+          "expectedQty": "2",
+          "defaultBatch": "2305138",
+          "defaultExpiry": "2028-04-01"
+        },
+        {
+          "section": "Drawer 4",
+          "name": "Syringe 2ml",
+          "expectedQty": "2",
+          "defaultBatch": "307727",
+          "defaultExpiry": "2027-09-01"
+        },
+        {
+          "section": "Drawer 4",
+          "name": "Syringe 1ml",
+          "expectedQty": "2",
+          "defaultBatch": "2310095",
+          "defaultExpiry": "2028-09-01"
+        },
+        {
+          "section": "Drawer 4",
+          "name": "Peg Syringe 10ml",
+          "expectedQty": "4",
+          "defaultBatch": "IS0240102J",
+          "defaultExpiry": "2029-02-01"
+        },
+        {
+          "section": "Drawer 4",
+          "name": "Peg Syringe 1ml",
+          "expectedQty": "4",
+          "defaultBatch": "C03230006",
+          "defaultExpiry": "2028-11-01"
+        },
+        {
+          "section": "Drawer 4",
+          "name": "Giving Set for IV Fluids",
+          "expectedQty": "1",
+          "defaultBatch": "20221125",
+          "defaultExpiry": "2027-11-01"
+        },
+        {
+          "section": "Drawer 4",
+          "name": "GlucoRx HCT Glucose and Ketone",
+          "expectedQty": "1",
+          "defaultBatch": null,
+          "defaultExpiry": "2025-09-01"
+        },
+        {
+          "section": "Drawer 4",
+          "name": "BM Control Test Fluid",
+          "expectedQty": "1",
+          "defaultBatch": null,
+          "defaultExpiry": null
+        },
+        {
+          "section": "Drawer 4",
+          "name": "Finger prick",
+          "expectedQty": "5",
+          "defaultBatch": null,
+          "defaultExpiry": null
+        },
+        {
+          "section": "Drawer 5",
+          "name": "Neonatal Ambu Bag",
+          "expectedQty": "1",
+          "defaultBatch": null,
+          "defaultExpiry": null
+        },
+        {
+          "section": "Drawer 5",
+          "name": "Cotton Wool",
+          "expectedQty": null,
+          "defaultBatch": null,
+          "defaultExpiry": null
+        },
+        {
+          "section": "Drawer 5",
+          "name": "Face Masks",
+          "expectedQty": null,
+          "defaultBatch": null,
+          "defaultExpiry": null
+        },
+        {
+          "section": "Drawer 5",
+          "name": "Latex Gloves",
+          "expectedQty": null,
+          "defaultBatch": null,
+          "defaultExpiry": null
+        },
+        {
+          "section": "Drawer 5",
+          "name": "Foil Blanket",
+          "expectedQty": "6",
+          "defaultBatch": null,
+          "defaultExpiry": null
+        },
+        {
+          "section": "Drawer 5",
+          "name": "Razors",
+          "expectedQty": "2",
+          "defaultBatch": null,
+          "defaultExpiry": null
+        },
+        {
+          "section": "Drawer 5",
+          "name": "Tags for Trolley",
+          "expectedQty": null,
+          "defaultBatch": null,
+          "defaultExpiry": null
+        },
+        {
+          "section": "Bottom",
+          "name": "Bags",
+          "expectedQty": null,
+          "defaultBatch": null,
+          "defaultExpiry": null
+        }
+      ]
+    }
+  ],
+  "anaphylaxis_boxes": [
+    {
+      "id": "ty_elan_box_1",
+      "type": "anaphylaxis_box",
+      "site": "main_branch",
+      "name": "Anaphylaxis Box 1",
+      "location": "Room 5 (Ty Elan)",
+      "frequency": "monthly",
+      "items": [
+        {
+          "name": "Adrenaline 1mg/1ml amp",
+          "expectedQty": "x2",
+          "defaultBatch": "151850",
+          "defaultExpiry": "2026-04-01"
+        },
+        {
+          "name": "BD eclipse (Blue)",
+          "expectedQty": "x2",
+          "defaultBatch": "2204001",
+          "defaultExpiry": "2027-03-01"
+        },
+        {
+          "name": "BD eclipse (Green)",
+          "expectedQty": "x2",
+          "defaultBatch": "2306004",
+          "defaultExpiry": "2028-05-01"
+        },
+        {
+          "name": "BD eclipse (Orange)",
+          "expectedQty": "x2",
+          "defaultBatch": "2003001",
+          "defaultExpiry": "2025-02-01"
+        },
+        {
+          "name": "Chlorphenamine 10mg/1ml amp",
+          "expectedQty": "x2",
+          "defaultBatch": "133675",
+          "defaultExpiry": "2026-03-01"
+        },
+        {
+          "name": "Shringe 1ml",
+          "expectedQty": "x2",
+          "defaultBatch": "2307020",
+          "defaultExpiry": "2028-06-01"
+        },
+        {
+          "name": "Shringe 2ml",
+          "expectedQty": "x2",
+          "defaultBatch": "307727",
+          "defaultExpiry": "2029-05-01"
+        },
+        {
+          "name": "Shringe 5ml",
+          "expectedQty": "x2",
+          "defaultBatch": "307731",
+          "defaultExpiry": "2026-08-01"
+        },
+        {
+          "name": "Solu-Cortef 100mg",
+          "expectedQty": "x2",
+          "defaultBatch": "EN0186",
+          "defaultExpiry": "2025-09-01"
+        },
+        {
+          "name": "Water For Injection 2ml amp",
+          "expectedQty": "x3",
+          "defaultBatch": "25502",
+          "defaultExpiry": "2025-06-01"
+        }
+      ]
+    },
+    {
+      "id": "ty_elan_box_2",
+      "type": "anaphylaxis_box",
+      "site": "main_branch",
+      "name": "Anaphylaxis Box 2",
+      "location": "Ty Elan (set location as needed)",
+      "frequency": "monthly",
+      "items": [
+        {
+          "name": "Adrenaline 1mg/1ml amp",
+          "expectedQty": "x2",
+          "defaultBatch": "151850",
+          "defaultExpiry": "2026-04-01"
+        },
+        {
+          "name": "BD eclipse (Blue)",
+          "expectedQty": "x2",
+          "defaultBatch": "2204001",
+          "defaultExpiry": "2027-03-01"
+        },
+        {
+          "name": "BD eclipse (Green)",
+          "expectedQty": "x2",
+          "defaultBatch": "2306004",
+          "defaultExpiry": "2028-05-01"
+        },
+        {
+          "name": "BD eclipse (Orange)",
+          "expectedQty": "x2",
+          "defaultBatch": "2003001",
+          "defaultExpiry": "2025-02-01"
+        },
+        {
+          "name": "Chlorphenamine 10mg/1ml amp",
+          "expectedQty": "x2",
+          "defaultBatch": "133675",
+          "defaultExpiry": "2026-03-01"
+        },
+        {
+          "name": "Shringe 1ml",
+          "expectedQty": "x2",
+          "defaultBatch": "2307020",
+          "defaultExpiry": "2028-06-01"
+        },
+        {
+          "name": "Shringe 2ml",
+          "expectedQty": "x2",
+          "defaultBatch": "307727",
+          "defaultExpiry": "2029-05-01"
+        },
+        {
+          "name": "Shringe 5ml",
+          "expectedQty": "x2",
+          "defaultBatch": "307731",
+          "defaultExpiry": "2026-08-01"
+        },
+        {
+          "name": "Solu-Cortef 100mg",
+          "expectedQty": "x2",
+          "defaultBatch": "EN0186",
+          "defaultExpiry": "2025-09-01"
+        },
+        {
+          "name": "Water For Injection 2ml amp",
+          "expectedQty": "x3",
+          "defaultBatch": "25502",
+          "defaultExpiry": "2025-06-01"
+        }
+      ]
+    }
+  ]
+}
