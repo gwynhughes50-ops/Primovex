@@ -974,17 +974,33 @@ function applyTheme(themeId) {
 export function MedTrakThemeProvider({ children }) {
   const { user, profile, isSyntheticMode } = useAuth();
   const applyingCloudRef = useRef(false);
+  const pendingLocalThemeRef = useRef(null);
+  const hydratedUserRef = useRef(null);
   const [themeId, setThemeIdState] = useState(() => {
     if (typeof localStorage === "undefined") return DEFAULT_THEME_ID;
     return localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || DEFAULT_THEME_ID;
   });
 
   useEffect(() => {
+    const userId = user?.uid || "anonymous";
+    if (hydratedUserRef.current !== userId) {
+      hydratedUserRef.current = userId;
+      pendingLocalThemeRef.current = null;
+    }
+
     const cloudTheme = profile?.themePreference;
-    if (!cloudTheme || !MEDTRAK_THEMES.some((item) => item.id === cloudTheme) || cloudTheme === themeId) return;
+    if (!cloudTheme || !MEDTRAK_THEMES.some((item) => item.id === cloudTheme)) return;
+
+    const pendingTheme = pendingLocalThemeRef.current;
+    if (pendingTheme) {
+      if (cloudTheme === pendingTheme) pendingLocalThemeRef.current = null;
+      return;
+    }
+
+    if (cloudTheme === themeId) return;
     applyingCloudRef.current = true;
     setThemeIdState(cloudTheme);
-  }, [profile?.themePreference, themeId]);
+  }, [profile?.themePreference, themeId, user?.uid]);
 
   useEffect(() => {
     applyTheme(themeId);
@@ -1004,6 +1020,7 @@ export function MedTrakThemeProvider({ children }) {
 
   const setThemeId = (nextThemeId) => {
     const safeThemeId = MEDTRAK_THEMES.some((item) => item.id === nextThemeId) ? nextThemeId : DEFAULT_THEME_ID;
+    pendingLocalThemeRef.current = safeThemeId;
     setThemeIdState(safeThemeId);
   };
 

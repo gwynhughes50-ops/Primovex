@@ -13,6 +13,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import ChecklistManagerDialog from "@/components/Inventory/ChecklistManagerDialog";
+import ClinicalChecklistItemRow from "@/components/assets/ClinicalChecklistItemRow";
 import useStock from "@/hooks/useStock";
 import { auth } from "@/lib/firebase";
 import {
@@ -564,76 +565,18 @@ export default function ClinicalAssetChecklist({
                 const stock = item.stock_barcode ? stockForBarcode(item.stock_barcode) : null;
                 const status = result.status || "OK";
                 return (
-                  <div key={item.id} className="p-4 transition hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_10%,var(--medtrak-panel))]/30">
-                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px_120px_160px_160px] lg:items-start">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {enableSections && item.section && (
-                            <span className="rounded-full border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-2.5 py-1 text-xs text-[color:var(--medtrak-muted)]">{item.section}</span>
-                          )}
-                          <span className={classNames("rounded-full border px-2.5 py-1 text-xs font-semibold", itemStatusClass(status, expiryDays))}>{expiryLabel(status, expiryDays)}</span>
-                        </div>
-                        <div className="mt-2 text-base font-semibold text-[color:var(--medtrak-text)]">{item.name}</div>
-                        <div className="mt-1 text-xs text-[color:var(--medtrak-muted)]">
-                          {item.stock_barcode
-                            ? `Linked stock barcode: ${item.stock_barcode}`
-                            : "Kit component: no individual barcode expected after split pack"}
-                        </div>
-                        <textarea
-                          className="mt-3 min-h-[66px] w-full rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm text-[color:var(--medtrak-text)] placeholder:text-[color:var(--medtrak-muted)] outline-none focus:ring-2 focus:ring-ring"
-                          placeholder="Item notes, replacement action or location note..."
-                          value={result.notes || ""}
-                          onChange={(event) => setItem(item.id, { notes: event.target.value })}
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--medtrak-muted)]">Status</label>
-                        <select
-                          className="mt-2 w-full rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm text-[color:var(--medtrak-text)] outline-none focus:ring-2 focus:ring-ring"
-                          value={status}
-                          onChange={(event) => setItem(item.id, { status: event.target.value })}
-                        >
-                          {STATUSES.map((itemStatus) => (
-                            <option key={itemStatus} value={itemStatus}>{itemStatus}</option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--medtrak-muted)]">Qty</label>
-                        <input
-                          className="mt-2 w-full rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm text-[color:var(--medtrak-text)] outline-none focus:ring-2 focus:ring-ring"
-                          value={result.qty || ""}
-                          onChange={(event) => setItem(item.id, { qty: event.target.value })}
-                          placeholder="-"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--medtrak-muted)]">Batch / Serial</label>
-                        <input
-                          className="mt-2 w-full rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm text-[color:var(--medtrak-text)] outline-none focus:ring-2 focus:ring-ring"
-                          value={result.batch || ""}
-                          onChange={(event) => setItem(item.id, { batch: event.target.value })}
-                          placeholder="-"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-xs font-medium uppercase tracking-[0.16em] text-[color:var(--medtrak-muted)]">Expiry</label>
-                        <input
-                          className="mt-2 w-full rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm text-[color:var(--medtrak-text)] outline-none focus:ring-2 focus:ring-ring"
-                          value={result.expiry || ""}
-                          onChange={(event) => setItem(item.id, { expiry: event.target.value })}
-                          placeholder="YYYY-MM-DD"
-                        />
-                        <div className="mt-2 text-xs text-[color:var(--medtrak-muted)]">
-                          {stock ? `Stock level ${stock.current_stock ?? "-"} / min ${stock.min_stock ?? 0}` : item.stock_barcode ? "Linked stock not found" : "Verified by count"}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <ClinicalChecklistItemRow
+                    key={item.id}
+                    item={item}
+                    result={result}
+                    status={status}
+                    statuses={STATUSES}
+                    statusLabel={expiryLabel(status, expiryDays)}
+                    statusClass={itemStatusClass(status, expiryDays)}
+                    enableSections={enableSections}
+                    stock={stock}
+                    onChange={(patch) => setItem(item.id, patch)}
+                  />
                 );
               })}
             </div>
@@ -669,7 +612,7 @@ export default function ClinicalAssetChecklist({
               </div>
               <div>
                 <h3 className="font-semibold text-[color:var(--medtrak-text)]">Asset QR Label</h3>
-                <p className="text-xs text-[color:var(--medtrak-muted)]">Retrofit physical kits with a MedTrak identity.</p>
+                <p className="text-xs text-[color:var(--medtrak-muted)]">Retrofit physical kits with a Primovex identity.</p>
               </div>
             </div>
             <div className="mt-4 rounded-2xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] p-4 text-center">
@@ -688,11 +631,11 @@ export default function ClinicalAssetChecklist({
             >
               <Printer className="h-4 w-4" /> Print / save label
             </button>
-            <p className="mt-3 text-xs leading-5 text-[color:var(--medtrak-muted)]">The manufacturer barcode remains useful for boxed stock. Once a kit is assembled or split into individual vials, use this MedTrak QR code to identify the kit and verify contents.</p>
+            <p className="mt-3 text-xs leading-5 text-[color:var(--medtrak-muted)]">The manufacturer barcode remains useful for boxed stock. Once a kit is assembled or split into individual vials, use this Primovex QR code to identify the kit and verify contents.</p>
           </div>
 
           <div className="rounded-3xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] p-5 text-[color:var(--medtrak-text)] shadow-sm">
-            <h3 className="font-semibold text-[color:var(--medtrak-text)]">MedAI readiness notes</h3>
+            <h3 className="font-semibold text-[color:var(--medtrak-text)]">Primovex AI readiness notes</h3>
             <div className="mt-4 space-y-3 text-sm text-[color:var(--medtrak-muted)]">
               <InsightLine icon={ShieldCheck} text={`${readiness.score}% readiness score calculated from missing, expired, expiring and overdue verification items.`} />
               <InsightLine icon={CalendarClock} text={readiness.checkOverdue ? "Verification is overdue or missing. Add this to today's clinical readiness queue." : "Verification cadence is currently within tolerance."} />
