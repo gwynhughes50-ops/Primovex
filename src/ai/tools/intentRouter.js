@@ -38,6 +38,12 @@ export function routeApprovedTool(prompt, options = {}) {
     return { toolId: 'operations.summary', input: {}, language: { normalised: text } };
   }
 
+  const fridgeMatch = text.match(/\b(?:fridge|freezer)\s*(?:number\s*)?(\d+)\b/i);
+  if (fridgeMatch || (includesAny(text, ['tell me about', 'status of', 'how is', 'is']) && includesAny(text, ['fridge', 'freezer']))) {
+    const unit = fridgeMatch ? `${text.includes('freezer') ? 'freezer' : 'fridge'} ${fridgeMatch[1]}` : extractSearchSubject(text, ['tell me about', 'status of', 'how is', 'is', 'the']);
+    return { toolId: 'coldChain.unitStatus', input: { unit }, language: { normalised: text, entityType: text.includes('freezer') ? 'freezer' : 'fridge' } };
+  }
+
   if (includesAny(text, ['cold chain', 'fridge temperature', 'fridge check', 'temperature reading', 'vaccine fridge', 'fridge ok', 'fridge status'])) {
     return { toolId: 'coldChain.latestStatus', input: {}, language: { normalised: text } };
   }

@@ -1,0 +1,14 @@
+C:\Development\Primovex-Git\src-tauri\target\aarch64-linux-android\release\deps\thiserror-6f8bb292b58f3a3e.d: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\aserror.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\display.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\var.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\private.rs C:\Development\Primovex-Git\src-tauri\target\aarch64-linux-android\release\build\thiserror-ff41630f551ed1f4\out/private.rs
+
+C:\Development\Primovex-Git\src-tauri\target\aarch64-linux-android\release\deps\libthiserror-6f8bb292b58f3a3e.rlib: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\aserror.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\display.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\var.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\private.rs C:\Development\Primovex-Git\src-tauri\target\aarch64-linux-android\release\build\thiserror-ff41630f551ed1f4\out/private.rs
+
+C:\Development\Primovex-Git\src-tauri\target\aarch64-linux-android\release\deps\libthiserror-6f8bb292b58f3a3e.rmeta: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\aserror.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\display.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\var.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\private.rs C:\Development\Primovex-Git\src-tauri\target\aarch64-linux-android\release\build\thiserror-ff41630f551ed1f4\out/private.rs
+
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\lib.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\aserror.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\display.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\var.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\thiserror-2.0.18\src\private.rs:
+C:\Development\Primovex-Git\src-tauri\target\aarch64-linux-android\release\build\thiserror-ff41630f551ed1f4\out/private.rs:
+
+# env-dep:OUT_DIR=C:\\Development\\Primovex-Git\\src-tauri\\target\\aarch64-linux-android\\release\\build\\thiserror-ff41630f551ed1f4\\out

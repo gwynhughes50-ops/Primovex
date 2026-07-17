@@ -182,6 +182,110 @@ export function registerApprovedReadOnlyTools() {
   });
 
   registerTool({
+    id: 'coldChain.unitStatus', label: 'Cold-chain unit status', requiredCapability: 'temperature.read',
+    async execute({ unit = '' } = {}) {
+      const requested = String(unit || '').trim();
+      const term = requested.toLowerCase().replace(/number\s+/g, '');
+      const normalise = (value) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+      // Android WebView/Firestore cache failures must never be allowed to take down Orb.
+      // Read each source independently and continue with whatever evidence is available.
+      const [unitResult, logResult] = await Promise.allSettled([
+        getDocs(collection(db, 'temperature_units')),
+        getDocs(collection(db, 'temperature_logs')),
+      ]);
+
+      const units = unitResult.status === 'fulfilled'
+        ? unitResult.value.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+        : [];
+      const logs = logResult.status === 'fulfilled'
+        ? logResult.value.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+        : [];
+
+      const wanted = normalise(term);
+      const target = units.find((candidate) => {
+        const haystack = normalise([candidate.name, candidate.unitName, candidate.label, candidate.id].filter(Boolean).join(' '));
+        return Boolean(haystack && wanted && (haystack.includes(wanted) || wanted.includes(haystack)));
+      });
+
+      const matchingLogs = logs
+        .filter((record) => {
+          const recordUnit = normalise([record.unitName, record.unit_name, record.unitId, record.unit_id, record.fridge, record.device].filter(Boolean).join(' '));
+          const targetTerms = [term, target?.name, target?.unitName, target?.id].filter(Boolean).map(normalise);
+          return Boolean(recordUnit && targetTerms.some((value) => value && (recordUnit.includes(value) || value.includes(recordUnit))));
+        })
+        .sort((a, b) => {
+          const toMillis = (value) => {
+            try {
+              if (value?.toMillis) return value.toMillis();
+              if (value?.toDate) return value.toDate().getTime();
+              const parsed = new Date(value || 0).getTime();
+              return Number.isFinite(parsed) ? parsed : 0;
+            } catch { return 0; }
+          };
+          return toMillis(b.measured_at || b.created_at) - toMillis(a.measured_at || a.created_at);
+        });
+
+      const record = matchingLogs[0] || null;
+      const sourceErrors = [];
+      if (unitResult.status === 'rejected') sourceErrors.push('Temperature unit registry unavailable');
+      if (logResult.status === 'rejected') sourceErrors.push('Temperature log unavailable');
+
+      if (!target && !record) {
+        const unavailable = sourceErrors.length === 2;
+        return {
+          data: null,
+          summary: unavailable
+            ? `I cannot retrieve ${requested || 'that cold-chain unit'} at the moment because the temperature data service is unavailable. Primovex has kept the app running safely.`
+            : `I could not find a cold-chain unit matching “${requested}”.`,
+          confidence: unavailable ? 0.35 : 0.82,
+          warnings: sourceErrors,
+          sources: [source('Temperature data', `${units.length} units and ${logs.length} readings safely checked · ${nowLabel()}`)],
+          actions: [{ label: 'Open Temperatures', route: '/temperature' }],
+        };
+      }
+
+      const value = Number(record?.temperature ?? record?.value ?? record?.currentValue ?? record?.current_value ?? target?.currentValue);
+      const min = Number(record?.unitRange?.min ?? record?.min_temp ?? record?.min ?? target?.min ?? target?.minTempC ?? 2);
+      const max = Number(record?.unitRange?.max ?? record?.max_temp ?? record?.max ?? target?.max ?? target?.maxTempC ?? 8);
+      const within = Number.isFinite(value) && value >= min && value <= max;
+      const name = String(target?.name || target?.unitName || record?.unitName || record?.unit_name || requested || 'Cold-chain unit');
+
+      let measuredAt = null;
+      try {
+        measuredAt = record?.measured_at?.toDate?.() || record?.created_at?.toDate?.() || (record?.measured_at ? new Date(record.measured_at) : null);
+      } catch { measuredAt = null; }
+      const ageMinutes = measuredAt instanceof Date && !Number.isNaN(measuredAt.getTime())
+        ? Math.max(0, Math.round((Date.now() - measuredAt.getTime()) / 60000))
+        : null;
+      const freshness = ageMinutes == null ? 'reading time unavailable' : ageMinutes < 2 ? 'just now' : `${ageMinutes} minutes ago`;
+
+      return {
+        // Keep data deliberately serialisable. Raw Firestore snapshots/timestamps are not
+        // passed into the conversation layer because some Android WebViews fail on them.
+        data: {
+          unitId: String(target?.id || record?.unitId || record?.unit_id || ''),
+          name,
+          value: Number.isFinite(value) ? value : null,
+          min: Number.isFinite(min) ? min : 2,
+          max: Number.isFinite(max) ? max : 8,
+          measuredAt: measuredAt instanceof Date && !Number.isNaN(measuredAt.getTime()) ? measuredAt.toISOString() : null,
+        },
+        summary: Number.isFinite(value)
+          ? `${name} is ${within ? 'operating within range' : 'outside its configured range'}. The latest reading is ${value}°C against a ${min}–${max}°C range, recorded ${freshness}.${ageMinutes != null && ageMinutes > 30 ? ' The reading is stale, so a current physical check is recommended.' : ''}`
+          : `${name} is registered, but I do not have a valid recent temperature reading. I cannot confirm that it is currently operating normally.`,
+        confidence: Number.isFinite(value) ? (ageMinutes != null && ageMinutes > 30 ? 0.76 : 0.97) : 0.58,
+        warnings: [...sourceErrors, ...(!Number.isFinite(value) ? ['No valid temperature reading'] : within ? [] : ['Latest reading is outside range'])],
+        sources: [
+          source(name, `Temperature unit registry · ${nowLabel()}`),
+          source('Temperature log', record ? `Latest matching reading · ${freshness}` : 'No matching reading found'),
+        ],
+        actions: [{ label: 'Open Temperatures', route: '/temperature' }],
+      };
+    },
+  });
+
+  registerTool({
     id: 'coldChain.latestStatus', label: 'Cold-chain status', requiredCapability: 'temperature.read',
     async execute() {
       const snap = await getDocs(query(collection(db, 'temperature_logs'), orderBy('measured_at', 'desc'), limit(1)));

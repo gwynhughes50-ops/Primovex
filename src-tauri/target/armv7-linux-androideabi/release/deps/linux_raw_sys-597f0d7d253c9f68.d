@@ -1,0 +1,10 @@
+C:\Development\Primovex-Git\src-tauri\target\armv7-linux-androideabi\release\deps\linux_raw_sys-597f0d7d253c9f68.d: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\arm\general.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\arm\ioctl.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\arm\system.rs
+
+C:\Development\Primovex-Git\src-tauri\target\armv7-linux-androideabi\release\deps\liblinux_raw_sys-597f0d7d253c9f68.rlib: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\arm\general.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\arm\ioctl.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\arm\system.rs
+
+C:\Development\Primovex-Git\src-tauri\target\armv7-linux-androideabi\release\deps\liblinux_raw_sys-597f0d7d253c9f68.rmeta: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\arm\general.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\arm\ioctl.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\arm\system.rs
+
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\lib.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\arm\general.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\arm\ioctl.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\arm\system.rs:

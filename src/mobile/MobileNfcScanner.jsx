@@ -86,8 +86,8 @@ export default function MobileNfcScanner({ open, onClose }) {
   const installedAndroid = isInstalledAndroidApp();
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-end bg-black/55 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="mobile-nfc-title">
-      <section className="w-full rounded-t-[2rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-4 text-[var(--medtrak-text)] shadow-2xl">
+    <div className="pvx-mobile-sheet-backdrop backdrop-blur-sm" style={{ zIndex: 110 }} role="dialog" aria-modal="true" aria-labelledby="mobile-nfc-title">
+      <section className="pvx-mobile-sheet px-5 pt-4 text-[var(--medtrak-text)]">
         <div className="mx-auto mb-4 h-1.5 w-12 rounded-full bg-[var(--medtrak-border)]" />
         <div className="flex items-start justify-between gap-4">
           <div>

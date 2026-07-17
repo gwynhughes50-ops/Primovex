@@ -1,0 +1,7 @@
+cargo:rerun-if-changed=permissions
+cargo:PERMISSION_FILES_PATH=C:\Development\Primovex-Git\src-tauri\target\i686-linux-android\release\build\tauri-plugin-os-8648035a7caf2215\out\tauri-plugin-os-permission-files
+cargo:rerun-if-env-changed=REMOVE_UNUSED_COMMANDS
+cargo:GLOBAL_API_SCRIPT_PATH=\\?\C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\api-iife.js
+cargo:rustc-check-cfg=cfg(mobile)
+cargo:rustc-cfg=mobile
+cargo:rustc-check-cfg=cfg(desktop)

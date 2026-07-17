@@ -1,0 +1,10 @@
+C:\Development\Primovex-Git\src-tauri\target\aarch64-linux-android\release\deps\linux_raw_sys-6432bfdadffa38de.d: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\aarch64\general.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\aarch64\ioctl.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\aarch64\system.rs
+
+C:\Development\Primovex-Git\src-tauri\target\aarch64-linux-android\release\deps\liblinux_raw_sys-6432bfdadffa38de.rlib: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\aarch64\general.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\aarch64\ioctl.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\aarch64\system.rs
+
+C:\Development\Primovex-Git\src-tauri\target\aarch64-linux-android\release\deps\liblinux_raw_sys-6432bfdadffa38de.rmeta: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\aarch64\general.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\aarch64\ioctl.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\aarch64\system.rs
+
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\lib.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\aarch64\general.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\aarch64\ioctl.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\aarch64\system.rs:

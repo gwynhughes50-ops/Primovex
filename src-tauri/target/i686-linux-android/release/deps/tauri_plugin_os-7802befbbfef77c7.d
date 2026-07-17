@@ -1,0 +1,10 @@
+C:\Development\Primovex-Git\src-tauri\target\i686-linux-android\release\deps\tauri_plugin_os-7802befbbfef77c7.d: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\commands.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\error.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\./init.js
+
+C:\Development\Primovex-Git\src-tauri\target\i686-linux-android\release\deps\libtauri_plugin_os-7802befbbfef77c7.rlib: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\commands.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\error.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\./init.js
+
+C:\Development\Primovex-Git\src-tauri\target\i686-linux-android\release\deps\libtauri_plugin_os-7802befbbfef77c7.rmeta: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\commands.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\error.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\./init.js
+
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\lib.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\commands.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\error.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-os-2.3.2\src\./init.js:

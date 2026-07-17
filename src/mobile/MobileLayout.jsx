@@ -15,10 +15,12 @@ import MobileNfcScanner from "./MobileNfcScanner";
 import QuickNotesSheet from "./QuickNotesSheet";
 import MobileAIActionSheet from "./MobileAIActionSheet";
 import MobileSenseSpaces from "./MobileSenseSpaces";
+import RoleAdaptiveMobileHome from "./RoleAdaptiveMobileHome";
+import { useAuth } from "@/contexts/AuthContext";
+import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry";
 import { getOpenQuickNotes, subscribeQuickNotes } from "@/services/quickNotesService";
 import { Barcode, BellRing, CheckCircle2, Eye, MapPin, Minus, Package, Plus, Sparkles, X } from "lucide-react";
 import ActiveSenseBanner from "@/modules/sense/components/ActiveSenseBanner";
-import MobileSenseMini from "@/modules/sense/components/MobileSenseMini";
 import { useSenseSession } from "@/contexts/SenseSessionContext";
 import MobileDeveloperIssueRecorder from "@/developer/MobileDeveloperIssueRecorder";
 import "./mobileLayout.css";
@@ -42,6 +44,7 @@ export default function MobileLayout() {
   const [activeTab, setActiveTab] = useState("home");
   const [escalationSeed, setEscalationSeed] = useState(null);
   const [showNfcScanner, setShowNfcScanner] = useState(false);
+  const [spaceScanError, setSpaceScanError] = useState("");
   const [showQuickNotes, setShowQuickNotes] = useState(false);
   const [showAIActionSheet, setShowAIActionSheet] = useState(false);
   const [quickNotes, setQuickNotes] = useState(() => getOpenQuickNotes());
@@ -58,7 +61,74 @@ export default function MobileLayout() {
   const { allItems = [] } = useStock({ includeArchived: false });
   const navigate = useNavigate();
   const { open: openPrimovexAI, ask: askPrimovexAI } = usePrimovexAI();
-  const { activeSenseSession } = useSenseSession();
+  const { activeSenseSession, activate } = useSenseSession();
+  const { role, user } = useAuth();
+
+
+  const handleSpaceCodeScan = async (rawCode) => {
+    const code = String(rawCode || "").trim();
+    if (!code) return;
+    setSpaceScanError("");
+
+    let spaceId = code;
+    try {
+      const url = new URL(code, window.location.origin);
+      const match = url.pathname.match(/^\/sense\/open\/space\/([^/]+)\/?$/i);
+      if (match) spaceId = decodeURIComponent(match[1]);
+    } catch {}
+
+    const registry = loadSpaceRegistry();
+    const space = registry.spaces.find((item) =>
+      [item.id, item.spaceId, item.qrCode, item.nfcTagId, item.slug].filter(Boolean).some((value) => String(value).toLowerCase() === spaceId.toLowerCase())
+    );
+
+    if (!space) {
+      setSpaceScanError("This code is not linked to a Primovex Space yet.");
+      return;
+    }
+
+    await activate({ id: space.spaceId || space.id, name: space.name, type: "space", source: "qr-barcode" });
+    setActiveTab("sense");
+  };
+
+  const openSpaceScanner = () => {
+    setSpaceScanError("");
+    document.querySelector("[data-mobile-space-scan-button]")?.click();
+  };
+
+  const handleRoleAction = async (action) => {
+    switch (action) {
+      case "scan-stock":
+        document.querySelector("[data-mobile-scan-button]")?.click();
+        break;
+      case "scan-room":
+        openSpaceScanner();
+        break;
+      case "room":
+        setActiveTab("sense");
+        break;
+      case "stock":
+        setActiveTab("stock");
+        break;
+      case "temperature":
+        navigate("/temperature");
+        break;
+      case "checks":
+        setActiveTab("compliance");
+        break;
+      case "clean":
+        setActiveTab("facilities");
+        break;
+      case "issue":
+        setEscalationSeed({ senseObjectId: activeSenseSession?.senseObjectId, location: activeSenseSession?.senseObjectName });
+        break;
+      case "orb":
+        setShowAIActionSheet(true);
+        break;
+      default:
+        break;
+    }
+  };
 
   const manualResults = useMemo(() => {
     const q = String(searchTerm || "").trim().toLowerCase();
@@ -203,26 +273,14 @@ export default function MobileLayout() {
     <div className="min-h-[100dvh] bg-[var(--medtrak-bg)] text-[var(--medtrak-text)] pb-[var(--pvx-mobile-content-bottom)]">
       <ActiveSenseBanner />
       <MobileDeveloperIssueRecorder />
-      {activeTab === "home" && (
-        <MobileSenseMini
-          onStock={() => setActiveTab("stock")}
-          onCleaning={() => setActiveTab("facilities")}
-          onIssues={() => setEscalationSeed({ senseObjectId: activeSenseSession?.senseObjectId, location: activeSenseSession?.senseObjectName })}
-          onChecks={() => setActiveTab("compliance")}
-          onAsk={async () => {
-            if (!activeSenseSession) return;
-            openPrimovexAI();
-            await askPrimovexAI(`Give me a concise operational summary for ${activeSenseSession.senseObjectName}, including stock, cleaning, checks and open issues.`);
-          }}
-        />
-      )}
+      {activeTab === "home" && <RoleAdaptiveMobileHome onAction={handleRoleAction} />}
       {activeTab === "connect" ? (
         <MobileConnect />
       ) : activeTab === "compliance" ? (
         <MobileCompliance />
       ) : activeTab === "sense" ? (
         <MobileSenseSpaces onScan={() => setShowNfcScanner(true)} />
-      ) : (
+      ) : activeTab === "home" ? null : (
         <MobileHome
           mode={activeTab}
           onNavigate={setActiveTab}
@@ -447,6 +505,22 @@ export default function MobileLayout() {
       />
 
       <MobileBarcodeScanner onScan={handleMobileScan} />
+      <MobileBarcodeScanner
+        onScan={handleSpaceCodeScan}
+        triggerAttribute="data-mobile-space-scan-button"
+        title="Scan room or space"
+        helper="Scan the Primovex QR code or barcode on the room tag. NFC remains available too."
+      />
+
+      {spaceScanError && (
+        <div className="fixed inset-x-4 bottom-[calc(var(--pvx-mobile-content-bottom)+.5rem)] z-[120] rounded-2xl border border-red-500/30 bg-[var(--medtrak-panel)] p-4 text-sm text-red-700 shadow-xl">
+          {spaceScanError}
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => { setSpaceScanError(""); setShowNfcScanner(true); }} className="rounded-xl bg-[var(--medtrak-accent)] px-3 py-2 font-bold text-white">Try NFC</button>
+            <button type="button" onClick={() => setSpaceScanError("")} className="rounded-xl border border-[var(--medtrak-border)] px-3 py-2 font-bold">Close</button>
+          </div>
+        </div>
+      )}
 
       <AskPrimovexPanel variant="mobile" />
 

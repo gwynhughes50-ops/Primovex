@@ -53,7 +53,7 @@ export const mockPrimovexProvider = {
 
     return {
       answer: 'I could not confidently match that request to an approved Primovex tool. Try asking about stock, expiry dates, room cleaning, equipment location, maintenance, fridge temperature, practice readiness, or recent operational changes.',
-      confidence: 0.72,
+      confidence: null,
       intent: 'general.unmatched',
       sources: [{ title: 'Primovex language engine', detail: 'No approved tool matched with sufficient confidence', type: 'system' }],
       actions: [],

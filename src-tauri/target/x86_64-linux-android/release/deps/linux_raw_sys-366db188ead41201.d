@@ -1,0 +1,10 @@
+C:\Development\Primovex-Git\src-tauri\target\x86_64-linux-android\release\deps\linux_raw_sys-366db188ead41201.d: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\x86_64\general.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\x86_64\ioctl.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\x86_64\system.rs
+
+C:\Development\Primovex-Git\src-tauri\target\x86_64-linux-android\release\deps\liblinux_raw_sys-366db188ead41201.rlib: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\x86_64\general.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\x86_64\ioctl.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\x86_64\system.rs
+
+C:\Development\Primovex-Git\src-tauri\target\x86_64-linux-android\release\deps\liblinux_raw_sys-366db188ead41201.rmeta: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\x86_64\general.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\x86_64\ioctl.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\x86_64\system.rs
+
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\lib.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\x86_64\general.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\x86_64\ioctl.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\linux-raw-sys-0.12.1\src\x86_64\system.rs:

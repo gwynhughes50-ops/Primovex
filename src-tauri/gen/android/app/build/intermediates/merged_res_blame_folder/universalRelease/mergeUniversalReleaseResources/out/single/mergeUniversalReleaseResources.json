@@ -1,0 +1,78 @@
+[
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/drawable-v24_ic_launcher_foreground.xml.flat",
+        "source": "uk.co.primovex.app-main-5:/drawable-v24/ic_launcher_foreground.xml"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-xhdpi_ic_launcher_round.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-xhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-xxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-xxxhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-mdpi_ic_launcher_round.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-mdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-hdpi_ic_launcher_foreground.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-hdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-hdpi_ic_launcher_round.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-hdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-xxhdpi_ic_launcher_round.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-xxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/drawable_ic_launcher_background.xml.flat",
+        "source": "uk.co.primovex.app-main-5:/drawable/ic_launcher_background.xml"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-mdpi_ic_launcher_foreground.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-mdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-xhdpi_ic_launcher_foreground.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-xhdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-mdpi_ic_launcher.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-mdpi/ic_launcher.png"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-xhdpi/ic_launcher.png"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/layout_activity_main.xml.flat",
+        "source": "uk.co.primovex.app-main-5:/layout/activity_main.xml"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/xml_file_paths.xml.flat",
+        "source": "uk.co.primovex.app-main-5:/xml/file_paths.xml"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-xxhdpi_ic_launcher_foreground.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-xxhdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-xxxhdpi_ic_launcher_round.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-xxxhdpi/ic_launcher_round.png"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-xxxhdpi_ic_launcher_foreground.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-xxxhdpi/ic_launcher_foreground.png"
+    },
+    {
+        "merged": "uk.co.primovex.app-universalRelease-4:/mipmap-hdpi_ic_launcher.png.flat",
+        "source": "uk.co.primovex.app-main-5:/mipmap-hdpi/ic_launcher.png"
+    }
+]

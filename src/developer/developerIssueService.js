@@ -15,7 +15,7 @@ export function createDeveloperIssue(input) {
     safeAreaProbe: { visualViewportWidth: window.visualViewport?.width || null, visualViewportHeight: window.visualViewport?.height || null },
     online: navigator.onLine, userAgent: navigator.userAgent,
     theme: document.documentElement.dataset.theme || null,
-    appVersion: import.meta.env.VITE_APP_VERSION || '0.11.4',
+    appVersion: import.meta.env.VITE_APP_VERSION || '0.12.2',
     registry: getSpaceRegistryDiagnostics(),
     ...input,
   };
@@ -24,7 +24,7 @@ export function createDeveloperIssue(input) {
 }
 export function updateDeveloperIssue(id, patch) { return write(read().map((issue) => issue.id === id ? { ...issue, ...patch, updatedAt: new Date().toISOString() } : issue)); }
 export function exportDeveloperBundle() {
-  return { generatedAt: new Date().toISOString(), app: 'Primovex', version: import.meta.env.VITE_APP_VERSION || '0.11.4', issues: read(), spaceRegistry: exportSpaceRegistryBackup() };
+  return { generatedAt: new Date().toISOString(), app: 'Primovex', version: import.meta.env.VITE_APP_VERSION || '0.12.2', issues: read(), spaceRegistry: exportSpaceRegistryBackup() };
 }
 export function downloadDeveloperBundle() {
   const blob = new Blob([JSON.stringify(exportDeveloperBundle(), null, 2)], { type: 'application/json' });

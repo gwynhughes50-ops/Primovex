@@ -253,6 +253,14 @@ export const ROLE_TEMPLATES = {
     "compliance.manageAssets",
     "mobile.access",
   ],
+  "Cleaner": [
+    "dashboard.read",
+    "operations.read",
+    "compliance.read",
+    "compliance.write",
+    "compliance.recordChecks",
+    "mobile.access",
+  ],
   "ReadOnly": [
     "dashboard.read",
     "operations.read",

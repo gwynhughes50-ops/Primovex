@@ -24,9 +24,9 @@ export default function MobileAIActionSheet({ open, onClose, onAsk, onQuickNote,
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[130] flex items-end bg-black/45" onClick={onClose}>
+    <div className="pvx-mobile-sheet-backdrop" style={{ zIndex: 130 }} onClick={onClose}>
       <section
-        className="w-full rounded-t-[2rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 text-[var(--medtrak-text)] shadow-2xl"
+        className="pvx-mobile-sheet px-5 pt-3 text-[var(--medtrak-text)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-[var(--medtrak-border)]" />

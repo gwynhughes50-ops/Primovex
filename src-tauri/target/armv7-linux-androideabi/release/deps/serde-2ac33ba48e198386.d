@@ -1,0 +1,14 @@
+C:\Development\Primovex-Git\src-tauri\target\armv7-linux-androideabi\release\deps\serde-2ac33ba48e198386.d: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs C:\Development\Primovex-Git\src-tauri\target\armv7-linux-androideabi\release\build\serde-e497cab4f2eae2de\out/private.rs
+
+C:\Development\Primovex-Git\src-tauri\target\armv7-linux-androideabi\release\deps\libserde-2ac33ba48e198386.rlib: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs C:\Development\Primovex-Git\src-tauri\target\armv7-linux-androideabi\release\build\serde-e497cab4f2eae2de\out/private.rs
+
+C:\Development\Primovex-Git\src-tauri\target\armv7-linux-androideabi\release\deps\libserde-2ac33ba48e198386.rmeta: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs C:\Development\Primovex-Git\src-tauri\target\armv7-linux-androideabi\release\build\serde-e497cab4f2eae2de\out/private.rs
+
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs:
+C:\Development\Primovex-Git\src-tauri\target\armv7-linux-androideabi\release\build\serde-e497cab4f2eae2de\out/private.rs:
+
+# env-dep:OUT_DIR=C:\\Development\\Primovex-Git\\src-tauri\\target\\armv7-linux-androideabi\\release\\build\\serde-e497cab4f2eae2de\\out

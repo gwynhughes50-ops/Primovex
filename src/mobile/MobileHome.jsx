@@ -103,13 +103,27 @@ export default function MobileHome({ mode="home", onNavigate, onScan, onSearch, 
     );
   }
 
-  if (mode === "me") return (
-    <Page title="Me" subtitle={role||"Primovex user"}>
-      <Card><div className="flex items-center gap-3"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-[color-mix(in_srgb,var(--medtrak-accent)_12%,var(--medtrak-panel))]"><UserRound /></div><div><b>{displayName}</b><p className="text-sm text-[var(--medtrak-muted)]">{capabilities.length} capabilities</p></div></div></Card>
-      <Section title="Security"><div className="flex items-center gap-3 py-2"><ShieldCheck className="text-[var(--medtrak-accent)]"/><div><b>Mobile access protected</b><p className="text-sm text-[var(--medtrak-muted)]">Biometric, PIN and account password fallback</p></div></div></Section>
-      <ReleaseUpdateCard />
-    </Page>
-  );
+  if (mode === "me") {
+    const roleLabel = role || "Primovex user";
+    const capabilityLabel = `${capabilities.length} capability profile${capabilities.length === 1 ? "" : "s"}`;
+    const isAdministrator = /admin|manager/i.test(roleLabel);
+    return (
+      <Page title={roleLabel} subtitle="Mobile profile">
+        <Card>
+          <div className="flex items-center gap-4">
+            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-[color-mix(in_srgb,var(--medtrak-accent)_12%,var(--medtrak-panel))] text-[var(--medtrak-accent)]"><UserRound className="h-7 w-7" /></div>
+            <div className="min-w-0">
+              <b className="block text-lg leading-tight">{displayName}</b>
+              <p className="mt-1 text-sm font-semibold text-[var(--medtrak-muted)]">{isAdministrator ? "Administrator" : roleLabel}</p>
+              <p className="mt-1 text-xs text-[var(--medtrak-muted)]">{capabilityLabel}</p>
+            </div>
+          </div>
+        </Card>
+        <Section title="Security"><div className="flex items-center gap-3 py-2"><ShieldCheck className="text-[var(--medtrak-accent)]"/><div><b>Mobile access protected</b><p className="text-sm text-[var(--medtrak-muted)]">Biometric, PIN and account password fallback</p></div></div></Section>
+        <ReleaseUpdateCard />
+      </Page>
+    );
+  }
 
   const priorities = summary?.priorities || [];
   const managementCount = governance.buckets.management.length;

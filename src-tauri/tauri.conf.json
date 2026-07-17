@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Primovex",
-  "version": "0.11.3",
+  "version": "0.13.6",
   "identifier": "uk.co.primovex.app",
   "build": {
     "beforeDevCommand": "npm run dev",

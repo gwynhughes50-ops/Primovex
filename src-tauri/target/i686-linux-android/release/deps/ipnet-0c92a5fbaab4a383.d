@@ -1,0 +1,11 @@
+C:\Development\Primovex-Git\src-tauri\target\i686-linux-android\release\deps\ipnet-0c92a5fbaab4a383.d: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\ipext.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\ipnet.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\mask.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\parser.rs
+
+C:\Development\Primovex-Git\src-tauri\target\i686-linux-android\release\deps\libipnet-0c92a5fbaab4a383.rlib: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\ipext.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\ipnet.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\mask.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\parser.rs
+
+C:\Development\Primovex-Git\src-tauri\target\i686-linux-android\release\deps\libipnet-0c92a5fbaab4a383.rmeta: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\ipext.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\ipnet.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\mask.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\parser.rs
+
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\lib.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\ipext.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\ipnet.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\mask.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\ipnet-2.12.0\src\parser.rs:

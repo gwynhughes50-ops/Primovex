@@ -1,0 +1,11 @@
+C:\Development\Primovex-Git\src-tauri\target\aarch64-linux-android\release\deps\socket2-0d3864221b3b5e31.d: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\sockaddr.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\socket.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\sockref.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\sys\unix.rs
+
+C:\Development\Primovex-Git\src-tauri\target\aarch64-linux-android\release\deps\libsocket2-0d3864221b3b5e31.rlib: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\sockaddr.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\socket.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\sockref.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\sys\unix.rs
+
+C:\Development\Primovex-Git\src-tauri\target\aarch64-linux-android\release\deps\libsocket2-0d3864221b3b5e31.rmeta: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\sockaddr.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\socket.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\sockref.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\sys\unix.rs
+
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\lib.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\sockaddr.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\socket.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\sockref.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\socket2-0.6.4\src\sys\unix.rs:

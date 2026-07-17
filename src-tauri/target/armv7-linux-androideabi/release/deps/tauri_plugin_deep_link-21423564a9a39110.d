@@ -1,0 +1,10 @@
+C:\Development\Primovex-Git\src-tauri\target\armv7-linux-androideabi\release\deps\tauri_plugin_deep_link-21423564a9a39110.d: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\commands.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\config.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\error.rs
+
+C:\Development\Primovex-Git\src-tauri\target\armv7-linux-androideabi\release\deps\libtauri_plugin_deep_link-21423564a9a39110.rlib: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\commands.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\config.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\error.rs
+
+C:\Development\Primovex-Git\src-tauri\target\armv7-linux-androideabi\release\deps\libtauri_plugin_deep_link-21423564a9a39110.rmeta: C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\lib.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\commands.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\config.rs C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\error.rs
+
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\lib.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\commands.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\config.rs:
+C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-deep-link-2.4.9\src\error.rs:

@@ -1,0 +1,20 @@
+{
+  "version": 3,
+  "artifactType": {
+    "type": "OPTIMIZED_PROCESSED_RES",
+    "kind": "Directory"
+  },
+  "applicationId": "uk.co.primovex.app",
+  "variantName": "universalRelease",
+  "elements": [
+    {
+      "type": "SINGLE",
+      "filters": [],
+      "attributes": [],
+      "versionCode": 13006,
+      "versionName": "0.13.6",
+      "outputFile": "resources-universal-release-optimize.ap_"
+    }
+  ],
+  "elementType": "File"
+}

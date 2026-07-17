@@ -1,0 +1,18 @@
+{
+  "version": 3,
+  "artifactType": {
+    "type": "BUNDLE",
+    "kind": "RegularFile"
+  },
+  "applicationId": "uk.co.primovex.app",
+  "variantName": "universalRelease",
+  "elements": [
+    {
+      "type": "SINGLE",
+      "filters": [],
+      "attributes": [],
+      "outputFile": "../../../../outputs/bundle/universalRelease/app-universal-release.aab"
+    }
+  ],
+  "elementType": "File"
+}

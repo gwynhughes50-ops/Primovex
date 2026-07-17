@@ -1,0 +1,311 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="uk.co.primovex.app"
+4    android:versionCode="13006"
+5    android:versionName="0.13.6" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="24"
+9        android:targetSdkVersion="36" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:3:5-67
+11-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:3:22-64
+12    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+12-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:4:5-71
+12-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:4:22-68
+13
+14    <!-- Allow Android 11+ package visibility for installed speech recognition providers. -->
+15    <queries>
+15-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:7:5-11:15
+16        <intent>
+16-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:8:9-10:18
+17            <action android:name="android.speech.RecognitionService" />
+17-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:9:13-72
+17-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:9:21-69
+18        </intent>
+19    </queries>
+20
+21    <!-- AndroidTV support -->
+22    <uses-feature
+22-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:14:5-87
+23        android:name="android.software.leanback"
+23-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:14:19-59
+24        android:required="false" />
+24-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:14:60-84
+25
+26    <uses-permission android:name="android.permission.CAMERA" />
+26-->[:tauri-plugin-barcode-scanner] C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-barcode-scanner-2.4.5\android\build\intermediates\merged_manifest\release\processReleaseManifest\AndroidManifest.xml:9:5-65
+26-->[:tauri-plugin-barcode-scanner] C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-barcode-scanner-2.4.5\android\build\intermediates\merged_manifest\release\processReleaseManifest\AndroidManifest.xml:9:22-62
+27    <uses-permission android:name="android.permission.VIBRATE" />
+27-->[:tauri-plugin-barcode-scanner] C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-barcode-scanner-2.4.5\android\build\intermediates\merged_manifest\release\processReleaseManifest\AndroidManifest.xml:10:5-66
+27-->[:tauri-plugin-barcode-scanner] C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-barcode-scanner-2.4.5\android\build\intermediates\merged_manifest\release\processReleaseManifest\AndroidManifest.xml:10:22-63
+28
+29    <uses-feature android:name="android.hardware.camera.any" />
+29-->[:tauri-plugin-barcode-scanner] C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-barcode-scanner-2.4.5\android\build\intermediates\merged_manifest\release\processReleaseManifest\AndroidManifest.xml:12:5-64
+29-->[:tauri-plugin-barcode-scanner] C:\Users\gwynh\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\tauri-plugin-barcode-scanner-2.4.5\android\build\intermediates\merged_manifest\release\processReleaseManifest\AndroidManifest.xml:12:19-61
+30
+31    <permission
+31-->[androidx.core:core:1.13.1] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\9e1e5c3c6156c712d150bf10e579522b\transformed\core-1.13.1\AndroidManifest.xml:22:5-24:47
+32        android:name="uk.co.primovex.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+32-->[androidx.core:core:1.13.1] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\9e1e5c3c6156c712d150bf10e579522b\transformed\core-1.13.1\AndroidManifest.xml:23:9-81
+33        android:protectionLevel="signature" />
+33-->[androidx.core:core:1.13.1] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\9e1e5c3c6156c712d150bf10e579522b\transformed\core-1.13.1\AndroidManifest.xml:24:9-44
+34
+35    <uses-permission android:name="uk.co.primovex.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" /> <!-- Although the *SdkVersion is captured in gradle build files, this is required for non gradle builds -->
+35-->[androidx.core:core:1.13.1] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\9e1e5c3c6156c712d150bf10e579522b\transformed\core-1.13.1\AndroidManifest.xml:26:5-97
+35-->[androidx.core:core:1.13.1] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\9e1e5c3c6156c712d150bf10e579522b\transformed\core-1.13.1\AndroidManifest.xml:26:22-94
+36    <!-- <uses-sdk android:minSdkVersion="14"/> -->
+37    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+37-->[com.google.android.datatransport:transport-backend-cct:2.3.3] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\cd1fbccfab67316f5b97d0150f40cb79\transformed\transport-backend-cct-2.3.3\AndroidManifest.xml:25:5-79
+37-->[com.google.android.datatransport:transport-backend-cct:2.3.3] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\cd1fbccfab67316f5b97d0150f40cb79\transformed\transport-backend-cct-2.3.3\AndroidManifest.xml:25:22-76
+38
+39    <application
+40        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+40-->[androidx.core:core:1.13.1] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\9e1e5c3c6156c712d150bf10e579522b\transformed\core-1.13.1\AndroidManifest.xml:28:18-86
+41        android:extractNativeLibs="false"
+42        android:icon="@mipmap/ic_launcher"
+42-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:17:9-43
+43        android:label="@string/app_name"
+43-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:18:9-41
+44        android:theme="@style/Theme.primovex"
+44-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:19:9-46
+45        android:usesCleartextTraffic="false" >
+45-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:20:9-63
+46        <activity
+46-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:21:9-48:20
+47            android:name="uk.co.primovex.app.MainActivity"
+47-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:25:13-41
+48            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+48-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:22:13-129
+49            android:exported="true"
+49-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:26:13-36
+50            android:label="@string/main_activity_title"
+50-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:24:13-56
+51            android:launchMode="singleTask" >
+51-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:23:13-44
+52            <intent-filter>
+52-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:27:13-32:29
+53                <action android:name="android.intent.action.MAIN" />
+53-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:28:17-69
+53-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:28:25-66
+54
+55                <category android:name="android.intent.category.LAUNCHER" />
+55-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:29:17-77
+55-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:29:27-74
+56                <!-- AndroidTV support -->
+57                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+57-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:31:17-86
+57-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:31:27-83
+58            </intent-filter>
+59            <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
+60            <intent-filter>
+60-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:34:13-46:29
+61                <action android:name="android.intent.action.VIEW" />
+61-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:35:17-69
+61-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:35:25-66
+62                <!-- ChromeOS ARC++ uses a different action for deep links -->
+63                <action android:name="org.chromium.arc.intent.action.VIEW" />
+63-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:37:17-78
+63-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:37:25-75
+64
+65                <category android:name="android.intent.category.DEFAULT" />
+65-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:38:17-76
+65-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:38:27-73
+66                <category android:name="android.intent.category.BROWSABLE" />
+66-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:39:17-78
+66-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:39:27-75
+67
+68                <data android:scheme="primovex" />
+68-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:40:17-51
+68-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:40:23-48
+69            </intent-filter>
+70            <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
+71        </activity>
+72
+73        <provider
+74            android:name="androidx.core.content.FileProvider"
+74-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:51:11-60
+75            android:authorities="uk.co.primovex.app.fileprovider"
+75-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:52:11-62
+76            android:exported="false"
+76-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:53:11-35
+77            android:grantUriPermissions="true" >
+77-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:54:11-45
+78            <meta-data
+78-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:55:11-57:50
+79                android:name="android.support.FILE_PROVIDER_PATHS"
+79-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:56:13-63
+80                android:resource="@xml/file_paths" />
+80-->C:\Development\Primovex-Git\src-tauri\gen\android\app\src\main\AndroidManifest.xml:57:13-47
+81        </provider>
+82
+83        <service
+83-->[androidx.camera:camera-camera2:1.5.1] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\7ccaaba6aae3d90eaff4f14150fe1a87\transformed\camera-camera2-1.5.1\AndroidManifest.xml:24:9-33:19
+84            android:name="androidx.camera.core.impl.MetadataHolderService"
+84-->[androidx.camera:camera-camera2:1.5.1] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\7ccaaba6aae3d90eaff4f14150fe1a87\transformed\camera-camera2-1.5.1\AndroidManifest.xml:25:13-75
+85            android:enabled="false"
+85-->[androidx.camera:camera-camera2:1.5.1] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\7ccaaba6aae3d90eaff4f14150fe1a87\transformed\camera-camera2-1.5.1\AndroidManifest.xml:26:13-36
+86            android:exported="false" >
+86-->[androidx.camera:camera-camera2:1.5.1] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\7ccaaba6aae3d90eaff4f14150fe1a87\transformed\camera-camera2-1.5.1\AndroidManifest.xml:27:13-37
+87            <meta-data
+87-->[androidx.camera:camera-camera2:1.5.1] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\7ccaaba6aae3d90eaff4f14150fe1a87\transformed\camera-camera2-1.5.1\AndroidManifest.xml:30:13-32:89
+88                android:name="androidx.camera.core.impl.MetadataHolderService.DEFAULT_CONFIG_PROVIDER"
+88-->[androidx.camera:camera-camera2:1.5.1] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\7ccaaba6aae3d90eaff4f14150fe1a87\transformed\camera-camera2-1.5.1\AndroidManifest.xml:31:17-103
+89                android:value="androidx.camera.camera2.Camera2Config$DefaultProvider" />
+89-->[androidx.camera:camera-camera2:1.5.1] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\7ccaaba6aae3d90eaff4f14150fe1a87\transformed\camera-camera2-1.5.1\AndroidManifest.xml:32:17-86
+90        </service>
+91
+92        <provider
+92-->[androidx.emoji2:emoji2:1.3.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\f4609dae742bccb9179e2c4bf3925745\transformed\emoji2-1.3.0\AndroidManifest.xml:24:9-32:20
+93            android:name="androidx.startup.InitializationProvider"
+93-->[androidx.emoji2:emoji2:1.3.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\f4609dae742bccb9179e2c4bf3925745\transformed\emoji2-1.3.0\AndroidManifest.xml:25:13-67
+94            android:authorities="uk.co.primovex.app.androidx-startup"
+94-->[androidx.emoji2:emoji2:1.3.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\f4609dae742bccb9179e2c4bf3925745\transformed\emoji2-1.3.0\AndroidManifest.xml:26:13-68
+95            android:exported="false" >
+95-->[androidx.emoji2:emoji2:1.3.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\f4609dae742bccb9179e2c4bf3925745\transformed\emoji2-1.3.0\AndroidManifest.xml:27:13-37
+96            <meta-data
+96-->[androidx.emoji2:emoji2:1.3.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\f4609dae742bccb9179e2c4bf3925745\transformed\emoji2-1.3.0\AndroidManifest.xml:29:13-31:52
+97                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+97-->[androidx.emoji2:emoji2:1.3.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\f4609dae742bccb9179e2c4bf3925745\transformed\emoji2-1.3.0\AndroidManifest.xml:30:17-75
+98                android:value="androidx.startup" />
+98-->[androidx.emoji2:emoji2:1.3.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\f4609dae742bccb9179e2c4bf3925745\transformed\emoji2-1.3.0\AndroidManifest.xml:31:17-49
+99            <meta-data
+99-->[androidx.lifecycle:lifecycle-process:2.10.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\87e63ce8599a9598e403daef53f2eb94\transformed\lifecycle-process-2.10.0\AndroidManifest.xml:29:13-31:52
+100                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+100-->[androidx.lifecycle:lifecycle-process:2.10.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\87e63ce8599a9598e403daef53f2eb94\transformed\lifecycle-process-2.10.0\AndroidManifest.xml:30:17-78
+101                android:value="androidx.startup" />
+101-->[androidx.lifecycle:lifecycle-process:2.10.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\87e63ce8599a9598e403daef53f2eb94\transformed\lifecycle-process-2.10.0\AndroidManifest.xml:31:17-49
+102            <meta-data
+102-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:29:13-31:52
+103                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+103-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:30:17-85
+104                android:value="androidx.startup" />
+104-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:31:17-49
+105        </provider>
+106
+107        <service
+107-->[com.google.android.gms:play-services-mlkit-barcode-scanning:18.1.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\ce078a5968be6de95870767ca4210595\transformed\play-services-mlkit-barcode-scanning-18.1.0\AndroidManifest.xml:9:9-15:19
+108            android:name="com.google.mlkit.common.internal.MlKitComponentDiscoveryService"
+108-->[com.google.android.gms:play-services-mlkit-barcode-scanning:18.1.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\ce078a5968be6de95870767ca4210595\transformed\play-services-mlkit-barcode-scanning-18.1.0\AndroidManifest.xml:10:13-91
+109            android:directBootAware="true"
+109-->[com.google.mlkit:common:18.5.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\1a3be1768609825b49145533c804de19\transformed\common-18.5.0\AndroidManifest.xml:17:13-43
+110            android:exported="false" >
+110-->[com.google.android.gms:play-services-mlkit-barcode-scanning:18.1.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\ce078a5968be6de95870767ca4210595\transformed\play-services-mlkit-barcode-scanning-18.1.0\AndroidManifest.xml:11:13-37
+111            <meta-data
+111-->[com.google.android.gms:play-services-mlkit-barcode-scanning:18.1.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\ce078a5968be6de95870767ca4210595\transformed\play-services-mlkit-barcode-scanning-18.1.0\AndroidManifest.xml:12:13-14:85
+112                android:name="com.google.firebase.components:com.google.mlkit.vision.barcode.internal.BarcodeRegistrar"
+112-->[com.google.android.gms:play-services-mlkit-barcode-scanning:18.1.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\ce078a5968be6de95870767ca4210595\transformed\play-services-mlkit-barcode-scanning-18.1.0\AndroidManifest.xml:13:17-120
+113                android:value="com.google.firebase.components.ComponentRegistrar" />
+113-->[com.google.android.gms:play-services-mlkit-barcode-scanning:18.1.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\ce078a5968be6de95870767ca4210595\transformed\play-services-mlkit-barcode-scanning-18.1.0\AndroidManifest.xml:14:17-82
+114            <meta-data
+114-->[com.google.mlkit:vision-common:17.2.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\a392a74b5ce4f9137c026c83afb9ad4a\transformed\vision-common-17.2.0\AndroidManifest.xml:12:13-14:85
+115                android:name="com.google.firebase.components:com.google.mlkit.vision.common.internal.VisionCommonRegistrar"
+115-->[com.google.mlkit:vision-common:17.2.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\a392a74b5ce4f9137c026c83afb9ad4a\transformed\vision-common-17.2.0\AndroidManifest.xml:13:17-124
+116                android:value="com.google.firebase.components.ComponentRegistrar" />
+116-->[com.google.mlkit:vision-common:17.2.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\a392a74b5ce4f9137c026c83afb9ad4a\transformed\vision-common-17.2.0\AndroidManifest.xml:14:17-82
+117            <meta-data
+117-->[com.google.mlkit:common:18.5.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\1a3be1768609825b49145533c804de19\transformed\common-18.5.0\AndroidManifest.xml:20:13-22:85
+118                android:name="com.google.firebase.components:com.google.mlkit.common.internal.CommonComponentRegistrar"
+118-->[com.google.mlkit:common:18.5.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\1a3be1768609825b49145533c804de19\transformed\common-18.5.0\AndroidManifest.xml:21:17-120
+119                android:value="com.google.firebase.components.ComponentRegistrar" />
+119-->[com.google.mlkit:common:18.5.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\1a3be1768609825b49145533c804de19\transformed\common-18.5.0\AndroidManifest.xml:22:17-82
+120        </service>
+121
+122        <provider
+122-->[com.google.mlkit:common:18.5.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\1a3be1768609825b49145533c804de19\transformed\common-18.5.0\AndroidManifest.xml:9:9-13:38
+123            android:name="com.google.mlkit.common.internal.MlKitInitProvider"
+123-->[com.google.mlkit:common:18.5.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\1a3be1768609825b49145533c804de19\transformed\common-18.5.0\AndroidManifest.xml:10:13-78
+124            android:authorities="uk.co.primovex.app.mlkitinitprovider"
+124-->[com.google.mlkit:common:18.5.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\1a3be1768609825b49145533c804de19\transformed\common-18.5.0\AndroidManifest.xml:11:13-69
+125            android:exported="false"
+125-->[com.google.mlkit:common:18.5.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\1a3be1768609825b49145533c804de19\transformed\common-18.5.0\AndroidManifest.xml:12:13-37
+126            android:initOrder="99" />
+126-->[com.google.mlkit:common:18.5.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\1a3be1768609825b49145533c804de19\transformed\common-18.5.0\AndroidManifest.xml:13:13-35
+127
+128        <activity
+128-->[com.google.android.gms:play-services-base:18.1.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\dd22b8be3e602ac429ca5d21b7317519\transformed\play-services-base-18.1.0\AndroidManifest.xml:20:9-22:45
+129            android:name="com.google.android.gms.common.api.GoogleApiActivity"
+129-->[com.google.android.gms:play-services-base:18.1.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\dd22b8be3e602ac429ca5d21b7317519\transformed\play-services-base-18.1.0\AndroidManifest.xml:20:19-85
+130            android:exported="false"
+130-->[com.google.android.gms:play-services-base:18.1.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\dd22b8be3e602ac429ca5d21b7317519\transformed\play-services-base-18.1.0\AndroidManifest.xml:22:19-43
+131            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+131-->[com.google.android.gms:play-services-base:18.1.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\dd22b8be3e602ac429ca5d21b7317519\transformed\play-services-base-18.1.0\AndroidManifest.xml:21:19-78
+132
+133        <meta-data
+133-->[com.google.android.gms:play-services-basement:18.1.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\eefb90a4221799b6fb4dadb1fb43c8b2\transformed\play-services-basement-18.1.0\AndroidManifest.xml:21:9-23:69
+134            android:name="com.google.android.gms.version"
+134-->[com.google.android.gms:play-services-basement:18.1.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\eefb90a4221799b6fb4dadb1fb43c8b2\transformed\play-services-basement-18.1.0\AndroidManifest.xml:22:13-58
+135            android:value="@integer/google_play_services_version" />
+135-->[com.google.android.gms:play-services-basement:18.1.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\eefb90a4221799b6fb4dadb1fb43c8b2\transformed\play-services-basement-18.1.0\AndroidManifest.xml:23:13-66
+136
+137        <receiver
+137-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:34:9-52:20
+138            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+138-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:35:13-76
+139            android:directBootAware="false"
+139-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:36:13-44
+140            android:enabled="true"
+140-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:37:13-35
+141            android:exported="true"
+141-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:38:13-36
+142            android:permission="android.permission.DUMP" >
+142-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:39:13-57
+143            <intent-filter>
+143-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:40:13-42:29
+144                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+144-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:41:17-91
+144-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:41:25-88
+145            </intent-filter>
+146            <intent-filter>
+146-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:43:13-45:29
+147                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+147-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:44:17-85
+147-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:44:25-82
+148            </intent-filter>
+149            <intent-filter>
+149-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:46:13-48:29
+150                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+150-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:47:17-88
+150-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:47:25-85
+151            </intent-filter>
+152            <intent-filter>
+152-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:49:13-51:29
+153                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+153-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:50:17-95
+153-->[androidx.profileinstaller:profileinstaller:1.4.0] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\102a824d9bb7da086a3260c11f02076f\transformed\profileinstaller-1.4.0\AndroidManifest.xml:50:25-92
+154            </intent-filter>
+155        </receiver>
+156
+157        <service
+157-->[com.google.android.datatransport:transport-backend-cct:2.3.3] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\cd1fbccfab67316f5b97d0150f40cb79\transformed\transport-backend-cct-2.3.3\AndroidManifest.xml:29:9-35:19
+158            android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery"
+158-->[com.google.android.datatransport:transport-backend-cct:2.3.3] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\cd1fbccfab67316f5b97d0150f40cb79\transformed\transport-backend-cct-2.3.3\AndroidManifest.xml:30:13-103
+159            android:exported="false" >
+159-->[com.google.android.datatransport:transport-backend-cct:2.3.3] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\cd1fbccfab67316f5b97d0150f40cb79\transformed\transport-backend-cct-2.3.3\AndroidManifest.xml:31:13-37
+160            <meta-data
+160-->[com.google.android.datatransport:transport-backend-cct:2.3.3] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\cd1fbccfab67316f5b97d0150f40cb79\transformed\transport-backend-cct-2.3.3\AndroidManifest.xml:32:13-34:39
+161                android:name="backend:com.google.android.datatransport.cct.CctBackendFactory"
+161-->[com.google.android.datatransport:transport-backend-cct:2.3.3] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\cd1fbccfab67316f5b97d0150f40cb79\transformed\transport-backend-cct-2.3.3\AndroidManifest.xml:33:17-94
+162                android:value="cct" />
+162-->[com.google.android.datatransport:transport-backend-cct:2.3.3] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\cd1fbccfab67316f5b97d0150f40cb79\transformed\transport-backend-cct-2.3.3\AndroidManifest.xml:34:17-36
+163        </service>
+164        <service
+164-->[com.google.android.datatransport:transport-runtime:2.2.6] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\4ed0701e4484778f3294a08f8d91d36c\transformed\transport-runtime-2.2.6\AndroidManifest.xml:26:9-30:19
+165            android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService"
+165-->[com.google.android.datatransport:transport-runtime:2.2.6] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\4ed0701e4484778f3294a08f8d91d36c\transformed\transport-runtime-2.2.6\AndroidManifest.xml:27:13-117
+166            android:exported="false"
+166-->[com.google.android.datatransport:transport-runtime:2.2.6] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\4ed0701e4484778f3294a08f8d91d36c\transformed\transport-runtime-2.2.6\AndroidManifest.xml:28:13-37
+167            android:permission="android.permission.BIND_JOB_SERVICE" >
+167-->[com.google.android.datatransport:transport-runtime:2.2.6] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\4ed0701e4484778f3294a08f8d91d36c\transformed\transport-runtime-2.2.6\AndroidManifest.xml:29:13-69
+168        </service>
+169
+170        <receiver
+170-->[com.google.android.datatransport:transport-runtime:2.2.6] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\4ed0701e4484778f3294a08f8d91d36c\transformed\transport-runtime-2.2.6\AndroidManifest.xml:32:9-34:40
+171            android:name="com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver"
+171-->[com.google.android.datatransport:transport-runtime:2.2.6] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\4ed0701e4484778f3294a08f8d91d36c\transformed\transport-runtime-2.2.6\AndroidManifest.xml:33:13-132
+172            android:exported="false" />
+172-->[com.google.android.datatransport:transport-runtime:2.2.6] C:\Users\gwynh\.gradle\caches\8.14.3\transforms\4ed0701e4484778f3294a08f8d91d36c\transformed\transport-runtime-2.2.6\AndroidManifest.xml:34:13-37
+173    </application>
+174
+175</manifest>

@@ -1,6 +1,8 @@
 import { getOperationsContributors } from './contributorRegistry';
 import { calculateReadiness } from './readinessEngine';
 import { buildPriorityQueue } from './priorityEngine';
+import { contributionsToOperationalFacts } from './contributionFactAdapter';
+import { runOperationalIntelligence } from './operationalIntelligenceEngine';
 
 export function runOperationsEngine(context = {}) {
   const contributions = getOperationsContributors().map((contributor) => {
@@ -26,12 +28,14 @@ export function runOperationsEngine(context = {}) {
     }
   });
 
+  const generatedAt = new Date().toISOString();
   const readiness = calculateReadiness(contributions);
   const priorities = buildPriorityQueue(contributions);
   const connected = contributions.filter((entry) => entry.connected && Number.isFinite(entry.readiness)).length;
+  const intelligence = runOperationalIntelligence(contributionsToOperationalFacts(contributions, generatedAt), context, { now: generatedAt });
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     readiness,
     priorities,
     contributions,
@@ -43,5 +47,6 @@ export function runOperationsEngine(context = {}) {
           ? 'Operating normally'
           : 'Awaiting connected data',
     connectedModules: connected,
+    intelligence,
   };
 }

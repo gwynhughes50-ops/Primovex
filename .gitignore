@@ -1,6 +1,0 @@
-
-# Generated Tauri mobile projects
-src-tauri/gen/
-
-# Local Android/Rust diagnostics
-arm64-build-log.txt

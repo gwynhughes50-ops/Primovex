@@ -20,10 +20,12 @@ export function PrimovexAIProvider({ children }) {
     setStatus(AI_STATES.SEARCHING);
 
     try {
-      const raw = await provider.ask({
+      const providerRequest = provider.ask({
         prompt: cleanPrompt,
         toolContext: { capabilities, role, userId: user?.uid || null, profile, conversation: messages },
       });
+      const timeout = new Promise((_, reject) => window.setTimeout(() => reject(new Error('Orb request timed out')), 8000));
+      const raw = await Promise.race([providerRequest, timeout]);
       setStatus(AI_STATES.REASONING);
       await new Promise((resolve) => window.setTimeout(resolve, 220));
       const response = assertProviderResponse(raw);

@@ -122,24 +122,24 @@ export default function MobileCompliance() {
   const config = getAssetTypeConfig(activeAsset?.assetType);
 
   return (
-    <div className="min-h-screen bg-slate-950 px-4 pb-28 pt-5 text-white">
+    <div className="pvx-mobile-page pvx-compliance-page">
       <div className="mx-auto max-w-md">
-        <div className="rounded-[2rem] border border-teal-400/20 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-5 shadow-2xl shadow-teal-950/30">
+        <div className="pvx-compliance-hero">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.25em] text-teal-300">MedTrak Mobile</p>
-              <h1 className="mt-2 text-2xl font-bold">Compliance QR</h1>
-              <p className="mt-1 text-sm text-slate-400">Scan the point, tap once, and MedTrak records the rest.</p>
+              <p className="text-xs font-bold uppercase tracking-[0.25em] text-[var(--medtrak-accent)]">Primovex Mobile</p>
+              <h1 className="mt-2 text-2xl font-bold">Compliance</h1>
+              <p className="mt-1 text-sm text-[var(--medtrak-muted)]">Scan the point, tap once, and Primovex records the rest.</p>
             </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-400/10 text-teal-100">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,var(--medtrak-accent)_12%,var(--medtrak-panel))] text-[var(--medtrak-accent)]">
               <QrCode className="h-6 w-6" />
             </div>
           </div>
 
           <div className="mt-5 grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-2xl bg-slate-900/70 p-3">
+            <div className="rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-3">
               <div className="text-xl font-bold">{assets.length}</div>
-              <div className="text-[10px] text-slate-400">Assets</div>
+              <div className="text-[10px] text-[var(--medtrak-muted)]">Assets</div>
             </div>
             <div className="rounded-2xl bg-amber-400/10 p-3 text-amber-100">
               <div className="text-xl font-bold">{dueAssets.length}</div>
@@ -156,7 +156,7 @@ export default function MobileCompliance() {
           <button
             type="button"
             onClick={() => document.querySelector("[data-compliance-scan-button]")?.click()}
-            className="rounded-[1.5rem] bg-teal-400 px-4 py-5 text-left font-bold text-slate-950 shadow-lg shadow-teal-500/20 active:scale-[0.99]"
+            className="rounded-[1.5rem] bg-[var(--medtrak-accent)] px-4 py-5 text-left font-bold text-white shadow-lg active:scale-[0.99]"
           >
             <QrCode className="mb-3 h-7 w-7" />
             Scan QR
@@ -164,26 +164,26 @@ export default function MobileCompliance() {
           <button
             type="button"
             onClick={startNfcRead}
-            className="rounded-[1.5rem] border border-violet-400/20 bg-violet-400/10 px-4 py-5 text-left font-bold text-violet-100 active:scale-[0.99]"
+            className="rounded-[1.5rem] border border-[color-mix(in_srgb,var(--medtrak-accent)_28%,var(--medtrak-border))] bg-[color-mix(in_srgb,var(--medtrak-accent)_8%,var(--medtrak-panel))] px-4 py-5 text-left font-bold text-[var(--medtrak-accent)] active:scale-[0.99]"
           >
             <SmartphoneNfc className="mb-3 h-7 w-7" />
             {nfcActive ? "Ready…" : "Tap NFC"}
           </button>
         </div>
 
-        <div className="mt-4 rounded-[1.5rem] border border-white/10 bg-slate-900/70 p-4">
-          <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">Manual Asset ID</label>
+        <div className="mt-4 rounded-[1.5rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4">
+          <label className="text-xs font-semibold uppercase tracking-wide text-[var(--medtrak-muted)]">Manual Asset ID</label>
           <div className="mt-2 flex gap-2">
             <input
               value={manualId}
               onChange={(e) => setManualId(e.target.value)}
               placeholder="FP-007"
-              className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-slate-950 px-4 py-3 text-white outline-none"
+              className="min-w-0 flex-1 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-4 py-3 text-[var(--medtrak-text)] outline-none"
             />
             <button
               type="button"
               onClick={() => manualId && handleScan(manualId, "manual")}
-              className="rounded-2xl bg-slate-800 px-4 py-3 text-slate-100"
+              className="rounded-2xl bg-[color-mix(in_srgb,var(--medtrak-accent)_10%,var(--medtrak-panel))] px-4 py-3 text-[var(--medtrak-accent)]"
             >
               <Keyboard className="h-5 w-5" />
             </button>
@@ -194,13 +194,13 @@ export default function MobileCompliance() {
           <div className="fixed inset-0 z-[80] flex items-end bg-black/60 backdrop-blur-sm">
             <div className="w-full rounded-t-[2rem] border border-teal-400/20 bg-slate-950 p-5 shadow-2xl">
               <div className="mx-auto max-w-md">
-                <p className="text-xs font-bold uppercase tracking-wide text-teal-300">Asset identified</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-[var(--medtrak-accent)]">Asset identified</p>
                 <h2 className="mt-1 text-2xl font-bold text-white">{assetLabel(activeAsset)}</h2>
-                <p className="mt-1 text-sm text-slate-400">{activeAsset.location || "No location"} • {config.label}</p>
+                <p className="mt-1 text-sm text-[var(--medtrak-muted)]">{activeAsset.location || "No location"} • {config.label}</p>
 
                 {isTemperature ? (
                   <div className="mt-5">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">Temperature °C</label>
+                    <label className="text-xs font-semibold uppercase tracking-wide text-[var(--medtrak-muted)]">Temperature °C</label>
                     <div className="mt-2 flex items-center gap-3 rounded-[1.5rem] border border-white/10 bg-slate-900 px-4 py-3">
                       <Thermometer className="h-6 w-6 text-teal-200" />
                       <input
@@ -284,21 +284,21 @@ export default function MobileCompliance() {
           </div>
         )}
 
-        <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-slate-900/60 p-4">
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white"><ShieldCheck className="h-4 w-4 text-teal-200" /> Due checks</div>
+        <div className="mt-5 rounded-[1.5rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4">
+          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--medtrak-text)]"><ShieldCheck className="h-4 w-4 text-teal-200" /> Due checks</div>
           <div className="space-y-2">
             {dueAssets.slice(0, 6).map((asset) => (
               <button
                 key={asset.id}
                 type="button"
                 onClick={() => setActiveAsset({ ...asset, identificationMethod: "manual_due_list" })}
-                className="w-full rounded-2xl border border-white/10 bg-slate-950/50 p-3 text-left"
+                className="w-full rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3 text-left"
               >
-                <div className="font-semibold text-white">{assetLabel(asset)}</div>
-                <div className="text-xs text-slate-400">{asset.location || "No location"}</div>
+                <div className="font-semibold text-[var(--medtrak-text)]">{assetLabel(asset)}</div>
+                <div className="text-xs text-[var(--medtrak-muted)]">{asset.location || "No location"}</div>
               </button>
             ))}
-            {dueAssets.length === 0 && <p className="text-sm text-slate-400">No due checks. Compliance is calm.</p>}
+            {dueAssets.length === 0 && <p className="text-sm text-[var(--medtrak-muted)]">No due checks. Compliance is calm.</p>}
           </div>
         </div>
       </div>
