@@ -13,6 +13,7 @@ import {
 import { developerAccessAllowed } from '@/developer/developerAccess';
 import { getSpaceRegistryDiagnostics } from '@/modules/sense/services/sharedSpaceRegistry';
 import { getRouteAuditRows } from '@/config/routeManifest';
+import OrbLearningReview from '@/orb/OrbLearningReview';
 
 function MetricCard({ icon: Icon, label, value, detail }) {
   return <div className="rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4 shadow-sm">
@@ -93,5 +94,6 @@ export default function DeveloperCentre() {
         <div className="rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-5"><div className="flex items-center gap-2"><Smartphone className="h-5 w-5 text-[var(--medtrak-accent)]"/><h2 className="font-bold">Mobile testing</h2></div><p className="mt-3 text-sm text-[var(--medtrak-muted)]">Launch the built-in mobile preview to mount the real Primovex mobile shell without rebuilding Android.</p></div>
       </aside>
     </section>
+    <OrbLearningReview />
   </div>;
 }

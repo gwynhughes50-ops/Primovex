@@ -4,6 +4,7 @@ import { getFacilitiesSnapshot } from '@/modules/facilities/services/facilitiesS
 import { buildOperationsTimeline, changesSince } from '@/operations/engine/operationsTimeline';
 import { getOperationsSummary } from '@/operations/tools/operationsSummaryTool';
 import { registerTool } from './toolRegistry';
+import { getLatestCheck, listAnaphylaxisBoxes, listEmergencyAssets } from '@/lib/checklistsFirestore';
 
 const nowLabel = () => new Date().toLocaleString('en-GB');
 const source = (title, detail, type = 'module') => ({ title, detail, type });
@@ -24,6 +25,29 @@ function isExpiringWithin(value, days = 60) {
 }
 
 export function registerApprovedReadOnlyTools() {
+  const registerClinicalReadinessTool = ({ id, label, collectionName, listEntities, route }) => registerTool({
+    id, label, requiredCapability: 'inventory.read',
+    async execute({ mode = 'status' } = {}) {
+      const entities = await listEntities();
+      const checks = await Promise.allSettled(entities.map((entity) => getLatestCheck(collectionName, entity.id)));
+      const rows = entities.map((entity, index) => {
+        const check = checks[index]?.status === 'fulfilled' ? checks[index].value : null;
+        const readiness = check?.readiness || {};
+        return { id: entity.id, name: entity.name || entity.id, location: entity.location || null, score: Number.isFinite(readiness.score) ? readiness.score : null, status: readiness.status || (check ? 'recorded' : 'unknown'), missing: readiness.missing || 0, expired: readiness.expired || 0, expiringSoon: readiness.expiringSoon || 0, checkedAt: check?.createdAt?.toDate?.()?.toISOString?.() || null };
+      });
+      const action = rows.filter((row) => row.score == null || row.status === 'critical' || row.missing || row.expired);
+      const summary = !rows.length
+        ? `No ${label.toLowerCase()} are configured.`
+        : action.length
+          ? `${action.length} of ${rows.length} ${label.toLowerCase()} need verification or action: ${action.slice(0, 6).map((row) => `${row.name}${row.score == null ? ' has no verified readiness check' : ` is ${row.score}% ready`}`).join('; ')}.`
+          : `All ${rows.length} ${label.toLowerCase()} have recorded checks with no missing or expired items.`;
+      return { data: rows, summary: mode === 'reconcile' ? `${summary} Open Inventory to perform the governed reconciliation.` : summary, confidence: rows.length ? 0.96 : 0.7, sources: [source(label, `${rows.length} configured asset${rows.length === 1 ? '' : 's'} and latest checks read ${nowLabel()}`)], actions: [{ label: mode === 'reconcile' ? 'Start reconciliation' : `Open ${label}`, route }], warnings: checks.some((result) => result.status === 'rejected') ? ['Some latest checks could not be read'] : [] };
+    },
+  });
+
+  registerClinicalReadinessTool({ id: 'emergency.readiness', label: 'Emergency drugs and equipment', collectionName: 'emergency_assets', listEntities: listEmergencyAssets, route: '/inventory?tab=emergency' });
+  registerClinicalReadinessTool({ id: 'anaphylaxis.readiness', label: 'Anaphylaxis boxes', collectionName: 'anaphylaxis_boxes', listEntities: listAnaphylaxisBoxes, route: '/inventory?tab=anaphylaxis' });
+
   registerTool({
     id: 'operations.summary', label: 'Operations summary', requiredCapability: 'operations.read',
     async execute() {

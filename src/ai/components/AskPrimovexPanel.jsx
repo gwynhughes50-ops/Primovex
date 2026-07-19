@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Bot, ExternalLink, Mic, MicOff, RotateCcw, ShieldCheck, Sparkles, X } from 'lucide-react';
+import { ArrowRight, Bot, CheckCircle2, ExternalLink, Meh, Mic, MicOff, RotateCcw, ShieldCheck, Sparkles, TriangleAlert, X, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import usePrimovexAI from '../hooks/usePrimovexAI';
 import { AI_STATES } from '../types/responseContract';
@@ -35,9 +35,32 @@ function getSpeechRecognition() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
+const FEEDBACK_OPTIONS = [
+  { id: 'exact', label: 'Perfect', icon: CheckCircle2 },
+  { id: 'nearly', label: 'Almost', icon: Meh },
+  { id: 'corrected', label: 'Needed correction', icon: TriangleAlert },
+  { id: 'wrong', label: 'Wrong', icon: XCircle },
+];
+
+const CORRECTION_REASONS = ['Wrong intent', 'Wrong item', 'Wrong space', 'Missed information', 'Too much detail', 'Not enough detail'];
+
+function MessageFeedback({ message, onRecord }) {
+  const [pendingOutcome, setPendingOutcome] = useState(null);
+  if (message.feedback) return <p className="primovex-ai-faint mt-2 text-xs">Feedback recorded: {message.feedback.outcome.replace('-', ' ')}</p>;
+  const choose = (outcome) => {
+    if (outcome === 'corrected' || outcome === 'wrong') setPendingOutcome(outcome);
+    else onRecord(message.id, outcome);
+  };
+  return <div className="mt-2 rounded-xl border border-[var(--medtrak-border)] p-2">
+    <p className="primovex-ai-faint mb-2 text-xs font-semibold">Did Orb understand and help?</p>
+    <div className="flex flex-wrap gap-1.5">{FEEDBACK_OPTIONS.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => choose(id)} className="inline-flex items-center gap-1 rounded-lg border border-[var(--medtrak-border)] px-2 py-1 text-[11px]"><Icon className="h-3 w-3" />{label}</button>)}</div>
+    {pendingOutcome && <div className="mt-2"><p className="primovex-ai-faint mb-1 text-[11px]">What needed changing?</p><div className="flex flex-wrap gap-1">{CORRECTION_REASONS.map((reason) => <button key={reason} type="button" onClick={() => onRecord(message.id, pendingOutcome, reason)} className="rounded-lg bg-[var(--medtrak-accent)]/10 px-2 py-1 text-[11px] text-[var(--medtrak-accent)]">{reason}</button>)}</div></div>}
+  </div>;
+}
+
 export default function AskPrimovexPanel({ variant = 'desktop' }) {
   const navigate = useNavigate();
-  const { isOpen, close, status, messages, ask, clearConversation } = usePrimovexAI();
+  const { isOpen, close, status, messages, ask, clearConversation, resolveClarification, recordFeedback } = usePrimovexAI();
   const [prompt, setPrompt] = useState('');
   const [voiceState, setVoiceState] = useState(VOICE_STATES.SLEEPING);
   const [voiceSupported, setVoiceSupported] = useState(true);
@@ -285,6 +308,14 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
                     ))}
                   </div>
                 )}
+                {message.clarification?.choices?.length > 0 && !message.clarification.resolvedIntent && (
+                  <div className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
+                    <p className="text-xs font-semibold">Choose the safe action you expected. Orb will retry now and submit the phrase for manager review.</p>
+                    <div className="mt-2 grid gap-2">{message.clarification.choices.map((choice) => <button key={choice.id} type="button" onClick={() => resolveClarification(message.id, choice.id)} className="rounded-lg border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2 text-left text-xs"><strong className="block">{choice.label}</strong><span className="primovex-ai-muted">{choice.description}</span></button>)}</div>
+                  </div>
+                )}
+                {message.clarification?.resolvedIntent && <p className="mt-2 text-xs text-emerald-500">Learning suggestion recorded for review. Orb retried the original request.</p>}
+                {message.role === 'assistant' && !message.error && message.intent !== 'general.clarification-required' && <MessageFeedback message={message} onRecord={recordFeedback} />}
               </div>
             ))}
             {busy && <div className="primovex-ai-assistant-message primovex-ai-muted mr-12 rounded-2xl px-4 py-3 text-sm">{STATUS_LABELS[status]}…</div>}

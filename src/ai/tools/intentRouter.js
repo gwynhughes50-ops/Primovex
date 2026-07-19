@@ -5,7 +5,9 @@ import {
   includesAny,
   isFollowUp,
   normalisePracticeLanguage,
+  phraseSimilarity,
 } from './languageEngine';
+import { CLINICAL_INTENTS, ORB_CLARIFY_THRESHOLD, ORB_INTENT_THRESHOLD } from '@/orb/clinicalIntentCatalog';
 
 const INVENTORY_WORDS = ['stock', 'inventory', 'supplies', 'products', 'consumables', 'items'];
 const LOW_WORDS = ['low', 'below minimum', 'minimum level', 'need ordering', 'needs ordering', 'reorder', 'running low', 'short of', 'out of stock', 'order next'];
@@ -29,6 +31,14 @@ export function routeApprovedTool(prompt, options = {}) {
   const context = getConversationContext(options.conversation);
   const followUp = routeFollowUp(text, context);
   if (followUp) return { ...followUp, language: { normalised: text, followUp: true } };
+
+  const clinicalCandidates = CLINICAL_INTENTS
+    .map((intent) => ({ intent, score: Math.max(...intent.phrases.map((phrase) => phraseSimilarity(text, phrase))) }))
+    .sort((a, b) => b.score - a.score);
+  const clinical = clinicalCandidates[0];
+  if (clinical?.score >= ORB_INTENT_THRESHOLD) {
+    return { toolId: clinical.intent.id, input: { mode: /reconcil|check/.test(text) ? 'reconcile' : 'status' }, language: { normalised: text, confidence: clinical.score, fuzzy: clinical.score < 0.96, candidates: clinicalCandidates.slice(0, 3).map(({ intent, score }) => ({ id: intent.id, score })) } };
+  }
 
   if (includesAny(text, ['what changed', 'since yesterday', 'what happened', 'operations timeline', 'activity timeline', 'what has happened'])) {
     return { toolId: 'operations.timeline', input: { sinceYesterday: true }, language: { normalised: text } };
@@ -85,5 +95,7 @@ export function routeApprovedTool(prompt, options = {}) {
     return { toolId: 'inventory.search', input: { query }, language: { normalised: text } };
   }
 
-  return null;
+  return clinical?.score >= ORB_CLARIFY_THRESHOLD
+    ? { toolId: null, input: {}, language: { normalised: text, confidence: clinical.score, needsClarification: true, candidates: clinicalCandidates.slice(0, 3).map(({ intent, score }) => ({ id: intent.id, score })) } }
+    : null;
 }

@@ -1,7 +1,8 @@
 import { createContext, useCallback, useMemo, useState } from 'react';
-import { getPrimovexAIProvider } from '../providers/providerFactory';
+import { getOrbEngine } from '@/orb';
 import { AI_STATES, assertProviderResponse, createMessage } from '../types/responseContract';
 import { useAuth } from '@/contexts/AuthContext';
+import { orbIntentLearningStore } from '@/orb/IntentLearningStore';
 
 export const PrimovexAIContext = createContext(null);
 
@@ -10,9 +11,9 @@ export function PrimovexAIProvider({ children }) {
   const [isOpen, setIsOpen] = useState(false);
   const [status, setStatus] = useState(AI_STATES.IDLE);
   const [messages, setMessages] = useState([]);
-  const provider = useMemo(() => getPrimovexAIProvider('mock'), []);
+  const orb = useMemo(() => getOrbEngine(), []);
 
-  const ask = useCallback(async (prompt) => {
+  const ask = useCallback(async (prompt, options = {}) => {
     const cleanPrompt = String(prompt || '').trim();
     if (!cleanPrompt || status === AI_STATES.SEARCHING || status === AI_STATES.REASONING) return;
 
@@ -20,9 +21,11 @@ export function PrimovexAIProvider({ children }) {
     setStatus(AI_STATES.SEARCHING);
 
     try {
-      const providerRequest = provider.ask({
-        prompt: cleanPrompt,
-        toolContext: { capabilities, role, userId: user?.uid || null, profile, conversation: messages },
+      const providerRequest = orb.ask({
+        input: cleanPrompt,
+        inputType: 'text',
+        context: { capabilities, role, userId: user?.uid || null, profile, forcedIntent: options.forcedIntent || null },
+        conversation: messages,
       });
       const timeout = new Promise((_, reject) => window.setTimeout(() => reject(new Error('Orb request timed out')), 8000));
       const raw = await Promise.race([providerRequest, timeout]);
@@ -38,6 +41,12 @@ export function PrimovexAIProvider({ children }) {
           sources: response.sources,
           actions: response.actions,
           intent: response.intent,
+          warnings: response.warnings,
+          modulesUsed: response.modulesUsed,
+          auditId: response.auditId,
+          confidenceBand: response.confidenceBand,
+          clarification: response.clarification,
+          request: cleanPrompt,
         }),
       ]);
       setStatus(AI_STATES.RESPONDING);
@@ -50,7 +59,23 @@ export function PrimovexAIProvider({ children }) {
       ]);
       setStatus(AI_STATES.ERROR);
     }
-  }, [capabilities, messages, profile, provider, role, status, user?.uid]);
+  }, [capabilities, messages, orb, profile, role, status, user?.uid]);
+
+  const resolveClarification = useCallback(async (messageId, selectedIntent) => {
+    const message = messages.find((item) => item.id === messageId);
+    const clarification = message?.clarification;
+    if (!clarification?.originalRequest || !selectedIntent || !clarification.choices?.some((choice) => choice.id === selectedIntent)) return;
+    const suggestion = orbIntentLearningStore.create({ phrase: clarification.originalRequest, selectedIntent, userId: user?.uid || null, role, siteId: profile?.siteId || profile?.practiceId || 'primary', originalConfidence: clarification.originalConfidence, candidates: clarification.candidates });
+    orb.audit.writeLearning({ suggestion, context: { userId: user?.uid || null, role, siteId: profile?.siteId || profile?.practiceId || 'primary' } });
+    setMessages((current) => current.map((item) => item.id === messageId ? { ...item, clarification: { ...item.clarification, resolvedIntent: selectedIntent, suggestionId: suggestion.id } } : item));
+    await ask(clarification.originalRequest, { forcedIntent: selectedIntent });
+  }, [ask, messages, orb, profile?.practiceId, profile?.siteId, role, user?.uid]);
+
+  const recordFeedback = useCallback((messageId, outcome, reason = null, note = null) => {
+    const record = orb.feedback.record({ interactionId: messageId, outcome, reason, note, userId: user?.uid || null });
+    setMessages((current) => current.map((item) => item.id === messageId ? { ...item, feedback: record } : item));
+    return record;
+  }, [orb, user?.uid]);
 
   const clearConversation = useCallback(() => {
     setMessages([]);
@@ -65,8 +90,10 @@ export function PrimovexAIProvider({ children }) {
     status,
     messages,
     ask,
+    resolveClarification,
+    recordFeedback,
     clearConversation,
-  }), [ask, clearConversation, isOpen, messages, status]);
+  }), [ask, clearConversation, isOpen, messages, recordFeedback, resolveClarification, status]);
 
   return <PrimovexAIContext.Provider value={value}>{children}</PrimovexAIContext.Provider>;
 }

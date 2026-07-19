@@ -6,8 +6,8 @@ let registered = false;
 
 export async function runApprovedToolForPrompt(prompt, context = {}) {
   if (!registered) { registerApprovedReadOnlyTools(); registered = true; }
-  const route = routeApprovedTool(prompt, { conversation: context.conversation });
-  if (!route) return null;
+  const route = context.forcedRoute || routeApprovedTool(prompt, { conversation: context.conversation });
+  if (!route?.toolId) return null;
   try {
     const result = await executeApprovedTool(route.toolId, route.input, context);
     return { ...result, intent: route.toolId };

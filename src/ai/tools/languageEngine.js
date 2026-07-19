@@ -18,6 +18,10 @@ const PHRASE_REPLACEMENTS = [
   [/\bmo\b/g, ' minor ops '],
   [/\baed\b/g, ' defibrillator '],
   [/\bdefib\b/g, ' defibrillator '],
+  [/\brecess\s+(?:trolley|box|cart)\b/g, ' resus trolley '],
+  [/\bresuscitation\s+(?:trolley|box|cart)\b/g, ' resus trolley '],
+  [/\bcrash\s+(?:cart|box)\b/g, ' crash trolley '],
+  [/\bemergency\s+(?:medications|medicines)\b/g, ' emergency drugs '],
   [/\becg\b/g, ' ecg '],
   [/\bfridges?\b/g, ' fridge '],
   [/\bcleaners?\b/g, ' cleaning '],
@@ -78,4 +82,30 @@ export function getConversationContext(conversation = []) {
 export function isFollowUp(text) {
   return /^(show|list|which|what about|and|those|them|these|more|details|yes|please show|go on)\b/.test(text)
     || /\b(show|list) (?:me )?(?:those|them|the items|the rooms|the results)\b/.test(text);
+}
+
+export function levenshteinDistance(left = '', right = '') {
+  const a = String(left); const b = String(right);
+  const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let previous = row[0]; row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const current = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (a[i - 1] === b[j - 1] ? 0 : 1));
+      previous = current;
+    }
+  }
+  return row[b.length];
+}
+
+export function phraseSimilarity(left, right) {
+  const a = normalisePracticeLanguage(left); const b = normalisePracticeLanguage(right);
+  if (!a || !b) return 0;
+  if (a.includes(b) || b.includes(a)) return Math.min(1, 0.88 + (Math.min(a.length, b.length) / Math.max(a.length, b.length)) * 0.12);
+  const edit = 1 - (levenshteinDistance(a, b) / Math.max(a.length, b.length));
+  const aTokens = new Set(a.split(' ').filter((token) => !STOP_WORDS.has(token)));
+  const bTokens = new Set(b.split(' ').filter((token) => !STOP_WORDS.has(token)));
+  const overlap = [...aTokens].filter((token) => bTokens.has(token)).length;
+  const union = new Set([...aTokens, ...bTokens]).size || 1;
+  return Math.max(0, Math.min(1, edit * 0.55 + (overlap / union) * 0.45));
 }

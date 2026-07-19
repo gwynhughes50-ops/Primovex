@@ -33,10 +33,12 @@ function wait(ms) {
 
 export const mockPrimovexProvider = {
   id: 'mock',
-  async ask({ prompt, toolContext = {} }) {
+  async ask({ prompt, toolContext = {}, orbIntent = null }) {
     await wait(350);
 
-    const approved = await runApprovedToolForPrompt(prompt, toolContext);
+    const approved = orbIntent?.toolId
+      ? await runApprovedToolForPrompt(prompt, { ...toolContext, forcedRoute: { toolId: orbIntent.toolId, input: orbIntent.input || {} } })
+      : await runApprovedToolForPrompt(prompt, toolContext);
     if (approved) {
       return {
         answer: approved.summary,
