@@ -82,11 +82,23 @@ function normalizeActor(actor) {
   const displayName =
     actor?.displayName ?? actor?.user?.displayName ?? actor?.name ?? null;
   const email = actor?.email ?? actor?.user?.email ?? null;
+  const role = actor?.role ?? actor?.user?.role ?? null;
 
   return {
     uid: uid || null,
     displayName: displayName || null,
     email: email || null,
+    role: role || null,
+  };
+}
+
+function normalizeMovementContext(movement = {}) {
+  return {
+    source: cleanString(movement?.source) || "manual",
+    barcode: cleanString(movement?.barcode) || null,
+    space_id: cleanString(movement?.spaceId) || null,
+    space_name: cleanString(movement?.spaceName) || null,
+    sense_session_id: cleanString(movement?.senseSessionId) || null,
   };
 }
 
@@ -414,6 +426,7 @@ export async function applyStockMovement(itemId, movement) {
     const reason = movement?.reason || null;
     const notes = movement?.notes || null;
     const actor = normalizeActor(movement?.actor);
+    const context = normalizeMovementContext(movement);
     const receiptDetails = type === "receive"
       ? {
           brand: cleanString(movement?.brand),
@@ -438,6 +451,7 @@ export async function applyStockMovement(itemId, movement) {
         reason,
         notes,
         actor,
+        context,
       },
     });
 
@@ -455,6 +469,11 @@ export async function applyStockMovement(itemId, movement) {
       reason,
       notes,
       actor,
+      context,
+      source: context.source,
+      barcode: context.barcode,
+      space_id: context.space_id,
+      space_name: context.space_name,
       receipt_details: receiptDetails,
       created_at: serverTimestamp(),
     });

@@ -10,6 +10,7 @@ target/
 # Android/Gradle generated output
 src-tauri/gen/android/.gradle/
 src-tauri/gen/android/app/build/
+src-tauri/gen/android/build/
 src-tauri/gen/android/buildSrc/.gradle/
 src-tauri/gen/android/buildSrc/build/
 src-tauri/gen/android/app/src/main/jniLibs/
@@ -33,3 +34,6 @@ src-tauri/gen/android/app/*.jks
 *.log
 *.apk
 *.aab
+
+# Local verification output
+work/

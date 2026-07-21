@@ -17,10 +17,11 @@ import MobileAIActionSheet from "./MobileAIActionSheet";
 import MobileSenseSpaces from "./MobileSenseSpaces";
 import RoleAdaptiveMobileHome from "./RoleAdaptiveMobileHome";
 import MobileClinicalAssetReconciliation from "./MobileClinicalAssetReconciliation";
+import MobileRapidStockAction from "./MobileRapidStockAction";
 import { useAuth } from "@/contexts/AuthContext";
 import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry";
 import { getOpenQuickNotes, subscribeQuickNotes } from "@/services/quickNotesService";
-import { Barcode, BellRing, CheckCircle2, Eye, MapPin, Minus, Package, Plus, Sparkles, X } from "lucide-react";
+import { Camera, BellRing, Eye, Sparkles } from "lucide-react";
 import ActiveSenseBanner from "@/modules/sense/components/ActiveSenseBanner";
 import { useSenseSession } from "@/contexts/SenseSessionContext";
 import MobileDeveloperIssueRecorder from "@/developer/MobileDeveloperIssueRecorder";
@@ -42,6 +43,9 @@ export default function MobileLayout() {
   const [unknownBarcode, setUnknownBarcode] = useState("");
   const [useQty, setUseQty] = useState(1);
   const [useBusy, setUseBusy] = useState(false);
+  const [useError, setUseError] = useState("");
+  const [movementOutcome, setMovementOutcome] = useState(null);
+  const [showStockMore, setShowStockMore] = useState(false);
   const [activeTab, setActiveTab] = useState("home");
   const [escalationSeed, setEscalationSeed] = useState(null);
   const [showNfcScanner, setShowNfcScanner] = useState(false);
@@ -64,7 +68,7 @@ export default function MobileLayout() {
   const navigate = useNavigate();
   const { open: openPrimovexAI, ask: askPrimovexAI } = usePrimovexAI();
   const { activeSenseSession, activate } = useSenseSession();
-  const { role, user } = useAuth();
+  const { role, user, displayName, can } = useAuth();
   const routedChecklistTab = location.pathname === '/inventory' ? new URLSearchParams(location.search).get('tab') : null;
   const showRoutedChecklist = routedChecklistTab === 'emergency' || routedChecklistTab === 'anaphylaxis';
 
@@ -166,6 +170,9 @@ export default function MobileLayout() {
     try {
       const item = await findStockItemByBarcode(scannedCode);
       setUseQty(1);
+      setUseError("");
+      setMovementOutcome(null);
+      setShowStockMore(false);
       setScannedItem({ ...item, barcode: scannedCode });
     } catch {
       setUnknownBarcode(scannedCode);
@@ -173,36 +180,52 @@ export default function MobileLayout() {
     }
   };
 
-  const handleUseStock = async () => {
+  const handleUseStock = async (requestedQty = useQty) => {
     if (!scannedItem) return;
 
-    const qty = Number(useQty);
+    const qty = Number(requestedQty);
 
     if (!Number.isFinite(qty) || qty <= 0) {
-      alert("Please enter a valid quantity");
+      setUseError("Enter a valid quantity.");
       return;
     }
 
     if (qty > Number(scannedItem.current_stock || 0)) {
-      alert("You cannot use more stock than is currently available");
+      setUseError("There is not enough stock available for that quantity.");
+      return;
+    }
+
+    if (!can("inventory.write")) {
+      setUseError("Your role cannot record stock use.");
       return;
     }
 
     try {
       setUseBusy(true);
+      setUseError("");
 
-      await applyStockMovement(scannedItem.id, {
+      const result = await applyStockMovement(scannedItem.id, {
         type: "use",
         qty,
-        actor: null,
+        reason: "mobile_barcode_use",
+        source: "mobile-barcode",
+        barcode: scannedItem.barcode || "",
+        spaceId: activeSenseSession?.senseObjectId || "",
+        spaceName: activeSenseSession?.senseObjectName || "",
+        senseSessionId: activeSenseSession?.id || "",
+        actor: { uid: user?.uid, displayName, email: user?.email, role },
       });
 
-      alert(`Used ${qty} item(s)`);
-      setScannedItem(null);
+      setScannedItem((current) => ({ ...current, current_stock: result.after }));
+      setMovementOutcome(result);
       setUseQty(1);
+      window.setTimeout(() => {
+        setScannedItem(null);
+        setMovementOutcome(null);
+      }, 850);
     } catch (err) {
       console.error(err);
-      alert("Failed to update stock");
+      setUseError(err?.message || "Stock use could not be recorded. Nothing was changed.");
     } finally {
       setUseBusy(false);
     }
@@ -224,7 +247,13 @@ export default function MobileLayout() {
       await applyStockMovement(scannedItem.id, {
         type: "receive",
         qty,
-        actor: null,
+        reason: "mobile_receive",
+        source: "mobile-barcode",
+        barcode: scannedItem.barcode || "",
+        spaceId: activeSenseSession?.senseObjectId || "",
+        spaceName: activeSenseSession?.senseObjectName || "",
+        senseSessionId: activeSenseSession?.id || "",
+        actor: { uid: user?.uid, displayName, email: user?.email, role },
       });
 
       alert(`Received ${qty} item(s)`);
@@ -369,71 +398,45 @@ export default function MobileLayout() {
         </div>
       )}
 
-      {scannedItem && (
-        <div className="fixed inset-x-0 top-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-[85] flex items-end bg-black/45">
-          <section className="max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-full overflow-y-auto rounded-t-[2rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-5 pb-5 pt-3 text-[var(--medtrak-text)] shadow-2xl">
-            <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-[var(--medtrak-border)]" />
-            <header className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.14em] text-[var(--medtrak-accent)]">
-                  <CheckCircle2 className="h-5 w-5 text-[var(--medtrak-success,#12b76a)]" /> Item found
-                </p>
-                <h2 className="mt-2 text-[clamp(1.75rem,7vw,2.25rem)] font-bold leading-tight text-[var(--medtrak-text)]">
-                  {scannedItem.name || "Unnamed item"}
-                </h2>
-                {productSubtitle(scannedItem) && <p className="mt-1 text-sm font-semibold text-[var(--medtrak-accent)]">{productSubtitle(scannedItem)}</p>}
-              </div>
-              <button type="button" onClick={() => setScannedItem(null)} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)]" aria-label="Close item actions"><X className="h-5 w-5" /></button>
-            </header>
+      <MobileRapidStockAction
+        item={scannedItem}
+        activeSpace={activeSenseSession ? { id: activeSenseSession.senseObjectId, name: activeSenseSession.senseObjectName } : null}
+        canWrite={can("inventory.write")}
+        busy={useBusy}
+        error={useError}
+        outcome={movementOutcome}
+        onUse={handleUseStock}
+        onClose={() => { setScannedItem(null); setUseError(""); setMovementOutcome(null); }}
+        onMore={() => setShowStockMore(true)}
+      />
 
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-[color-mix(in_srgb,var(--medtrak-success,#12b76a)_22%,var(--medtrak-border))] bg-[color-mix(in_srgb,var(--medtrak-success,#12b76a)_7%,var(--medtrak-panel))] p-3">
-                <div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-[color-mix(in_srgb,var(--medtrak-success,#12b76a)_12%,var(--medtrak-panel))] text-[var(--medtrak-success,#12b76a)]"><Package className="h-5 w-5" /></span><div><p className="text-xs font-semibold text-[var(--medtrak-muted)]">Stock</p><p className="text-2xl font-bold text-[var(--medtrak-success,#12b76a)]">{scannedItem.current_stock ?? 0}</p><p className="text-xs text-[var(--medtrak-muted)]">in stock</p></div></div>
-              </div>
-              <div className="rounded-2xl border border-[color-mix(in_srgb,var(--medtrak-accent)_22%,var(--medtrak-border))] bg-[color-mix(in_srgb,var(--medtrak-accent)_7%,var(--medtrak-panel))] p-3">
-                <div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-2xl bg-[color-mix(in_srgb,var(--medtrak-accent)_12%,var(--medtrak-panel))] text-[var(--medtrak-accent)]"><MapPin className="h-5 w-5" /></span><div><p className="text-xs font-semibold text-[var(--medtrak-muted)]">Location</p><p className="text-xl font-bold text-[var(--medtrak-accent)]">{scannedItem.location || "Not set"}</p></div></div>
-              </div>
-            </div>
-
-            {Number(scannedItem.current_stock || 0) <= Number(scannedItem.min_stock || 0) && (
-              <div className="mt-3 rounded-xl border border-[color-mix(in_srgb,var(--medtrak-danger,#b42318)_30%,transparent)] bg-[color-mix(in_srgb,var(--medtrak-danger,#b42318)_8%,var(--medtrak-panel))] px-3 py-2 text-sm font-semibold text-[var(--medtrak-danger,#b42318)]">Low stock warning{scannedItem.min_stock !== undefined ? ` â€¢ Minimum ${scannedItem.min_stock}` : ""}</div>
-            )}
-
-            {scannedItem.barcode && <div className="mt-3 flex items-center gap-3 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-4 py-3"><Barcode className="h-5 w-5 text-[var(--medtrak-muted)]" /><div><p className="text-xs font-semibold text-[var(--medtrak-muted)]">Barcode</p><p className="font-medium">{scannedItem.barcode}</p></div></div>}
-
-            <div className="mt-4">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-[var(--medtrak-muted)]">Quantity</label>
-              <div className="grid grid-cols-[3.25rem_1fr_3.25rem] gap-2">
-                <button type="button" onClick={() => setUseQty((value) => Math.max(1, Number(value || 1) - 1))} className="grid place-items-center rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)]" aria-label="Decrease quantity"><Minus className="h-5 w-5" /></button>
-                <input type="number" min="1" value={useQty} onChange={(e) => setUseQty(e.target.value)} className="w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-3 text-center text-lg font-semibold text-[var(--medtrak-text)]" />
-                <button type="button" onClick={() => setUseQty((value) => Number(value || 0) + 1)} className="grid place-items-center rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)]" aria-label="Increase quantity"><Plus className="h-5 w-5" /></button>
-              </div>
-            </div>
-
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <button type="button" onClick={handleUseStock} disabled={useBusy} className="rounded-2xl bg-[var(--medtrak-accent)] px-3 py-3 font-bold text-white disabled:opacity-50">{useBusy ? "Updating..." : "Use Stock"}</button>
-              <button type="button" onClick={handleReceiveStock} disabled={useBusy} className="rounded-2xl border border-[color-mix(in_srgb,var(--medtrak-accent)_35%,var(--medtrak-border))] bg-[color-mix(in_srgb,var(--medtrak-accent)_7%,var(--medtrak-panel))] px-3 py-3 font-bold text-[var(--medtrak-accent)] disabled:opacity-50">{useBusy ? "Updating..." : "Receive Stock"}</button>
-            </div>
-
-            <button type="button" onClick={() => { setReorderQty(1); setReorderNote(""); setShowReorderForm(true); }} disabled={reorderBusy} className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-[color-mix(in_srgb,var(--medtrak-warning,#f59e0b)_32%,var(--medtrak-border))] bg-[color-mix(in_srgb,var(--medtrak-warning,#f59e0b)_8%,var(--medtrak-panel))] px-3 py-3 font-semibold disabled:opacity-50"><BellRing className="h-5 w-5 text-[var(--medtrak-warning,#f59e0b)]" />Request Reorder</button>
-
+      {showStockMore && scannedItem && (
+        <div className="fixed inset-x-0 top-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-[90] flex items-end bg-black/55">
+          <div className="w-full rounded-t-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4 text-[var(--medtrak-text)]">
+            <h2 className="text-lg font-bold">More inventory options</h2>
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => { setScannedItem(null); setActiveTab("stock"); }} className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-3 font-semibold"><Eye className="h-5 w-5" />View Details</button>
-              <button type="button" onClick={askAboutScannedItem} className="flex items-center justify-center gap-2 rounded-2xl border border-[color-mix(in_srgb,var(--medtrak-accent)_32%,var(--medtrak-border))] bg-[color-mix(in_srgb,var(--medtrak-accent)_10%,var(--medtrak-panel))] px-3 py-3 font-semibold text-[var(--medtrak-accent)]"><Sparkles className="h-5 w-5" />Ask Primovex AI</button>
+              <button type="button" onClick={handleReceiveStock} disabled={!can("inventory.write") || useBusy} className="rounded-2xl border border-[var(--medtrak-border)] p-3 font-bold disabled:opacity-40">Receive 1</button>
+              <button type="button" onClick={() => { setReorderQty(1); setReorderNote(""); setShowStockMore(false); setShowReorderForm(true); }} className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] p-3 font-bold"><BellRing className="h-5 w-5" />Reorder</button>
+              <button type="button" onClick={() => { setShowStockMore(false); setScannedItem(null); setActiveTab("stock"); }} className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] p-3 font-bold"><Eye className="h-5 w-5" />Details</button>
+              <button type="button" onClick={() => { setShowStockMore(false); askAboutScannedItem(); }} className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] p-3 font-bold"><Sparkles className="h-5 w-5" />Ask Orb</button>
             </div>
-          </section>
+            <button type="button" onClick={() => setShowStockMore(false)} className="mt-3 w-full rounded-xl px-3 py-2 text-sm font-semibold text-[var(--medtrak-muted)]">Back</button>
+          </div>
         </div>
       )}
 
       {unknownBarcode && (
-        <div className="fixed inset-0 z-[72] flex items-end bg-black/45">
-          <div className="w-full rounded-t-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-5 text-[var(--medtrak-text)] shadow-2xl">
+        <div className="fixed inset-x-0 top-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-[72] flex items-end bg-black/45">
+          <div className="max-h-full w-full overflow-y-auto rounded-t-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-5 text-[var(--medtrak-text)] shadow-2xl">
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--medtrak-warning,#f59e0b)]">Barcode not recognised</p>
             <h2 className="mt-1 text-xl font-bold">No matching stock item</h2>
             <p className="mt-2 text-sm text-[var(--medtrak-muted)]">Barcode {unknownBarcode} is not linked to an active inventory item.</p>
             <div className="mt-5 grid gap-2">
               <button type="button" onClick={() => { setSearchTerm(unknownBarcode); setUnknownBarcode(""); setShowSearch(true); }} className="w-full rounded-xl bg-[var(--medtrak-accent)] px-4 py-3 font-semibold text-white">Search inventory</button>
               <button type="button" onClick={() => { setUnknownBarcode(""); navigate(`/inventory?add=1&barcode=${encodeURIComponent(unknownBarcode)}`); }} className="w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-4 py-3 font-semibold">Add new item</button>
+              <button type="button" onClick={() => { const barcode = unknownBarcode; setUnknownBarcode(""); setEscalationSeed({ domain: "inventory", title: `Unknown barcode ${barcode}` }); }} className="w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-4 py-3 font-semibold">Report unknown item</button>
+              <button type="button" disabled className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--medtrak-border)] px-4 py-3 font-semibold text-[var(--medtrak-muted)] opacity-75"><Camera className="h-5 w-5" />Photograph with Orb Vision · planned</button>
+              <p className="text-xs text-[var(--medtrak-muted)]">Primovex will never create stock or change a count from an unknown barcode without your confirmation.</p>
               <button type="button" onClick={scanAgain} className="w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-4 py-3 font-semibold">Scan again</button>
               <button type="button" onClick={() => setUnknownBarcode("")} className="w-full rounded-xl px-4 py-3 text-sm text-[var(--medtrak-muted)]">Cancel</button>
             </div>
