@@ -1,0 +1,35 @@
+# Dependencies and frontend output
+node_modules/
+node_modules_partial/
+dist/
+
+# Rust and Tauri build output
+src-tauri/target/
+target/
+
+# Android/Gradle generated output
+src-tauri/gen/android/.gradle/
+src-tauri/gen/android/app/build/
+src-tauri/gen/android/buildSrc/.gradle/
+src-tauri/gen/android/buildSrc/build/
+src-tauri/gen/android/app/src/main/jniLibs/
+
+# Local Android SDK and signing secrets
+src-tauri/gen/android/local.properties
+src-tauri/gen/android/keystore.properties*
+src-tauri/gen/android/app/*.jks
+*.keystore
+*.jks
+
+# Environment and service credentials
+.env
+.env.*
+!.env.example
+**/google-services.json
+*service-account*.json
+*serviceAccount*.json
+
+# Logs and packages
+*.log
+*.apk
+*.aab

@@ -1,0 +1,134 @@
+:root {
+  --pvx-mobile-gutter: 0.875rem;
+  --pvx-mobile-section-gap: 0.75rem;
+  --pvx-mobile-card-radius: 1.25rem;
+  --pvx-mobile-card-padding: 0.875rem;
+  --pvx-mobile-header-top: max(0.875rem, env(safe-area-inset-top));
+  --pvx-mobile-nav-height: 4.75rem;
+  --pvx-mobile-safe-bottom: max(0.625rem, env(safe-area-inset-bottom));
+  --pvx-mobile-content-bottom: calc(var(--pvx-mobile-nav-height) + var(--pvx-mobile-safe-bottom) + 0.75rem);
+}
+
+[data-primovex-preview="mobile"] {
+  --pvx-mobile-header-top: 2rem;
+  --pvx-mobile-safe-bottom: 1.25rem;
+}
+
+.pvx-mobile-page {
+  min-height: 100dvh;
+  padding: var(--pvx-mobile-header-top) var(--pvx-mobile-gutter) var(--pvx-mobile-content-bottom);
+  color: var(--medtrak-text);
+}
+
+.pvx-mobile-stack { display: grid; align-content: start; gap: var(--pvx-mobile-section-gap); }
+.pvx-mobile-card {
+  border: 1px solid var(--medtrak-border);
+  border-radius: var(--pvx-mobile-card-radius);
+  background: var(--medtrak-panel);
+  padding: var(--pvx-mobile-card-padding);
+}
+.pvx-mobile-title { font-size: 1.35rem; line-height: 1.2; font-weight: 750; }
+.pvx-mobile-subtitle { margin-top: .2rem; font-size: .8125rem; line-height: 1.35; color: var(--medtrak-muted); }
+
+.pvx-mobile-sheet-backdrop {
+  position: fixed;
+  inset: 0 0 calc(var(--pvx-mobile-nav-height) + var(--pvx-mobile-safe-bottom)) 0;
+  z-index: 85;
+  display: flex;
+  align-items: flex-end;
+  background: rgb(0 0 0 / .45);
+}
+.pvx-mobile-sheet {
+  width: 100%;
+  max-height: calc(100dvh - var(--pvx-mobile-nav-height) - var(--pvx-mobile-safe-bottom) - 1rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--medtrak-border);
+  border-radius: 1.5rem 1.5rem 0 0;
+  background: var(--medtrak-panel);
+  padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom));
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+  box-shadow: 0 -18px 44px rgb(15 23 42 / .22);
+}
+
+/* Sprint 44.6 role-adaptive mobile foundation */
+.pvx-role-home { display:grid; align-content:start; gap:.75rem; min-height:calc(100dvh - var(--pvx-mobile-content-bottom)); padding:var(--pvx-mobile-header-top) var(--pvx-mobile-gutter) 1rem; }
+.pvx-role-hero { display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem; min-width:0; padding:.25rem .125rem .125rem; }
+.pvx-role-hero > div { min-width:0; flex:1; }
+.pvx-role-hero h1 { margin-top:.2rem; font-size:clamp(1.28rem,6vw,1.55rem); line-height:1.15; font-weight:800; overflow-wrap:anywhere; }
+.pvx-role-hero p:not(.pvx-role-eyebrow) { margin-top:.3rem; max-width:19rem; font-size:.82rem; line-height:1.4; color:var(--medtrak-muted); }
+.pvx-role-eyebrow { color:var(--medtrak-accent); font-size:.68rem; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
+.pvx-orb-command { display:grid; place-items:center; flex:0 0 auto; width:3.65rem; height:3.65rem; border:4px solid color-mix(in srgb,var(--medtrak-accent) 12%,var(--medtrak-panel)); border-radius:999px; background:var(--medtrak-accent); color:white; box-shadow:0 12px 28px color-mix(in srgb,var(--medtrak-accent) 28%,transparent); }
+.pvx-orb-command span { margin-top:-.15rem; font-size:.64rem; font-weight:800; }
+.pvx-active-context,.pvx-no-context { display:flex; align-items:center; gap:.75rem; width:100%; border:1px solid color-mix(in srgb,var(--medtrak-accent) 30%,var(--medtrak-border)); border-radius:1rem; background:color-mix(in srgb,var(--medtrak-accent) 7%,var(--medtrak-panel)); padding:.75rem; text-align:left; }
+.pvx-active-context small,.pvx-no-context small { display:block; color:var(--medtrak-muted); font-size:.7rem; }
+.pvx-active-context b,.pvx-no-context b { display:block; font-size:.9rem; }
+.pvx-context-ready { margin-left:auto; border-radius:999px; background:color-mix(in srgb,var(--medtrak-success,#12b76a) 12%,var(--medtrak-panel)); padding:.25rem .55rem; color:var(--medtrak-success,#087443); font-size:.68rem; font-weight:800; }
+.pvx-primary-action { display:flex; align-items:center; gap:.9rem; width:100%; border-radius:1.25rem; background:var(--medtrak-accent); padding:1rem; color:white; text-align:left; box-shadow:0 14px 32px color-mix(in srgb,var(--medtrak-accent) 25%,transparent); }
+.pvx-primary-action b { display:block; font-size:1.06rem; }
+.pvx-primary-action small { display:block; margin-top:.15rem; color:rgb(255 255 255 / .82); font-size:.76rem; }
+.pvx-primary-icon { display:grid; place-items:center; width:3rem; height:3rem; border-radius:1rem; background:rgb(255 255 255 / .16); }
+.pvx-role-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.65rem; }
+.pvx-role-actions button { min-height:6.25rem; border:1px solid var(--medtrak-border); border-radius:1.15rem; background:var(--medtrak-panel); padding:.8rem; text-align:left; }
+.pvx-role-actions svg { color:var(--medtrak-accent); }
+.pvx-role-actions b { display:block; margin-top:.55rem; font-size:.88rem; }
+.pvx-role-actions small { display:block; margin-top:.15rem; color:var(--medtrak-muted); font-size:.7rem; line-height:1.3; }
+.pvx-orb-hint { display:flex; align-items:flex-start; gap:.55rem; border-radius:1rem; background:color-mix(in srgb,var(--medtrak-accent) 6%,var(--medtrak-panel)); padding:.7rem .8rem; color:var(--medtrak-muted); font-size:.72rem; line-height:1.4; }
+
+/* Sprint 45.1 compliance theme repair */
+.pvx-compliance-page { background: var(--medtrak-bg); color: var(--medtrak-text); }
+.pvx-compliance-hero {
+  border: 1px solid color-mix(in srgb,var(--medtrak-accent) 28%,var(--medtrak-border));
+  border-radius: 2rem;
+  background: linear-gradient(145deg,color-mix(in srgb,var(--medtrak-accent) 12%,var(--medtrak-panel)),var(--medtrak-panel));
+  padding: 1.25rem;
+  box-shadow: 0 18px 42px color-mix(in srgb,var(--medtrak-accent) 12%,transparent);
+}
+.pvx-mobile-shell .primovex-ai-action {
+  min-height: 3.25rem;
+  flex: 1 1 10rem;
+  justify-content: center;
+  border: 1px solid var(--medtrak-border);
+  background: var(--medtrak-panel);
+  font-size: .9rem;
+}
+
+.pvx-mobile-shell .primovex-ai-action:first-child {
+  border-color: var(--medtrak-accent);
+  background: var(--medtrak-accent);
+  color: white;
+}
+
+/* Native windowed barcode scanner: CameraX sits beneath the WebView.
+   Every WebView document surface, including html itself, must be transparent. */
+html.pvx-native-barcode-active,
+html.pvx-native-barcode-active body,
+body.pvx-native-barcode-active,
+body.pvx-native-barcode-active #root,
+body.pvx-native-barcode-active .pvx-mobile-shell {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+body.pvx-native-barcode-active .pvx-mobile-shell > :not(.pvx-native-barcode-overlay) {
+  visibility: hidden !important;
+}
+body.pvx-native-barcode-active .pvx-native-barcode-overlay {
+  visibility: visible !important;
+}
+body.pvx-native-barcode-active .pvx-mobile-session-shell {
+  background: transparent !important;
+}
+body.pvx-native-barcode-active .pvx-native-barcode-overlay,
+body.pvx-native-barcode-active .pvx-native-barcode-overlay > div:nth-child(2),
+body.pvx-native-barcode-active .pvx-native-barcode-overlay > div:nth-child(2) > div {
+  background-color: transparent !important;
+}
+body.pvx-native-barcode-active #root {
+  visibility: hidden !important;
+  background: transparent !important;
+}
+body.pvx-native-barcode-active > .pvx-native-barcode-overlay {
+  visibility: visible !important;
+  background: transparent !important;
+}
