@@ -16,7 +16,6 @@ import {
   AlertTriangle,
 } from "lucide-react";
 
-import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 
@@ -152,6 +151,18 @@ function toCSV(rows) {
   const lines = [headers.join(",")];
   for (const r of rows) lines.push(headers.map((h) => escape(r[h])).join(","));
   return lines.join("\n");
+}
+
+function toExcelSpreadsheetXml(rows) {
+  const escapeXml = (value) => String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+  const headers = Object.keys(rows[0] || {});
+  const rowXml = (values) => `<Row>${values.map((value) => `<Cell><Data ss:Type="String">${escapeXml(value)}</Data></Cell>`).join("")}</Row>`;
+  return `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Report"><Table>${rowXml(headers)}${rows.map((row) => rowXml(headers.map((header) => row[header]))).join("")}</Table></Worksheet></Workbook>`;
 }
 
 // -------------------- UI helpers --------------------
@@ -774,10 +785,10 @@ export default function Reports() {
 
   const handleExportExcel = () => {
     if (!exportRows.length) return;
-    const ws = XLSX.utils.json_to_sheet(exportRows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Report");
-    XLSX.writeFile(wb, `${exportBaseName}.xlsx`);
+    downloadBlob(
+      `${exportBaseName}.xml`,
+      new Blob([toExcelSpreadsheetXml(exportRows)], { type: "application/vnd.ms-excel;charset=utf-8" })
+    );
   };
 
   const handleExportPDF = () => {
@@ -833,7 +844,7 @@ export default function Reports() {
             onClick={handleExportExcel}
           >
             <Download className="mr-1.5 h-4 w-4" />
-            Export Excel
+            Export Excel XML
           </Button>
           <Button
             className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 px-4 py-2 text-xs font-medium text-slate-950 shadow-sm hover:from-teal-400 hover:to-emerald-300"

@@ -95,9 +95,12 @@ function normalizeActor(actor) {
 function normalizeMovementContext(movement = {}) {
   return {
     source: cleanString(movement?.source) || "manual",
+    movement_kind: cleanString(movement?.movementKind) || null,
     barcode: cleanString(movement?.barcode) || null,
     space_id: cleanString(movement?.spaceId) || null,
     space_name: cleanString(movement?.spaceName) || null,
+    destination_space_id: cleanString(movement?.destinationSpaceId) || null,
+    destination_space_name: cleanString(movement?.destinationSpaceName) || null,
     sense_session_id: cleanString(movement?.senseSessionId) || null,
   };
 }
@@ -383,6 +386,7 @@ export async function applyStockMovement(itemId, movement) {
   }
 
   const itemRef = doc(db, ITEMS_COL, itemId);
+  const moveRef = doc(collection(db, MOVES_COL));
 
   return runTransaction(db, async (tx) => {
     const snap = await tx.get(itemRef);
@@ -455,7 +459,6 @@ export async function applyStockMovement(itemId, movement) {
       },
     });
 
-    const moveRef = doc(collection(db, MOVES_COL));
     tx.set(moveRef, {
       item_id: itemId,
       item_name,
@@ -478,7 +481,90 @@ export async function applyStockMovement(itemId, movement) {
       created_at: serverTimestamp(),
     });
 
-    return { before, after, delta };
+    return { before, after, delta, movementId: moveRef.id };
+  });
+}
+
+/**
+ * Reverses a recorded stock-use movement with a new compensating audit entry.
+ * The original movement is retained and marked as reversed. Replays are blocked.
+ */
+export async function reverseStockUseMovement(itemId, movementId, reversal = {}) {
+  if (!itemId || !movementId) throw new Error("Movement reference missing.");
+
+  const itemRef = doc(db, ITEMS_COL, itemId);
+  const originalRef = doc(db, MOVES_COL, movementId);
+  const reversalRef = doc(collection(db, MOVES_COL));
+
+  return runTransaction(db, async (tx) => {
+    const [itemSnap, originalSnap] = await Promise.all([tx.get(itemRef), tx.get(originalRef)]);
+    if (!itemSnap.exists()) throw new Error("Item not found.");
+    if (!originalSnap.exists()) throw new Error("Original movement not found.");
+
+    const original = originalSnap.data() || {};
+    if (original.type !== "use" || Number(original.delta || 0) >= 0) {
+      throw new Error("Only a stock-use movement can be undone here.");
+    }
+    if (original.reversal_movement_id || original.reversed_at) {
+      throw new Error("This stock movement has already been undone.");
+    }
+
+    const item = itemSnap.data() || {};
+    const before = toNumber(item.current_stock, 0);
+    const qty = Math.abs(toNumber(original.delta, 0));
+    const after = before + qty;
+    const actor = normalizeActor(reversal.actor);
+    const context = normalizeMovementContext({
+      ...reversal,
+      source: reversal.source || "mobile-undo",
+      movementKind: "compensating-reversal",
+    });
+
+    tx.update(itemRef, {
+      current_stock: after,
+      updated_at: serverTimestamp(),
+      last_movement: {
+        type: "receive",
+        delta: qty,
+        qty_before: before,
+        qty_after: after,
+        reason: "undo_stock_use",
+        notes: `Compensating reversal of ${movementId}`,
+        actor,
+        context,
+      },
+    });
+
+    tx.update(originalRef, {
+      reversed_at: serverTimestamp(),
+      reversed_by: actor,
+      reversal_movement_id: reversalRef.id,
+    });
+
+    tx.set(reversalRef, {
+      item_id: itemId,
+      item_name: item.name || original.item_name || "",
+      item_strength: item.strength || original.item_strength || "",
+      item_form: item.form || original.item_form || "",
+      product_identity_key: item.product_identity_key || original.product_identity_key || "",
+      type: "receive",
+      delta: qty,
+      qty_before: before,
+      qty_after: after,
+      reason: "undo_stock_use",
+      notes: `Compensating reversal of ${movementId}`,
+      actor,
+      context,
+      source: context.source,
+      barcode: context.barcode,
+      space_id: context.space_id,
+      space_name: context.space_name,
+      reverses_movement_id: movementId,
+      receipt_details: null,
+      created_at: serverTimestamp(),
+    });
+
+    return { before, after, delta: qty, movementId: reversalRef.id, reversesMovementId: movementId };
   });
 }
 

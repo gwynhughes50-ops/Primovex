@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,6 +17,7 @@ const LEGACY_NAV_KEY = "primovex.desktopNavigation.legacy";
 
 export default function Layout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, displayName, role, isAdmin, capabilities, loading, signOut } = useAuth();
   const { unreadCount } = useNotifications(user?.uid);
   const showDeveloperCentre = developerAccessAllowed(role);
@@ -44,6 +45,7 @@ export default function Layout() {
   }
 
   const signedInLabel = displayName || user?.email || "Signed in";
+  const immersiveModule = location.pathname.startsWith("/clinflow");
 
   if (legacyNavigation) return <LegacyDesktopLayout />;
 
@@ -67,8 +69,8 @@ export default function Layout() {
           onSignOut={handleSignOut}
         />
 
-        <div className="min-w-0 flex-1">
-          <header className="sticky top-0 z-30 flex min-h-20 items-center justify-between border-b border-[var(--medtrak-border)] bg-[var(--medtrak-bg)]/88 px-5 backdrop-blur-xl lg:px-8">
+        <div className={`min-w-0 flex-1 ${immersiveModule ? "h-screen overflow-hidden" : ""}`}>
+          {!immersiveModule && <header className="sticky top-0 z-30 flex min-h-20 items-center justify-between border-b border-[var(--medtrak-border)] bg-[var(--medtrak-bg)]/88 px-5 backdrop-blur-xl lg:px-8">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--medtrak-accent)]">Primovex operations platform</p>
               <p className="mt-1 text-sm text-[var(--medtrak-muted)]">Connected practice intelligence</p>
@@ -83,17 +85,21 @@ export default function Layout() {
               </NavLink>
               {!loading && user && <div className="hidden xl:block text-right"><p className="text-sm font-semibold">{signedInLabel}</p><p className="text-xs text-[var(--medtrak-muted)]">{isAdmin ? "System Admin" : role}</p></div>}
             </div>
-          </header>
+          </header>}
 
-          <div className="px-4 py-4 sm:px-6 lg:px-8">
-            <PlatformModeBanner compact />
-            <main className="mx-auto mt-5 w-full max-w-[1600px]"><Outlet /></main>
-          </div>
+          {immersiveModule ? (
+            <main className="h-full w-full"><Outlet /></main>
+          ) : (
+            <div className="px-4 py-4 sm:px-6 lg:px-8">
+              <PlatformModeBanner compact />
+              <main className="mx-auto mt-5 w-full max-w-[1600px]"><Outlet /></main>
+            </div>
+          )}
         </div>
       </div>
 
-      <PulseWidget />
-      <AskPrimovexPanel />
+      {!immersiveModule && <PulseWidget />}
+      {!immersiveModule && <AskPrimovexPanel />}
     </div>
   );
 }

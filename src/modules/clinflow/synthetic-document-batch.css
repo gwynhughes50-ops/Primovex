@@ -1,0 +1,28 @@
+.cf-azure-setup--batch{grid-template-columns:1fr}
+.cf-azure-selected-files{width:min(620px,100%);max-height:215px;overflow:auto}
+.cf-azure-selected-files .cf-azure-file{width:100%}
+.cf-azure-batch-results{display:grid;grid-template-columns:300px minmax(0,1fr);min-height:0;flex:1;overflow:hidden}
+.cf-azure-job-list{display:flex;min-height:0;flex-direction:column;border-right:1px solid #d6e2ed;background:#fff;padding:14px;overflow:auto}
+.cf-azure-job-list h3{display:flex;justify-content:space-between;margin:0 0 10px;font-size:12px}
+.cf-azure-job-list h3 span{color:#005eb8}
+.cf-azure-job-list>button{display:flex;align-items:center;gap:9px;width:100%;margin-bottom:6px;border:1px solid #dbe5ee;border-radius:9px;background:#fff;padding:9px;text-align:left}
+.cf-azure-job-list>button.active{border-color:#2f80ed;background:#f2f8ff}
+.cf-azure-job-list>button svg{width:17px;flex:0 0 auto}
+.cf-azure-job-list>button>span{display:flex;min-width:0;flex-direction:column}
+.cf-azure-job-list>button strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9.5px}
+.cf-azure-job-list>button small{margin-top:2px;color:#6c7d90;font-size:8.5px;text-transform:capitalize}
+.cf-azure-batch-actions{display:grid;gap:7px;margin-top:auto;padding-top:12px}
+.cf-azure-batch-actions button{display:flex;align-items:center;justify-content:center;gap:6px;border:1px solid #cbd9e6;border-radius:8px;background:#fff;padding:9px;color:#294766;font-size:9px;font-weight:900}
+.cf-azure-batch-actions button:first-child{border-color:#005eb8;background:#005eb8;color:#fff}
+.cf-azure-batch-actions button:disabled{opacity:.5}
+.cf-azure-batch-actions svg{width:15px}
+.cf-azure-job-detail{display:flex;min-height:0;flex-direction:column;padding:14px;overflow:hidden}
+.cf-azure-job-state{display:grid;height:100%;place-content:center;justify-items:center;text-align:center;color:#526c86}
+.cf-azure-job-state svg{width:38px;height:38px;color:#005eb8}
+.cf-azure-job-state h3{margin:10px 0 4px}
+.cf-azure-job-state p{max-width:440px;margin:0;font-size:10px}
+.cf-azure-job-state--error svg,.cf-azure-job-state--error h3{color:#b42318}
+.cf-paper--ocr{min-height:100%}
+.cf-paper--ocr pre{margin:24px 0 0;white-space:pre-wrap;word-break:break-word;font:11px/1.6 Arial,sans-serif}
+@media(max-width:900px){.cf-azure-batch-results{grid-template-columns:220px minmax(0,1fr)}}
+@media(max-width:650px){.cf-azure-batch-results{display:flex;flex-direction:column;overflow:auto}.cf-azure-job-list{max-height:260px;border-right:0;border-bottom:1px solid #d6e2ed}.cf-azure-job-detail{min-height:520px}}

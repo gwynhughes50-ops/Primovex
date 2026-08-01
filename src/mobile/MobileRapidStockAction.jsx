@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { CheckCircle2, MapPin, Minus, Package, Plus, X } from "lucide-react";
+import { formatProductSubtitle } from "@/utils/productDisplay";
 
 function subtitle(item) {
-  return [item?.strength, item?.form].filter(Boolean).join(" • ");
+  return formatProductSubtitle(item);
 }
 
 export default function MobileRapidStockAction({

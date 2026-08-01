@@ -1,8 +1,11 @@
 import { getProvider, getProviderSummary, listProviders } from "./providers/ProviderFactory";
 import { SIMULATOR_PROVIDER_ID, SIMULATED_CONNECT_DEVICES } from "./providers/SimulatorProvider";
+import { TUYA_PROVIDER_ID } from "./providers/TuyaProvider";
 import { subscribeDeviceRegistry } from "./DeviceRegistry";
 
-export const DEFAULT_CONNECT_PROVIDER = SIMULATOR_PROVIDER_ID;
+// Live installations must open the real registry. Synthetic devices are
+// supplied explicitly by Demo/Training mode in useConnectedDevices.
+export const DEFAULT_CONNECT_PROVIDER = TUYA_PROVIDER_ID;
 
 export function normaliseDevice(docLike) {
   const data = docLike?.data ? docLike.data() : docLike || {};
@@ -33,8 +36,9 @@ export function normaliseDevice(docLike) {
     unit: data.unit || "°C",
     min,
     max,
-    battery: Number(data.battery ?? data.batteryPercent ?? 100),
-    signal: Number(data.signal ?? data.signalPercent ?? 100),
+    battery: data.battery == null && data.batteryPercent == null ? null : Number(data.battery ?? data.batteryPercent),
+    batteryState: data.batteryState ?? null,
+    signal: data.signal == null && data.signalPercent == null ? null : Number(data.signal ?? data.signalPercent),
     firmware: data.firmware || data.firmwareVersion || "—",
     serialNumber: data.serialNumber || data.serial || "—",
     provider,
@@ -49,7 +53,7 @@ export function normaliseDevice(docLike) {
 export function inferDeviceStatus({ currentValue, min, max, battery, lastSeenMinutes }) {
   const value = Number(currentValue);
   if (Number(lastSeenMinutes) > 30) return "offline";
-  if (Number(battery) <= 20) return "warning";
+  if (battery != null && Number(battery) <= 20) return "warning";
   if (Number.isFinite(value) && (value < Number(min) || value > Number(max))) return "critical";
   return "online";
 }
@@ -125,11 +129,13 @@ export function buildConnectIntelligence(devices = [], providerId = DEFAULT_CONN
   const warnings = normalised.filter((d) => getDeviceStatus(d).key === "warning");
   const allOnline = normalised.length > 0 && offline.length === 0;
   const coldChainOk = coldChainDevices.length > 0 && coldChainDevices.every((d) => getDeviceStatus(d).key === "online");
-  const avgBattery = normalised.length
-    ? Math.round(normalised.reduce((sum, d) => sum + Number(d.battery || 0), 0) / normalised.length)
+  const batteryDevices = normalised.filter((d) => Number.isFinite(d.battery));
+  const signalDevices = normalised.filter((d) => Number.isFinite(d.signal));
+  const avgBattery = batteryDevices.length
+    ? Math.round(batteryDevices.reduce((sum, d) => sum + d.battery, 0) / batteryDevices.length)
     : 0;
-  const avgSignal = normalised.length
-    ? Math.round(normalised.reduce((sum, d) => sum + Number(d.signal || 0), 0) / normalised.length)
+  const avgSignal = signalDevices.length
+    ? Math.round(signalDevices.reduce((sum, d) => sum + d.signal, 0) / signalDevices.length)
     : 0;
 
   const healthScore = Math.max(
@@ -187,7 +193,7 @@ export function buildConnectIntelligence(devices = [], providerId = DEFAULT_CONN
       id: `${d.id}-warning`,
       priority: "Medium",
       title: `Check ${d.name}`,
-      reason: d.battery <= 30 ? `Battery is ${d.battery}%.` : "Device health is below ideal.",
+      reason: d.battery != null && d.battery <= 30 ? `Battery is ${d.battery}%.` : "Device health is below ideal.",
       action: "Check battery/signal during the next room round.",
       estimate: "1 min",
       score: 62,
@@ -251,7 +257,16 @@ export function getConnectProviderSettings() {
     };
   }
   try {
-    return JSON.parse(stored);
+    const parsed = JSON.parse(stored);
+    const platformMode = window.localStorage.getItem("medtrak.platform.mode") || "live";
+    // Older APKs wrote "simulator" as the default even in Live mode. Migrate
+    // that legacy default once so the new T13 appears without manual setup.
+    if (platformMode === "live" && parsed.activeProvider === SIMULATOR_PROVIDER_ID) {
+      const migrated = { ...parsed, activeProvider: DEFAULT_CONNECT_PROVIDER };
+      window.localStorage.setItem("medtrak.connect.provider", JSON.stringify(migrated));
+      return migrated;
+    }
+    return parsed;
   } catch {
     return { activeProvider: DEFAULT_CONNECT_PROVIDER, tuya: { region: "eu", accessId: "", projectId: "", deviceId: "" } };
   }
@@ -272,17 +287,27 @@ export function subscribeConnectedDevices(callback, onError, options = {}) {
     return subscribeDeviceRegistry(
       (rows) => {
         const normalisedRows = rows.map(normaliseDevice).filter((device) => !device.provider || device.provider === providerId || providerId === "all");
-        callback(normalisedRows.length ? normalisedRows : SIMULATED_CONNECT_DEVICES.map((d) => ({ ...d, provider: providerId, providerLabel: provider.shortLabel || provider.label })));
+        callback(normalisedRows);
       },
       (error) => {
         onError?.(error);
-        callback(SIMULATED_CONNECT_DEVICES.map((d) => ({ ...d, provider: providerId, providerLabel: provider.shortLabel || provider.label })));
+        callback([]);
       }
     );
   }
 
-  callback(SIMULATED_CONNECT_DEVICES);
-  return () => {};
+  return subscribeDeviceRegistry(
+    (rows) => {
+      const normalisedRows = rows
+        .map(normaliseDevice)
+        .filter((device) => !device.provider || device.provider === providerId);
+      callback(normalisedRows);
+    },
+    (error) => {
+      onError?.(error);
+      callback([]);
+    }
+  );
 }
 
 export async function getProviderHealth(providerId = DEFAULT_CONNECT_PROVIDER) {

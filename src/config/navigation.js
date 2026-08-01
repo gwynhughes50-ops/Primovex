@@ -19,6 +19,7 @@ const desktopNavigationConfig = [
   { to: "/help", label: "Help", iconKey: "help", group: "support" },
   { to: "/theme-lab", label: "Theme Lab", iconKey: "settings", group: "admin", capability: "theme.lab" },
   { to: "/security-centre", label: "Security", iconKey: "security", group: "admin", capability: "security.read" },
+  { to: "/clinflow", label: "ClinFlow", iconKey: "clinflow", group: "insight", capability: "clinflow.read" },
   { to: "/reports", label: "Reports", iconKey: "reports", group: "insight", capability: "reports.read" },
 ];
 

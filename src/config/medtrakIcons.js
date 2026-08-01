@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   FileText,
+  FileHeart,
   Gauge,
   RadioTower,
   Wifi,
@@ -36,6 +37,7 @@ import {
   Flame,
   Droplets,
   Radar,
+  Truck,
 } from "lucide-react";
 
 /**
@@ -51,6 +53,7 @@ export const Icons = {
   alerts: AlertTriangle,
   barcodeScan: Camera,
   compliance: ClipboardCheck,
+  clinflow: FileHeart,
   dashboard: LayoutDashboard,
   departments: Users,
   help: LifeBuoy,
@@ -75,7 +78,7 @@ export const Icons = {
   check: CheckCircle2,
   sites: MapPin,
   stock: Package,
-  suppliers: Building2,
+  suppliers: Truck,
   temperature: Thermometer,
   trash: Trash2,
   user: User,

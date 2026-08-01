@@ -35,6 +35,7 @@ import {
 } from "firebase/firestore";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import ComplianceQrEngine from "@/components/compliance/ComplianceQrEngine";
+import { listEquipment, upsertEquipment } from "@/modules/equipment/services/equipmentRegistry";
 
 // ---------- UI helpers ----------
 function TabButton({ active, onClick, icon: Icon, label }) {
@@ -1770,7 +1771,32 @@ function PatRegister({ SITE_ID }) {
           .filter((r) => r.active && r.siteId === SITE_ID)
           .sort((a, b) => String(a.tag || "").localeCompare(String(b.tag || "")));
 
-        setAssets(filtered);
+        filtered.forEach((asset) => {
+          const equipmentId = asset.equipmentId || `EQ-PAT-${asset.id}`;
+          upsertEquipment({
+            equipmentId,
+            name: asset.name,
+            assetTag: asset.tag,
+            makeModel: asset.makeModel,
+            serialNumber: asset.serialNumber,
+            compliance: { patRequired: true, patAssetId: asset.id },
+          }, "pat-firestore-sync");
+        });
+        const firestoreIds = new Set(filtered.map((asset) => asset.equipmentId || `EQ-PAT-${asset.id}`));
+        const registryOnly = listEquipment()
+          .filter((item) => item.compliance?.patRequired && !firestoreIds.has(item.equipmentId))
+          .map((item) => ({
+            id: item.compliance?.patAssetId || item.equipmentId,
+            equipmentId: item.equipmentId,
+            tag: item.assetTag,
+            name: item.name,
+            makeModel: [item.make, item.model].filter(Boolean).join(" "),
+            location: item.currentSpaceId || "",
+            serialNumber: item.serialNumber,
+            active: true,
+            registryOnly: true,
+          }));
+        setAssets([...filtered, ...registryOnly]);
       },
       (e) => console.error("pat_assets subscribe error:", e)
     );
@@ -1784,8 +1810,10 @@ function PatRegister({ SITE_ID }) {
     if (!name) return setErr("Name is required (e.g. PC + Lead).");
 
     try {
-      await addDoc(collection(db, "pat_assets"), {
+      const equipmentId = `EQ-PAT-${Date.now().toString().slice(-7)}`;
+      const created = await addDoc(collection(db, "pat_assets"), {
         siteId: SITE_ID,
+        equipmentId,
         tag,
         name,
         makeModel: form.makeModel.trim(),
@@ -1794,6 +1822,14 @@ function PatRegister({ SITE_ID }) {
         active: true,
         createdAt: serverTimestamp(),
       });
+      upsertEquipment({
+        equipmentId,
+        name,
+        assetTag: tag,
+        model: form.makeModel.trim(),
+        serialNumber: form.serialNumber.trim(),
+        compliance: { patRequired: true, patAssetId: created.id },
+      }, "pat-register");
       setForm({ tag: "", name: "", makeModel: "", location: "", serialNumber: "" });
     } catch (e) {
       console.error("Add PAT asset error:", e);
@@ -1873,14 +1909,14 @@ function PatRegister({ SITE_ID }) {
                     {a.serialNumber ? ` • SN ${a.serialNumber}` : ""}
                   </div>
                 </div>
-                <Button
+                {a.registryOnly ? <span className="rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold text-sky-200">Unified Registry</span> : <Button
                   variant="outline"
                   className="rounded-full border-white/10 bg-slate-900/40 text-xs text-rose-300 hover:bg-slate-900/60"
                   onClick={() => deleteAsset(a.id, a.tag)}
                 >
                   <Trash2 className="mr-1.5 h-4 w-4" />
                   Delete
-                </Button>
+                </Button>}
               </div>
             ))
           )}

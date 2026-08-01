@@ -27,6 +27,7 @@ import AccessDenied from "@/components/security/AccessDenied";
 import { buildDeviceHistory, getDeviceStatus, listProviders } from "@/services/connectService";
 import { buildTuyaBackendContract } from "@/services/connect/providers/TuyaProvider";
 import { getConnectCloudHealth, syncConnectProvider, buildConnectCloudDeploymentNotes } from "@/services/connect/connectCloudClient";
+import DeviceAssignmentSheet from "@/components/temperature/DeviceAssignmentSheet";
 
 function ConnectBadge({ device }) {
   const status = getDeviceStatus(device);
@@ -341,8 +342,8 @@ function DeviceCard({ device, selected, onSelect }) {
           <p className="mt-1 text-xs text-slate-400">Safe range {device.min}-{device.max}{device.unit}</p>
         </div>
         <div className="text-right text-xs text-slate-400">
-          <div className="flex items-center justify-end gap-1"><Battery className="h-3.5 w-3.5" /> {device.battery}%</div>
-          <div className="mt-1 flex items-center justify-end gap-1"><Signal className="h-3.5 w-3.5" /> {device.signal}%</div>
+          <div className="flex items-center justify-end gap-1"><Battery className="h-3.5 w-3.5" /> {device.battery != null ? `${device.battery}%` : device.batteryState || "Not reported"}</div>
+          <div className="mt-1 flex items-center justify-end gap-1"><Signal className="h-3.5 w-3.5" /> {device.signal != null ? `${device.signal}%` : "Not reported"}</div>
           <div className="mt-1 rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase tracking-wide">{device.providerLabel}</div>
         </div>
       </div>
@@ -350,7 +351,7 @@ function DeviceCard({ device, selected, onSelect }) {
   );
 }
 
-function DeviceDetail({ device }) {
+function DeviceDetail({ device, canManage, onAssign }) {
   if (!device) return null;
   const status = getDeviceStatus(device);
   return (
@@ -383,7 +384,7 @@ function DeviceDetail({ device }) {
         <div className={`rounded-2xl border p-4 ${status.className}`}>
           <p className="text-xs uppercase tracking-wide opacity-75">Device health</p>
           <p className="mt-2 text-xl font-bold text-white">{status.label}</p>
-          <p className="mt-1 text-xs opacity-75">Battery {device.battery}% • Signal {device.signal}%</p>
+          <p className="mt-1 text-xs opacity-75">Battery {device.battery != null ? `${device.battery}%` : device.batteryState || "not reported"} • Signal {device.signal != null ? `${device.signal}%` : "not reported"}</p>
         </div>
       </div>
 
@@ -393,6 +394,14 @@ function DeviceDetail({ device }) {
         <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-3 text-xs text-slate-400"><span className="text-slate-500">Equipment</span><br /><span className="font-semibold text-slate-100">{device.equipment}</span></div>
         <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-3 text-xs text-slate-400"><span className="text-slate-500">Firmware</span><br /><span className="font-semibold text-slate-100">{device.firmware}</span></div>
         <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-3 text-xs text-slate-400"><span className="text-slate-500">Humidity</span><br /><span className="font-semibold text-slate-100">{device.humidity ?? "—"}{device.humidity ? "%" : ""}</span></div>
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/50 p-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Registry assignment</p>
+          <p className="mt-1 text-sm font-semibold text-white">{device.integrationStatus === "active" ? `${device.equipment} · ${device.room}` : "Needs Space and equipment assignment"}</p>
+        </div>
+        {canManage && <Button type="button" onClick={onAssign} className="rounded-full bg-sky-600 px-4 font-semibold text-white hover:bg-sky-500">{device.integrationStatus === "active" ? "Edit assignment" : "Assign device"}</Button>}
       </div>
 
       <div className="mt-5 rounded-2xl border border-teal-400/20 bg-teal-500/10 p-4">
@@ -418,8 +427,10 @@ function DeviceDetail({ device }) {
 export function TemperatureMonitoring() {
   const { can } = useAuth();
   const canViewConnect = can("connect.view");
+  const canManageDevices = can("connect.manageDevices");
   const { devices, loading, error, intelligence } = useConnectedDevices();
   const [selectedId, setSelectedId] = useState(null);
+  const [assigningDevice, setAssigningDevice] = useState(null);
 
   useEffect(() => {
     if (!selectedId && devices?.[0]?.id) setSelectedId(devices[0].id);
@@ -435,7 +446,7 @@ export function TemperatureMonitoring() {
     <div className="space-y-5">
       {error && (
         <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">
-          {error}. Showing provider fallback devices.
+          {error}. Primovex will not substitute demonstration readings in Live mode.
         </div>
       )}
 
@@ -458,8 +469,13 @@ export function TemperatureMonitoring() {
           {devices.map((device) => (
             <DeviceCard key={device.id} device={device} selected={selectedDevice?.id === device.id} onSelect={(item) => setSelectedId(item.id)} />
           ))}
+          {!loading && devices.length === 0 && (
+            <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+              No live Tuya devices are available in the Device Registry. Run a provider sync in Connected Practice, then assign the T13 to its fridge.
+            </div>
+          )}
         </div>
-        <DeviceDetail device={selectedDevice} />
+        <DeviceDetail device={selectedDevice} canManage={canManageDevices} onAssign={() => setAssigningDevice(selectedDevice)} />
       </div>
 
       <Card className="border border-white/10 bg-slate-900/70 p-5">
@@ -473,6 +489,7 @@ export function TemperatureMonitoring() {
           ))}
         </div>
       </Card>
+      {assigningDevice && <DeviceAssignmentSheet device={assigningDevice} onClose={() => setAssigningDevice(null)} />}
     </div>
   );
 }
@@ -515,7 +532,7 @@ export default function Connect() {
 
       {error && (
         <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">
-          {error}. Showing provider fallback devices.
+          {error}. Primovex will not substitute demonstration readings in Live mode.
         </div>
       )}
 

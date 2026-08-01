@@ -1,0 +1,89 @@
+{
+  "pack": "Primovex Azure Document Intelligence synthetic hospital correspondence",
+  "safety": "All organisations, people, identifiers, addresses and clinical events are fictional. Not for clinical use.",
+  "azure_f0_constraints": {
+    "max_pages_per_file": 2,
+    "max_file_size_mb": 4
+  },
+  "documents": [
+    {
+      "document": "Degraded respiratory clinic letter",
+      "expected": {
+        "patient": "Alex Example",
+        "clinic": "Respiratory Medicine",
+        "oxygen_saturation": "97%",
+        "follow_up": "8 weeks",
+        "medication": "salbutamol 100 micrograms"
+      },
+      "difficulty": "Medium - skew, scan noise, signature and faint coffee ring",
+      "filename": "01-degraded-respiratory-clinic-letter.pdf",
+      "pages": 1,
+      "bytes": 207115,
+      "within_f0_limits": true
+    },
+    {
+      "document": "Faxed two-page discharge summary",
+      "expected": {
+        "patient": "Morgan Sample",
+        "diagnosis": "community-acquired pneumonia",
+        "outstanding": "sputum culture",
+        "gp_actions": 4,
+        "restart_ramipril": "02/08/2026"
+      },
+      "difficulty": "Hard - two pages, monospaced fax output, low contrast, table structure and handwriting",
+      "filename": "02-faxed-two-page-discharge-summary.pdf",
+      "pages": 2,
+      "bytes": 280445,
+      "within_f0_limits": true
+    },
+    {
+      "document": "Handwritten ward review note",
+      "expected": {
+        "patient": "Casey Fiction",
+        "oxygen_saturation": "94% room air",
+        "temperature": "37.4",
+        "escalation_threshold": "oxygen saturation below 92%",
+        "tests": [
+          "U&E",
+          "CRP"
+        ]
+      },
+      "difficulty": "Very hard - handwritten text, ruled paper, uneven baseline and scan rotation",
+      "filename": "03-handwritten-ward-review-note.pdf",
+      "pages": 1,
+      "bytes": 203026,
+      "within_f0_limits": true
+    },
+    {
+      "document": "Annotated two-page cardiology letter",
+      "expected": {
+        "patient": "Taylor Testpatient",
+        "ejection_fraction": "60%",
+        "medication": "bisoprolol 2.5 mg once daily",
+        "ventricular_ectopics": "312",
+        "follow_up": "4 months"
+      },
+      "difficulty": "Hard - two pages, tables, handwritten annotation, stamp and mixed hierarchy",
+      "filename": "04-annotated-two-page-cardiology-letter.pdf",
+      "pages": 2,
+      "bytes": 362034,
+      "within_f0_limits": true
+    },
+    {
+      "document": "Dense emergency handover form",
+      "expected": {
+        "patient": "Jordan Example",
+        "news2": "3",
+        "heart_rate": "108",
+        "aspirin": "300 mg at 21:31",
+        "repeat_troponin": "00:30",
+        "first_troponin": "7 ng/L"
+      },
+      "difficulty": "Very hard - dense form, checkboxes, handwriting, greyscale photocopy and urgent action box",
+      "filename": "05-dense-emergency-handover-form.pdf",
+      "pages": 1,
+      "bytes": 158976,
+      "within_f0_limits": true
+    }
+  ]
+}

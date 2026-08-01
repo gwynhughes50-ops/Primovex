@@ -1,5 +1,11 @@
 import { defaultAssetPassports, defaultSenseTimeline } from '../data/defaultSense';
 import { loadSpaceRegistry, replaceRegistryStructure, resetSpaceRegistry } from './sharedSpaceRegistry';
+import {
+  equipmentToSenseAsset,
+  listEquipment,
+  loadEquipmentRegistry,
+  saveEquipmentRegistry,
+} from '@/modules/equipment/services/equipmentRegistry';
 
 const KEY = 'primovex.sense.v1';
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -30,7 +36,7 @@ export function loadSenseState() {
       floors: registry.floors,
       zones: registry.zones,
       spaces: registry.spaces,
-      assets: Array.isArray(parsed.assets) ? parsed.assets : clone(defaultAssetPassports),
+      assets: listEquipment().map(equipmentToSenseAsset),
       timeline: Array.isArray(parsed.timeline) ? parsed.timeline : clone(defaultSenseTimeline),
       nfcTags: Array.isArray(parsed.nfcTags) ? parsed.nfcTags : [],
       schemaVersion: 3,
@@ -45,6 +51,8 @@ export function saveSenseState(state) {
   replaceRegistryStructure({ sites: state.sites, floors: state.floors, zones: state.zones, spaces: state.spaces });
   const { sites, floors, zones, spaces, ...senseOnly } = state;
   localStorage.setItem(KEY, JSON.stringify({ ...senseOnly, schemaVersion: 3 }));
+  const registry = loadEquipmentRegistry();
+  saveEquipmentRegistry({ ...registry, equipment: state.assets || registry.equipment }, 'sense');
   window.dispatchEvent(new CustomEvent('primovex:sense-changed'));
 }
 

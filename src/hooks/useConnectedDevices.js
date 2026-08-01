@@ -10,14 +10,22 @@ import {
   saveConnectProviderSettings,
   subscribeConnectedDevices,
 } from "@/services/connectService";
+import { listEquipment } from "@/modules/equipment/services/equipmentRegistry";
 
 export default function useConnectedDevices() {
   const [providerSettings, setProviderSettings] = useState(() => getConnectProviderSettings());
   const [devices, setDevices] = useState(MOCK_CONNECTED_DEVICES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [equipmentRevision, setEquipmentRevision] = useState(0);
 
   const activeProvider = providerSettings.activeProvider || DEFAULT_CONNECT_PROVIDER;
+
+  useEffect(() => {
+    const refresh = () => setEquipmentRevision((value) => value + 1);
+    window.addEventListener("primovex:equipment-registry-changed", refresh);
+    return () => window.removeEventListener("primovex:equipment-registry-changed", refresh);
+  }, []);
 
   useEffect(() => {
     if (isSafeSyntheticMode()) {
@@ -61,14 +69,30 @@ export default function useConnectedDevices() {
     [updateProviderSettings]
   );
 
-  const intelligence = useMemo(() => buildConnectIntelligence(devices, activeProvider), [devices, activeProvider]);
   const provider = useMemo(() => getProviderSummary(activeProvider), [activeProvider]);
+  const linkedDevices = useMemo(() => {
+    const equipment = listEquipment();
+    return devices.map((device) => {
+      const asset = equipment.find((item) => item.connected?.deviceId === device.id);
+      if (!asset) return device;
+      return {
+        ...device,
+        equipmentId: asset.equipmentId,
+        equipment: asset.name,
+        spaceId: asset.currentSpaceId,
+        fridgeId: asset.monitoring?.fridgeId || device.fridgeId,
+        min: asset.monitoring?.min ?? device.min,
+        max: asset.monitoring?.max ?? device.max,
+        integrationStatus: "active",
+      };
+    });
+  }, [devices, equipmentRevision]);
 
   return {
-    devices,
+    devices: linkedDevices,
     loading,
     error,
-    intelligence,
+    intelligence: buildConnectIntelligence(linkedDevices, activeProvider),
     provider,
     providerSettings,
     activeProvider,

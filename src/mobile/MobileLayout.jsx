@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import useStock from "@/hooks/useStock";
 
@@ -18,6 +18,7 @@ import MobileSenseSpaces from "./MobileSenseSpaces";
 import RoleAdaptiveMobileHome from "./RoleAdaptiveMobileHome";
 import MobileClinicalAssetReconciliation from "./MobileClinicalAssetReconciliation";
 import MobileRapidStockAction from "./MobileRapidStockAction";
+import MobileStockMovementReceipt from "./MobileStockMovementReceipt";
 import { useAuth } from "@/contexts/AuthContext";
 import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry";
 import { getOpenQuickNotes, subscribeQuickNotes } from "@/services/quickNotesService";
@@ -26,18 +27,20 @@ import ActiveSenseBanner from "@/modules/sense/components/ActiveSenseBanner";
 import { useSenseSession } from "@/contexts/SenseSessionContext";
 import MobileDeveloperIssueRecorder from "@/developer/MobileDeveloperIssueRecorder";
 import "./mobileLayout.css";
+import { formatProductSubtitle } from "@/utils/productDisplay";
 
 import {
   findStockItemByBarcode,
   applyStockMovement,
+  reverseStockUseMovement,
   createReorderRequest,
 } from "@/services/stockService";
 
 function productSubtitle(item) {
-  return [item?.strength, item?.form].filter(Boolean).join(" â€¢ ");
+  return formatProductSubtitle(item);
 }
 
-export default function MobileLayout() {
+export default function MobileLayout({ initialTab = "home" }) {
   const [scannedItem, setScannedItem] = useState(null);
   const [scanError, setScanError] = useState("");
   const [unknownBarcode, setUnknownBarcode] = useState("");
@@ -45,8 +48,10 @@ export default function MobileLayout() {
   const [useBusy, setUseBusy] = useState(false);
   const [useError, setUseError] = useState("");
   const [movementOutcome, setMovementOutcome] = useState(null);
+  const [recentMovement, setRecentMovement] = useState(null);
+  const [undoBusy, setUndoBusy] = useState(false);
   const [showStockMore, setShowStockMore] = useState(false);
-  const [activeTab, setActiveTab] = useState("home");
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [escalationSeed, setEscalationSeed] = useState(null);
   const [showNfcScanner, setShowNfcScanner] = useState(false);
   const [spaceScanError, setSpaceScanError] = useState("");
@@ -59,6 +64,7 @@ export default function MobileLayout() {
   const [showSearch, setShowSearch] = useState(false);
 
   const [reorderBusy, setReorderBusy] = useState(false);
+  const [reorderItem, setReorderItem] = useState(null);
   const [showReorderForm, setShowReorderForm] = useState(false);
   const [reorderQty, setReorderQty] = useState(1);
   const [reorderNote, setReorderNote] = useState("");
@@ -124,7 +130,7 @@ export default function MobileLayout() {
         setActiveTab("stock");
         break;
       case "temperature":
-        navigate("/temperature");
+        setActiveTab("temperature");
         break;
       case "checks":
         setActiveTab("compliance");
@@ -200,6 +206,11 @@ export default function MobileLayout() {
       return;
     }
 
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setUseError("You are offline. Nothing was changed. Reconnect and scan again so the stock audit remains reliable.");
+      return;
+    }
+
     try {
       setUseBusy(true);
       setUseError("");
@@ -209,25 +220,65 @@ export default function MobileLayout() {
         qty,
         reason: "mobile_barcode_use",
         source: "mobile-barcode",
+        movementKind: "consumption",
         barcode: scannedItem.barcode || "",
         spaceId: activeSenseSession?.senseObjectId || "",
         spaceName: activeSenseSession?.senseObjectName || "",
+        destinationSpaceId: activeSenseSession?.senseObjectId || "",
+        destinationSpaceName: activeSenseSession?.senseObjectName || "",
         senseSessionId: activeSenseSession?.id || "",
         actor: { uid: user?.uid, displayName, email: user?.email, role },
       });
 
-      setScannedItem((current) => ({ ...current, current_stock: result.after }));
-      setMovementOutcome(result);
+      const completedItem = { ...scannedItem, current_stock: result.after };
+      const receipt = {
+        id: result.movementId,
+        movementId: result.movementId,
+        item: completedItem,
+        qty,
+        after: result.after,
+        spaceName: activeSenseSession?.senseObjectName || scannedItem.location || "",
+        status: "synced",
+      };
+      setRecentMovement(receipt);
+      setScannedItem(null);
+      setMovementOutcome(null);
       setUseQty(1);
       window.setTimeout(() => {
-        setScannedItem(null);
-        setMovementOutcome(null);
-      }, 850);
+        setRecentMovement((current) => current?.movementId === result.movementId ? null : current);
+      }, 10000);
     } catch (err) {
       console.error(err);
       setUseError(err?.message || "Stock use could not be recorded. Nothing was changed.");
     } finally {
       setUseBusy(false);
+    }
+  };
+
+  const handleUndoStockUse = async () => {
+    if (!recentMovement || recentMovement.status === "undone") return;
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      setRecentMovement((current) => ({ ...current, error: "You are offline. The original movement remains unchanged." }));
+      return;
+    }
+
+    try {
+      setUndoBusy(true);
+      const result = await reverseStockUseMovement(recentMovement.item.id, recentMovement.movementId, {
+        source: "mobile-undo",
+        barcode: recentMovement.item.barcode || "",
+        spaceId: activeSenseSession?.senseObjectId || "",
+        spaceName: activeSenseSession?.senseObjectName || recentMovement.spaceName || "",
+        senseSessionId: activeSenseSession?.id || "",
+        actor: { uid: user?.uid, displayName, email: user?.email, role },
+      });
+      setRecentMovement((current) => ({ ...current, status: "undone", after: result.after, error: "" }));
+      window.setTimeout(() => setRecentMovement(null), 2200);
+    } catch (err) {
+      console.error(err);
+      setRecentMovement((current) => ({ ...current, error: err?.message || "Undo failed. The original movement remains recorded." }));
+    } finally {
+      setUndoBusy(false);
     }
   };
 
@@ -268,13 +319,14 @@ export default function MobileLayout() {
   };
 
   const handleRequestReorder = async () => {
-    if (!scannedItem) return;
+    const item = reorderItem || scannedItem;
+    if (!item) return;
 
     try {
       setReorderBusy(true);
 
       await createReorderRequest({
-        ...scannedItem,
+        ...item,
         requested_qty: Number(reorderQty || 1),
         note: reorderNote || "",
       });
@@ -282,6 +334,7 @@ export default function MobileLayout() {
       alert("Reorder request created");
 
       setShowReorderForm(false);
+      setReorderItem(null);
       setReorderQty(1);
       setReorderNote("");
     } catch (err) {
@@ -300,7 +353,7 @@ export default function MobileLayout() {
 
   const askAboutScannedItem = async () => {
     if (!scannedItem) return;
-    const label = [scannedItem.name, productSubtitle(scannedItem)].filter(Boolean).join(" â€¢ ");
+    const label = [scannedItem.name, productSubtitle(scannedItem)].filter(Boolean).join(" • ");
     setScannedItem(null);
     openPrimovexAI();
     await askPrimovexAI(`Tell me about the stock position for ${label}. Current stock is ${scannedItem.current_stock ?? 0}.`);
@@ -318,6 +371,8 @@ export default function MobileLayout() {
       {activeTab === "home" && <RoleAdaptiveMobileHome onAction={handleRoleAction} />}
       {activeTab === "connect" ? (
         <MobileConnect />
+      ) : activeTab === "temperature" ? (
+        <MobileConnect onBack={() => setActiveTab("home")} />
       ) : activeTab === "compliance" ? (
         <MobileCompliance />
       ) : activeTab === "sense" ? (
@@ -348,8 +403,8 @@ export default function MobileLayout() {
             <h2 className="text-xl font-bold text-[var(--medtrak-text)]">Reorder Request</h2>
 
             <p className="mt-1 text-[var(--medtrak-muted)]">
-              {scannedItem?.name}
-              {productSubtitle(scannedItem) ? ` â€¢ ${productSubtitle(scannedItem)}` : ""}
+              {(reorderItem || scannedItem)?.name}
+              {productSubtitle(reorderItem || scannedItem) ? ` • ${productSubtitle(reorderItem || scannedItem)}` : ""}
             </p>
 
             <div className="mt-4">
@@ -389,7 +444,7 @@ export default function MobileLayout() {
 
             <button
               type="button"
-              onClick={() => setShowReorderForm(false)}
+              onClick={() => { setShowReorderForm(false); setReorderItem(null); }}
               className="mt-3 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-3 text-[var(--medtrak-text)]"
             >
               Cancel
@@ -450,6 +505,20 @@ export default function MobileLayout() {
         </div>
       )}
 
+      <MobileStockMovementReceipt
+        receipt={recentMovement}
+        busy={undoBusy}
+        onUndo={handleUndoStockUse}
+        onReorder={() => {
+          setReorderItem(recentMovement?.item || null);
+          setReorderQty(1);
+          setReorderNote("Created after mobile stock use reached minimum level.");
+          setRecentMovement(null);
+          setShowReorderForm(true);
+        }}
+        onClose={() => setRecentMovement(null)}
+      />
+
       {showSearch && (
         <div className="pvx-mobile-sheet-backdrop z-[95]">
           <section className="pvx-mobile-sheet text-[var(--medtrak-text)]">
@@ -485,7 +554,7 @@ export default function MobileLayout() {
 
                   <div className="text-sm text-[var(--medtrak-muted)]">
                     Stock: {item.current_stock ?? 0}
-                    {item.location ? ` â€¢ ${item.location}` : ""}
+                    {item.location ? ` • ${item.location}` : ""}
                   </div>
                 </button>
               ))}

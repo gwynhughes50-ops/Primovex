@@ -62,6 +62,12 @@ export const CAPABILITIES = {
   reports: {
     read: "reports.read",
   },
+  clinflow: {
+    read: "clinflow.read",
+    capture: "clinflow.capture",
+    workflow: "clinflow.workflow",
+    manage: "clinflow.manage",
+  },
   theme: {
     lab: "theme.lab",
   },
@@ -125,6 +131,10 @@ export const CAPABILITY_CATALOG = [
   { id: "practiceAdmin.read", label: "View practice admin", group: "Administration" },
   { id: "practiceAdmin.write", label: "Update practice admin", group: "Administration" },
   { id: "reports.read", label: "View reports", group: "Insight" },
+  { id: "clinflow.read", label: "View ClinFlow", group: "ClinFlow" },
+  { id: "clinflow.capture", label: "Capture ClinFlow documents", group: "ClinFlow" },
+  { id: "clinflow.workflow", label: "Process ClinFlow workflow", group: "ClinFlow" },
+  { id: "clinflow.manage", label: "Manage ClinFlow settings and learning", group: "ClinFlow" },
   { id: "theme.lab", label: "Use Theme Lab", group: "Design System" },
 
   { id: "mobile.access", label: "Use MedTrak Mobile", group: "Mobile" },
@@ -144,6 +154,10 @@ export const CAPABILITY_CATALOG = [
 export const ROLE_TEMPLATES = {
   "System Admin": ["*"],
   "Practice Manager": [
+    "clinflow.read",
+    "clinflow.capture",
+    "clinflow.workflow",
+    "clinflow.manage",
     "dashboard.read",
     "operations.read",
     "operations.manage",
@@ -189,6 +203,8 @@ export const ROLE_TEMPLATES = {
     "security.manage",
   ],
   "User": [
+    "clinflow.read",
+    "clinflow.workflow",
     "dashboard.read",
     "operations.read",
     "inventory.read",
@@ -206,6 +222,8 @@ export const ROLE_TEMPLATES = {
     "mobile.biometricUnlock",
   ],
   "Nurse": [
+    "clinflow.read",
+    "clinflow.workflow",
     "dashboard.read",
     "operations.read",
     "inventory.read",
@@ -233,6 +251,9 @@ export const ROLE_TEMPLATES = {
     "mobile.biometricUnlock",
   ],
   "Reception": [
+    "clinflow.read",
+    "clinflow.capture",
+    "clinflow.workflow",
     "dashboard.read",
     "operations.read",
     "inventory.read",
@@ -264,6 +285,7 @@ export const ROLE_TEMPLATES = {
     "mobile.access",
   ],
   "ReadOnly": [
+    "clinflow.read",
     "dashboard.read",
     "operations.read",
     "inventory.read",

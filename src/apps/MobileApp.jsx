@@ -9,7 +9,7 @@ import FirstRunSetupGate from "@/setup/FirstRunSetupGate";
 
 const MINIMUM_SPLASH_MS = 1200;
 
-function MobileBootController() {
+function MobileBootController({ initialTab = "home" }) {
   const { user, loading } = useAuth();
   const [minimumSplashComplete, setMinimumSplashComplete] = useState(false);
 
@@ -22,13 +22,17 @@ function MobileBootController() {
     return <MobileBootSplash message={loading ? "Checking your secure session" : "Preparing Primovex Mobile"} />;
   }
 
-  return user ? <FirstRunSetupGate><MobileLayout /></FirstRunSetupGate> : <MobileAccountLogin />;
+  return user
+    ? <FirstRunSetupGate><MobileLayout initialTab={initialTab} /></FirstRunSetupGate>
+    : <MobileAccountLogin />;
 }
 
 function MobileSenseRoute() {
   const { user, loading } = useAuth();
   if (loading) return <MobileBootSplash message="Opening Primovex Sense" />;
-  if (!user) return <Navigate to="/" replace />;
+  // Keep the deep-link route in place while the user signs in. Once Firebase
+  // restores the session this component opens the intended room automatically.
+  if (!user) return <MobileAccountLogin />;
   return <SenseNfcOpen />;
 }
 
@@ -36,6 +40,8 @@ export default function MobileApp() {
   return (
     <Routes>
       <Route path="/sense/open/:entityType/:entityId" element={<MobileSenseRoute />} />
+      <Route path="/spaces" element={<MobileBootController initialTab="sense" />} />
+      <Route path="/dashboard" element={<MobileBootController initialTab="home" />} />
       <Route path="*" element={<MobileBootController />} />
     </Routes>
   );

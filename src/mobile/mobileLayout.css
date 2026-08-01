@@ -4,6 +4,7 @@
   --pvx-mobile-card-radius: 1.25rem;
   --pvx-mobile-card-padding: 0.875rem;
   --pvx-mobile-header-top: max(0.875rem, env(safe-area-inset-top));
+  --pvx-mobile-page-top: var(--pvx-mobile-header-top);
   --pvx-mobile-nav-height: 4.75rem;
   --pvx-mobile-safe-bottom: max(0.625rem, env(safe-area-inset-bottom));
   --pvx-mobile-content-bottom: calc(var(--pvx-mobile-nav-height) + var(--pvx-mobile-safe-bottom) + 0.75rem);
@@ -11,12 +12,18 @@
 
 [data-primovex-preview="mobile"] {
   --pvx-mobile-header-top: 2rem;
+  --pvx-mobile-page-top: 2rem;
   --pvx-mobile-safe-bottom: 1.25rem;
+}
+
+[data-primovex-client="android"] {
+  /* Android WebView can report a zero CSS safe-area inset despite drawing below the status bar. */
+  --pvx-mobile-page-top: max(3.75rem, env(safe-area-inset-top));
 }
 
 .pvx-mobile-page {
   min-height: 100dvh;
-  padding: var(--pvx-mobile-header-top) var(--pvx-mobile-gutter) var(--pvx-mobile-content-bottom);
+  padding: var(--pvx-mobile-page-top) var(--pvx-mobile-gutter) var(--pvx-mobile-content-bottom);
   color: var(--medtrak-text);
 }
 

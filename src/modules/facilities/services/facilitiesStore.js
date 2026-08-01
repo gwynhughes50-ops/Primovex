@@ -1,5 +1,11 @@
 import { defaultCleaningLogs, defaultEquipment, defaultMaintenance } from '../data/defaultFacilities';
 import { loadSpaceRegistry, resetSpaceRegistry, saveSpaceRegistry } from '@/modules/sense/services/sharedSpaceRegistry';
+import {
+  equipmentToFacilitiesItem,
+  listEquipment,
+  saveEquipmentRegistry,
+  loadEquipmentRegistry,
+} from '@/modules/equipment/services/equipmentRegistry';
 
 const KEY = 'primovex.facilities.v3';
 const LEGACY_KEY = 'primovex.facilities.v2';
@@ -69,6 +75,8 @@ export function loadFacilitiesState() {
   const operational = loadOperationalState();
   return {
     ...operational,
+    equipment: listEquipment().map(equipmentToFacilitiesItem),
+    equipmentMovements: loadEquipmentRegistry().movements || [],
     rooms: registry.spaces.filter((space) => space.status !== 'archived').map((space) => spaceToRoom(space, registry, operational)),
   };
 }
@@ -94,6 +102,12 @@ export function saveFacilitiesState(state) {
     equipmentMovements: state.equipmentMovements || [],
   };
   localStorage.setItem(KEY, JSON.stringify(payload));
+  const equipmentRegistry = loadEquipmentRegistry();
+  saveEquipmentRegistry({
+    ...equipmentRegistry,
+    equipment: state.equipment || equipmentRegistry.equipment,
+    movements: state.equipmentMovements || equipmentRegistry.movements,
+  }, 'facilities');
 
   const statusById = new Map((state.rooms || []).map((room) => [room.id, room.status]));
   saveSpaceRegistry({

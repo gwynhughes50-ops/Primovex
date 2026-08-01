@@ -75,7 +75,7 @@ export default function ManualAddItemDialog({ open, onOpenChange, onCreate, init
 
           <div>
             <label className="text-xs text-slate-400">Strength</label>
-            <Input className="mt-1" value={form.strength} onChange={(e) => setForm((p) => ({ ...p, strength: e.target.value }))} placeholder="e.g. 500mg" />
+            <Input className="mt-1" value={form.strength} onChange={(e) => setForm((p) => ({ ...p, strength: e.target.value }))} placeholder="e.g. 500 mg" />
           </div>
 
           <div>

@@ -15,6 +15,7 @@ export const ROUTE_MANIFEST = [
   { path: "/facilities", label: "Facilities", section: "operations", iconKey: "facilities", children: ["Overview", "Spaces", "Cleaning", "Equipment", "Maintenance"] },
   { path: "/compliance", label: "Compliance", section: "operations", iconKey: "compliance", capability: "compliance.read", children: ["QR / NFC Rounds", "Fire Checks", "Water Temperatures", "PAT Testing"] },
 
+  { path: "/clinflow", label: "ClinFlow", section: "intelligence", iconKey: "clinflow", capability: "clinflow.read", children: ["Workflow", "NFWF", "QAIF", "Coding"] },
   { path: "/reports", label: "Reports", section: "intelligence", iconKey: "reports", capability: "reports.read", children: ["Stock Levels", "Expiry Report", "Transactions", "Temperature"] },
 
   { path: "/connect", label: "Connected Practice", section: "connected", iconKey: "connect", capability: "connect.view", children: ["Providers", "Device Onboarding", "Tuya", "Connectivity"] },

@@ -26,6 +26,7 @@ import Help from "@/pages/Help";
 import DeveloperCentre from "@/pages/DeveloperCentre";
 import DeveloperMobilePreview from "@/developer/DeveloperMobilePreview";
 import LoadingPage from "@/pages/LoadingPage";
+import ClinFlowWorkspace from "@/modules/clinflow/ClinFlowWorkspace";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -84,6 +85,7 @@ export default function DesktopApp() {
         <Route path="compliance" element={<Compliance />} />
         <Route path="admin/*" element={<AdminDashboard />} />
         <Route path="reports" element={<Reports />} />
+        <Route path="clinflow" element={<PermissionGate capability="clinflow.read"><ClinFlowWorkspace /></PermissionGate>} />
         <Route path="help" element={<Help />} />
         <Route path="developer-centre" element={<DeveloperCentre />} />
         <Route path="notifications" element={<Notifications />} />

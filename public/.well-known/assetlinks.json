@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "uk.co.primovex.app",
+      "sha256_cert_fingerprints": [
+        "53:9A:8B:06:4D:54:63:F4:27:32:BB:38:4A:55:E0:D0:D1:BA:7A:3D:C0:26:E8:DD:A2:A8:84:12:22:44:8A:A0"
+      ]
+    }
+  }
+]

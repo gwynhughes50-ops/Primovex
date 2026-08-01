@@ -1,7 +1,8 @@
 const ENTITY_LABELS = { space: 'Space', asset: 'Asset', emergencyBox: 'Emergency box', fridge: 'Fridge' };
+export const PRIMOVEX_APP_ORIGIN = String(import.meta.env.VITE_PUBLIC_APP_URL || 'https://app.primovex.co.uk').replace(/\/+$/, '');
 
 export function buildNfcUrl(entityType, entityId) {
-  return `${window.location.origin}/sense/open/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`;
+  return `${PRIMOVEX_APP_ORIGIN}/sense/open/${encodeURIComponent(entityType)}/${encodeURIComponent(entityId)}`;
 }
 
 export function isInstalledAndroidApp() {

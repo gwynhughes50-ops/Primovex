@@ -28,6 +28,25 @@ service cloud.firestore {
       return signedIn() && userRole() == "Caretaker";
     }
 
+    function clinFlowReader() {
+      return signedIn() && userRole() in ["System Admin", "Practice Manager", "User", "Nurse", "Reception", "ReadOnly"];
+    }
+
+    function clinFlowWorker() {
+      return signedIn() && userRole() in ["System Admin", "Practice Manager", "User", "Nurse", "Reception"];
+    }
+
+    function clinFlowManager() {
+      return signedIn() && userRole() in ["System Admin", "Practice Manager"];
+    }
+
+    function clinFlowPracticeMatches(practiceId) {
+      return practiceId == "primary"
+        || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.practiceId == practiceId
+        || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organisationId == practiceId
+        || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == practiceId;
+    }
+
     // -------------------------
     // PER-USER SETTINGS
     // -------------------------
@@ -362,6 +381,12 @@ match /subject_access_requests/{requestId} {
       allow create, update, delete: if hasPermission("connect", "manageDevices") || isAdmin();
     }
 
+    match /device_assignment_audit/{auditId} {
+      allow get, list: if signedIn() && (hasPermission("audit", "read") || isAdmin());
+      allow create: if signedIn() && (hasPermission("connect", "manageDevices") || isAdmin());
+      allow update, delete: if false;
+    }
+
     match /connect_device_readings/{readingId} {
       allow get, list: if signedIn() && (hasPermission("connect", "view") || isAdmin());
       // Real IoT ingestion should use Cloud Functions/Admin SDK. This client rule
@@ -385,6 +410,63 @@ match /subject_access_requests/{requestId} {
     match /audit_events/{eventId} {
       allow get, list: if signedIn() && (hasPermission("audit", "read") || isAdmin());
       allow create: if signedIn();
+      allow update, delete: if false;
+    }
+
+    // -------------------------
+    // CLINFLOW GOVERNED SYNTHETIC FOUNDATION
+    // -------------------------
+    // Only non-identifying demonstration workflow state can be written by a client.
+    // Real documents and patient data require the future privileged ingestion gateway.
+    // Azure analysis metadata is written by the Admin SDK only. The uploaded PDF
+    // and extracted text are deliberately never stored in Firestore.
+    match /clinflow_analysis_events/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /clinflow_workflow_records/{documentId} {
+      allow get, list: if clinFlowReader()
+        && resource.data.dataMode == "synthetic"
+        && clinFlowPracticeMatches(resource.data.practiceId);
+
+      allow create: if clinFlowWorker()
+        && request.resource.data.dataMode == "synthetic"
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          "schemaVersion", "dataMode", "practiceId", "siteId", "demoReference",
+          "priority", "destination", "status", "archived",
+          "patientVerificationStatus", "retentionClass", "createdByUid",
+          "triageSuggestion", "triageDecision", "triageStatus", "triageRulesetVersion",
+          "triageReviewedByUid", "triageReviewedAt",
+          "createdAt", "updatedAt", "updatedByUid"
+        ])
+        && clinFlowPracticeMatches(request.resource.data.practiceId);
+
+      allow update: if clinFlowWorker()
+        && resource.data.dataMode == "synthetic"
+        && request.resource.data.dataMode == "synthetic"
+        && request.resource.data.practiceId == resource.data.practiceId
+        && request.resource.data.siteId == resource.data.siteId
+        && request.resource.data.demoReference == resource.data.demoReference
+        && request.resource.data.updatedByUid == request.auth.uid
+        && (request.resource.data.archived == resource.data.archived || clinFlowManager())
+        && clinFlowPracticeMatches(resource.data.practiceId);
+
+      allow delete: if false;
+    }
+
+    match /clinflow_workflow_events/{eventId} {
+      allow get, list: if clinFlowReader()
+        && resource.data.dataMode == "synthetic"
+        && clinFlowPracticeMatches(resource.data.practiceId);
+      allow create: if clinFlowWorker()
+        && request.resource.data.dataMode == "synthetic"
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          "schemaVersion", "dataMode", "practiceId", "siteId", "documentId",
+          "type", "summary", "metadata", "actorUid", "createdAt"
+        ])
+        && clinFlowPracticeMatches(request.resource.data.practiceId);
       allow update, delete: if false;
     }
 
