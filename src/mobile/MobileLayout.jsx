@@ -12,6 +12,7 @@ import AskPrimovexPanel from "@/ai/components/AskPrimovexPanel";
 import usePrimovexAI from "@/ai/hooks/usePrimovexAI";
 import OperationalEscalationSheet from "./OperationalEscalationSheet";
 import MobileNfcScanner from "./MobileNfcScanner";
+import MobileBleScanner from "./MobileBleScanner";
 import QuickNotesSheet from "./QuickNotesSheet";
 import MobileAIActionSheet from "./MobileAIActionSheet";
 import MobileSenseSpaces from "./MobileSenseSpaces";
@@ -21,11 +22,20 @@ import MobileRapidStockAction from "./MobileRapidStockAction";
 import MobileStockMovementReceipt from "./MobileStockMovementReceipt";
 import { useAuth } from "@/contexts/AuthContext";
 import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry";
+import { loadSenseState } from "@/modules/sense/services/senseStore";
+import { parsePrimovexSenseUrl } from "@/modules/sense/services/nfcService";
+import { parseIBeaconValue } from "@/modules/sense/services/bleService";
+import { recordEquipmentSighting } from "@/modules/equipment/services/equipmentSightingService";
+import { findEquipmentByBleTag } from "@/modules/equipment/services/equipmentRegistry";
+import { parseComplianceQrPayload } from "@/services/compliance/complianceQrService";
+import { completeCleaningSession, getActiveCleaningSession, startCleaningSession, subscribeRoomOperational } from "@/modules/facilities/services/cleaningRecordService";
+import { playBeep } from "@/utils/beep";
 import { getOpenQuickNotes, subscribeQuickNotes } from "@/services/quickNotesService";
 import { Camera, BellRing, Eye, Sparkles } from "lucide-react";
 import ActiveSenseBanner from "@/modules/sense/components/ActiveSenseBanner";
 import { useSenseSession } from "@/contexts/SenseSessionContext";
 import MobileDeveloperIssueRecorder from "@/developer/MobileDeveloperIssueRecorder";
+import MobileCleanerHome from "./MobileCleanerHome";
 import "./mobileLayout.css";
 import { formatProductSubtitle } from "@/utils/productDisplay";
 
@@ -34,7 +44,9 @@ import {
   applyStockMovement,
   reverseStockUseMovement,
   createReorderRequest,
+  normalizeStockItemCategory,
 } from "@/services/stockService";
+import { categoryLabel as stockCategoryLabel, subcategoryLabel as stockSubcategoryLabel } from "@/data/stockCategories";
 
 function productSubtitle(item) {
   return formatProductSubtitle(item);
@@ -54,11 +66,16 @@ export default function MobileLayout({ initialTab = "home" }) {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [escalationSeed, setEscalationSeed] = useState(null);
   const [showNfcScanner, setShowNfcScanner] = useState(false);
+  const [pendingComplianceScan, setPendingComplianceScan] = useState(null);
+  const [showBleScanner, setShowBleScanner] = useState(false);
   const [spaceScanError, setSpaceScanError] = useState("");
   const [showQuickNotes, setShowQuickNotes] = useState(false);
   const [showAIActionSheet, setShowAIActionSheet] = useState(false);
   const [quickNotes, setQuickNotes] = useState(() => getOpenQuickNotes());
   useEffect(() => subscribeQuickNotes((notes) => setQuickNotes(notes.filter((note) => note.status !== "completed"))), []);
+
+  const [roomOperational, setRoomOperational] = useState({});
+  useEffect(() => subscribeRoomOperational(setRoomOperational), []);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [showSearch, setShowSearch] = useState(false);
@@ -89,16 +106,34 @@ export default function MobileLayout({ initialTab = "home" }) {
     if (!code) return;
     setSpaceScanError("");
 
-    let spaceId = code;
+    let entityType = "space";
+    let entityId = code;
     try {
       const url = new URL(code, window.location.origin);
-      const match = url.pathname.match(/^\/sense\/open\/space\/([^/]+)\/?$/i);
-      if (match) spaceId = decodeURIComponent(match[1]);
+      const match = url.pathname.match(/^\/sense\/open\/(space|asset)\/([^/]+)\/?$/i);
+      if (match) {
+        entityType = match[1].toLowerCase();
+        entityId = decodeURIComponent(match[2]);
+      }
     } catch {}
+
+    if (entityType === "asset") {
+      const senseState = loadSenseState();
+      const asset = (senseState.assets || []).find((item) =>
+        [item.id, item.equipmentId, item.identity?.nfcTagId].filter(Boolean).some((value) => String(value).toLowerCase() === entityId.toLowerCase())
+      );
+      if (!asset) {
+        setSpaceScanError("This code is not linked to a Primovex asset yet.");
+        return;
+      }
+      await activate({ id: asset.id, name: asset.name, type: "asset", source: "qr-barcode" });
+      setActiveTab("sense");
+      return;
+    }
 
     const registry = loadSpaceRegistry();
     const space = registry.spaces.find((item) =>
-      [item.id, item.spaceId, item.qrCode, item.nfcTagId, item.slug].filter(Boolean).some((value) => String(value).toLowerCase() === spaceId.toLowerCase())
+      [item.id, item.spaceId, item.qrCode, item.nfcTagId, item.slug].filter(Boolean).some((value) => String(value).toLowerCase() === entityId.toLowerCase())
     );
 
     if (!space) {
@@ -108,7 +143,92 @@ export default function MobileLayout({ initialTab = "home" }) {
 
     await activate({ id: space.spaceId || space.id, name: space.name, type: "space", source: "qr-barcode" });
     setActiveTab("sense");
+
+    // A Cleaner's own scan of a room's tag/code is the cleaning trigger itself,
+    // no separate button: first scan of a room with no active session starts
+    // one, scanning the same room again while one is running completes it.
+    if (role === "Cleaner") {
+      const roomId = space.spaceId || space.id;
+      const actorName = displayName || user?.email || "Cleaner";
+      const activeSession = getActiveCleaningSession(roomOperational, roomId);
+      if (activeSession) {
+        await completeCleaningSession(roomOperational, roomId, space.name, actorName);
+        playBeep(2); // finished — move on to the next room
+      } else {
+        await startCleaningSession(roomId, space.name, actorName);
+        playBeep(1); // started — cleaning session is now active
+      }
+    }
   };
+
+  // Fired by MainActivity.kt's NFC reader mode while the app is already in the
+  // foreground (see onNfcTagDiscovered/dispatchNfcEvent). Reuses the same
+  // resolve-and-activate path as a manual QR/barcode space scan, so tapping a
+  // room's tag mid-session switches the Sense tab in place instead of the app
+  // cold-launching to a full-page route the way a closed-app tap still does.
+  // Compliance tags (fire points etc) use a different payload shape
+  // ("MEDTRAK:COMPLIANCE:FP-007") entirely unrelated to Sense space/asset
+  // URLs — checked first so handleSpaceCodeScan never sees them and shows a
+  // misleading "not linked to a Space" error for a tag that's working fine.
+  useEffect(() => {
+    function handleNativeNfc(event) {
+      if (event.detail?.type !== "scanned" || !event.detail?.value) return;
+      const value = event.detail.value;
+      if (parseComplianceQrPayload(value)) {
+        setActiveTab("compliance");
+        setPendingComplianceScan(value);
+        return;
+      }
+      handleSpaceCodeScan(value);
+    }
+    window.addEventListener("primovex-native-nfc", handleNativeNfc);
+    return () => window.removeEventListener("primovex-native-nfc", handleNativeNfc);
+  }, [handleSpaceCodeScan]);
+
+  // BLE scanning now runs continuously in the background whenever the app is
+  // foregrounded (see MainActivity.kt's onResume), not just when a scan sheet
+  // is deliberately open — that's the point, for fast-moving kit (ECG,
+  // ultrasound, dermatoscope) to be found without anyone having to go looking
+  // for it first. So unlike the NFC tap handler above, a passively-detected
+  // equipment tag must NOT force-navigate or interrupt whatever the user is
+  // doing — it just quietly records a "last seen" sighting. MobileBleScanner.jsx
+  // listens to this same event stream separately for the deliberate "find this
+  // specific tag now" flow, where showing/opening the result IS the point.
+  useEffect(() => {
+    let lastSightingAt = new Map();
+    function recordSightingThrottled(entityId) {
+      const now = Date.now();
+      const last = lastSightingAt.get(entityId) || 0;
+      if (now - last < 60000) return;
+      lastSightingAt.set(entityId, now);
+      recordEquipmentSighting(entityId, {
+        seenBy: displayName || user?.email || "",
+        spaceId: activeSenseSession?.senseObjectType === "space" ? activeSenseSession.senseObjectId : null,
+        spaceName: activeSenseSession?.senseObjectType === "space" ? activeSenseSession.senseObjectName : "",
+      }).catch((error) => console.error("Unable to record equipment sighting", error));
+    }
+    function handleNativeBle(event) {
+      const { type, value } = event.detail || {};
+      if (type === "scanned" && value) {
+        const parsed = parsePrimovexSenseUrl(value);
+        if (parsed?.entityType === "asset") recordSightingThrottled(parsed.entityId);
+        return;
+      }
+      // Cheap iBeacon-format tags (e.g. the DX-CP35) can't be reconfigured to
+      // broadcast a Primovex URL (Eddystone-URL's payload is too short for
+      // our URLs), so those are matched by UUID+Major+Minor against whatever
+      // equipment record they were linked to instead — see
+      // MobileFridgeSheet.jsx's "Link this BLE tag" flow.
+      if (type === "ibeacon" && value) {
+        const beacon = parseIBeaconValue(value);
+        if (!beacon) return;
+        const match = findEquipmentByBleTag(beacon.uuid, beacon.major, beacon.minor);
+        if (match) recordSightingThrottled(match.id);
+      }
+    }
+    window.addEventListener("primovex-native-ble", handleNativeBle);
+    return () => window.removeEventListener("primovex-native-ble", handleNativeBle);
+  }, [displayName, user, activeSenseSession]);
 
   const openSpaceScanner = () => {
     setSpaceScanError("");
@@ -135,6 +255,9 @@ export default function MobileLayout({ initialTab = "home" }) {
       case "checks":
         setActiveTab("compliance");
         break;
+      case "concerns":
+        navigate("/governance/concerns");
+        break;
       case "clean":
         setActiveTab("facilities");
         break;
@@ -154,15 +277,19 @@ export default function MobileLayout({ initialTab = "home" }) {
     if (!q) return [];
 
     return allItems
-      .filter((item) =>
-        String(item.name || "").toLowerCase().includes(q) ||
-        String(item.strength || "").toLowerCase().includes(q) ||
-        String(item.form || "").toLowerCase().includes(q) ||
-        String(item.product_identity_key || "").toLowerCase().includes(q) ||
-        String(item.barcode || "").toLowerCase().includes(q) ||
-        String(item.location || "").toLowerCase().includes(q) ||
-        String(item.category || "").toLowerCase().includes(q)
-      )
+      .filter((item) => {
+        const resolved = normalizeStockItemCategory(item);
+        return (
+          String(item.name || "").toLowerCase().includes(q) ||
+          String(item.strength || "").toLowerCase().includes(q) ||
+          String(item.form || "").toLowerCase().includes(q) ||
+          String(item.product_identity_key || "").toLowerCase().includes(q) ||
+          String(item.barcode || "").toLowerCase().includes(q) ||
+          String(item.location || "").toLowerCase().includes(q) ||
+          stockCategoryLabel(resolved.category).toLowerCase().includes(q) ||
+          stockSubcategoryLabel(resolved.category, resolved.subcategory).toLowerCase().includes(q)
+        );
+      })
       .slice(0, 8);
   }, [allItems, searchTerm]);
 
@@ -359,6 +486,25 @@ export default function MobileLayout({ initialTab = "home" }) {
     await askPrimovexAI(`Tell me about the stock position for ${label}. Current stock is ${scannedItem.current_stock ?? 0}.`);
   };
 
+  // The Cleaner role gets a dedicated, deliberately minimal experience: scan
+  // instructions plus a way to report an issue, nothing else — no bottom
+  // nav, no other tabs. Everything above this (NFC listener, scan handling,
+  // cleaning session start/finish, beeps) still runs the same way since none
+  // of those are skipped, only the rendered UI branches here.
+  if (role === "Cleaner") {
+    return (
+      <MobileSessionShell>
+        <MobileCleanerHome onScanRoom={() => document.querySelector("[data-cleaner-scan-button]")?.click()} />
+        <MobileBarcodeScanner
+          onScan={handleSpaceCodeScan}
+          triggerAttribute="data-cleaner-scan-button"
+          title="Scan room or space"
+          helper="Scan the Primovex QR code or barcode on the room tag. NFC remains available too."
+        />
+      </MobileSessionShell>
+    );
+  }
+
   return (
     <MobileSessionShell>
     <div className="pvx-mobile-shell min-h-[100dvh] bg-[var(--medtrak-bg)] text-[var(--medtrak-text)] pb-[var(--pvx-mobile-content-bottom)]">
@@ -374,9 +520,9 @@ export default function MobileLayout({ initialTab = "home" }) {
       ) : activeTab === "temperature" ? (
         <MobileConnect onBack={() => setActiveTab("home")} />
       ) : activeTab === "compliance" ? (
-        <MobileCompliance />
+        <MobileCompliance pendingNfcScan={pendingComplianceScan} onConsumeNfcScan={() => setPendingComplianceScan(null)} />
       ) : activeTab === "sense" ? (
-        <MobileSenseSpaces onScan={() => setShowNfcScanner(true)} />
+        <MobileSenseSpaces onScan={() => setShowNfcScanner(true)} onBleScan={() => setShowBleScanner(true)} />
       ) : activeTab === "home" ? null : (
         <MobileHome
           mode={activeTab}
@@ -578,6 +724,7 @@ export default function MobileLayout({ initialTab = "home" }) {
       <OperationalEscalationSheet open={escalationSeed !== null} seed={escalationSeed || {}} onClose={() => setEscalationSeed(null)} />
 
       <MobileNfcScanner open={showNfcScanner} onClose={() => setShowNfcScanner(false)} />
+      <MobileBleScanner open={showBleScanner} onClose={() => setShowBleScanner(false)} />
 
       <QuickNotesSheet open={showQuickNotes} onClose={() => setShowQuickNotes(false)} />
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -19,8 +19,13 @@ import useStock from "@/hooks/useStock";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, query } from "firebase/firestore";
+import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry";
+import { listEquipment } from "@/modules/equipment/services/equipmentRegistry";
+import AssignLocationModal from "@/components/stock/AssignLocationModal";
+import { STOCK_CATEGORIES, getSubcategories, categoryLabel, subcategoryLabel, UNCATEGORISED_CATEGORY } from "@/data/stockCategories";
+import { normalizeStockItemCategory, migrateStockItemCategoryIfNeeded } from "@/services/stockService";
 
-import { Search, Package, Pencil, History, Trash2, Archive, RotateCcw } from "lucide-react";
+import { Search, Package, Pencil, History, Trash2, Archive, RotateCcw, MapPin } from "lucide-react";
 
 /* helpers */
 const getStockBadge = (qty, min) => {
@@ -80,6 +85,8 @@ export default function Inventory() {
   /* stock state */
   const [showArchived, setShowArchived] = useState(false);
   const [search, setSearch] = useState("");
+  const [categoryTab, setCategoryTab] = useState("all");
+  const [subcategoryFilter, setSubcategoryFilter] = useState("all");
 
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveMode, setMoveMode] = useState("use");
@@ -114,7 +121,8 @@ export default function Inventory() {
     barcode: "",
     site: "",
     location: "",
-    category: "",
+    category: UNCATEGORISED_CATEGORY,
+    subcategory: "",
     min_stock: 0,
     preferred_supplier_id: "",
     preferred_supplier_name: "",
@@ -131,8 +139,15 @@ export default function Inventory() {
    * We always subscribe to ALL (active + archived) and filter client-side,
    * so the toggle cannot get “stuck” due to a listener not re-subscribing.
    */
-  const { items, loading, error, archiveItem, restoreItem, receiveStock, useStockQty, addItem, updateItem } =
+  const { items, loading, error, archiveItem, restoreItem, receiveStock, useStockQty, addItem, updateItem, assignLocation, unassignLocation } =
     useStock({ includeArchived: true });
+
+  const [locationsOpen, setLocationsOpen] = useState(false);
+  const [locationsItem, setLocationsItem] = useState(null);
+  const openLocations = (item) => {
+    setLocationsItem(item);
+    setLocationsOpen(true);
+  };
 
   useEffect(() => {
     const qSuppliers = query(collection(db, "suppliers"));
@@ -156,6 +171,26 @@ export default function Inventory() {
     return () => unsub();
   }, []);
 
+  /* Self-healing category migration: items created before the fixed
+     taxonomy shipped (free text, or the old 6-value enum) get resolved to
+     it on every read already (see normalizeStockItemCategory), but this
+     also persists that resolved value once so it stops depending on the
+     legacy-mapping guesswork on every future read/filter. Runs at most once
+     per item per session (attemptedRef guards against re-firing while the
+     write is still in flight) and only for staff who can actually write
+     inventory. */
+  const categoryMigrationAttemptedRef = useRef(new Set());
+  useEffect(() => {
+    if (!canWriteInventory) return;
+    (items || []).forEach((item) => {
+      if (!item?.id || categoryMigrationAttemptedRef.current.has(item.id)) return;
+      categoryMigrationAttemptedRef.current.add(item.id);
+      migrateStockItemCategoryIfNeeded(item).catch((err) => {
+        console.error("Stock category migration failed for", item.id, err);
+      });
+    });
+  }, [items, canWriteInventory]);
+
   const counts = useMemo(() => {
     const total = Array.isArray(items) ? items.length : 0;
     let archived = 0;
@@ -167,15 +202,54 @@ export default function Inventory() {
     return { total, active, archived };
   }, [items]);
 
+  /* category tabs reset the subcategory filter so it can't get stuck pointing
+     at a subcategory that doesn't exist under the newly selected category */
+  const selectCategoryTab = (id) => {
+    setCategoryTab(id);
+    setSubcategoryFilter("all");
+  };
+
+  const categoryCounts = useMemo(() => {
+    const rows = Array.isArray(items) ? items : [];
+    const base = showArchived ? rows : rows.filter((it) => !isArchivedItem(it));
+    const counts = {};
+    base.forEach((it) => {
+      const resolved = normalizeStockItemCategory(it);
+      counts[resolved.category] = (counts[resolved.category] || 0) + 1;
+    });
+    return counts;
+  }, [items, showArchived]);
+
+  const subcategoryCounts = useMemo(() => {
+    if (categoryTab === "all") return {};
+    const rows = Array.isArray(items) ? items : [];
+    const base = showArchived ? rows : rows.filter((it) => !isArchivedItem(it));
+    const counts = {};
+    base.forEach((it) => {
+      const resolved = normalizeStockItemCategory(it);
+      if (resolved.category !== categoryTab) return;
+      counts[resolved.subcategory] = (counts[resolved.subcategory] || 0) + 1;
+    });
+    return counts;
+  }, [items, showArchived, categoryTab]);
+
   /* derived */
   const filtered = useMemo(() => {
     const rows = Array.isArray(items) ? items : [];
-    const base = showArchived ? rows : rows.filter((it) => !isArchivedItem(it));
+    let base = showArchived ? rows : rows.filter((it) => !isArchivedItem(it));
+
+    if (categoryTab !== "all") {
+      base = base.filter((it) => normalizeStockItemCategory(it).category === categoryTab);
+    }
+    if (subcategoryFilter !== "all") {
+      base = base.filter((it) => normalizeStockItemCategory(it).subcategory === subcategoryFilter);
+    }
 
     const q = search.trim().toLowerCase();
     if (!q) return base;
 
     return base.filter((it) => {
+      const resolved = normalizeStockItemCategory(it);
       const name = String(it?.name || "").toLowerCase();
       const barcode = String(it?.barcode || "").toLowerCase();
       const strength = String(it?.strength || "").toLowerCase();
@@ -184,6 +258,8 @@ export default function Inventory() {
       const site = String(it?.site || "").toLowerCase();
       const location = String(it?.location || "").toLowerCase();
       const category = String(it?.category || "").toLowerCase();
+      const categoryLabelText = categoryLabel(resolved.category).toLowerCase();
+      const subcategoryLabelText = subcategoryLabel(resolved.category, resolved.subcategory).toLowerCase();
 
       return (
         name.includes(q) ||
@@ -193,10 +269,12 @@ export default function Inventory() {
         productKey.includes(q) ||
         site.includes(q) ||
         location.includes(q) ||
-        category.includes(q)
+        category.includes(q) ||
+        categoryLabelText.includes(q) ||
+        subcategoryLabelText.includes(q)
       );
     });
-  }, [items, search, showArchived]);
+  }, [items, search, showArchived, categoryTab, subcategoryFilter]);
 const handleBarcodeScan = (code) => {
   const scannedCode = String(code || "").trim();
 
@@ -253,6 +331,7 @@ const handleBarcodeScan = (code) => {
 
   const openEdit = (item) => {
     if (!canWriteInventory) return;
+    const resolvedCategory = normalizeStockItemCategory(item);
     setEditItem(item);
     setEditForm({
       name: item?.name ?? "",
@@ -262,7 +341,8 @@ const handleBarcodeScan = (code) => {
       barcode: item?.barcode ?? "",
       site: item?.site ?? "",
       location: item?.location ?? "",
-      category: item?.category ?? "",
+      category: resolvedCategory.category,
+      subcategory: resolvedCategory.subcategory,
       min_stock: typeof item?.min_stock === "number" ? item.min_stock : Number(item?.min_stock ?? 0) || 0,
       preferred_supplier_id: item?.preferred_supplier_id ?? "",
       preferred_supplier_name: item?.preferred_supplier_name ?? "",
@@ -310,7 +390,8 @@ const handleBarcodeScan = (code) => {
         barcode: (editForm.barcode || "").trim(),
         site,
         location,
-        category: (editForm.category || "").trim(),
+        category: (editForm.category || "").trim() || UNCATEGORISED_CATEGORY,
+        subcategory: (editForm.subcategory || "").trim(),
         min_stock: Number(editForm.min_stock) || 0,
         preferred_supplier_id: editForm.preferred_supplier_id || "",
         preferred_supplier_name: editForm.preferred_supplier_name || "",
@@ -394,6 +475,56 @@ const handleBarcodeScan = (code) => {
             </div>
           </div>
 
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => selectCategoryTab("all")}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
+                categoryTab === "all" ? "border-teal-400/50 bg-teal-500/15 text-teal-100" : "border-slate-800 bg-slate-900/60 text-slate-300"
+              }`}
+            >
+              All categories ({Object.values(categoryCounts).reduce((sum, n) => sum + n, 0)})
+            </button>
+            {STOCK_CATEGORIES.filter((cat) => categoryCounts[cat.id]).map((cat) => (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => selectCategoryTab(cat.id)}
+                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
+                  categoryTab === cat.id ? "border-teal-400/50 bg-teal-500/15 text-teal-100" : "border-slate-800 bg-slate-900/60 text-slate-300"
+                }`}
+              >
+                {cat.icon} {cat.label} ({categoryCounts[cat.id]})
+              </button>
+            ))}
+          </div>
+
+          {categoryTab !== "all" && Object.keys(subcategoryCounts).length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setSubcategoryFilter("all")}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition ${
+                  subcategoryFilter === "all" ? "border-teal-400/40 bg-teal-500/10 text-teal-100" : "border-slate-800/70 bg-slate-900/40 text-slate-400"
+                }`}
+              >
+                All subcategories
+              </button>
+              {getSubcategories(categoryTab).filter((sub) => subcategoryCounts[sub.id]).map((sub) => (
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => setSubcategoryFilter(sub.id)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium border transition ${
+                    subcategoryFilter === sub.id ? "border-teal-400/40 bg-teal-500/10 text-teal-100" : "border-slate-800/70 bg-slate-900/40 text-slate-400"
+                  }`}
+                >
+                  {sub.label} ({subcategoryCounts[sub.id]})
+                </button>
+              ))}
+            </div>
+          )}
+
           {loading && <p className="text-slate-400">Loading inventory...</p>}
           {error && <p className="text-rose-400">{String(error)}</p>}
 
@@ -444,13 +575,14 @@ const handleBarcodeScan = (code) => {
                         </p>
                       )}
 
-                      {(item.category || item.min_stock !== undefined) && (
-                        <p className="mt-1 text-[11px] text-slate-400 truncate">
-                          {item.category ? `${item.category}` : ""}
-                          {item.category && item.min_stock !== undefined ? " - " : ""}
-                          {item.min_stock !== undefined ? `Min: ${item.min_stock}` : ""}
-                        </p>
-                      )}
+                      <p className="mt-1 text-[11px] text-slate-400 truncate">
+                        {(() => {
+                          const resolved = normalizeStockItemCategory(item);
+                          const label = subcategoryLabel(resolved.category, resolved.subcategory) || categoryLabel(resolved.category);
+                          return `${categoryLabel(resolved.category)}${label && label !== categoryLabel(resolved.category) ? ` › ${label}` : ""}`;
+                        })()}
+                        {item.min_stock !== undefined ? ` - Min: ${item.min_stock}` : ""}
+                      </p>
 
                       {item.preferred_supplier_name && (
                         <p className="mt-1 text-[11px] text-cyan-300 truncate">
@@ -480,6 +612,18 @@ const handleBarcodeScan = (code) => {
                         + Receive
                       </Button>
                     </div>
+                  )}
+
+                  {!archived && (
+                    <Button
+                      variant="outline"
+                      className="mt-2 w-full"
+                      onClick={() => openLocations(item)}
+                      disabled={!canWriteInventory}
+                    >
+                      <MapPin className="mr-2 h-4 w-4" />
+                      Locations{Array.isArray(item.locations) && item.locations.length > 0 ? ` (${item.locations.length})` : ""}
+                    </Button>
                   )}
 
                   <div className="mt-3 flex justify-between items-center">
@@ -569,6 +713,14 @@ const handleBarcodeScan = (code) => {
           <StockHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} item={historyItem} />
           <ManualAddItemDialog open={manualAddOpen} onOpenChange={setManualAddOpen} onCreate={addItem} initialBarcode={initialBarcode} />
 
+          <AssignLocationModal
+            open={locationsOpen}
+            onOpenChange={setLocationsOpen}
+            item={(items || []).find((i) => i.id === locationsItem?.id) || locationsItem}
+            onAssign={(payload) => assignLocation(locationsItem.id, payload, { actor: actorUser })}
+            onUnassign={(locationId, quantity) => unassignLocation(locationsItem.id, locationId, quantity, { actor: actorUser })}
+          />
+
           <>
             {editOpen && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
@@ -650,22 +802,40 @@ const handleBarcodeScan = (code) => {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <p className="text-xs text-slate-400 mb-1">Category</p>
-                        <Input
+                        <select
                           value={editForm.category}
-                          onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}
-                          placeholder="e.g. Dressings"
-                        />
+                          onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value, subcategory: "" }))}
+                          className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                        >
+                          {STOCK_CATEGORIES.map((cat) => (
+                            <option key={cat.id} value={cat.id}>{cat.icon} {cat.label}</option>
+                          ))}
+                        </select>
                       </div>
 
                       <div>
-                        <p className="text-xs text-slate-400 mb-1">Min stock</p>
-                        <Input
-                          type="number"
-                          value={editForm.min_stock}
-                          onChange={(e) => setEditForm((f) => ({ ...f, min_stock: e.target.value }))}
-                          placeholder="0"
-                        />
+                        <p className="text-xs text-slate-400 mb-1">Subcategory</p>
+                        <select
+                          value={editForm.subcategory}
+                          onChange={(e) => setEditForm((f) => ({ ...f, subcategory: e.target.value }))}
+                          className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                        >
+                          <option value="">Select a subcategory</option>
+                          {getSubcategories(editForm.category).map((sub) => (
+                            <option key={sub.id} value={sub.id}>{sub.label}</option>
+                          ))}
+                        </select>
                       </div>
+                    </div>
+
+                    <div>
+                      <p className="text-xs text-slate-400 mb-1">Min stock</p>
+                      <Input
+                        type="number"
+                        value={editForm.min_stock}
+                        onChange={(e) => setEditForm((f) => ({ ...f, min_stock: e.target.value }))}
+                        placeholder="0"
+                      />
                     </div>
 
                     <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Clipboard, Nfc, Power, RadioTower, RefreshCcw, ShieldCheck, Smartphone } from 'lucide-react';
-import { buildNfcUrl, nfcSupported, scanNfcOnce, writeNfcUrl } from '../services/nfcService';
+import { buildNfcUrl, nfcSetupStatus, nfcSupported, scanNfcOnce, writeNfcUrl } from '../services/nfcService';
 import { markNfcTagTested, updateNfcTagStatus, upsertNfcTag } from '../services/senseStore';
+import { useAuth } from '@/contexts/AuthContext';
 
 const panel = 'rounded-2xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)]';
 const muted = 'text-[color:var(--medtrak-muted)]';
@@ -13,6 +14,7 @@ function fmt(value) {
 }
 
 export default function NfcManager({ state, commit, actor, defaultEntityId }) {
+  const { isAdmin } = useAuth();
   const [entityType, setEntityType] = useState('space');
   const [entityId, setEntityId] = useState(state.spaces[0]?.id || '');
   const [busy, setBusy] = useState('');
@@ -75,7 +77,7 @@ export default function NfcManager({ state, commit, actor, defaultEntityId }) {
           <h2 className="mt-1 text-xl font-semibold">Set up a room Smart Tag</h2>
           <p className={`mt-1 max-w-3xl text-sm ${muted}`}>Choose the room, press Write tag, then hold a blank NFC tag to the phone. Primovex writes only the room identity; room data remains securely in Primovex.</p>
         </div>
-        <span className={`rounded-full px-3 py-1 text-xs font-bold ${nfcSupported() ? 'bg-emerald-500/12 text-emerald-700' : 'bg-amber-500/12 text-amber-700'}`}>{nfcSupported() ? 'Web NFC available' : 'Use link fallback'}</span>
+        <span className={`rounded-full px-3 py-1 text-xs font-bold ${nfcSetupStatus().mode === 'deep-link' ? 'bg-amber-500/12 text-amber-700' : 'bg-emerald-500/12 text-emerald-700'}`}>{nfcSetupStatus().label}</span>
       </div>
 
       <div className="mt-5 grid gap-2 sm:grid-cols-3"><Step number="1" text="Choose a room" /><Step number="2" text="Write the blank tag" /><Step number="3" text="Test and place it" /></div>
@@ -90,7 +92,7 @@ export default function NfcManager({ state, commit, actor, defaultEntityId }) {
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <button onClick={programTag} disabled={!selected || busy} className={`${button} bg-[color:var(--medtrak-accent)] text-white`}><Smartphone className="mr-2 inline h-4 w-4" />{busy === 'write' ? 'Writing…' : 'Write room tag'}</button>
+        {isAdmin && <button onClick={programTag} disabled={!selected || busy} className={`${button} bg-[color:var(--medtrak-accent)] text-white`}><Smartphone className="mr-2 inline h-4 w-4" />{busy === 'write' ? 'Writing…' : 'Write room tag'}</button>}
         <button onClick={copyLink} disabled={!url} className={button}><Clipboard className="mr-2 inline h-4 w-4" />Copy link for NFC writer</button>
       </div>
 

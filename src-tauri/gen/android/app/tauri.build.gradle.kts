@@ -5,4 +5,5 @@ dependencies {
   implementation(project(":tauri-android"))
   implementation(project(":tauri-plugin-barcode-scanner"))
   implementation(project(":tauri-plugin-deep-link"))
+  implementation(project(":tauri-plugin-opener"))
 }

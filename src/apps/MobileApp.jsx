@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import MobileLayout from "@/mobile/MobileLayout";
+import MobileSessionShell from "@/mobile/MobileSessionShell";
+import MobileGovernanceConcerns from "@/mobile/MobileGovernanceConcerns";
 import SenseNfcOpen from "@/pages/SenseNfcOpen";
 import MobileBootSplash from "@/mobile/auth/MobileBootSplash";
 import MobileAccountLogin from "@/mobile/auth/MobileAccountLogin";
@@ -36,10 +38,22 @@ function MobileSenseRoute() {
   return <SenseNfcOpen />;
 }
 
+function MobileGovernanceConcernsRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <MobileBootSplash message="Opening Concerns" />;
+  if (!user) return <MobileAccountLogin />;
+  // Wrapped in the same session lock as the rest of the app — this carries
+  // real patient governance data (EMIS numbers, complaint details), reached
+  // by a normal nav action rather than a physical NFC tap, so it should not
+  // bypass the PIN/biometric gate the way a tag scan is allowed to.
+  return <MobileSessionShell><MobileGovernanceConcerns /></MobileSessionShell>;
+}
+
 export default function MobileApp() {
   return (
     <Routes>
       <Route path="/sense/open/:entityType/:entityId" element={<MobileSenseRoute />} />
+      <Route path="/governance/concerns" element={<MobileGovernanceConcernsRoute />} />
       <Route path="/spaces" element={<MobileBootController initialTab="sense" />} />
       <Route path="/dashboard" element={<MobileBootController initialTab="home" />} />
       <Route path="*" element={<MobileBootController />} />

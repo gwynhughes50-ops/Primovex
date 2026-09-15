@@ -5,12 +5,58 @@ import { useSession } from "@/contexts/SessionContext";
 
 const PIN_KEY = "primovex.mobile.pin";
 const UNLOCK_KEY = "primovex.mobile.unlocked";
+const BIOMETRIC_KEY = "primovex.mobile.biometricCredentialId";
 const IDLE_LIMIT = 15 * 60 * 1000;
 
 async function digest(value) {
   const bytes = new TextEncoder().encode(value);
   const hash = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function base64urlToBuffer(base64url) {
+  const padding = "=".repeat((4 - (base64url.length % 4)) % 4);
+  const base64 = (base64url + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) bytes[i] = raw.charCodeAt(i);
+  return bytes.buffer;
+}
+
+// This is a LOCAL device-unlock gate, not a remote login — the account is
+// already authenticated (a real 12-hour session exists via SessionContext),
+// so there's no server challenge/verification step here. The security
+// property we need is just "the platform authenticator actually matched this
+// person on this device", and navigator.credentials.get() only resolves after
+// that succeeds (or throws otherwise) — that's enough, without needing to
+// hand-roll WebAuthn signature verification.
+async function registerBiometricCredential(uid, label) {
+  const credential = await navigator.credentials.create({
+    publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name: "Primovex" },
+      user: {
+        id: new TextEncoder().encode(uid || "primovex-user"),
+        name: label || "Primovex mobile session",
+        displayName: label || "Primovex mobile session",
+      },
+      pubKeyCredParams: [{ alg: -7, type: "public-key" }, { alg: -257, type: "public-key" }],
+      authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required" },
+      timeout: 60000,
+    },
+  });
+  return credential;
+}
+
+async function verifyBiometricCredential(credentialId) {
+  await navigator.credentials.get({
+    publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ id: base64urlToBuffer(credentialId), type: "public-key" }],
+      userVerification: "required",
+      timeout: 60000,
+    },
+  });
 }
 
 function MobileBrandLockup({ compact = false }) {
@@ -56,14 +102,22 @@ export default function MobileSessionShell({ children, showSplash = false }) {
   const { endSession, expiresAtMs } = useSession();
   const pinKey = `${PIN_KEY}.${user?.uid || "anonymous"}`;
   const unlockKey = `${UNLOCK_KEY}.${user?.uid || "anonymous"}`;
+  const biometricKey = `${BIOMETRIC_KEY}.${user?.uid || "anonymous"}`;
   const [splash, setSplash] = useState(true);
   const [locked, setLocked] = useState(() => sessionStorage.getItem(`${UNLOCK_KEY}.${user?.uid || "anonymous"}`) !== "yes");
-  const [mode, setMode] = useState("biometric");
+  const hasPin = useMemo(() => Boolean(localStorage.getItem(pinKey)), [pinKey]);
+  // Some Android WebView builds don't expose the Credential Management API at
+  // all (window.PublicKeyCredential is undefined), which biometricUnlock
+  // already handles safely — but defaulting mode to "biometric" there means
+  // every single unlock shows a button that's guaranteed to fail before
+  // falling back to PIN. Skip straight to PIN on devices where it can't work.
+  const biometricSupported = typeof window !== "undefined" && Boolean(window.PublicKeyCredential);
+  const defaultMode = () => (biometricSupported ? "biometric" : (hasPin ? "pin" : "set-pin"));
+  const [mode, setMode] = useState(defaultMode);
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [message, setMessage] = useState("");
   const [lastActivity, setLastActivity] = useState(Date.now());
-  const hasPin = useMemo(() => Boolean(localStorage.getItem(pinKey)), [pinKey]);
 
   const unlock = useCallback(() => {
     sessionStorage.setItem(unlockKey, "yes");
@@ -77,8 +131,8 @@ export default function MobileSessionShell({ children, showSplash = false }) {
   const lock = useCallback(() => {
     sessionStorage.removeItem(unlockKey);
     setLocked(true);
-    setMode("biometric");
-  }, [unlockKey]);
+    setMode(defaultMode());
+  }, [unlockKey, biometricSupported, hasPin]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -100,7 +154,23 @@ export default function MobileSessionShell({ children, showSplash = false }) {
       setMode(hasPin ? "pin" : "set-pin");
       return;
     }
-    unlock();
+    const storedCredentialId = localStorage.getItem(biometricKey);
+    try {
+      if (storedCredentialId) {
+        // Only resolves after the platform authenticator (fingerprint/face)
+        // actually matches — any mismatch, cancel, or timeout throws instead.
+        await verifyBiometricCredential(storedCredentialId);
+      } else {
+        // First use on this device: registering itself requires a successful
+        // platform authenticator gesture, so this can't be used as a bypass.
+        const credential = await registerBiometricCredential(user?.uid, displayName || user?.email);
+        localStorage.setItem(biometricKey, credential.id);
+      }
+      unlock();
+    } catch (error) {
+      setMessage("Biometric check failed or was cancelled. Use your PIN instead.");
+      setMode(hasPin ? "pin" : "set-pin");
+    }
   };
 
   const submitPin = async () => {
@@ -129,9 +199,10 @@ export default function MobileSessionShell({ children, showSplash = false }) {
 
   useEffect(() => {
     setLocked(sessionStorage.getItem(unlockKey) !== "yes");
-    setMode("biometric");
+    setMode(defaultMode());
     setPin("");
     setConfirmPin("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [unlockKey]);
 
   if (showSplash && splash) return <Splash onDone={() => setSplash(false)} />;

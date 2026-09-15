@@ -1,9 +1,11 @@
 import SimulatorProvider, { SIMULATOR_PROVIDER_ID } from "./SimulatorProvider";
 import TuyaProvider, { TUYA_PROVIDER_ID } from "./TuyaProvider";
+import ShellyLocalProvider, { SHELLY_LOCAL_PROVIDER_ID } from "./ShellyLocalProvider";
 
 export const CONNECT_PROVIDER_IDS = {
   simulator: SIMULATOR_PROVIDER_ID,
   tuya: TUYA_PROVIDER_ID,
+  shellyLocal: SHELLY_LOCAL_PROVIDER_ID,
   esp32: "esp32",
   mqtt: "mqtt",
   homeAssistant: "home-assistant",
@@ -12,6 +14,7 @@ export const CONNECT_PROVIDER_IDS = {
 export const CONNECT_PROVIDERS = {
   [SIMULATOR_PROVIDER_ID]: SimulatorProvider,
   [TUYA_PROVIDER_ID]: TuyaProvider,
+  [SHELLY_LOCAL_PROVIDER_ID]: ShellyLocalProvider,
 };
 
 export const FUTURE_PROVIDERS = [

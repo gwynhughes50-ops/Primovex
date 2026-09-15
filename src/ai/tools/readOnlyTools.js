@@ -1,6 +1,7 @@
-import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { getFacilitiesSnapshot } from '@/modules/facilities/services/facilitiesStore';
+import { listEquipment } from '@/modules/equipment/services/equipmentRegistry';
 import { buildOperationsTimeline, changesSince } from '@/operations/engine/operationsTimeline';
 import { getOperationsSummary } from '@/operations/tools/operationsSummaryTool';
 import { registerTool } from './toolRegistry';
@@ -8,6 +9,11 @@ import { getLatestCheck, listAnaphylaxisBoxes, listEmergencyAssets } from '@/lib
 import { loadSpaceRegistry } from '@/modules/sense/services/sharedSpaceRegistry';
 import { getOperationalEscalations } from '@/operations/escalations/operationalEscalationService';
 import { createReconciliationProposal } from '@/orb/GovernedActionStore';
+import { CONCERNS_COLLECTION, friendly, getDeadlineTone } from '@/modules/governance/services/concernService';
+import { SAR_COLLECTION, getSarDeadlineTone, getStatusLabel } from '@/modules/governance/services/sarService';
+import { normalizeStockItemCategory } from '@/services/stockService';
+import { STOCK_CATEGORIES, categoryLabel as taxonomyCategoryLabel, subcategoryLabel as taxonomySubcategoryLabel } from '@/data/stockCategories';
+import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
 
 const nowLabel = () => new Date().toLocaleString('en-GB');
 const source = (title, detail, type = 'module') => ({ title, detail, type });
@@ -17,6 +23,34 @@ const itemLabel = (item) => [item.name, item.strength, item.form].filter(Boolean
 async function readStock() {
   const snap = await getDocs(collection(db, 'stock_items'));
   return activeItems(snap.docs);
+}
+
+// Cleaning/stocking status lives in room_operational/cleaning_logs now (see
+// cleaningRecordService.js), not on the facilities/space-registry snapshot —
+// Orb needs a live one-shot read of both to answer cleaning questions
+// correctly, and to build the rooms context the Operations engine expects.
+async function readRoomOperational() {
+  const snap = await getDocs(collection(db, 'room_operational'));
+  const map = {};
+  snap.docs.forEach((row) => { map[row.id] = row.data(); });
+  return map;
+}
+
+async function readCleaningLogs() {
+  const snap = await getDocs(collection(db, 'cleaning_logs'));
+  return snap.docs.map((row) => ({ id: row.id, ...row.data() }));
+}
+
+async function buildRoomsContext() {
+  const [operational, logs] = await Promise.all([readRoomOperational(), readCleaningLogs()]);
+  return { operational, logs, loading: false };
+}
+
+function cleanedAtDate(value) {
+  if (!value) return null;
+  if (typeof value?.toDate === 'function') return value.toDate();
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function isExpiringWithin(value, days = 60) {
@@ -74,7 +108,7 @@ export function registerApprovedReadOnlyTools() {
   registerTool({
     id: 'operations.summary', label: 'Operations summary', requiredCapability: 'operations.read',
     async execute() {
-      const summary = getOperationsSummary();
+      const summary = getOperationsSummary({ rooms: await buildRoomsContext() });
       const priorities = summary.priorities?.slice(0, 5) || [];
       return {
         data: summary,
@@ -90,7 +124,7 @@ export function registerApprovedReadOnlyTools() {
   registerTool({
     id: 'operations.timeline', label: 'Operations timeline', requiredCapability: 'operations.read',
     async execute({ sinceYesterday = true } = {}) {
-      const timeline = buildOperationsTimeline();
+      const timeline = buildOperationsTimeline({ rooms: await buildRoomsContext() });
       const since = new Date();
       if (sinceYesterday) { since.setDate(since.getDate() - 1); since.setHours(0, 0, 0, 0); }
       const events = sinceYesterday ? changesSince(timeline, since) : timeline;
@@ -185,37 +219,144 @@ export function registerApprovedReadOnlyTools() {
     },
   });
 
+  // Matches free text like "wound care" or "emergency drugs" against the
+  // fixed Category -> Subcategory taxonomy (src/data/stockCategories.js).
+  // Subcategory labels are checked first since they're more specific — "PPE"
+  // should resolve to Clinical Consumables > PPE, not just Clinical
+  // Consumables as a whole.
+  function resolveCategoryQuery(term) {
+    const q = String(term || '').trim().toLowerCase();
+    if (!q) return null;
+    for (const cat of STOCK_CATEGORIES) {
+      for (const sub of cat.subcategories) {
+        if (sub.label.toLowerCase().includes(q) || q.includes(sub.label.toLowerCase())) {
+          return { category: cat.id, subcategory: sub.id };
+        }
+      }
+    }
+    for (const cat of STOCK_CATEGORIES) {
+      if (cat.label.toLowerCase().includes(q) || q.includes(cat.label.toLowerCase())) {
+        return { category: cat.id, subcategory: null };
+      }
+    }
+    return null;
+  }
+
+  registerTool({
+    id: 'inventory.categoryLookup', label: 'Inventory by category', requiredCapability: 'inventory.read',
+    async execute({ category = '', days = 60 } = {}) {
+      const match = resolveCategoryQuery(category);
+      const items = await readStock();
+      if (!match) {
+        const available = STOCK_CATEGORIES.filter((c) => c.id !== 'uncategorised').map((c) => c.label).join(', ');
+        return {
+          data: { matched: false },
+          summary: `"${category}" didn't match a known stock category. Available categories: ${available}.`,
+          confidence: 0.6,
+          sources: [source('Inventory categories', `${STOCK_CATEGORIES.length} categories checked · ${nowLabel()}`)],
+          actions: [{ label: 'Open Inventory', route: '/inventory' }],
+        };
+      }
+      const matches = items.filter((item) => {
+        const resolved = normalizeStockItemCategory(item);
+        if (resolved.category !== match.category) return false;
+        if (match.subcategory && resolved.subcategory !== match.subcategory) return false;
+        return true;
+      });
+      const low = matches.filter((i) => Number(i.current_stock || 0) <= Number(i.min_stock || 0));
+      const out = matches.filter((i) => Number(i.current_stock || 0) <= 0);
+      const expiring = matches.filter((i) => isExpiringWithin(i.expiry_date, days));
+      const totalUnits = matches.reduce((sum, item) => sum + Math.max(0, Number(item.current_stock || 0)), 0);
+      const label = match.subcategory ? taxonomySubcategoryLabel(match.category, match.subcategory) : taxonomyCategoryLabel(match.category);
+      const parts = [
+        `${matches.length} item${matches.length === 1 ? '' : 's'} in ${label}`,
+        `${totalUnits} total unit${totalUnits === 1 ? '' : 's'}`,
+        `${low.length} at or below minimum`,
+        `${out.length} out of stock`,
+        `${expiring.length} expiring within ${days} days`,
+      ];
+      return {
+        data: { matched: true, category: match.category, subcategory: match.subcategory, items: matches, counts: { total: matches.length, totalUnits, low: low.length, outOfStock: out.length, expiring: expiring.length } },
+        summary: matches.length
+          ? `${parts.join('; ')}.${matches.length ? ` Items: ${matches.slice(0, 10).map((i) => itemLabel(i)).join('; ')}.` : ''}`
+          : `No active stock items are currently categorised under ${label}.`,
+        confidence: 0.97,
+        sources: [source('Inventory', `${items.length} active items checked against the Category/Subcategory taxonomy · ${nowLabel()}`)],
+        actions: [{ label: 'Open Inventory', route: '/inventory' }],
+      };
+    },
+  });
+
   registerTool({
     id: 'facilities.roomStatus', label: 'Room status', requiredCapability: 'operations.read',
-    execute({ room = '' } = {}) {
+    async execute({ room = '' } = {}) {
       const state = getFacilitiesSnapshot();
+      const operational = await readRoomOperational();
       const term = String(room).trim().toLowerCase();
       const match = state.rooms.find((r) => r.name.toLowerCase().includes(term) || String(r.slug || '').replaceAll('-', ' ').includes(term));
       if (!match) return { data: null, summary: `I could not find a room matching “${room}”.`, confidence: 0.86, sources: [source('Facilities room registry', `${state.rooms.length} rooms checked · local read ${nowLabel()}`)], actions: [{ label: 'Open Facilities', route: '/facilities' }] };
-      const cleanedToday = match.lastCleanedAt && new Date(match.lastCleanedAt).toDateString() === new Date().toDateString();
-      return { data: match, summary: cleanedToday ? `${match.name} was cleaned today at ${new Date(match.lastCleanedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} by ${match.lastCleanedBy}.` : `${match.name} has not been marked as cleaned today. Last recorded clean: ${match.lastCleanedAt ? new Date(match.lastCleanedAt).toLocaleString('en-GB') : 'none'}.`, confidence: 0.99, sources: [source(match.name, `Facilities room record · local read ${nowLabel()}`)], actions: [{ label: 'Open Facilities', route: '/facilities' }] };
+      const lastCleanedAt = cleanedAtDate(operational[match.id]?.lastCleanedAt);
+      const lastCleanedBy = operational[match.id]?.lastCleanedBy;
+      const cleanedToday = lastCleanedAt && lastCleanedAt.toDateString() === new Date().toDateString();
+      const enriched = { ...match, lastCleanedAt: lastCleanedAt?.toISOString() || null, lastCleanedBy: lastCleanedBy || null };
+      return { data: enriched, summary: cleanedToday ? `${match.name} was cleaned today at ${lastCleanedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })} by ${lastCleanedBy}.` : `${match.name} has not been marked as cleaned today. Last recorded clean: ${lastCleanedAt ? lastCleanedAt.toLocaleString('en-GB') : 'none'}.`, confidence: 0.99, sources: [source(match.name, `Facilities room record · live read ${nowLabel()}`)], actions: [{ label: 'Open Facilities', route: '/facilities' }] };
     },
   });
 
   registerTool({
     id: 'facilities.cleaningStatus', label: 'Cleaning status', requiredCapability: 'operations.read',
-    execute() {
+    async execute() {
       const state = getFacilitiesSnapshot();
+      const operational = await readRoomOperational();
       const today = new Date().toDateString();
-      const overdue = state.rooms.filter((r) => !r.lastCleanedAt || new Date(r.lastCleanedAt).toDateString() !== today);
-      return { data: overdue, summary: overdue.length ? `${overdue.length} room${overdue.length === 1 ? '' : 's'} not marked as cleaned today: ${overdue.map((r) => r.name).join(', ')}.` : `All ${state.rooms.length} rooms are marked as cleaned today.`, confidence: 0.99, sources: [source('Facilities cleaning register', `${state.rooms.length} rooms checked · local read ${nowLabel()}`)], actions: [{ label: 'Open Facilities', route: '/facilities' }] };
+      const overdue = state.rooms.filter((r) => {
+        const lastCleanedAt = cleanedAtDate(operational[r.id]?.lastCleanedAt);
+        return !lastCleanedAt || lastCleanedAt.toDateString() !== today;
+      });
+      return { data: overdue, summary: overdue.length ? `${overdue.length} room${overdue.length === 1 ? '' : 's'} not marked as cleaned today: ${overdue.map((r) => r.name).join(', ')}.` : `All ${state.rooms.length} rooms are marked as cleaned today.`, confidence: 0.99, sources: [source('Facilities cleaning register', `${state.rooms.length} rooms checked · live read ${nowLabel()}`)], actions: [{ label: 'Open Facilities', route: '/facilities' }] };
     },
   });
 
   registerTool({
     id: 'facilities.equipmentLocation', label: 'Equipment location', requiredCapability: 'operations.read',
-    execute({ equipment = '' } = {}) {
-      const state = getFacilitiesSnapshot();
+    async execute({ equipment = '' } = {}) {
       const term = String(equipment).trim().toLowerCase();
-      const match = state.equipment.find((e) => e.name.toLowerCase().includes(term));
-      if (!match) return { data: null, summary: `I could not find equipment matching “${equipment}”.`, confidence: 0.86, sources: [source('Facilities equipment registry', `${state.equipment.length} assets checked · local read ${nowLabel()}`)], actions: [{ label: 'Open Facilities', route: '/facilities' }] };
-      const room = state.rooms.find((r) => r.id === match.roomId);
-      return { data: match, summary: `${match.name} is currently recorded in ${room?.name || 'an unknown location'}. Last seen ${match.lastSeenAt ? new Date(match.lastSeenAt).toLocaleString('en-GB') : 'not recorded'}${match.lastSeenBy ? ` by ${match.lastSeenBy}` : ''}.`, confidence: 0.99, sources: [source('Facilities equipment registry', `Asset record · local read ${nowLabel()}`)], actions: [{ label: 'Open Facilities', route: '/facilities' }] };
+      const all = listEquipment();
+      const byName = all.filter((item) => item.name?.toLowerCase().includes(term));
+      const matches = byName.length ? byName : all.filter((item) => item.category?.toLowerCase().includes(term) || item.equipmentType?.toLowerCase().includes(term));
+
+      if (!matches.length) {
+        return { data: null, summary: `I could not find equipment matching “${equipment}”.`, confidence: 0.86, sources: [source('Equipment registry', `${all.length} assets checked · local read ${nowLabel()}`)], actions: [{ label: 'Open Equipment', route: '/spaces' }] };
+      }
+      if (matches.length > 1) {
+        const names = matches.slice(0, 6).map((item) => item.name).join(', ');
+        return { data: matches, summary: `${matches.length} items match “${equipment}”: ${names}. Ask about one by name to narrow it down.`, confidence: 0.85, sources: [source('Equipment registry', `${matches.length} matches · local read ${nowLabel()}`)], actions: [{ label: 'Open Equipment', route: '/spaces' }] };
+      }
+
+      const match = matches[0];
+      let sighting = null;
+      try {
+        const snap = await getDoc(doc(db, 'equipment_sightings', match.id));
+        sighting = snap.exists() ? snap.data() : null;
+      } catch { sighting = null; }
+
+      let seenLabel = 'not been detected by a BLE tag scan yet';
+      let seenAt = null;
+      try { seenAt = sighting?.lastSeenAt?.toDate?.() || null; } catch { seenAt = null; }
+      if (seenAt) {
+        const ageMinutes = Math.max(0, Math.round((Date.now() - seenAt.getTime()) / 60000));
+        const ageLabel = ageMinutes < 1 ? 'just now' : ageMinutes < 60 ? `${ageMinutes} min ago` : ageMinutes < 1440 ? `${Math.round(ageMinutes / 60)}h ago` : `${Math.round(ageMinutes / 1440)}d ago`;
+        seenLabel = `last seen ${ageLabel}${sighting?.lastSeenSpaceName ? ` near ${sighting.lastSeenSpaceName}` : ''}${sighting?.lastSeenBy ? ` (by ${sighting.lastSeenBy})` : ''}`;
+      }
+
+      const homeSpace = match.homeSpaceId ? `home location ${match.homeSpaceId}` : null;
+      return {
+        data: { equipment: match, sighting },
+        summary: `${match.name} (${match.category || 'equipment'}) — ${seenLabel}.${homeSpace && !seenAt ? ` Registered ${homeSpace}.` : ''}`,
+        confidence: seenAt ? 0.97 : 0.75,
+        sources: [source('Equipment registry', `Asset record · local read ${nowLabel()}`), source('BLE sighting log', sighting ? `Last updated ${nowLabel()}` : 'No sighting recorded')],
+        actions: [{ label: 'Open Equipment', route: '/spaces' }],
+      };
     },
   });
 
@@ -424,6 +565,142 @@ export function registerApprovedReadOnlyTools() {
         confidence: unavailable ? 0.64 : 0.95, knownState: unavailable ? 'partial' : 'known',
         sources: [source('Inventory alerts', `${low.length} low-stock exception${low.length === 1 ? '' : 's'}`), source('Connected-device alerts', `${deviceAlerts.length} active alert${deviceAlerts.length === 1 ? '' : 's'}`), source('Temperature evidence', temperatureResult.status === 'fulfilled' ? `${temperatureResult.value.size} recent reading${temperatureResult.value.size === 1 ? '' : 's'} available` : 'Unavailable')],
         warnings: unavailable ? [`${unavailable} alert source${unavailable === 1 ? '' : 's'} unavailable`] : [], actions: [{ label: 'Open Operations Centre', route: '/alerts' }],
+      };
+    },
+  });
+
+  registerTool({
+    id: 'tasks.quickNotes', label: 'Quick notes', requiredCapability: 'operations.read',
+    async execute(_input = {}, context = {}) {
+      if (!context.userId) return { data: null, summary: 'I need to know who is asking before I can read your quick notes.', confidence: 0.4, sources: [source('Quick Notes', 'No signed-in user in context')], actions: [] };
+      const [ownSnap, practiceSnap] = await Promise.all([
+        getDocs(query(collection(db, 'quick_notes'), where('authorUid', '==', context.userId))),
+        getDocs(query(collection(db, 'quick_notes'), where('scope', '==', 'practice'))),
+      ]);
+      const merged = new Map();
+      ownSnap.docs.forEach((row) => merged.set(row.id, { id: row.id, ...row.data() }));
+      practiceSnap.docs.forEach((row) => merged.set(row.id, { id: row.id, ...row.data() }));
+      const open = Array.from(merged.values()).filter((note) => note.status !== 'completed');
+      const overdue = open.filter((note) => note.dueAt && new Date(note.dueAt) < new Date());
+      open.sort((a, b) => new Date(a.dueAt || 0) - new Date(b.dueAt || 0));
+      return {
+        domain: 'tasks', data: { counts: { open: open.length, overdue: overdue.length }, notes: open.slice(0, 15) },
+        summary: open.length ? `${open.length} open quick note${open.length === 1 ? '' : 's'}${overdue.length ? `, ${overdue.length} overdue` : ''}: ${open.slice(0, 5).map((note) => note.text).join('; ')}.` : 'No open quick notes are recorded for you.',
+        confidence: 0.95,
+        sources: [source('Quick Notes', `${open.length} open note${open.length === 1 ? '' : 's'} checked · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Dashboard', route: '/dashboard' }],
+      };
+    },
+  });
+
+  registerTool({
+    id: 'admin.users', label: 'Team members', requiredCapability: 'admin.access',
+    async execute({ name = '' } = {}) {
+      const snap = await getDocs(collection(db, 'users'));
+      const users = snap.docs.map((row) => ({ id: row.id, ...row.data() }));
+      const term = String(name).trim().toLowerCase();
+      if (term) {
+        const match = users.find((u) => String(u.displayName || '').toLowerCase().includes(term) || String(u.email || '').toLowerCase().includes(term));
+        if (!match) return { data: null, summary: `I could not find a user matching “${name}”.`, confidence: 0.8, sources: [source('Users', `${users.length} account${users.length === 1 ? '' : 's'} checked · live read ${nowLabel()}`)], actions: [{ label: 'Open Advanced Admin', route: '/admin/users' }] };
+        return { data: match, summary: `${match.displayName || match.email} is ${match.role || 'not assigned a role'}.`, confidence: 0.97, sources: [source(match.displayName || match.email || match.id, `User record · live read ${nowLabel()}`)], actions: [{ label: 'Open Advanced Admin', route: '/admin/users' }] };
+      }
+      const byRole = {};
+      users.forEach((u) => { const role = u.role || 'No role'; byRole[role] = (byRole[role] || 0) + 1; });
+      return {
+        domain: 'admin', data: { counts: { total: users.length }, byRole, users: users.map(({ id, displayName, email, role }) => ({ id, displayName, email, role })) },
+        summary: `${users.length} account${users.length === 1 ? '' : 's'} are registered: ${Object.entries(byRole).map(([role, count]) => `${count} ${role}`).join(', ')}.`,
+        confidence: 0.97,
+        sources: [source('Users', `${users.length} account${users.length === 1 ? '' : 's'} checked · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Advanced Admin', route: '/admin/users' }],
+      };
+    },
+  });
+
+  registerTool({
+    id: 'governance.concernLookup', label: 'Concern lookup', requiredCapability: 'governance.read',
+    async execute({ reference = '', emisNumber = '' } = {}) {
+      const ref = String(reference).trim().toUpperCase();
+      const emis = String(emisNumber).trim();
+      if (!ref && !emis) {
+        return { data: null, summary: 'Give me a concern reference (e.g. CN-2026-...) or an EMIS number to look up.', confidence: 0.4, sources: [source('Governance concerns', 'No identifier provided')], actions: [{ label: 'Open Concerns', route: '/governance/concerns' }] };
+      }
+      const [byRef, byEmis] = await Promise.all([
+        ref ? getDocs(query(collection(db, CONCERNS_COLLECTION), where('reference', '==', ref))) : Promise.resolve(null),
+        emis ? getDocs(query(collection(db, CONCERNS_COLLECTION), where('emisNumber', '==', emis))) : Promise.resolve(null),
+      ]);
+      const rows = new Map();
+      byRef?.docs.forEach((row) => rows.set(row.id, { id: row.id, ...row.data() }));
+      byEmis?.docs.forEach((row) => rows.set(row.id, { id: row.id, ...row.data() }));
+      const matches = Array.from(rows.values());
+
+      if (!matches.length) {
+        return { data: null, summary: `I could not find a concern matching ${ref || `EMIS ${emis}`}.`, confidence: 0.82, sources: [source('Governance concerns', `Searched by ${ref ? 'reference' : 'EMIS number'} · live read ${nowLabel()}`)], actions: [{ label: 'Open Concerns', route: '/governance/concerns' }] };
+      }
+
+      const describe = (concern) => {
+        const deadline = getDeadlineTone(concern);
+        return `${concern.reference}: ${friendly(concern.status)} case, ${friendly(concern.priority)} priority${concern.category ? `, category ${friendly(concern.category)}` : ''}. ${deadline.label}. Owned by ${concern.ownerName || 'Unassigned'}.`;
+      };
+
+      return {
+        domain: 'governance', data: matches,
+        summary: matches.length === 1 ? describe(matches[0]) : `${matches.length} concerns matched: ${matches.map(describe).join(' ')}`,
+        confidence: 0.97,
+        sources: [source('Governance concerns', `${matches.length} match${matches.length === 1 ? '' : 'es'} · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Concerns', route: '/governance/concerns' }],
+      };
+    },
+  });
+
+  registerTool({
+    id: 'governance.sarLookup', label: 'SAR lookup', requiredCapability: 'governance.read',
+    async execute({ reference = '', emisNumber = '' } = {}) {
+      const ref = String(reference).trim().toUpperCase();
+      const emis = String(emisNumber).trim();
+      if (!ref && !emis) {
+        return { data: null, summary: 'Give me a SAR reference (e.g. SAR-2026-...) or an EMIS number to look up.', confidence: 0.4, sources: [source('Governance SARs', 'No identifier provided')], actions: [{ label: 'Open SARs', route: '/governance/sars' }] };
+      }
+      const [byRef, byEmis] = await Promise.all([
+        ref ? getDocs(query(collection(db, SAR_COLLECTION), where('reference', '==', ref))) : Promise.resolve(null),
+        emis ? getDocs(query(collection(db, SAR_COLLECTION), where('emisNumber', '==', emis))) : Promise.resolve(null),
+      ]);
+      const rows = new Map();
+      byRef?.docs.forEach((row) => rows.set(row.id, { id: row.id, ...row.data() }));
+      byEmis?.docs.forEach((row) => rows.set(row.id, { id: row.id, ...row.data() }));
+      const matches = Array.from(rows.values());
+
+      if (!matches.length) {
+        return { data: null, summary: `I could not find a SAR matching ${ref || `EMIS ${emis}`}.`, confidence: 0.82, sources: [source('Governance SARs', `Searched by ${ref ? 'reference' : 'EMIS number'} · live read ${nowLabel()}`)], actions: [{ label: 'Open SARs', route: '/governance/sars' }] };
+      }
+
+      const describe = (sar) => {
+        const deadline = getSarDeadlineTone(sar);
+        return `${sar.reference}: ${getStatusLabel(sar.status)}, ${sar.requestTypeLabel || 'record'} request${sar.urgent ? ' (urgent)' : ''}, assigned to ${sar.assignedToName || 'Unassigned'}. ${deadline.label}.`;
+      };
+
+      return {
+        domain: 'governance', data: matches,
+        summary: matches.length === 1 ? describe(matches[0]) : `${matches.length} SARs matched: ${matches.map(describe).join(' ')}`,
+        confidence: 0.97,
+        sources: [source('Governance SARs', `${matches.length} match${matches.length === 1 ? '' : 'es'} · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open SARs', route: '/governance/sars' }],
+      };
+    },
+  });
+
+  registerTool({
+    id: 'knowledge.faqLookup', label: 'Practice knowledge lookup', requiredCapability: 'operations.read',
+    execute({ entryId = '' } = {}) {
+      const entry = orbKnowledgeStore.get(entryId);
+      if (!entry) {
+        return { data: null, summary: "I don't have an answer taught for that yet.", confidence: 0.3, sources: [source('Practice knowledge', 'No matching entry')], actions: [] };
+      }
+      return {
+        domain: 'knowledge', data: entry,
+        summary: entry.answer,
+        confidence: 0.9,
+        sources: [source('Practice knowledge', `Taught entry · ${entry.updatedAt ? new Date(entry.updatedAt).toLocaleDateString('en-GB') : 'date unknown'}`)],
+        actions: [],
       };
     },
   });

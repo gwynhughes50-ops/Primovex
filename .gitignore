@@ -37,3 +37,6 @@ src-tauri/gen/android/app/*.jks
 
 # Local verification output
 work/
+
+# Firebase CLI cache
+.firebase/

@@ -15,7 +15,9 @@ export const CLINICAL_INTENTS = Object.freeze([
   { id: 'spaces.summary', label: 'Check practice Spaces', description: 'Read the Unified Space Registry and statuses.', requiredCapability: 'operations.read', phrases: ['practice spaces', 'space registry', 'how many rooms', 'how many spaces', 'room status', 'tell me about spaces'] },
   { id: 'compliance.summary', label: 'Check compliance', description: 'Read connected compliance evidence and exceptions.', requiredCapability: 'compliance.read', phrases: ['compliance status', 'is compliance ok', 'are we compliant', 'compliance outstanding', 'compliance checks', 'what compliance is due'] },
   { id: 'tasks.summary', label: 'Check operational tasks', description: 'Read open operational tasks and escalations.', requiredCapability: 'operations.read', phrases: ['my tasks', 'open tasks', 'tasks outstanding', 'what tasks are due', 'what jobs are open', 'operational tasks'] },
+  { id: 'tasks.quickNotes', label: 'Check my quick notes', description: 'Read your open quick notes and shared practice reminders.', requiredCapability: 'operations.read', phrases: ['quick notes', 'my quick notes', 'my notes', 'my reminders', 'reminders', "what's on my notes", 'what are my notes'] },
   { id: 'alerts.summary', label: 'Check active alerts', description: 'Read active operational exceptions and alerts.', requiredCapability: 'operations.read', phrases: ['active alerts', 'what alerts are there', 'show alerts', 'any alerts', 'operational alerts', 'anything needs attention'] },
+  { id: 'admin.users', label: 'Check team members', description: 'Read registered user accounts and roles.', requiredCapability: 'admin.access', phrases: ['who are the users', 'team members', 'list users', 'user accounts', 'who has access', 'user roles', 'how many users'] },
 ]);
 
 export function getClinicalIntent(id) { return CLINICAL_INTENTS.find((intent) => intent.id === id) || null; }

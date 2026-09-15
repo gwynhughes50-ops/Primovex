@@ -88,9 +88,18 @@ export async function saveSyntheticWorkflowQueue(items, context) {
   await batch.commit();
 }
 
-function ensureWorkflowRecord(batch, item, context) {
+// Writes exactly once per document per batch. A not-yet-persisted document's
+// create write must itself carry the security rules' required fields (like
+// dataMode) — issuing that create and then a second, separate set() for the
+// action's changes to the same ref in one batch left the second write
+// without those fields and got rejected by the "insufficient permissions"
+// (permission-denied) rule check, even though the two merges would have
+// produced the correct data. Merging changes into the single create/update
+// write removes that failure mode entirely.
+function ensureWorkflowRecord(batch, item, context, changes = {}) {
   const ref = doc(db, DOCUMENTS, item.id);
-  if (!item.persisted) batch.set(ref, { ...workflowPayload(item, context), createdAt: serverTimestamp() }, { merge: true });
+  if (!item.persisted) batch.set(ref, { ...workflowPayload(item, context), ...changes, createdAt: serverTimestamp() }, { merge: true });
+  else batch.set(ref, changes, { merge: true });
   return ref;
 }
 
@@ -98,13 +107,13 @@ export async function applyClinFlowAction(item, action, context) {
   requireActor(context);
   if (!item?.id) throw new Error("No ClinFlow document is selected.");
   const batch = writeBatch(db);
-  const ref = ensureWorkflowRecord(batch, item, context);
   const changes = { updatedAt: serverTimestamp(), updatedByUid: context.actorUid };
   if (action.type === "route") changes.destination = clean(action.destination, "Workflow");
   if (action.type === "priority") changes.priority = clean(action.priority, "high");
   if (action.type === "claim") Object.assign(changes, { claimedByUid: context.actorUid, claimedAt: serverTimestamp(), status: "in_review" });
   if (action.type === "complete") Object.assign(changes, { completedByUid: context.actorUid, completedAt: serverTimestamp(), status: "completed" });
   if (action.type === "archive") Object.assign(changes, { archived: true, archivedByUid: context.actorUid, archivedAt: serverTimestamp(), status: "archived" });
+  if (action.type === "delete") Object.assign(changes, { archived: true, archivedByUid: context.actorUid, archivedAt: serverTimestamp(), deleted: true, deletedByUid: context.actorUid, deletedAt: serverTimestamp() });
   if (action.type === "triage") Object.assign(changes, {
     triageDecision: clean(action.decision, "review_required"),
     triageStatus: "human_confirmed",
@@ -112,7 +121,7 @@ export async function applyClinFlowAction(item, action, context) {
     triageReviewedByUid: context.actorUid,
     triageReviewedAt: serverTimestamp(),
   });
-  batch.set(ref, changes, { merge: true });
+  ensureWorkflowRecord(batch, item, context, changes);
   batch.set(doc(collection(db, EVENTS)), eventPayload(item.id, `clinflow.${action.type}`, action.summary, action.metadata, context));
   await batch.commit();
 }
@@ -120,8 +129,7 @@ export async function applyClinFlowAction(item, action, context) {
 export async function recordClinFlowNoteMarker(item, noteLength, context) {
   requireActor(context);
   const batch = writeBatch(db);
-  const ref = ensureWorkflowRecord(batch, item, context);
-  batch.set(ref, { updatedAt: serverTimestamp(), updatedByUid: context.actorUid }, { merge: true });
+  ensureWorkflowRecord(batch, item, context, { updatedAt: serverTimestamp(), updatedByUid: context.actorUid });
   batch.set(doc(collection(db, EVENTS)), eventPayload(item.id, "clinflow.note", "Workflow note marker recorded", { noteLength: Number(noteLength) || 0, contentStored: false }, context));
   await batch.commit();
 }

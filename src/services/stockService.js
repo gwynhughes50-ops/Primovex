@@ -15,6 +15,8 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { writeAuditEvent } from "@/core/identity/auditService";
+import { UNCATEGORISED_CATEGORY, UNCATEGORISED_SUBCATEGORY, isKnownCategory, resolveLegacyCategory, getSubcategories } from "@/data/stockCategories";
 
 const ITEMS_COL = "stock_items";
 const MOVES_COL = "stock_movements";
@@ -43,6 +45,8 @@ function normalizeItemPatch(patch = {}) {
   if ("max_stock" in out) out.max_stock = toNumber(out.max_stock, 0);
 
   if ("name" in out) out.name = cleanString(out.name);
+  if ("category" in out) out.category = cleanString(out.category) || UNCATEGORISED_CATEGORY;
+  if ("subcategory" in out) out.subcategory = cleanString(out.subcategory);
   if ("barcode" in out) out.barcode = cleanString(out.barcode);
   if ("site" in out) out.site = cleanString(out.site);
   if ("location" in out) out.location = cleanString(out.location);
@@ -92,6 +96,33 @@ function normalizeActor(actor) {
   };
 }
 
+// Stock items keep one authoritative current_stock total (unchanged
+// behaviour for every existing caller). `locations` is a separate, optional
+// breakdown of *where a portion of that total physically is* — e.g. 10 of
+// this item's 50 units are known to be in Fridge 1. The remainder
+// (current_stock minus the sum of all location quantities) is implicitly
+// "unassigned". This keeps every existing dashboard/alert/report that reads
+// current_stock working unchanged, while adding real per-location tracking
+// on top.
+function applyLocationDelta(locations, locationId, locationName, locationType, delta) {
+  const list = Array.isArray(locations) ? locations.map((loc) => ({ ...loc })) : [];
+  const index = list.findIndex((loc) => loc.locationId === locationId);
+  if (index === -1) {
+    if (delta < 0) throw new Error("This location has no recorded stock for this item.");
+    if (delta === 0) return list;
+    list.push({ locationId, locationName: locationName || locationId, locationType: locationType || "space", quantity: delta });
+    return list;
+  }
+  const nextQty = toNumber(list[index].quantity, 0) + delta;
+  if (nextQty < 0) throw new Error("Not enough stock recorded at this location.");
+  if (nextQty === 0) {
+    list.splice(index, 1);
+  } else {
+    list[index] = { ...list[index], quantity: nextQty, locationName: locationName || list[index].locationName };
+  }
+  return list;
+}
+
 function normalizeMovementContext(movement = {}) {
   return {
     source: cleanString(movement?.source) || "manual",
@@ -103,6 +134,43 @@ function normalizeMovementContext(movement = {}) {
     destination_space_name: cleanString(movement?.destinationSpaceName) || null,
     sense_session_id: cleanString(movement?.senseSessionId) || null,
   };
+}
+
+// Resolves an item's effective category/subcategory against the fixed
+// taxonomy (src/data/stockCategories.js), whether or not that item has been
+// migrated onto it yet. Items created before the taxonomy shipped — or via
+// the old free-text/6-value-enum forms — keep whatever they had in
+// `category` until something calls migrateStockItemCategoryIfNeeded below;
+// this just resolves what they SHOULD show as, on the fly, everywhere
+// (Inventory tabs, mobile, Orb) without depending on that write having run.
+function isKnownSubcategory(category, subcategory) {
+  if (!subcategory) return true; // "unspecified" is always valid
+  return getSubcategories(category).some((sub) => sub.id === subcategory);
+}
+
+export function normalizeStockItemCategory(item) {
+  const rawCategory = item?.category;
+  if (isKnownCategory(rawCategory)) {
+    const subcategory = isKnownSubcategory(rawCategory, item?.subcategory) ? (item?.subcategory || "") : "";
+    return { category: rawCategory, subcategory };
+  }
+  return resolveLegacyCategory(rawCategory);
+}
+
+// One-time "self-healing" write: if an item's stored category isn't a known
+// taxonomy id yet, persist the resolved value so every future read is exact
+// (no more per-read legacy-mapping) and it shows correctly in the Category/
+// Subcategory edit dropdowns. Safe to call repeatedly — it's a no-op once an
+// item is already on the fixed taxonomy with a subcategory that's actually
+// valid under it.
+export async function migrateStockItemCategoryIfNeeded(item) {
+  if (!item?.id) return false;
+  if (isKnownCategory(item?.category) && isKnownSubcategory(item.category, item?.subcategory)) return false;
+  const resolved = isKnownCategory(item?.category)
+    ? { category: item.category, subcategory: "" }
+    : resolveLegacyCategory(item.category);
+  await updateStockItem(item.id, { category: resolved.category, subcategory: resolved.subcategory });
+  return true;
 }
 
 /**
@@ -129,7 +197,8 @@ export async function createStockItem(data) {
     strength: cleanString(data?.strength),
     form: cleanString(data?.form),
     barcode: cleanString(data?.barcode),
-    category: data?.category || "non_medical",
+    category: cleanString(data?.category) || UNCATEGORISED_CATEGORY,
+    subcategory: cleanString(data?.subcategory) || (cleanString(data?.category) ? "" : UNCATEGORISED_SUBCATEGORY),
     site: cleanString(data?.site),
     location: cleanString(data?.location),
     brand: cleanString(data?.brand),
@@ -388,7 +457,7 @@ export async function applyStockMovement(itemId, movement) {
   const itemRef = doc(db, ITEMS_COL, itemId);
   const moveRef = doc(collection(db, MOVES_COL));
 
-  return runTransaction(db, async (tx) => {
+  const result = await runTransaction(db, async (tx) => {
     const snap = await tx.get(itemRef);
     if (!snap.exists()) throw new Error("Item not found");
 
@@ -444,9 +513,19 @@ export async function applyStockMovement(itemId, movement) {
         }
       : null;
 
+    // If this movement is scoped to a specific location (e.g. it happened
+    // via a fridge's NFC scan), keep that location's own breakdown in sync
+    // with the same delta — not just the item's overall current_stock.
+    const locationId = cleanString(movement?.locationId);
+    let nextLocations = item.locations;
+    if (locationId && (type === "receive" || type === "use")) {
+      nextLocations = applyLocationDelta(item.locations, locationId, cleanString(movement?.locationName), movement?.locationType, delta);
+    }
+
     tx.update(itemRef, {
       current_stock: after,
       updated_at: serverTimestamp(),
+      ...(nextLocations !== item.locations ? { locations: nextLocations } : {}),
       last_movement: {
         type,
         delta,
@@ -477,11 +556,120 @@ export async function applyStockMovement(itemId, movement) {
       barcode: context.barcode,
       space_id: context.space_id,
       space_name: context.space_name,
+      location_id: locationId || null,
+      location_name: locationId ? cleanString(movement?.locationName) || locationId : null,
+      location_type: locationId ? (movement?.locationType || "space") : null,
       receipt_details: receiptDetails,
       created_at: serverTimestamp(),
     });
 
     return { before, after, delta, movementId: moveRef.id };
+  });
+  writeAuditEvent({
+    action: `inventory.stock.${type}`,
+    module: "inventory",
+    targetType: "stock_item",
+    targetId: itemId,
+    summary: `Stock ${type} movement recorded`,
+    correlationId: result.movementId,
+    metadata: { movementId: result.movementId, before: result.before, after: result.after, delta: result.delta, source: movement?.source || "manual", spaceId: movement?.spaceId || "" },
+  }).catch(() => {});
+  return result;
+}
+
+/**
+ * ✅ Assign a portion of an item's stock to a specific location (a Sense
+ * space or an equipment/asset like a fridge) without affecting its overall
+ * current_stock — this only ever moves quantity out of the implicit
+ * "unassigned" pool into a named location.
+ */
+export async function assignStockToLocation(itemId, { locationId, locationName, locationType = "space", quantity } = {}, actor = null) {
+  const cleanLocationId = cleanString(locationId);
+  if (!cleanLocationId) throw new Error("Select a location.");
+  const qty = Math.abs(toNumber(quantity, 0));
+  if (qty <= 0) throw new Error("Quantity must be greater than 0.");
+
+  const itemRef = doc(db, ITEMS_COL, itemId);
+  const moveRef = doc(collection(db, MOVES_COL));
+  const actorSafe = normalizeActor(actor);
+
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(itemRef);
+    if (!snap.exists()) throw new Error("Item not found.");
+    const item = snap.data() || {};
+    const total = toNumber(item.current_stock, 0);
+    const locations = Array.isArray(item.locations) ? item.locations : [];
+    const assigned = locations.reduce((sum, loc) => sum + toNumber(loc.quantity, 0), 0);
+    const unassigned = total - assigned;
+    if (qty > unassigned) {
+      throw new Error(`Only ${unassigned} unit${unassigned === 1 ? "" : "s"} of this item ${unassigned === 1 ? "is" : "are"} unassigned to a location.`);
+    }
+
+    const cleanLocationName = cleanString(locationName) || cleanLocationId;
+    const nextLocations = applyLocationDelta(locations, cleanLocationId, cleanLocationName, locationType, qty);
+
+    tx.update(itemRef, { locations: nextLocations, updated_at: serverTimestamp() });
+    tx.set(moveRef, {
+      item_id: itemId,
+      item_name: item.name || "",
+      type: "relocate",
+      delta: 0,
+      qty_before: total,
+      qty_after: total,
+      relocate_qty: qty,
+      location_id: cleanLocationId,
+      location_name: cleanLocationName,
+      location_type: locationType || "space",
+      reason: null,
+      notes: `Assigned ${qty} unit${qty === 1 ? "" : "s"} to ${cleanLocationName}`,
+      actor: actorSafe,
+      created_at: serverTimestamp(),
+    });
+  });
+}
+
+/**
+ * ✅ Move a portion of an item's stock at a location back into the
+ * "unassigned" pool. Also does not affect current_stock.
+ */
+export async function unassignStockFromLocation(itemId, locationId, quantity, actor = null) {
+  const cleanLocationId = cleanString(locationId);
+  if (!cleanLocationId) throw new Error("Location is required.");
+  const qty = Math.abs(toNumber(quantity, 0));
+  if (qty <= 0) throw new Error("Quantity must be greater than 0.");
+
+  const itemRef = doc(db, ITEMS_COL, itemId);
+  const moveRef = doc(collection(db, MOVES_COL));
+  const actorSafe = normalizeActor(actor);
+
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(itemRef);
+    if (!snap.exists()) throw new Error("Item not found.");
+    const item = snap.data() || {};
+    const total = toNumber(item.current_stock, 0);
+    const locations = Array.isArray(item.locations) ? item.locations : [];
+    const existing = locations.find((loc) => loc.locationId === cleanLocationId);
+    if (!existing) throw new Error("This location has no recorded stock for this item.");
+    const locationName = existing.locationName || cleanLocationId;
+    const nextLocations = applyLocationDelta(locations, cleanLocationId, locationName, existing.locationType, -qty);
+
+    tx.update(itemRef, { locations: nextLocations, updated_at: serverTimestamp() });
+    tx.set(moveRef, {
+      item_id: itemId,
+      item_name: item.name || "",
+      type: "relocate",
+      delta: 0,
+      qty_before: total,
+      qty_after: total,
+      relocate_qty: -qty,
+      location_id: cleanLocationId,
+      location_name: locationName,
+      location_type: existing.locationType || "space",
+      reason: null,
+      notes: `Unassigned ${qty} unit${qty === 1 ? "" : "s"} from ${locationName}`,
+      actor: actorSafe,
+      created_at: serverTimestamp(),
+    });
   });
 }
 
@@ -496,7 +684,7 @@ export async function reverseStockUseMovement(itemId, movementId, reversal = {})
   const originalRef = doc(db, MOVES_COL, movementId);
   const reversalRef = doc(collection(db, MOVES_COL));
 
-  return runTransaction(db, async (tx) => {
+  const result = await runTransaction(db, async (tx) => {
     const [itemSnap, originalSnap] = await Promise.all([tx.get(itemRef), tx.get(originalRef)]);
     if (!itemSnap.exists()) throw new Error("Item not found.");
     if (!originalSnap.exists()) throw new Error("Original movement not found.");
@@ -566,6 +754,16 @@ export async function reverseStockUseMovement(itemId, movementId, reversal = {})
 
     return { before, after, delta: qty, movementId: reversalRef.id, reversesMovementId: movementId };
   });
+  writeAuditEvent({
+    action: "inventory.stock.reversal",
+    module: "inventory",
+    targetType: "stock_movement",
+    targetId: movementId,
+    summary: "Compensating stock reversal recorded",
+    correlationId: result.movementId,
+    metadata: { reversalMovementId: result.movementId, before: result.before, after: result.after, delta: result.delta },
+  }).catch(() => {});
+  return result;
 }
 
 /**

@@ -38,6 +38,8 @@ export const CAPABILITIES = {
     manageSars: "governance.manageSars",
     manageComplaints: "governance.manageComplaints",
     manageConcerns: "governance.manageConcerns",
+    concernsTeam: "governance.concernsTeam",
+    partnerAccess: "governance.partnerAccess",
   },
   connect: {
     view: "connect.view",
@@ -115,6 +117,8 @@ export const CAPABILITY_CATALOG = [
   { id: "governance.manageSars", label: "Manage SARs", group: "Governance" },
   { id: "governance.manageComplaints", label: "Manage complaints", group: "Governance" },
   { id: "governance.manageConcerns", label: "Manage Listening to People concerns", group: "Governance" },
+  { id: "governance.concernsTeam", label: "Concerns team — full access to every concern", group: "Governance" },
+  { id: "governance.partnerAccess", label: "Partner — read-only visibility across all governance records", group: "Governance" },
 
   { id: "connect.view", label: "View MedTrak Connect", group: "Connect" },
   { id: "connect.manageDevices", label: "Add/edit connected devices", group: "Connect" },
@@ -176,6 +180,7 @@ export const ROLE_TEMPLATES = {
     "governance.manageSars",
     "governance.manageComplaints",
     "governance.manageConcerns",
+    "governance.concernsTeam",
     "connect.view",
     "connect.manageDevices",
     "connect.acknowledgeAlerts",
@@ -261,6 +266,7 @@ export const ROLE_TEMPLATES = {
     "governance.read",
     "governance.write",
     "governance.manageConcerns",
+    "governance.concernsTeam",
     "connect.view",
     "mobile.access",
   ],
@@ -282,6 +288,17 @@ export const ROLE_TEMPLATES = {
     "compliance.read",
     "compliance.write",
     "compliance.recordChecks",
+    "mobile.access",
+  ],
+  // Practice partners: read-only visibility across every governance record
+  // (Concerns, SARs, complaints) regardless of whether they're personally
+  // involved in a given case — but no edit rights anywhere in governance.
+  // Only the Concerns team (a capability layered onto any role, not a
+  // separate role) can actually change a case.
+  "Partner": [
+    "dashboard.read",
+    "governance.read",
+    "governance.partnerAccess",
     "mobile.access",
   ],
   "ReadOnly": [

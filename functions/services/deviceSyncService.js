@@ -67,7 +67,13 @@ async function writeDevice(db, providerDevice) {
 
   if (Number.isFinite(probeValue)) {
     const recordedAt = FieldValue.serverTimestamp();
+    const nowDate = now.toDate();
+    const dateKey = nowDate.toISOString().slice(0, 10);
+    const slot = nowDate.getHours() < 12 ? "AM" : "PM";
     const unitId = device.fridgeId || id;
+    const unitRange = { min: device.min, max: device.max };
+    const siteId = device.site || "";
+
     await db.collection(TEMPERATURE_UNITS_COLLECTION).doc(unitId).set({
       name: device.equipment || device.name,
       unitName: device.equipment || device.name,
@@ -75,7 +81,8 @@ async function writeDevice(db, providerDevice) {
       provider: doc.provider,
       type: device.type,
       unitType: device.type,
-      site: device.site || "",
+      site: siteId,
+      siteId,
       spaceId: device.spaceId ?? null,
       equipmentId: device.equipmentId ?? null,
       fridgeId: device.fridgeId ?? null,
@@ -91,9 +98,15 @@ async function writeDevice(db, providerDevice) {
       active: true,
       updatedAt: recordedAt,
     }, { merge: true });
+
+    // Field names below deliberately mirror what TemperatureLog.jsx's manual
+    // save path writes (created_at/measured_at, unitRange, dateKey/slot) so
+    // device-sourced readings show up in the same query/table without the
+    // frontend needing to know two different schemas.
     await db.collection(TEMPERATURE_LOGS_COLLECTION).doc(readingId(device)).set({
       unitId,
       unitName: device.equipment || device.name,
+      unitType: device.type,
       deviceId: id,
       provider: doc.provider,
       temp: probeValue,
@@ -101,49 +114,74 @@ async function writeDevice(db, providerDevice) {
       ambientTemperature: device.ambientTemperature ?? null,
       humidity: device.humidity ?? null,
       batteryState: device.batteryState ?? null,
+      siteId,
+      siteName: siteId,
       spaceId: device.spaceId ?? null,
       equipmentId: device.equipmentId ?? null,
       fridgeId: device.fridgeId ?? null,
+      unitRange,
       min: device.min,
       max: device.max,
+      dateKey,
+      slot,
+      recordedBy: "Automated · Connect sync",
+      notes: "",
       source: "tuya-external-probe",
       measured_at: recordedAt,
+      created_at: recordedAt,
       recordedAt,
     });
 
-    const incidentId = `tuya_${id}_range`.replace(/[^A-Za-z0-9_-]/g, "_");
     const delayMinutes = Math.max(0, Number(device.alertDelayMinutes ?? 15));
     const outsideDurationMs = outside && excursionStartedAt?.toMillis
       ? now.toMillis() - excursionStartedAt.toMillis()
       : 0;
+
+    // Incidents are opened automatically once an excursion has been sustained
+    // for alertDelayMinutes, but are never auto-resolved: a human must review
+    // and resolve via the Incidents tab, even if the reading recovers on its
+    // own. Each excursion episode gets its own incident document (tracked via
+    // openIncidentId on the device doc) so a resolved incident's notes are
+    // never overwritten by a later, separate excursion.
     if (outside && device.alertsEnabled !== false && outsideDurationMs >= delayMinutes * 60 * 1000) {
-      await db.collection(TEMPERATURE_INCIDENTS_COLLECTION).doc(incidentId).set({
-        deviceId: id,
-        unitId,
-        unitName: device.equipment || device.name,
-        spaceId: device.spaceId ?? null,
-        equipmentId: device.equipmentId ?? null,
-        fridgeId: device.fridgeId ?? null,
-        status: "open",
-        source: "tuya-external-probe",
-        observedTemperature: probeValue,
-        min: device.min,
-        max: device.max,
-        alertDelayMinutes: delayMinutes,
-        excursionStartedAt,
-        updatedAt: recordedAt,
-        createdAt: recordedAt,
-      }, { merge: true });
-    } else if (!outside) {
-      const incidentRef = db.collection(TEMPERATURE_INCIDENTS_COLLECTION).doc(incidentId);
-      const incident = await incidentRef.get();
-      if (incident.exists && incident.data()?.status === "open") {
+      let incidentRef = null;
+      const trackedId = existing.openIncidentId;
+      if (trackedId) {
+        const trackedSnap = await db.collection(TEMPERATURE_INCIDENTS_COLLECTION).doc(trackedId).get();
+        if (trackedSnap.exists && trackedSnap.data()?.status === "open") incidentRef = trackedSnap.ref;
+      }
+
+      if (incidentRef) {
         await incidentRef.set({
-          status: "resolved",
-          resolvedAt: recordedAt,
-          resolution: "Automatically resolved when the connected probe returned to range.",
+          observedTemp: probeValue,
           updatedAt: recordedAt,
         }, { merge: true });
+      } else {
+        incidentRef = db.collection(TEMPERATURE_INCIDENTS_COLLECTION).doc();
+        await incidentRef.set({
+          unitId,
+          unitName: device.equipment || device.name,
+          unitType: device.type,
+          siteId,
+          deviceId: id,
+          spaceId: device.spaceId ?? null,
+          equipmentId: device.equipmentId ?? null,
+          fridgeId: device.fridgeId ?? null,
+          expectedRange: unitRange,
+          observedTemp: probeValue,
+          summary: `Automatic excursion alert: ${device.equipment || device.name} reading ${probeValue}°C, outside the ${device.min}–${device.max}°C safe range`,
+          details: `Opened automatically after the connected probe stayed outside its safe range for at least ${delayMinutes} minutes. Review the device history, decide on affected stock, and resolve once investigated.`,
+          actionsTaken: "",
+          affectedStock: { quarantined: false, discarded: false, movedToBackupUnit: false, stockNotes: "" },
+          status: "open",
+          source: "tuya-external-probe",
+          openedAt: recordedAt,
+          openedBy: "Automated · Connect sync",
+          resolvedAt: null,
+          resolvedBy: null,
+          resolutionNotes: "",
+        });
+        await deviceRef.set({ openIncidentId: incidentRef.id }, { merge: true });
       }
     }
   }

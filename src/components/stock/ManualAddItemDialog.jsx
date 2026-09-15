@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { X, Save } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
+import { STOCK_CATEGORIES, UNCATEGORISED_CATEGORY, getSubcategories } from "@/data/stockCategories";
 
 export default function ManualAddItemDialog({ open, onOpenChange, onCreate, initialBarcode = "" }) {
   const scrollRef = useRef(null);
@@ -12,7 +13,8 @@ export default function ManualAddItemDialog({ open, onOpenChange, onCreate, init
     form: "",
     brand: "",
     barcode: initialBarcode,
-    category: "non_medical",
+    category: UNCATEGORISED_CATEGORY,
+    subcategory: "",
     site: "",
     location: "",
     batch_number: "",
@@ -35,7 +37,8 @@ export default function ManualAddItemDialog({ open, onOpenChange, onCreate, init
         form: "",
         brand: "",
         barcode: initialBarcode,
-        category: "non_medical",
+        category: UNCATEGORISED_CATEGORY,
+        subcategory: "",
         site: "",
         location: "",
         batch_number: "",
@@ -53,7 +56,7 @@ export default function ManualAddItemDialog({ open, onOpenChange, onCreate, init
   const canSave = form.name.trim().length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/80 p-0 backdrop-blur sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-sm sm:items-center sm:p-4">
       <div className="flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-slate-700/70 bg-slate-900/95 text-slate-100 shadow-2xl sm:rounded-2xl">
         <div className="flex shrink-0 items-center justify-between border-b border-slate-800/80 bg-slate-900/95 px-4 py-3">
           <p className="text-sm font-semibold">Add item</p>
@@ -98,14 +101,25 @@ export default function ManualAddItemDialog({ open, onOpenChange, onCreate, init
             <select
               className="mt-1 h-10 w-full rounded-xl border border-slate-700/70 bg-slate-900 px-3 text-sm"
               value={form.category}
-              onChange={(e) => setForm((p) => ({ ...p, category: e.target.value }))}
+              onChange={(e) => setForm((p) => ({ ...p, category: e.target.value, subcategory: "" }))}
             >
-              <option value="non_medical">Non-medical</option>
-              <option value="medicinal">Medicinal</option>
-              <option value="vaccines">Vaccines</option>
-              <option value="emergency_drugs">Emergency drugs</option>
-              <option value="dressings">Dressings</option>
-              <option value="equipment">Equipment</option>
+              {STOCK_CATEGORIES.map((cat) => (
+                <option key={cat.id} value={cat.id}>{cat.icon} {cat.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs text-slate-400">Subcategory</label>
+            <select
+              className="mt-1 h-10 w-full rounded-xl border border-slate-700/70 bg-slate-900 px-3 text-sm"
+              value={form.subcategory}
+              onChange={(e) => setForm((p) => ({ ...p, subcategory: e.target.value }))}
+            >
+              <option value="">Select a subcategory</option>
+              {getSubcategories(form.category).map((sub) => (
+                <option key={sub.id} value={sub.id}>{sub.label}</option>
+              ))}
             </select>
           </div>
 

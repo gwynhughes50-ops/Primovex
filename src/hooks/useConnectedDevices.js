@@ -4,16 +4,22 @@ import { demoConnectDevices } from "@/data/demoDataset";
 import {
   buildConnectIntelligence,
   DEFAULT_CONNECT_PROVIDER,
-  getConnectProviderSettings,
+  getDefaultConnectProviderSettings,
   getProviderSummary,
   MOCK_CONNECTED_DEVICES,
   saveConnectProviderSettings,
   subscribeConnectedDevices,
+  subscribeConnectProviderSettings,
 } from "@/services/connectService";
 import { listEquipment } from "@/modules/equipment/services/equipmentRegistry";
 
 export default function useConnectedDevices() {
-  const [providerSettings, setProviderSettings] = useState(() => getConnectProviderSettings());
+  const [providerSettings, setProviderSettings] = useState(() => getDefaultConnectProviderSettings());
+
+  useEffect(() => {
+    const unsub = subscribeConnectProviderSettings(setProviderSettings);
+    return () => unsub?.();
+  }, []);
   const [devices, setDevices] = useState(MOCK_CONNECTED_DEVICES);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -53,10 +59,11 @@ export default function useConnectedDevices() {
   }, [activeProvider, providerSettings]);
 
   const updateProviderSettings = useCallback((nextSettings) => {
-    const resolved = typeof nextSettings === "function" ? nextSettings(getConnectProviderSettings()) : nextSettings;
-    const saved = saveConnectProviderSettings(resolved);
-    setProviderSettings(saved);
-    return saved;
+    setProviderSettings((current) => {
+      const resolved = typeof nextSettings === "function" ? nextSettings(current) : nextSettings;
+      saveConnectProviderSettings(resolved);
+      return resolved;
+    });
   }, []);
 
   const setActiveProvider = useCallback(

@@ -13,7 +13,7 @@ function arrayBufferToBase64(buffer) {
 }
 
 export function validateSyntheticPdf(file) {
-  if (!file) throw new Error("Choose one of the Primovex synthetic test PDFs.");
+  if (!file) throw new Error("Choose an anonymised PDF to test.");
   if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
     throw new Error("ClinFlow accepts PDF files only.");
   }

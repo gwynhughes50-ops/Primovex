@@ -22,19 +22,29 @@ export default function QuickNotesSheet({ open, onClose }) {
   const [priority, setPriority] = useState("routine");
   const [scope, setScope] = useState("private");
   const [showComposer, setShowComposer] = useState(true);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => subscribeQuickNotes(setNotes), []);
   const openNotes = useMemo(() => notes.filter((n) => n.status !== "completed"), [notes]);
 
   if (!open) return null;
 
-  const save = () => {
+  const save = async () => {
     if (!text.trim()) return;
-    addQuickNote({ text, dueAt: dueAt ? new Date(dueAt).toISOString() : null, priority, scope });
-    setText("");
-    setDueAt(tomorrowMorning());
-    setPriority("routine");
-    setShowComposer(false);
+    setSaving(true);
+    setError("");
+    try {
+      await addQuickNote({ text, dueAt: dueAt ? new Date(dueAt).toISOString() : null, priority, scope });
+      setText("");
+      setDueAt(tomorrowMorning());
+      setPriority("routine");
+      setShowComposer(false);
+    } catch (err) {
+      setError(err?.message || "Could not save this note.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -68,7 +78,8 @@ export default function QuickNotesSheet({ open, onClose }) {
               <button onClick={() => setScope("private")} className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${scope === "private" ? "border-[var(--medtrak-accent)] bg-[color-mix(in_srgb,var(--medtrak-accent)_10%,var(--medtrak-panel))] text-[var(--medtrak-accent)]" : "border-[var(--medtrak-border)]"}`}>Private</button>
               <button onClick={() => setScope("practice")} className={`flex-1 rounded-xl border px-3 py-2 text-sm font-semibold ${scope === "practice" ? "border-[var(--medtrak-accent)] bg-[color-mix(in_srgb,var(--medtrak-accent)_10%,var(--medtrak-panel))] text-[var(--medtrak-accent)]" : "border-[var(--medtrak-border)]"}`}>Practice task</button>
             </div>
-            <button onClick={save} disabled={!text.trim()} className="mt-4 w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 py-3 font-bold text-white disabled:opacity-50"><Bell className="mr-2 inline h-4 w-4" />Save reminder</button>
+            {error && <p className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-700">{error}</p>}
+            <button onClick={save} disabled={!text.trim() || saving} className="mt-4 w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 py-3 font-bold text-white disabled:opacity-50"><Bell className="mr-2 inline h-4 w-4" />{saving ? "Saving…" : "Save reminder"}</button>
           </div>
         ) : (
           <button onClick={() => setShowComposer(true)} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-4 py-3 font-bold"><Plus className="h-5 w-5" />Add another note</button>

@@ -18,8 +18,12 @@ import {
   COMPLIANCE_ASSET_TYPES,
   buildComplianceQrPayload,
   createComplianceAsset,
+  generateNextAssetCode,
   getAssetTypeConfig,
+  getNextFirePointToTest,
   getQrImageUrl,
+  isComplianceCheckDue,
+  isFireAlarmTestDueThisWeek,
   recordComplianceCheck,
   subscribeComplianceAssets,
   subscribeRecentComplianceChecks,
@@ -90,6 +94,15 @@ export default function ComplianceQrEngine() {
   useEffect(() => subscribeComplianceAssets(setAssets, console.error, { siteId: SITE_ID }), []);
   useEffect(() => subscribeRecentComplianceChecks(setRecent, console.error, { siteId: SITE_ID, max: 20 }), []);
 
+  // Suggests the next code for the default type once assets have actually
+  // loaded — applyTypeDefaults below only fires on a user-driven type
+  // change, so the very first code (for the form's initial default type)
+  // needs its own trigger. Only fills it in while the field is still blank,
+  // so it never clobbers something the user's already typed.
+  useEffect(() => {
+    setForm((prev) => (prev.assetCode ? prev : { ...prev, assetCode: generateNextAssetCode(prev.assetType, assets) }));
+  }, [assets]);
+
   const selectedType = useMemo(() => getAssetTypeConfig(form.assetType), [form.assetType]);
 
   function applyTypeDefaults(type) {
@@ -97,6 +110,7 @@ export default function ComplianceQrEngine() {
     setForm((prev) => ({
       ...prev,
       assetType: type,
+      assetCode: generateNextAssetCode(type, assets),
       checkMode: config.checkMode,
       frequency: config.defaultFrequency,
       minTempC: config.minTempC ?? "",
@@ -134,8 +148,10 @@ export default function ComplianceQrEngine() {
     }
   }
 
-  const dueCount = assets.filter((asset) => !asset.lastCheckAt || asset.lastCheckResult === "fail").length;
+  const dueCount = assets.filter((asset) => isComplianceCheckDue(asset)).length;
   const failedCount = assets.filter((asset) => asset.lastCheckResult === "fail").length;
+  const fireTestDue = isFireAlarmTestDueThisWeek(assets);
+  const nextFirePoint = getNextFirePointToTest(assets);
   const qrReady = assets.length;
 
   return (
@@ -167,6 +183,23 @@ export default function ComplianceQrEngine() {
           </div>
         </div>
       </Card>
+
+      {nextFirePoint && (
+        <Card className={`border p-5 ${fireTestDue ? "border-amber-400/30 bg-amber-400/10" : "border-white/10 bg-slate-900/70"}`}>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <Flame className="mt-0.5 h-5 w-5 text-amber-400" />
+              <div>
+                <h3 className="text-base font-semibold text-slate-50">Weekly fire alarm test</h3>
+                <p className="mt-1 text-sm text-slate-300">
+                  {fireTestDue ? "No call point has been tested this week." : "A call point was tested this week — all good."} BS 5839-1 practice: test one call point weekly, a different one each time, rotating through them all.
+                </p>
+                <p className="mt-2 text-xs text-slate-400">Next up: <span className="text-slate-100">{assetTitle(nextFirePoint)}</span> · {nextFirePoint.location || "No location"} · {nextFirePoint.lastCheckAt ? "longest since last tested" : "never tested yet"}</p>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <Card className="border border-white/10 bg-slate-900/70 p-5">
@@ -324,7 +357,12 @@ export default function ComplianceQrEngine() {
                 <div className="font-semibold text-slate-100">{row.assetCode || row.assetLabel} • {row.assetLabel}</div>
                 <div className="text-xs text-slate-400">{row.location || "No location"} • {row.actor?.displayName || "Unknown"}</div>
               </div>
-              <div className={`rounded-full px-3 py-1 text-xs font-semibold ${row.result === "pass" ? "bg-emerald-400/10 text-emerald-100" : "bg-rose-400/10 text-rose-100"}`}>{String(row.result || "").toUpperCase()}</div>
+              <div className="flex items-center gap-2">
+                {row.checkMode === "temperature" && row.tempC !== null && row.tempC !== undefined && (
+                  <span className="rounded-full bg-white/5 px-3 py-1 text-xs font-semibold text-slate-200">{row.tempC}°C</span>
+                )}
+                <div className={`rounded-full px-3 py-1 text-xs font-semibold ${row.result === "pass" ? "bg-emerald-400/10 text-emerald-100" : "bg-rose-400/10 text-rose-100"}`}>{String(row.result || "").toUpperCase()}</div>
+              </div>
             </div>
           ))}
         </div>

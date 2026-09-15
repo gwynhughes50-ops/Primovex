@@ -19,19 +19,96 @@ export const COMPLIANCE_CHECKS_COLLECTION = "compliance_checks";
 export const PULSE_EVENTS_COLLECTION = "pulse_events";
 
 export const COMPLIANCE_ASSET_TYPES = [
-  { key: "fire_point", label: "Fire Point", icon: "🔥", checkMode: "pass_fail", defaultFrequency: "weekly" },
-  { key: "fire_door", label: "Fire Door", icon: "🚪", checkMode: "pass_fail", defaultFrequency: "weekly" },
-  { key: "water_hot", label: "Hot Water Outlet", icon: "💧", checkMode: "temperature", defaultFrequency: "monthly", minTempC: 50, maxTempC: 65 },
-  { key: "water_cold", label: "Cold Water Outlet", icon: "💧", checkMode: "temperature", defaultFrequency: "monthly", minTempC: 0, maxTempC: 20 },
-  { key: "fridge", label: "Fridge", icon: "🌡️", checkMode: "temperature", defaultFrequency: "daily", minTempC: 2, maxTempC: 8 },
-  { key: "freezer", label: "Freezer", icon: "❄️", checkMode: "temperature", defaultFrequency: "daily", minTempC: -45, maxTempC: -35 },
-  { key: "aed", label: "AED", icon: "❤️", checkMode: "pass_fail", defaultFrequency: "weekly" },
-  { key: "emergency_equipment", label: "Emergency Equipment", icon: "🧰", checkMode: "pass_fail", defaultFrequency: "monthly" },
-  { key: "general", label: "General Asset", icon: "📍", checkMode: "pass_fail", defaultFrequency: "monthly" },
+  { key: "fire_point", label: "Fire Point", icon: "🔥", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "FP" },
+  { key: "fire_door", label: "Fire Door", icon: "🚪", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "FD" },
+  { key: "water_hot", label: "Hot Water Outlet", icon: "💧", checkMode: "temperature", defaultFrequency: "monthly", minTempC: 50, maxTempC: 65, codePrefix: "WH" },
+  { key: "water_cold", label: "Cold Water Outlet", icon: "💧", checkMode: "temperature", defaultFrequency: "monthly", minTempC: 0, maxTempC: 20, codePrefix: "WC" },
+  { key: "fridge", label: "Fridge", icon: "🌡️", checkMode: "temperature", defaultFrequency: "daily", minTempC: 2, maxTempC: 8, codePrefix: "FR" },
+  { key: "freezer", label: "Freezer", icon: "❄️", checkMode: "temperature", defaultFrequency: "daily", minTempC: -45, maxTempC: -35, codePrefix: "FZ" },
+  { key: "aed", label: "AED", icon: "❤️", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "AED" },
+  { key: "emergency_equipment", label: "Emergency Equipment", icon: "🧰", checkMode: "pass_fail", defaultFrequency: "monthly", codePrefix: "EE" },
+  { key: "general", label: "General Asset", icon: "📍", checkMode: "pass_fail", defaultFrequency: "monthly", codePrefix: "GA" },
 ];
 
 export function getAssetTypeConfig(type) {
   return COMPLIANCE_ASSET_TYPES.find((row) => row.key === type) || COMPLIANCE_ASSET_TYPES.at(-1);
+}
+
+const FREQUENCY_MS = {
+  daily: 24 * 3600000,
+  weekly: 7 * 24 * 3600000,
+  monthly: 30 * 24 * 3600000,
+  quarterly: 91 * 24 * 3600000,
+  annually: 365 * 24 * 3600000,
+};
+
+function toDateValue(value) {
+  if (!value) return null;
+  const date = value?.toDate ? value.toDate() : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+// A monthly water-outlet check and a weekly fire-point check must not be
+// treated the same just because both have "been checked at some point" —
+// this is the actual re-check-is-due calculation, not just "ever checked".
+//
+// Fire points are the one exception: per BS 5839-1 weekly testing practice,
+// the caretaker sets off ONE call point a week, a different one each time,
+// so the whole system gets exercised in rotation — it is NOT "every call
+// point needs testing every week". Individual fire_point assets are
+// deliberately excluded here; see isFireAlarmTestDueThisWeek/
+// getNextFirePointToTest below for the group-level equivalent.
+export function isComplianceCheckDue(asset, now = new Date()) {
+  if (!asset) return false;
+  if (asset.assetType === "fire_point") return false;
+  if (asset.lastCheckResult === "fail") return true;
+  const lastChecked = toDateValue(asset.lastCheckAt);
+  if (!lastChecked) return true;
+  const intervalMs = FREQUENCY_MS[asset.frequency] ?? FREQUENCY_MS.monthly;
+  return now.getTime() - lastChecked.getTime() >= intervalMs;
+}
+
+// Suggests the next free code for a type, e.g. FP-001, FP-002... — scoped
+// per type so each asset type gets its own sequence rather than sharing one
+// global counter. Only ever a suggestion: the field stays editable in case a
+// practice already has its own physical labelling scheme to match.
+export function generateNextAssetCode(assetType, existingAssets = []) {
+  const prefix = getAssetTypeConfig(assetType).codePrefix || "GA";
+  const pattern = new RegExp(`^${prefix}-(\\d+)$`, "i");
+  const highest = existingAssets.reduce((max, asset) => {
+    const match = pattern.exec(String(asset.assetCode || "").trim());
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+  return `${prefix}-${String(highest + 1).padStart(3, "0")}`;
+}
+
+const FIRE_ROTATION_WINDOW_MS = FREQUENCY_MS.weekly;
+
+function activeFirePoints(assets = []) {
+  return assets.filter((asset) => asset.assetType === "fire_point" && asset.active !== false);
+}
+
+// The compliance obligation is satisfied for the week as soon as ANY fire
+// point has been tested in the last 7 days — not each one individually.
+export function isFireAlarmTestDueThisWeek(assets = [], now = new Date()) {
+  const firePoints = activeFirePoints(assets);
+  if (!firePoints.length) return false;
+  const mostRecent = firePoints.reduce((latest, asset) => {
+    const checked = toDateValue(asset.lastCheckAt);
+    return checked && (!latest || checked > latest) ? checked : latest;
+  }, null);
+  if (!mostRecent) return true;
+  return now.getTime() - mostRecent.getTime() >= FIRE_ROTATION_WINDOW_MS;
+}
+
+// Whichever fire point has gone longest without being tested — the natural
+// "test this one next" suggestion that keeps the rotation actually covering
+// every call point over time, rather than the same one or two getting picked
+// out of habit.
+export function getNextFirePointToTest(assets = []) {
+  const firePoints = activeFirePoints(assets);
+  if (!firePoints.length) return null;
+  return [...firePoints].sort((a, b) => (toDateValue(a.lastCheckAt)?.getTime() || 0) - (toDateValue(b.lastCheckAt)?.getTime() || 0))[0];
 }
 
 export function normaliseAssetCode(value) {

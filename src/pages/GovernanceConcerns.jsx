@@ -3,11 +3,11 @@ import { useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/common/PageHeader";
 import SectionCard from "@/components/common/SectionCard";
 import StatusBadge from "@/components/common/StatusBadge";
-import PermissionGate from "@/components/security/PermissionGate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Icons } from "@/config/medtrakIcons";
 import { useAuth } from "@/contexts/AuthContext";
+import { subscribeUsers } from "@/services/adminUserService";
 import {
   CONCERN_CATEGORIES,
   CONCERN_PRIORITIES,
@@ -15,6 +15,8 @@ import {
   CONCERN_STAGES,
   CONCERN_STATUSES,
   acknowledgeConcern,
+  addConcernQuickNote,
+  addInvolvedUser,
   addLearningAction,
   buildGovernancePrompts,
   calculateCaseHealth,
@@ -28,6 +30,7 @@ import {
   getPriorityBadge,
   getStatusBadge,
   recordListeningDiscussion,
+  removeInvolvedUser,
   subscribeConcernTimeline,
   subscribeConcerns,
   subscribeLearningActions,
@@ -97,16 +100,14 @@ function MetricCard({ label, value, tone = "slate", helper }) {
 function StageProgress({ status }) {
   const currentIndex = Math.max(0, CONCERN_STAGES.findIndex((stage) => stage.key === status));
   return (
-    <div className="grid gap-2 sm:grid-cols-4 lg:grid-cols-8">
+    <div className="space-y-1.5">
       {CONCERN_STAGES.map((stage, index) => {
         const active = index <= currentIndex;
         return (
-          <div key={stage.key} className={`rounded-2xl border px-3 py-3 text-xs font-semibold ${active ? "border-teal-400/30 bg-teal-500/10 text-teal-100" : "border-slate-800 bg-slate-950/60 text-slate-400"}`}>
-            <div className="mb-1 flex items-center gap-2">
-              <span className={`h-2 w-2 rounded-full ${active ? "bg-teal-300" : "bg-slate-600"}`} />
-              Step {index + 1}
-            </div>
-            {stage.label}
+          <div key={stage.key} className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-sm font-semibold ${active ? "border-teal-400/30 bg-teal-500/10 text-teal-100" : "border-slate-800 bg-slate-950/60 text-slate-400"}`}>
+            <span className={`h-2 w-2 shrink-0 rounded-full ${active ? "bg-teal-300" : "bg-slate-600"}`} />
+            <span className="shrink-0 text-xs font-bold uppercase tracking-wide text-slate-500">Step {index + 1}</span>
+            <span>{stage.label}</span>
           </div>
         );
       })}
@@ -209,10 +210,12 @@ function ConcernFormModal({ open, onClose, actor, onCreated }) {
   );
 }
 
-function ConcernDetail({ concern, actor }) {
+function ConcernDetail({ concern, actor, isTeam, isPartner, users }) {
   const [timeline, setTimeline] = useState([]);
   const [learning, setLearning] = useState([]);
   const [learningTitle, setLearningTitle] = useState("");
+  const [noteText, setNoteText] = useState("");
+  const [addUserId, setAddUserId] = useState("");
 
   useEffect(() => {
     if (!concern?.id) return undefined;
@@ -230,11 +233,26 @@ function ConcernDetail({ concern, actor }) {
 
   const health = calculateCaseHealth(concern);
   const deadline = getDeadlineTone(concern);
+  const involvedIds = concern.involvedUserIds || [];
+  const involvedUsers = involvedIds.map((uid) => users.find((u) => u.id === uid) || { id: uid, displayName: uid });
+  const addableUsers = users.filter((u) => !involvedIds.includes(u.id));
 
   const addLearning = async () => {
     if (!learningTitle.trim()) return;
     await addLearningAction(concern.id, { title: learningTitle.trim() }, actor);
     setLearningTitle("");
+  };
+
+  const submitNote = async () => {
+    if (!noteText.trim()) return;
+    await addConcernQuickNote(concern.id, noteText.trim(), actor);
+    setNoteText("");
+  };
+
+  const shareWithUser = async () => {
+    if (!addUserId) return;
+    await addInvolvedUser(concern.id, addUserId, actor);
+    setAddUserId("");
   };
 
   return (
@@ -258,13 +276,35 @@ function ConcernDetail({ concern, actor }) {
 
         <div className="mt-5"><StageProgress status={concern.status} /></div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Button onClick={() => acknowledgeConcern(concern, actor)} className="rounded-full bg-slate-800 text-slate-100 hover:bg-slate-700">Mark acknowledged</Button>
-          <Button onClick={() => recordListeningDiscussion(concern, actor, false)} className="rounded-full bg-slate-800 text-slate-100 hover:bg-slate-700">Listening offered</Button>
-          <Button onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.investigation }, actor)} className="rounded-full bg-slate-800 text-slate-100 hover:bg-slate-700">Move to investigation</Button>
-          <Button onClick={() => closeConcern(concern, actor)} className="rounded-full bg-emerald-500 text-slate-950 hover:bg-emerald-400">Close case</Button>
-        </div>
+        {isTeam && (
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Button onClick={() => acknowledgeConcern(concern, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Mark acknowledged</Button>
+            <Button onClick={() => recordListeningDiscussion(concern, actor, false)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Listening offered</Button>
+            <Button onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.investigation }, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Move to investigation</Button>
+            <Button onClick={() => closeConcern(concern, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-emerald-500 py-2.5 text-center leading-snug text-slate-950 hover:bg-emerald-400">Close case</Button>
+          </div>
+        )}
       </SectionCard>
+
+      {isTeam && (
+        <SectionCard title="Shared with" description="Staff who can see this specific case's progress and add notes.">
+          <div className="flex flex-wrap gap-2">
+            {involvedUsers.length === 0 ? <p className="text-sm text-slate-400">Not shared with anyone yet.</p> : involvedUsers.map((u) => (
+              <span key={u.id} className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/70 px-3 py-1.5 text-sm text-slate-200">
+                {u.displayName || u.email || u.id}
+                <button type="button" onClick={() => removeInvolvedUser(concern.id, u.id, actor)} className="text-slate-500 hover:text-rose-400" aria-label={`Remove ${u.displayName || u.id}`}>×</button>
+              </span>
+            ))}
+          </div>
+          <div className="mt-3 flex gap-2">
+            <select value={addUserId} onChange={(e) => setAddUserId(e.target.value)} className="flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
+              <option value="">Add a staff member…</option>
+              {addableUsers.map((u) => <option key={u.id} value={u.id}>{u.displayName || u.email || u.id}</option>)}
+            </select>
+            <Button onClick={shareWithUser} disabled={!addUserId} className="rounded-full">Share</Button>
+          </div>
+        </SectionCard>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <SectionCard title="MedAI governance prompts" description="Rule-based prompts aligned to the new Listening to People workflow.">
@@ -276,10 +316,12 @@ function ConcernDetail({ concern, actor }) {
         </SectionCard>
 
         <SectionCard title="Learning actions" description="Each concern should end with learning where appropriate.">
-          <div className="flex gap-2">
-            <Input value={learningTitle} onChange={(e) => setLearningTitle(e.target.value)} placeholder="Add learning action" />
-            <Button onClick={addLearning} className="rounded-full">Add</Button>
-          </div>
+          {isTeam && (
+            <div className="flex gap-2">
+              <Input value={learningTitle} onChange={(e) => setLearningTitle(e.target.value)} placeholder="Add learning action" />
+              <Button onClick={addLearning} className="rounded-full">Add</Button>
+            </div>
+          )}
           <div className="mt-3 space-y-2">
             {learning.length === 0 ? <p className="text-sm text-slate-400">No learning actions recorded yet.</p> : learning.map((item) => (
               <div key={item.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-sm text-slate-200">
@@ -292,6 +334,12 @@ function ConcernDetail({ concern, actor }) {
       </div>
 
       <SectionCard title="Case timeline" description="Chronological audit trail of key concern activity.">
+        {!isPartner && (
+          <div className="mb-4 flex gap-2">
+            <Input value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Add a quick note" />
+            <Button onClick={submitNote} className="rounded-full">Add note</Button>
+          </div>
+        )}
         <div className="space-y-2">
           {timeline.length === 0 ? <p className="text-sm text-slate-400">No timeline events yet.</p> : timeline.map((event) => (
             <div key={event.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-sm text-slate-200">
@@ -310,9 +358,13 @@ function ConcernDetail({ concern, actor }) {
 }
 
 export default function GovernanceConcerns() {
-  const { user, displayName } = useAuth();
+  const { user, displayName, can } = useAuth();
   const actor = useMemo(() => actorFromUser(user, displayName), [user, displayName]);
+  const isTeam = can("governance.concernsTeam");
+  const isPartner = !isTeam && can("governance.partnerAccess");
+  const involvedOnly = !isTeam && !isPartner;
   const [concerns, setConcerns] = useState([]);
+  const [users, setUsers] = useState([]);
   const [error, setError] = useState("");
   const [openCreate, setOpenCreate] = useState(false);
   const [selectedId, setSelectedId] = useState("");
@@ -322,9 +374,14 @@ export default function GovernanceConcerns() {
     const unsub = subscribeConcerns((rows) => {
       setConcerns(rows);
       setSelectedId((current) => current || rows[0]?.id || "");
-    }, (err) => setError(err?.message || String(err)));
+    }, (err) => setError(err?.message || String(err)), involvedOnly ? { involvedUid: user?.uid } : {});
     return () => unsub?.();
-  }, []);
+  }, [involvedOnly, user?.uid]);
+
+  useEffect(() => {
+    if (!isTeam) return undefined;
+    return subscribeUsers(setUsers, console.error);
+  }, [isTeam]);
 
   const metrics = useMemo(() => getConcernMetrics(concerns), [concerns]);
   const filtered = useMemo(() => {
@@ -337,14 +394,22 @@ export default function GovernanceConcerns() {
 
   const selected = concerns.find((c) => c.id === selectedId) || filtered[0] || null;
 
-  return (
-    <PermissionGate capability="governance.manageConcerns">
+  if (involvedOnly && concerns.length === 0 && !error) {
+    return (
       <div className="space-y-5">
+        <PageHeader title="Governance Intelligence" description="Listening to People case management." eyebrow="Sprint 23" icon={Icons.governance} />
+        <div className="rounded-3xl border border-slate-800 bg-slate-950/50 p-6 text-sm text-slate-400">No concerns have been shared with you yet. The Concerns team can share a case for you to follow its progress and add notes.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
         <PageHeader
           title="Governance Intelligence"
-          description="Listening to People case management, anonymised identifiers, deadlines, timeline and learning actions."
+          description={isTeam ? "Listening to People case management, anonymised identifiers, deadlines, timeline and learning actions." : isPartner ? "Read-only oversight of every Listening to People case." : "Cases shared with you — follow progress and add notes."}
           eyebrow="Sprint 23" icon={Icons.governance}
-          actions={<Button onClick={() => setOpenCreate(true)} className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950"><Icons.add className="mr-2 h-4 w-4" /> New concern</Button>}
+          actions={isTeam ? <Button onClick={() => setOpenCreate(true)} className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950"><Icons.add className="mr-2 h-4 w-4" /> New concern</Button> : null}
         />
 
         {error && <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-100">Firestore is not returning concerns yet. Check Sprint 23 rules. {error}</div>}
@@ -395,11 +460,10 @@ export default function GovernanceConcerns() {
             </div>
           </SectionCard>
 
-          <ConcernDetail concern={selected} actor={actor} />
+          <ConcernDetail concern={selected} actor={actor} isTeam={isTeam} isPartner={isPartner} users={users} />
         </div>
 
         <ConcernFormModal open={openCreate} onClose={() => setOpenCreate(false)} actor={actor} />
-      </div>
-    </PermissionGate>
+    </div>
   );
 }

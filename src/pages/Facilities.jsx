@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, Building2, CalendarClock, CheckCircle2, ChevronRight, ClipboardCheck,
-  Filter, History, MapPin, PackageSearch, Plus, RotateCcw, Search, Sparkles, UserRound,
+  Filter, History, MapPin, PackageCheck, PackageSearch, Plus, RotateCcw, Search, Sparkles, UserRound,
   Wrench, X, XCircle,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { loadFacilitiesState, resetFacilitiesState, saveFacilitiesState } from '@/modules/facilities/services/facilitiesStore';
+import { getActiveCleaningSession, markRoomCleaned, markRoomStocked, subscribeCleaningLogs, subscribeRoomOperational } from '@/modules/facilities/services/cleaningRecordService';
 import SpaceBuilder from '@/modules/sense/components/SpaceBuilder';
 import { loadSenseState, saveSenseState } from '@/modules/sense/services/senseStore';
 import EquipmentRegistrationWizard from '@/modules/equipment/components/EquipmentRegistrationWizard';
@@ -17,19 +18,36 @@ const text = 'text-[color:var(--medtrak-text)]';
 const soft = 'bg-[color:color-mix(in_srgb,var(--medtrak-accent)_12%,transparent)]';
 const button = 'rounded-xl border border-[color:var(--medtrak-border)] px-3 py-2 text-sm transition hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-[color:var(--medtrak-accent)]';
 
+// lastCleanedAt/lastStockedAt/cleanedAt now come from Firestore serverTimestamp
+// fields (Timestamp objects with .toDate()) rather than plain ISO strings.
+function toDate(value) {
+  if (!value) return null;
+  if (value?.toDate) return value.toDate();
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function formatDate(value) {
-  if (!value) return 'Not recorded';
-  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+  const date = toDate(value);
+  if (!date) return 'Not recorded';
+  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
 }
 
 function formatShort(value) {
-  if (!value) return 'Not set';
-  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value));
+  const date = toDate(value);
+  if (!date) return 'Not set';
+  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(date);
 }
 
 function getNextCleanAt(room) {
-  if (!room.lastCleanedAt) return null;
-  return new Date(new Date(room.lastCleanedAt).getTime() + (room.cleaningFrequencyHours || 24) * 3600000);
+  const cleaned = toDate(room.lastCleanedAt);
+  if (!cleaned) return null;
+  return new Date(cleaned.getTime() + (room.cleaningFrequencyHours || 24) * 3600000);
+}
+
+const FREQUENCY_LABELS = { 8: 'Every 8 hours', 12: 'Every 12 hours', 24: 'Daily', 168: 'Weekly', 720: 'Monthly', 4320: 'Every 6 months', 8760: 'Yearly' };
+function formatCleaningFrequency(hours) {
+  return FREQUENCY_LABELS[hours] || `Every ${hours} hours`;
 }
 
 function getRoomOperationalStatus(room, maintenance) {
@@ -65,6 +83,8 @@ export default function Facilities() {
   const [historyPerson, setHistoryPerson] = useState('all');
   const [showEquipmentWizard, setShowEquipmentWizard] = useState(false);
   const { devices: connectedDevices } = useConnectedDevices();
+  const [roomOperational, setRoomOperational] = useState({});
+  const [cleaningLogs, setCleaningLogs] = useState([]);
 
   useEffect(() => {
     const refresh = () => {
@@ -81,19 +101,33 @@ export default function Facilities() {
     };
   }, []);
 
+  useEffect(() => subscribeRoomOperational(setRoomOperational), []);
+  useEffect(() => subscribeCleaningLogs(setCleaningLogs), []);
+
   const actor = displayName || user?.email || 'Signed-in user';
   const today = new Date().toDateString();
 
-  const roomRows = useMemo(() => state.rooms.map((room) => ({
-    ...room,
-    operationalStatus: getRoomOperationalStatus(room, state.maintenance),
-    nextCleanAt: getNextCleanAt(room),
-    equipmentCount: state.equipment.filter((item) => item.roomId === room.id).length,
-    openIssues: state.maintenance.filter((item) => item.roomId === room.id && item.status !== 'closed').length,
-  })), [state]);
+  const roomRows = useMemo(() => state.rooms.map((room) => {
+    const operational = roomOperational[room.id] || {};
+    const merged = {
+      ...room,
+      lastCleanedAt: operational.lastCleanedAt || null,
+      lastCleanedBy: operational.lastCleanedBy || '',
+      lastStockedAt: operational.lastStockedAt || null,
+      lastStockedBy: operational.lastStockedBy || '',
+      cleaningFrequencyHours: operational.cleaningFrequencyHours || room.cleaningFrequencyHours || 24,
+    };
+    return {
+      ...merged,
+      operationalStatus: getRoomOperationalStatus(merged, state.maintenance),
+      nextCleanAt: getNextCleanAt(merged),
+      equipmentCount: state.equipment.filter((item) => item.roomId === room.id).length,
+      openIssues: state.maintenance.filter((item) => item.roomId === room.id && item.status !== 'closed').length,
+    };
+  }), [state, roomOperational]);
 
   const metrics = useMemo(() => {
-    const cleanedToday = state.rooms.filter((room) => room.lastCleanedAt && new Date(room.lastCleanedAt).toDateString() === today).length;
+    const cleanedToday = roomRows.filter((room) => toDate(room.lastCleanedAt)?.toDateString() === today).length;
     const openMaintenance = state.maintenance.filter((item) => item.status !== 'closed').length;
     const readyRooms = roomRows.filter((room) => room.operationalStatus === 'ready').length;
     const overdueRooms = roomRows.filter((room) => room.operationalStatus === 'overdue').length;
@@ -103,8 +137,8 @@ export default function Facilities() {
   const filteredRooms = roomRows.filter((room) => `${room.name} ${room.id} ${room.type} ${room.zone}`.toLowerCase().includes(query.toLowerCase()));
   const selectedRoom = roomRows.find((room) => room.id === selectedRoomId);
   const selectedEquipment = state.equipment.find((item) => item.id === selectedEquipmentId);
-  const cleaners = [...new Set(state.cleaningLogs.map((log) => log.cleanedBy).filter(Boolean))];
-  const filteredLogs = state.cleaningLogs.filter((log) => (historyRoom === 'all' || log.roomId === historyRoom) && (historyPerson === 'all' || log.cleanedBy === historyPerson));
+  const cleaners = [...new Set(cleaningLogs.map((log) => log.cleanedBy).filter(Boolean))];
+  const filteredLogs = cleaningLogs.filter((log) => (historyRoom === 'all' || log.roomId === historyRoom) && (historyPerson === 'all' || log.cleanedBy === historyPerson));
 
   function commit(next) {
     setState(next);
@@ -117,15 +151,16 @@ export default function Facilities() {
     setState(loadFacilitiesState());
   }
 
-  function markCleaned(roomId) {
-    const timestamp = new Date().toISOString();
-    const room = state.rooms.find((item) => item.id === roomId);
-    commit({
-      ...state,
-      rooms: state.rooms.map((item) => item.id === roomId ? { ...item, lastCleanedAt: timestamp, lastCleanedBy: actor, status: 'ready' } : item),
-      cleaningLogs: [{ id: crypto.randomUUID(), roomId, roomName: room?.name || 'Room', cleanedAt: timestamp, cleanedBy: actor, method: 'one-tap-confirmation' }, ...state.cleaningLogs],
-    });
+  async function markCleaned(roomId) {
+    const room = roomRows.find((item) => item.id === roomId);
+    await markRoomCleaned(roomId, room?.name || roomId, actor);
   }
+
+  async function markStocked(roomId) {
+    await markRoomStocked(roomId, actor);
+  }
+
+  const activeCleaningSession = selectedRoom ? getActiveCleaningSession(roomOperational, selectedRoom.id) : null;
 
   function addIssue() {
     if (!selectedRoom || !newIssue.trim()) return;
@@ -203,7 +238,7 @@ export default function Facilities() {
             {filteredRooms.map((room) => (
               <button key={room.id} onClick={() => setSelectedRoomId(room.id)} className="group rounded-2xl border border-[color:var(--medtrak-border)] p-4 text-left transition hover:-translate-y-0.5 hover:bg-white/5">
                 <div className="flex items-start justify-between gap-3"><div><p className={`text-[11px] font-semibold tracking-wide ${muted}`}>{room.id}</p><h3 className="mt-1 font-semibold">{room.name}</h3><p className={`mt-1 text-xs ${muted}`}>{room.floor} • {room.zone}</p></div><StatusPill status={room.operationalStatus} /></div>
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><span className={`block text-xs ${muted}`}>Last cleaned</span><span className="mt-1 block font-medium">{room.lastCleanedAt ? formatDate(room.lastCleanedAt) : 'Not recorded'}</span></div><div><span className={`block text-xs ${muted}`}>Next clean</span><span className="mt-1 block font-medium">{room.nextCleanAt ? formatDate(room.nextCleanAt) : 'Due now'}</span></div></div>
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><span className={`block text-xs ${muted}`}>Last cleaned</span><span className="mt-1 block font-medium">{room.lastCleanedAt ? formatDate(room.lastCleanedAt) : 'Not recorded'}</span></div><div><span className={`block text-xs ${muted}`}>Next clean</span><span className="mt-1 block font-medium">{room.nextCleanAt ? formatDate(room.nextCleanAt) : 'Due now'}</span></div><div><span className={`block text-xs ${muted}`}>Last stocked</span><span className="mt-1 block font-medium">{room.lastStockedAt ? formatDate(room.lastStockedAt) : 'Not recorded'}</span></div></div>
                 <div className={`mt-4 flex items-center justify-between border-t border-[color:var(--medtrak-border)] pt-3 text-xs ${muted}`}><span>{room.equipmentCount} equipment • {room.openIssues} issues</span><span className="flex items-center gap-1 text-[color:var(--medtrak-accent)]">Open <ChevronRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" /></span></div>
               </button>
             ))}
@@ -214,7 +249,7 @@ export default function Facilities() {
       {tab === 'cleaning' && (
         <section className={`${panel} p-4 sm:p-5`}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"><div><h2 className="text-lg font-semibold">Cleaning history</h2><p className={`text-sm ${muted}`}>Timestamped audit trail of room cleaning confirmations.</p></div><div className="flex flex-col gap-2 sm:flex-row"><label className="text-xs"><span className={`mb-1 block ${muted}`}>Room</span><select value={historyRoom} onChange={(e)=>setHistoryRoom(e.target.value)} className="rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] px-3 py-2 text-sm"><option value="all">All rooms</option>{state.rooms.map((room)=><option key={room.id} value={room.id}>{room.name}</option>)}</select></label><label className="text-xs"><span className={`mb-1 block ${muted}`}>Cleaner</span><select value={historyPerson} onChange={(e)=>setHistoryPerson(e.target.value)} className="rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] px-3 py-2 text-sm"><option value="all">All staff</option>{cleaners.map((person)=><option key={person} value={person}>{person}</option>)}</select></label></div></div>
-          <div className="mt-5 space-y-2">{filteredLogs.length === 0 && <p className={muted}>No cleaning records match these filters.</p>}{filteredLogs.map((log)=><div key={log.id} className="grid gap-2 rounded-xl border border-[color:var(--medtrak-border)] p-4 sm:grid-cols-[1fr_auto_auto] sm:items-center"><div><div className="font-medium">{log.roomName}</div><div className={`text-xs ${muted}`}>{log.roomId}</div></div><div className="flex items-center gap-2 text-sm"><UserRound className="h-4 w-4 text-[color:var(--medtrak-accent)]" /> {log.cleanedBy}</div><div className={`text-sm ${muted}`}>{formatDate(log.cleanedAt)}</div></div>)}</div>
+          <div className="mt-5 space-y-2">{filteredLogs.length === 0 && <p className={muted}>No cleaning records match these filters.</p>}{filteredLogs.map((log)=><div key={log.id} className="grid gap-2 rounded-xl border border-[color:var(--medtrak-border)] p-4 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center"><div><div className="font-medium">{log.roomName}</div><div className={`text-xs ${muted}`}>{log.roomId}</div></div><div className="flex items-center gap-2 text-sm"><UserRound className="h-4 w-4 text-[color:var(--medtrak-accent)]" /> {log.cleanedBy}</div><div className={`text-sm ${muted}`}>{formatDate(log.cleanedAt)}</div><div className={`text-xs ${muted}`}>{Number.isFinite(log.durationSeconds) ? `Took ${Math.round(log.durationSeconds / 60)} min · NFC session` : log.method === 'one-tap-confirmation' ? 'One-tap confirmation' : log.method}</div></div>)}</div>
         </section>
       )}
 
@@ -227,8 +262,15 @@ export default function Facilities() {
       )}
 
       {selectedRoom && <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-6" onClick={()=>setSelectedRoomId(null)}><div className={`${panel} max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-b-none p-5 sm:rounded-2xl`} onClick={(e)=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wider text-[color:var(--medtrak-accent)]">Digital room • {selectedRoom.id}</p><h2 className="mt-1 text-2xl font-semibold">{selectedRoom.name}</h2><p className={`mt-1 text-sm ${muted}`}>{selectedRoom.site} • {selectedRoom.floor} • {selectedRoom.zone}</p></div><button onClick={()=>setSelectedRoomId(null)} className="rounded-full p-2 hover:bg-white/5"><X className="h-5 w-5"/></button></div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-3"><div className={`rounded-2xl p-4 ${soft}`}><span className={`text-xs ${muted}`}>Room status</span><div className="mt-2"><StatusPill status={selectedRoom.operationalStatus} /></div></div><div className="rounded-2xl border border-[color:var(--medtrak-border)] p-4"><span className={`text-xs ${muted}`}>Last cleaned</span><div className="mt-1 font-semibold">{formatDate(selectedRoom.lastCleanedAt)}</div><div className={`text-xs ${muted}`}>{selectedRoom.lastCleanedBy || 'No cleaner recorded'}</div></div><div className="rounded-2xl border border-[color:var(--medtrak-border)] p-4"><span className={`text-xs ${muted}`}>Next clean due</span><div className="mt-1 font-semibold">{selectedRoom.nextCleanAt ? formatDate(selectedRoom.nextCleanAt) : 'Due now'}</div><div className={`text-xs ${muted}`}>Every {selectedRoom.cleaningFrequencyHours} hours</div></div></div>
-        <button onClick={()=>markCleaned(selectedRoom.id)} className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-[color:var(--medtrak-accent)] px-4 py-4 text-base font-semibold text-white"><Sparkles className="h-5 w-5"/> Room cleaned: YES</button><p className={`mt-2 text-center text-xs ${muted}`}>One confirmation records the signed-in user, room and exact time. NFC will open this card directly.</p>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><div className={`rounded-2xl p-4 ${soft}`}><span className={`text-xs ${muted}`}>Room status</span><div className="mt-2"><StatusPill status={selectedRoom.operationalStatus} /></div></div><div className="rounded-2xl border border-[color:var(--medtrak-border)] p-4"><span className={`text-xs ${muted}`}>Last cleaned</span><div className="mt-1 font-semibold">{formatDate(selectedRoom.lastCleanedAt)}</div><div className={`text-xs ${muted}`}>{selectedRoom.lastCleanedBy || 'No cleaner recorded'}</div></div><div className="rounded-2xl border border-[color:var(--medtrak-border)] p-4"><span className={`text-xs ${muted}`}>Next clean due</span><div className="mt-1 font-semibold">{selectedRoom.nextCleanAt ? formatDate(selectedRoom.nextCleanAt) : 'Due now'}</div><div className={`text-xs ${muted}`}>{formatCleaningFrequency(selectedRoom.cleaningFrequencyHours)}</div></div><div className="rounded-2xl border border-[color:var(--medtrak-border)] p-4"><span className={`text-xs ${muted}`}>Last stocked</span><div className="mt-1 font-semibold">{formatDate(selectedRoom.lastStockedAt)}</div><div className={`text-xs ${muted}`}>{selectedRoom.lastStockedBy || 'No record yet'}</div></div></div>
+
+        {activeCleaningSession && <div className="mt-4 flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4"><Sparkles className="h-5 w-5 text-amber-500" /><div><div className="font-semibold">Cleaning in progress</div><p className={`text-sm ${muted}`}>Started by {activeCleaningSession.startedBy} at {formatDate(activeCleaningSession.startedAt)}. This finishes automatically when they scan the room's tag again on the way out, or you can confirm it manually below.</p></div></div>}
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <button onClick={()=>markCleaned(selectedRoom.id)} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-[color:var(--medtrak-accent)] px-4 py-4 text-base font-semibold text-white"><Sparkles className="h-5 w-5"/> Room cleaned: YES</button>
+          <button onClick={()=>markStocked(selectedRoom.id)} className={`${button} flex items-center justify-center gap-2 py-4 text-base font-semibold`}><PackageCheck className="h-5 w-5"/> Room stocked: YES</button>
+        </div>
+        <p className={`mt-2 text-center text-xs ${muted}`}>One confirmation records the signed-in user, room and exact time. NFC will open this card directly.</p>
         <div className="mt-6 grid gap-5 lg:grid-cols-2"><div><h3 className="font-semibold">Equipment in this room</h3><div className="mt-2 space-y-2">{state.equipment.filter((item)=>item.roomId===selectedRoom.id).length === 0 && <p className={`text-sm ${muted}`}>No equipment currently assigned.</p>}{state.equipment.filter((item)=>item.roomId===selectedRoom.id).map((item)=><button key={item.id} onClick={()=>setSelectedEquipmentId(item.id)} className="flex w-full items-center justify-between rounded-xl border border-[color:var(--medtrak-border)] p-3 text-left hover:bg-white/5"><span><span className="block font-medium">{item.name}</span><span className={`text-xs ${muted}`}>{item.id}</span></span><ChevronRight className="h-4 w-4" /></button>)}</div></div><div><h3 className="font-semibold">Report an issue</h3><div className="mt-2 space-y-2"><input value={newIssue} onChange={(e)=>setNewIssue(e.target.value)} placeholder="e.g. hand dryer not working" className="w-full rounded-xl border border-[color:var(--medtrak-border)] bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-[color:var(--medtrak-accent)]"/><div className="flex gap-2"><select value={issuePriority} onChange={(e)=>setIssuePriority(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] px-3 py-2 text-sm"><option value="low">Low priority</option><option value="medium">Medium priority</option><option value="high">High priority</option></select><button onClick={addIssue} className={`${button} flex items-center gap-2`}><Plus className="h-4 w-4"/> Add</button></div></div></div></div>
         {selectedRoom.notes && <div className={`mt-5 rounded-xl p-4 ${soft}`}><div className="text-sm font-medium">Room notes</div><p className={`mt-1 text-sm ${muted}`}>{selectedRoom.notes}</p></div>}
       </div></div>}

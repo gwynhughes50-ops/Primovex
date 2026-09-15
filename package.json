@@ -1,6 +1,6 @@
 {
   "name": "primovex",
-  "version": "0.15.37",
+  "version": "0.15.41",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -23,7 +23,8 @@
     "android:bootstrap": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap-android.ps1",
     "test:orb-trust": "esbuild scripts/verify-orb-trust.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-trust.bundle.mjs && node work/verify-orb-trust.bundle.mjs",
     "test:orb-actions": "esbuild scripts/verify-orb-actions.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-actions.bundle.mjs && node work/verify-orb-actions.bundle.mjs",
-    "test:clinflow-intelligence": "node scripts/verify-clinflow-intelligence.mjs"
+    "test:clinflow-intelligence": "node scripts/verify-clinflow-intelligence.mjs",
+    "test:governed-audit": "node scripts/verify-governed-audit.mjs"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -47,6 +48,7 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.460.0",
+    "pdf-lib": "^1.17.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.28.0",

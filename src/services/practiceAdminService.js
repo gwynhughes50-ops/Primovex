@@ -12,6 +12,7 @@ import {
 } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
+import { writeAuditEvent } from "@/core/identity/auditService";
 
 export const PRACTICE_CONFIG_ID = "main";
 
@@ -80,7 +81,7 @@ export function subscribeCollection(collectionName, callback, onError) {
 }
 
 export async function savePracticeConfig(payload, actor = null) {
-  return setDoc(
+  const result = await setDoc(
     doc(db, "practice_config", PRACTICE_CONFIG_ID),
     {
       ...payload,
@@ -89,57 +90,71 @@ export async function savePracticeConfig(payload, actor = null) {
     },
     { merge: true }
   );
+  await writeAuditEvent({ action: "administration.practice_config.update", module: "administration", targetType: "practice_config", targetId: PRACTICE_CONFIG_ID, summary: "Practice configuration updated", metadata: { changedFields: Object.keys(payload || {}).slice(0, 20) } });
+  return result;
 }
 
 export async function addPracticeSite(payload, actor = null) {
-  return addDoc(collection(db, "practice_sites"), {
+  const result = await addDoc(collection(db, "practice_sites"), {
     ...payload,
     active: true,
     created_at: serverTimestamp(),
     created_by: actor,
   });
+  await writeAuditEvent({ action: "administration.site.create", module: "administration", targetType: "practice_site", targetId: result.id, summary: "Practice site created" });
+  return result;
 }
 
 export async function addDepartment(payload, actor = null) {
-  return addDoc(collection(db, "practice_departments"), {
+  const result = await addDoc(collection(db, "practice_departments"), {
     ...payload,
     active: true,
     created_at: serverTimestamp(),
     created_by: actor,
   });
+  await writeAuditEvent({ action: "administration.department.create", module: "administration", targetType: "practice_department", targetId: result.id, summary: "Practice department created" });
+  return result;
 }
 
 export async function updatePracticeSite(siteId, payload, actor = null) {
-  return updateDoc(doc(db, "practice_sites", siteId), {
+  const result = await updateDoc(doc(db, "practice_sites", siteId), {
     ...payload,
     updated_at: serverTimestamp(),
     updated_by: actor,
   });
+  await writeAuditEvent({ action: "administration.site.update", module: "administration", targetType: "practice_site", targetId: siteId, summary: "Practice site updated", metadata: { changedFields: Object.keys(payload || {}).slice(0, 20) } });
+  return result;
 }
 
 export async function updateDepartment(departmentId, payload, actor = null) {
-  return updateDoc(doc(db, "practice_departments", departmentId), {
+  const result = await updateDoc(doc(db, "practice_departments", departmentId), {
     ...payload,
     updated_at: serverTimestamp(),
     updated_by: actor,
   });
+  await writeAuditEvent({ action: "administration.department.update", module: "administration", targetType: "practice_department", targetId: departmentId, summary: "Practice department updated", metadata: { changedFields: Object.keys(payload || {}).slice(0, 20) } });
+  return result;
 }
 
 export async function addPracticeRole(payload, actor = null) {
-  return addDoc(collection(db, "practice_roles"), {
+  const result = await addDoc(collection(db, "practice_roles"), {
     ...payload,
     active: true,
     created_at: serverTimestamp(),
     created_by: actor,
   });
+  await writeAuditEvent({ action: "administration.role.create", module: "administration", targetType: "practice_role", targetId: result.id, summary: "Practice role template created", metadata: { permissionCount: Array.isArray(payload?.permissions) ? payload.permissions.length : 0 } });
+  return result;
 }
 
 export async function updatePracticeRole(roleId, payload, actor = null) {
-  return updateDoc(doc(db, "practice_roles", roleId), {
+  const result = await updateDoc(doc(db, "practice_roles", roleId), {
     ...payload,
     updated_at: serverTimestamp(),
     updated_by: actor,
   });
+  await writeAuditEvent({ action: "administration.role.update", module: "administration", targetType: "practice_role", targetId: roleId, summary: "Practice role template updated", metadata: { changedFields: Object.keys(payload || {}).slice(0, 20), permissionCount: Array.isArray(payload?.permissions) ? payload.permissions.length : 0 } });
+  return result;
 }
 
 export async function seedPracticeDefaults(actor = null) {

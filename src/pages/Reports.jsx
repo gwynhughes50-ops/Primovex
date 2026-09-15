@@ -21,6 +21,8 @@ import "jspdf-autotable";
 
 import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { normalizeStockItemCategory } from "@/services/stockService";
+import { categoryLabel as taxonomyCategoryLabel, subcategoryLabel as taxonomySubcategoryLabel } from "@/data/stockCategories";
 
 // -------------------- Firestore collections --------------------
 const ITEMS_COL = "stock_items";
@@ -31,16 +33,6 @@ const TEMP_COL = "temperature_logs";
 const ALL_SITES = "__ALL_SITES__";
 const ALL_LOCATIONS = "__ALL_LOCATIONS__";
 const ALL_CATEGORIES = "__ALL_CATEGORIES__";
-
-// -------------------- Category labels --------------------
-const categoryLabels = {
-  non_medical: "Non Medical",
-  medicinal: "Medicinal",
-  vaccines: "Vaccines",
-  emergency_drugs: "Emergency Drugs",
-  dressings: "Dressings",
-  equipment: "Equipment",
-};
 
 const norm = (v) => String(v ?? "").trim().toLowerCase();
 
@@ -69,20 +61,14 @@ function resolveLocation(row) {
 }
 
 function resolveCategoryKey(row) {
-  return String(
-    row?.category ||
-      row?.categoryKey ||
-      row?.category_name ||
-      row?.categoryName ||
-      ""
-  ).trim();
+  return normalizeStockItemCategory(row).category;
 }
 
 function categoryLabelFromItem(item) {
-  const key = resolveCategoryKey(item);
-  const label = categoryLabels[key] || key;
-  const cleaned = String(label || "").trim();
-  return cleaned ? cleaned : "Uncategorised";
+  const resolved = normalizeStockItemCategory(item);
+  const sub = taxonomySubcategoryLabel(resolved.category, resolved.subcategory);
+  const main = taxonomyCategoryLabel(resolved.category);
+  return sub && sub !== main ? `${main} › ${sub}` : main;
 }
 
 function isNeedsAttention(item) {

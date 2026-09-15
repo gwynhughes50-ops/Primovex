@@ -38,6 +38,7 @@ const tabs = [
   { key: "departments", label: "Departments", icon: Icons.departments },
   { key: "roles", label: "Roles", icon: Icons.roles },
   { key: "pulse", label: "Pulse", icon: Icons.pulse },
+  { key: "modules", label: "Modules", icon: Icons.settings },
   { key: "platform", label: "Platform Mode", icon: Icons.settings },
 ];
 
@@ -297,6 +298,32 @@ export default function PracticeAdministration() {
     } catch (err) {
       console.error(err);
       setError(err?.message || "Failed to add role.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clinflowDisabled = Boolean(practice?.moduleToggles?.clinflow?.disabled);
+
+  const toggleClinflowModule = async () => {
+    if (!requireManage()) return;
+    beginAction();
+    try {
+      setBusy(true);
+      const nextDisabled = !clinflowDisabled;
+      await savePracticeConfig(
+        {
+          moduleToggles: {
+            ...(practice?.moduleToggles || {}),
+            clinflow: nextDisabled ? { disabled: true, allowUids: [user?.uid].filter(Boolean) } : { disabled: false, allowUids: [] },
+          },
+        },
+        actor
+      );
+      setSuccess(nextDisabled ? "ClinFlow is now only visible to you." : "ClinFlow is visible to everyone with ClinFlow access again.");
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || "Failed to update module access.");
     } finally {
       setBusy(false);
     }
@@ -655,6 +682,24 @@ export default function PracticeAdministration() {
             </Card>
           )}
 
+
+          {activeTab === "modules" && (
+            <Card className="rounded-2xl mt-card border p-4 mt-text-primary">
+              <SectionHeader title="Module Access" />
+              <p className="mb-4 text-sm leading-6 mt-text-secondary">
+                Turn a module off for everyone except yourself — useful while you're still testing something before rolling it out to the rest of the practice. This doesn't change anyone's role or permissions, it just hides the module until you switch it back on.
+              </p>
+              <div className="rounded-xl mt-card-strong border p-4 flex items-center justify-between gap-3">
+                <div>
+                  <div className="font-bold mt-text-primary">ClinFlow</div>
+                  <div className="text-xs mt-text-secondary">{clinflowDisabled ? "Only visible to you" : "Visible to everyone with ClinFlow access"}</div>
+                </div>
+                <Button variant={clinflowDisabled ? "outline" : "default"} disabled={busy || !canManage} onClick={toggleClinflowModule}>
+                  {clinflowDisabled ? "Make visible to everyone" : "Make visible to only me"}
+                </Button>
+              </div>
+            </Card>
+          )}
 
           {activeTab === "platform" && (
             <Card className="rounded-2xl mt-card border p-4 mt-text-primary">

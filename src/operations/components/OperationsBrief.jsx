@@ -9,9 +9,9 @@ function tone(priority) {
   return priority === 'critical' ? 'text-rose-300 bg-rose-500/10' : priority === 'high' ? 'text-amber-200 bg-amber-500/10' : 'text-[color:var(--medtrak-text)] bg-white/[0.04]';
 }
 
-export default function OperationsBrief({ inventory, temperature, recentMoves = [] }) {
+export default function OperationsBrief({ inventory, temperature, recentMoves = [], rooms }) {
   const navigate = useNavigate();
-  const context = { inventory, temperature, recentMoves };
+  const context = { inventory, temperature, recentMoves, rooms };
   const summary = useOperationsSummary(context);
   const score = summary.readiness.overall;
   const top = summary.priorities.slice(0, 4);

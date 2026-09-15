@@ -1,8 +1,9 @@
-import { createContext, useCallback, useMemo, useState } from 'react';
+import { createContext, useCallback, useEffect, useMemo, useState } from 'react';
 import { getOrbEngine } from '@/orb';
 import { AI_STATES, assertProviderResponse, createMessage } from '../types/responseContract';
 import { useAuth } from '@/contexts/AuthContext';
 import { orbIntentLearningStore } from '@/orb/IntentLearningStore';
+import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
 
 export const PrimovexAIContext = createContext(null);
 
@@ -12,6 +13,14 @@ export function PrimovexAIProvider({ children }) {
   const [status, setStatus] = useState(AI_STATES.IDLE);
   const [messages, setMessages] = useState([]);
   const orb = useMemo(() => getOrbEngine(), []);
+
+  // The knowledge store subscribes to Firestore lazily on first use — without
+  // this, the very first Orb question of a session would race an empty cache
+  // (onSnapshot's own callback is always async, even for local writes), so a
+  // freshly taught fact could look unknown until some other query happened
+  // to warm it. Triggering the subscription at app mount instead means it's
+  // almost always already warm by the time anyone actually asks Orb anything.
+  useEffect(() => { orbKnowledgeStore.list(); }, []);
 
   const ask = useCallback(async (prompt, options = {}) => {
     const cleanPrompt = String(prompt || '').trim();
@@ -65,7 +74,7 @@ export function PrimovexAIProvider({ children }) {
     const message = messages.find((item) => item.id === messageId);
     const clarification = message?.clarification;
     if (!clarification?.originalRequest || !selectedIntent || !clarification.choices?.some((choice) => choice.id === selectedIntent)) return;
-    const suggestion = orbIntentLearningStore.create({ phrase: clarification.originalRequest, selectedIntent, userId: user?.uid || null, role, siteId: profile?.siteId || profile?.practiceId || 'primary', originalConfidence: clarification.originalConfidence, candidates: clarification.candidates });
+    const suggestion = await orbIntentLearningStore.create({ phrase: clarification.originalRequest, selectedIntent, userId: user?.uid || null, role, siteId: profile?.siteId || profile?.practiceId || 'primary', originalConfidence: clarification.originalConfidence, candidates: clarification.candidates });
     orb.audit.writeLearning({ suggestion, context: { userId: user?.uid || null, role, siteId: profile?.siteId || profile?.practiceId || 'primary' } });
     setMessages((current) => current.map((item) => item.id === messageId ? { ...item, clarification: { ...item.clarification, resolvedIntent: selectedIntent, suggestionId: suggestion.id } } : item));
     await ask(clarification.originalRequest, { forcedIntent: selectedIntent });

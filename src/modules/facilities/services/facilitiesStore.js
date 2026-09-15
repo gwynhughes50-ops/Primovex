@@ -1,4 +1,4 @@
-import { defaultCleaningLogs, defaultEquipment, defaultMaintenance } from '../data/defaultFacilities';
+import { defaultEquipment, defaultMaintenance } from '../data/defaultFacilities';
 import { loadSpaceRegistry, resetSpaceRegistry, saveSpaceRegistry } from '@/modules/sense/services/sharedSpaceRegistry';
 import {
   equipmentToFacilitiesItem,
@@ -11,13 +11,16 @@ const KEY = 'primovex.facilities.v3';
 const LEGACY_KEY = 'primovex.facilities.v2';
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
+// Cleaning/stocking status (lastCleanedAt, cleaningLogs, activeCleaningSessions
+// etc.) used to live in this same localStorage blob, but that meant a
+// Cleaner's phone and the desktop Facilities view never saw the same data —
+// see cleaningRecordService.js for the real, Firestore-backed replacement.
+// Equipment/maintenance stay local here for now; only cleaning/stocking moved.
 function operationalBase() {
   return {
     schemaVersion: 3,
-    roomOperational: {},
     equipment: clone(defaultEquipment),
     maintenance: clone(defaultMaintenance),
-    cleaningLogs: clone(defaultCleaningLogs),
     equipmentMovements: [],
   };
 }
@@ -32,17 +35,7 @@ function loadOperationalState() {
     if (legacy) {
       base.equipment = Array.isArray(legacy.equipment) ? legacy.equipment : base.equipment;
       base.maintenance = Array.isArray(legacy.maintenance) ? legacy.maintenance : base.maintenance;
-      base.cleaningLogs = Array.isArray(legacy.cleaningLogs) ? legacy.cleaningLogs : base.cleaningLogs;
       base.equipmentMovements = Array.isArray(legacy.equipmentMovements) ? legacy.equipmentMovements : [];
-      for (const room of legacy.rooms || []) {
-        base.roomOperational[room.id] = {
-          lastCleanedAt: room.lastCleanedAt || null,
-          lastCleanedBy: room.lastCleanedBy || '',
-          cleaningFrequencyHours: room.cleaningFrequencyHours || 24,
-          operationalStatus: room.status || 'ready',
-          notes: room.notes || '',
-        };
-      }
     }
     localStorage.setItem(KEY, JSON.stringify(base));
     return base;
@@ -52,8 +45,7 @@ function loadOperationalState() {
   }
 }
 
-function spaceToRoom(space, registry, operational) {
-  const details = operational.roomOperational?.[space.id] || {};
+function spaceToRoom(space, registry) {
   const site = registry.sites.find((item) => item.id === space.siteId);
   const floor = registry.floors.find((item) => item.id === space.floorId);
   const zone = registry.zones.find((item) => item.id === space.zoneId);
@@ -62,11 +54,9 @@ function spaceToRoom(space, registry, operational) {
     site: site?.name || space.siteName || space.site || '',
     floor: floor?.name || space.floorName || space.floor || '',
     zone: zone?.name || space.zoneName || space.zone || '',
-    status: details.operationalStatus || space.status || 'ready',
-    cleaningFrequencyHours: details.cleaningFrequencyHours || space.cleaningFrequencyHours || 24,
-    lastCleanedAt: details.lastCleanedAt || null,
-    lastCleanedBy: details.lastCleanedBy || '',
-    notes: details.notes ?? space.notes ?? '',
+    status: space.status || 'ready',
+    cleaningFrequencyHours: space.cleaningFrequencyHours || 24,
+    notes: space.notes ?? '',
   };
 }
 
@@ -77,28 +67,16 @@ export function loadFacilitiesState() {
     ...operational,
     equipment: listEquipment().map(equipmentToFacilitiesItem),
     equipmentMovements: loadEquipmentRegistry().movements || [],
-    rooms: registry.spaces.filter((space) => space.status !== 'archived').map((space) => spaceToRoom(space, registry, operational)),
+    rooms: registry.spaces.filter((space) => space.status !== 'archived').map((space) => spaceToRoom(space, registry)),
   };
 }
 
 export function saveFacilitiesState(state) {
   const registry = loadSpaceRegistry();
-  const roomOperational = { ...(state.roomOperational || {}) };
-  for (const room of state.rooms || []) {
-    roomOperational[room.id] = {
-      lastCleanedAt: room.lastCleanedAt || null,
-      lastCleanedBy: room.lastCleanedBy || '',
-      cleaningFrequencyHours: room.cleaningFrequencyHours || 24,
-      operationalStatus: room.status || 'ready',
-      notes: room.notes || '',
-    };
-  }
   const payload = {
     schemaVersion: 3,
-    roomOperational,
     equipment: state.equipment || [],
     maintenance: state.maintenance || [],
-    cleaningLogs: state.cleaningLogs || [],
     equipmentMovements: state.equipmentMovements || [],
   };
   localStorage.setItem(KEY, JSON.stringify(payload));

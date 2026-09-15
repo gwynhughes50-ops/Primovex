@@ -62,10 +62,19 @@ function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
-function recommendedDestination({ text, urgentHits, medicationChanged, actions }) {
+function recommendedDestination({ text, urgentHits, medicationChanged, actions, diagnoses = [], observations = [] }) {
   if (text.includes("safeguarding") || text.includes("child protection")) return "Child Protection";
   if (urgentHits.length) return "GP";
-  if (medicationChanged || /\b(medicine|medication|prescrib|dose|anticoagul)/.test(text)) return "Pharmacist";
+  // A letter that only mentions medicines with no other clinical substance
+  // (diagnoses, observations, broader actions) is a medicines-management
+  // letter and belongs with the pharmacist. But a letter with real clinical
+  // complexity alongside its medication mentions — new/query diagnoses,
+  // observations, investigations — needs the GP's judgement on the whole
+  // picture, not just the medicines line; pharmacist can follow afterwards.
+  const clinicalComplexity = diagnoses.length + observations.length;
+  const medicationLed = medicationChanged || /\b(medicine|medication|prescrib|dose|anticoagul)/.test(text);
+  if (medicationLed && clinicalComplexity === 0) return "Pharmacist";
+  if (clinicalComplexity > 0 || actions.length) return "GP";
   if (/\b(registration|register patient|new patient)\b/.test(text)) return "Registration Forms";
   if (/\b(respiratory|copd|asthma|smoking cessation|wound|dressing)\b/.test(text) && actions.length) return "Nurse / HCA";
   if (/\b(book|appointment|recall|send|contact patient|letter)\b/.test(text) && actions.length) return "Admin";
@@ -85,7 +94,16 @@ export function createClinFlowTriage({ ocr, actions = [], medicines = [], diagno
   const workflowHits = matchSignals(text, WORKFLOW_SIGNALS);
   const informationHits = matchSignals(text, INFORMATION_ONLY_SIGNALS);
   const completedHits = matchSignals(text, COMPLETED_ACTION_SIGNALS);
-  const detectedMedicationChange = Boolean(medicationChanged || (medicines.length && MEDICATION_CHANGE_PATTERN.test(`${medicineText} ${content}`)));
+  // Real letters trust the caller's already-refined medicationChanged flag
+  // (from the LLM's medicationChangePresent, which distinguishes a lasting
+  // change from a temporary test-prep hold) rather than re-deriving it with
+  // this blunt start/stop/restart pattern, which would flag a temporary
+  // "stop the inhaler for a few days before your test" instruction the same
+  // as a real ongoing medication change. The curated synthetic profiles have
+  // no llmExtraction and keep the original pattern-based detection.
+  const detectedMedicationChange = ocr?.llmExtraction
+    ? Boolean(medicationChanged)
+    : Boolean(medicationChanged || (medicines.length && MEDICATION_CHANGE_PATTERN.test(`${medicineText} ${content}`)));
 
   urgentHits.forEach(([phrase, label]) => clinicalTriggers.push({ type: "urgent", label, evidence: phrase }));
   workflowHits.forEach(([phrase, label]) => clinicalTriggers.push({ type: "workflow", label, evidence: phrase }));
@@ -121,13 +139,13 @@ export function createClinFlowTriage({ ocr, actions = [], medicines = [], diagno
   } else if (urgent || documentId.includes("emergency") || urgentHits.length) {
     decision = "urgent";
     confidence = urgentHits.length ? 0.96 : 0.88;
-    destination = recommendedDestination({ text, urgentHits, medicationChanged: detectedMedicationChange, actions });
+    destination = recommendedDestination({ text, urgentHits, medicationChanged: detectedMedicationChange, actions, diagnoses, observations });
     priority = "high";
     reasons.push(evidence("urgent_context", "Urgent or safety-critical context", urgentHits.map(([, label]) => label).join("; ") || "Governed emergency document profile.", 1));
   } else if (actions.length || workflowHits.length || detectedMedicationChange) {
     decision = "workflow_required";
     confidence = Math.min(0.96, 0.74 + Math.min(actions.length, 3) * 0.04 + (detectedMedicationChange ? 0.08 : 0) + Math.min(workflowHits.length, 2) * 0.03);
-    destination = recommendedDestination({ text, urgentHits, medicationChanged: detectedMedicationChange, actions });
+    destination = recommendedDestination({ text, urgentHits, medicationChanged: detectedMedicationChange, actions, diagnoses, observations });
     reasons.push(evidence("outstanding_work", "Outstanding workflow detected", unique([
       ...workflowHits.map(([, label]) => label),
       actions.length ? `${actions.length} extracted action(s) require confirmation` : "",

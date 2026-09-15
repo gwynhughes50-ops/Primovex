@@ -16,14 +16,29 @@ import {
   Shield,
   ArrowLeft,
   CheckCircle2,
+  Copy,
   RotateCcw,
 } from "lucide-react";
+import { ROLE_TEMPLATES } from "@/core/identity/capabilities";
+import { createUserAccount } from "@/services/adminUserService";
 
-const roles = [
-  { value: "User", label: "User", hint: "Can view and edit stock for assigned sites." },
-  { value: "ReadOnly", label: "Read-only", hint: "Can view stock and logs, cannot edit." },
-  { value: "Admin", label: "Admin", hint: "Full access, including user management." },
-];
+const ROLE_HINTS = {
+  "System Admin": "Full platform access, including user management and destructive actions.",
+  "Practice Manager": "Operational management access across Primovex modules.",
+  User: "Can view and edit stock for assigned sites.",
+  Nurse: "Clinical mobile access — stock, temperature, compliance checks.",
+  HCA: "Healthcare assistant mobile access.",
+  Reception: "Front-desk access — ClinFlow intake, governance concerns.",
+  Caretaker: "Facilities access — spaces, compliance, temperature.",
+  Cleaner: "The dedicated cleaning-only mobile screen — scan to start/finish, report issues.",
+  ReadOnly: "Can view stock and logs, cannot edit.",
+};
+
+const roles = Object.keys(ROLE_TEMPLATES).map((name) => ({
+  value: name,
+  label: name,
+  hint: ROLE_HINTS[name] || `${name} capability template.`,
+}));
 
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
@@ -40,6 +55,8 @@ export default function AddUser() {
 
   const [status, setStatus] = useState("idle"); // idle | sending | sent | error
   const [error, setError] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const roleMeta = useMemo(
     () => roles.find((r) => r.value === form.role) || roles[0],
@@ -61,6 +78,8 @@ export default function AddUser() {
     setForm({ displayName: "", email: "", role: "User" });
     setStatus("idle");
     setError("");
+    setInviteLink("");
+    setLinkCopied(false);
   };
 
   const onSubmit = async (e) => {
@@ -78,14 +97,26 @@ export default function AddUser() {
 
     try {
       setStatus("sending");
-
-      // Demo delay. Replace with real API call later.
-      await new Promise((r) => setTimeout(r, 700));
-
+      const result = await createUserAccount({
+        displayName: form.displayName.trim(),
+        email: form.email.trim(),
+        role: form.role,
+      });
+      setInviteLink(result?.inviteLink || "");
       setStatus("sent");
-    } catch {
+    } catch (err) {
       setStatus("error");
-      setError("Something went wrong sending the invite. Try again.");
+      setError(err?.message || "Something went wrong creating the account. Try again.");
+    }
+  };
+
+  const copyInviteLink = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      setError("Could not copy the link — copy it manually.");
     }
   };
 
@@ -166,9 +197,9 @@ export default function AddUser() {
                 </select>
                 <div className="mt-1 text-xs text-slate-400">{roleMeta.hint}</div>
 
-                {form.role === "Admin" && (
+                {form.role === "System Admin" && (
                   <div className="mt-2 rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-                    <strong>Admin access:</strong> grants full control including user
+                    <strong>System Admin access:</strong> grants full control including user
                     management and destructive actions. Assign only if necessary.
                   </div>
                 )}
@@ -197,7 +228,7 @@ export default function AddUser() {
                   className="rounded-full"
                   disabled={!canSubmit || status === "sending"}
                 >
-                  {status === "sending" ? "Sending invite…" : "Send invite"}
+                  {status === "sending" ? "Creating account…" : "Create account"}
                 </Button>
               </div>
             </form>
@@ -207,14 +238,25 @@ export default function AddUser() {
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="h-5 w-5 text-emerald-200 mt-0.5" />
                   <div>
-                    <div className="font-semibold text-emerald-50">Invite sent</div>
+                    <div className="font-semibold text-emerald-50">Account created</div>
                     <div className="text-sm text-emerald-100/80">
-                      An invitation link would be emailed to{" "}
-                      <span className="font-medium text-emerald-50">{form.email}</span>.
+                      <span className="font-medium text-emerald-50">{form.email}</span> now exists as {form.role}. There's no email sending set up yet, so send this password-set link to them yourself.
                     </div>
                   </div>
                 </div>
               </div>
+
+              {inviteLink && (
+                <div className="rounded-xl border border-slate-800/70 bg-slate-950/40 p-3">
+                  <div className="text-xs text-slate-400 mb-1">Password-set link</div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 truncate text-xs text-slate-200">{inviteLink}</code>
+                    <Button type="button" size="sm" variant="outline" className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60 shrink-0" onClick={copyInviteLink}>
+                      <Copy className="h-3.5 w-3.5 mr-1.5" /> {linkCopied ? "Copied" : "Copy"}
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <Button

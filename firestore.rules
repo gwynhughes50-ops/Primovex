@@ -47,6 +47,16 @@ service cloud.firestore {
         || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.organizationId == practiceId;
     }
 
+    // Audit evidence never uses the broad synthetic `primary` exception above.
+    // A user may only read the exact tenant on their authenticated profile; the
+    // primary fallback is accepted only for legacy single-practice profiles
+    // which contain no explicit tenant identifier.
+    function auditPracticeMatches(practiceId) {
+      let profile = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let tenant = profile.get("practiceId", profile.get("organisationId", profile.get("organizationId", "primary")));
+      return signedIn() && practiceId == tenant;
+    }
+
     // -------------------------
     // PER-USER SETTINGS
     // -------------------------
@@ -87,7 +97,10 @@ service cloud.firestore {
     // USERS (profiles)
     // -------------------------
     match /users/{uid} {
-      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      // Concerns team members need to list staff by name to add someone as
+      // involved on a case (see governance_concerns below) - narrow, direct
+      // requirement rather than a general staff-directory widening.
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || hasPermission("governance", "concernsTeam"));
 
       allow create: if signedIn()
         && request.auth.uid == uid
@@ -123,7 +136,18 @@ service cloud.firestore {
     match /stock_movements/{docId} {
       allow get, list: if signedIn();
       allow create: if signedIn();
-      allow update, delete: if isAdmin();
+      // Historical movements are immutable except for the single controlled
+      // transition that links an original stock-use entry to its compensating
+      // reversal. No quantities, actor, reason or source fields can be edited.
+      allow update: if signedIn()
+        && !("reversed_at" in resource.data)
+        && resource.data.type == "use"
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["reversed_at", "reversed_by", "reversal_movement_id"])
+        && request.resource.data.reversal_movement_id is string
+        && request.resource.data.reversed_by is map
+        && request.resource.data.reversed_by.uid == request.auth.uid;
+      allow delete: if false;
     }
     match /stock_barcodes/{barcodeId} {
   allow read: if request.auth != null;
@@ -217,21 +241,49 @@ match /practice_roles/{roleId} {
 // -------------------------
 // GOVERNANCE INTELLIGENCE - LISTENING TO PEOPLE CONCERNS
 // -------------------------
+// Three tiers: the Concerns team (a capability, not a role - can be layered
+// onto anyone) has full read/write on every case. Partners (a dedicated
+// role) can read every case but never write. Everyone else only sees a case
+// if their uid is explicitly listed on it (involvedUserIds), and can only
+// add a "note"-type timeline entry - never change the case itself.
+function isConcernsTeam() {
+  return isAdmin() || hasPermission("governance", "concernsTeam");
+}
+function isGovernancePartner() {
+  return isAdmin() || hasPermission("governance", "partnerAccess");
+}
+function isInvolvedInConcern(concernData) {
+  return signedIn() && request.auth.uid in (concernData.involvedUserIds != null ? concernData.involvedUserIds : []);
+}
+
 match /governance_concerns/{concernId} {
-  allow get, list: if signedIn();
-  allow create, update: if signedIn();
+  allow get, list: if signedIn() && (isConcernsTeam() || isGovernancePartner() || isInvolvedInConcern(resource.data));
+  allow create: if isConcernsTeam();
+  allow update: if isConcernsTeam();
   allow delete: if isAdmin();
 }
 
 match /governance_concern_timeline/{timelineId} {
-  allow get, list: if signedIn();
-  allow create: if signedIn();
-  allow update, delete: if isAdmin();
+  allow get, list: if signedIn() && (
+    isConcernsTeam() || isGovernancePartner()
+    || isInvolvedInConcern(get(/databases/$(database)/documents/governance_concerns/$(resource.data.concernId)).data)
+  );
+  allow create: if signedIn() && (
+    isConcernsTeam()
+    || (
+      isInvolvedInConcern(get(/databases/$(database)/documents/governance_concerns/$(request.resource.data.concernId)).data)
+      && request.resource.data.type == "note"
+    )
+  );
+  allow update, delete: if false;
 }
 
 match /governance_concern_learning_actions/{actionId} {
-  allow get, list: if signedIn();
-  allow create, update: if signedIn();
+  allow get, list: if signedIn() && (
+    isConcernsTeam() || isGovernancePartner()
+    || isInvolvedInConcern(get(/databases/$(database)/documents/governance_concerns/$(resource.data.concernId)).data)
+  );
+  allow create, update: if isConcernsTeam();
   allow delete: if isAdmin();
 }
 
@@ -247,7 +299,7 @@ match /governance_sars/{sarId} {
 match /governance_sar_activity/{activityId} {
   allow get, list: if signedIn();
   allow create: if signedIn();
-  allow update, delete: if isAdmin();
+  allow update, delete: if false;
 }
 
 // -------------------------
@@ -358,11 +410,20 @@ match /subject_access_requests/{requestId} {
     // -------------------------
     // Sprint 22: capability-aware access. Existing System Admin users continue
     // to work while we migrate user profiles to granular permissions maps.
+    //
+    // users/{uid}.permissions is actually a flat array of "domain.action"
+    // capability strings (see capabilities.js's ROLE_TEMPLATES and
+    // functions/index.js's own permission check), not a nested map — the
+    // indexed-lookup version of this function below was checking a shape that
+    // never existed, so it always fell through to isAdmin() alone. Fixed to
+    // match the real shape; this only ever grants MORE access than before
+    // (isAdmin() || <a check that used to always be false>), never less.
     function hasPermission(domain, action) {
       return signedIn()
         && (
           isAdmin()
-          || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions[domain][action] == true
+          || (domain + "." + action) in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions
+          || "*" in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions
         );
     }
 
@@ -376,9 +437,103 @@ match /subject_access_requests/{requestId} {
       allow delete: if isAdmin();
     }
 
+    // Equipment registry — was localStorage-only, so equipment (fridges etc.)
+    // added on one device never showed up on another. Same rule shape as
+    // space_registries above, which this collection mirrors exactly.
+    match /equipment_registry/{registryId} {
+      allow get, list: if signedIn();
+      allow create, update: if isAdmin() || hasPermission("practiceAdmin", "write");
+      allow delete: if isAdmin();
+    }
+
+    // One doc per equipment item, written every time any staff phone's
+    // background BLE scan passes near its tag. High write frequency by
+    // design (last-seen-wins, no reconciliation needed), so this is
+    // deliberately separate from equipment_registry's single shared doc.
+    match /equipment_sightings/{equipmentId} {
+      allow get, list: if signedIn();
+      allow create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+
     match /connected_devices/{deviceId} {
       allow get, list: if signedIn() && (hasPermission("connect", "view") || isAdmin());
       allow create, update, delete: if hasPermission("connect", "manageDevices") || isAdmin();
+    }
+
+    // Non-secret Connect provider config (region/accessId/projectId/deviceId).
+    // The Tuya Access Secret never touches Firestore or React — it only lives
+    // in Firebase Functions secrets, read server-side by connectCloudHealth /
+    // syncConnectProvider.
+    match /connect_provider_settings/{settingsId} {
+      allow get, list: if signedIn() && (hasPermission("connect", "view") || isAdmin());
+      allow create, update: if signedIn() && (hasPermission("connect", "manageDevices") || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    match /shelly_local_thermometers/{thermometerId} {
+      allow get, list: if signedIn() && (hasPermission("connect", "view") || isAdmin());
+      allow create, update, delete: if hasPermission("connect", "manageDevices") || isAdmin();
+    }
+
+    // Cleaning/stocking status per room, and the append-only log of cleaning
+    // events. Low-sensitivity operational data (no PII) that any signed-in
+    // staff member may need to write while physically doing the work (a
+    // Cleaner scanning a tag, a nurse marking a room stocked), so this is
+    // deliberately broader than the capability-gated collections above.
+    match /room_operational/{roomId} {
+      allow get, list, create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Orb phrase-learning suggestions. Every signed-in user's IntentEngine
+    // reads the approved set on every request (list), and anyone can suggest
+    // a phrase (create) via the clarification flow — but only an admin can
+    // approve/reject one (update).
+    match /orb_intent_learning/{suggestionId} {
+      allow get, list, create: if signedIn();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Practice-taught FAQ/knowledge entries Orb matches against when no
+    // structured tool applies. Any signed-in user can contribute a fact;
+    // editing/removing an existing one is admin-gated to stop casual
+    // overwrites of something someone else taught it.
+    match /orb_knowledge_entries/{entryId} {
+      allow get, list, create: if signedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // Orb interaction audit trail. Write-only from the user's perspective —
+    // an audit log a user could edit or read at will isn't a real audit log.
+    match /orb_audit_log/{entryId} {
+      allow create: if signedIn();
+      allow get, list: if isAdmin();
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /cleaning_logs/{logId} {
+      allow get, list, create: if signedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // Internal QA bug reports (mobile bug button + Developer Centre). No PII,
+    // gated client-side to developer/admin roles, so this is deliberately
+    // broad like room_operational above.
+    match /developer_issues/{issueId} {
+      allow get, list, create, update: if signedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Quick Notes. "private" notes are only visible to their author; "practice"
+    // notes are visible to every signed-in user. A note can only ever be
+    // authored as yourself, and only you (or an admin) can complete/delete it.
+    match /quick_notes/{noteId} {
+      allow get, list: if signedIn() && (resource.data.authorUid == request.auth.uid || resource.data.scope == "practice");
+      allow create: if signedIn() && request.resource.data.authorUid == request.auth.uid;
+      allow update, delete: if signedIn() && (resource.data.authorUid == request.auth.uid || isAdmin());
     }
 
     match /device_assignment_audit/{auditId} {
@@ -392,7 +547,7 @@ match /subject_access_requests/{requestId} {
       // Real IoT ingestion should use Cloud Functions/Admin SDK. This client rule
       // supports simulation and testing during early hardware discovery.
       allow create: if signedIn() && (hasPermission("connect", "manageDevices") || isAdmin());
-      allow update, delete: if isAdmin();
+      allow update, delete: if false;
     }
 
     match /connect_device_alerts/{alertId} {
@@ -408,9 +563,17 @@ match /subject_access_requests/{requestId} {
     }
 
     match /audit_events/{eventId} {
-      allow get, list: if signedIn() && (hasPermission("audit", "read") || isAdmin());
-      allow create: if signedIn();
+      allow get, list: if signedIn()
+        && (hasPermission("audit", "read") || isAdmin())
+        && auditPracticeMatches(resource.data.practiceId);
+      // The Admin SDK Cloud Function derives actor and tenant identity, writes
+      // the sequence/hash chain and bypasses these client rules.
+      allow create: if false;
       allow update, delete: if false;
+    }
+
+    match /audit_ledger_heads/{practiceId} {
+      allow read, write: if false;
     }
 
     // -------------------------
@@ -438,6 +601,8 @@ match /subject_access_requests/{requestId} {
           "patientVerificationStatus", "retentionClass", "createdByUid",
           "triageSuggestion", "triageDecision", "triageStatus", "triageRulesetVersion",
           "triageReviewedByUid", "triageReviewedAt",
+          "claimedByUid", "claimedAt", "completedByUid", "completedAt",
+          "archivedByUid", "archivedAt", "deleted", "deletedByUid", "deletedAt",
           "createdAt", "updatedAt", "updatedByUid"
         ])
         && clinFlowPracticeMatches(request.resource.data.practiceId);

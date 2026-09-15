@@ -1,25 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, ExternalLink, Nfc, Smartphone, X } from "lucide-react";
-import { isInstalledAndroidApp, nfcSetupStatus, nfcSupported, scanNfcOnce } from "@/modules/sense/services/nfcService";
+import { isInstalledAndroidApp, nfcSetupStatus, nfcSupported, parsePrimovexSenseUrl, scanNfcOnce } from "@/modules/sense/services/nfcService";
 import { useSenseSession } from "@/contexts/SenseSessionContext";
 import useSenseContext from "@/modules/sense/hooks/useSenseContext";
-
-function parsePrimovexSenseUrl(value) {
-  if (!value) return null;
-  try {
-    const url = new URL(value, window.location.origin);
-    if (url.origin !== window.location.origin) return null;
-    const match = url.pathname.match(/^\/sense\/open\/(space|asset)\/([^/]+)\/?$/i);
-    if (!match) return null;
-    return {
-      entityType: match[1].toLowerCase(),
-      entityId: decodeURIComponent(match[2]),
-      href: `${url.pathname}${url.search}${url.hash}`,
-    };
-  } catch {
-    return null;
-  }
-}
 
 export default function MobileNfcScanner({ open, onClose }) {
   const { activate } = useSenseSession();

@@ -242,7 +242,7 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
             <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)} className="w-full truncate bg-transparent text-lg font-bold text-[var(--medtrak-text)] outline-none">
               {boxes.map((box) => <option key={box.id} value={box.id}>{box.name}</option>)}
             </select>
-            <p className="truncate text-xs font-medium text-[var(--medtrak-muted)]">{selected.location || selected.site || "Room not assigned"} Â· {Math.min(completedCount + 1, items.length)}/{items.length}</p>
+            <p className="truncate text-xs font-medium text-[var(--medtrak-muted)]">{selected.location || selected.site || "Room not assigned"} · {Math.min(completedCount + 1, items.length)}/{items.length}</p>
           </div>
           <span className="text-sm font-bold text-[var(--medtrak-accent)]">{progress}%</span>
         </div>
@@ -277,7 +277,7 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
               ))}
             </div>
             <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-3 text-xs leading-5 text-blue-900">Saving creates the auditable readiness record. Replacement, borrowing and urgent-order choices remain pending follow-up records until a user completes the corresponding stock or ordering action.</div>
-            <button type="button" onClick={saveVerification} disabled={saving || !canVerify} className="mt-4 w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 py-3.5 text-base font-bold text-white disabled:opacity-50">{saving ? "Savingâ€¦" : "Save verification"}</button>
+            <button type="button" onClick={saveVerification} disabled={saving || !canVerify} className="mt-4 w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 py-3.5 text-base font-bold text-white disabled:opacity-50">{saving ? "Saving…" : "Save verification"}</button>
           </section>
         ) : currentItem ? (
           <section className="rounded-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4 shadow-sm">
@@ -285,7 +285,7 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--medtrak-accent)]">Item {index + 1} of {items.length}</p>
                 <h2 className="mt-2 text-2xl font-bold leading-tight">{currentItem.name}</h2>
-                {(currentItem.expectedQty || currentItem.defaultExpiry) && <p className="mt-1 text-sm text-[var(--medtrak-muted)]">{currentItem.expectedQty ? `Expected ${currentItem.expectedQty}` : ""}{currentItem.expectedQty && currentItem.defaultExpiry ? " Â· " : ""}{currentItem.defaultExpiry ? `Expiry ${currentItem.defaultExpiry}` : ""}</p>}
+                {(currentItem.expectedQty || currentItem.defaultExpiry) && <p className="mt-1 text-sm text-[var(--medtrak-muted)]">{currentItem.expectedQty ? `Expected ${currentItem.expectedQty}` : ""}{currentItem.expectedQty && currentItem.defaultExpiry ? " · " : ""}{currentItem.defaultExpiry ? `Expiry ${currentItem.defaultExpiry}` : ""}</p>}
               </div>
               {results[currentItem.id] && <ResultPill status={results[currentItem.id].status} />}
             </div>

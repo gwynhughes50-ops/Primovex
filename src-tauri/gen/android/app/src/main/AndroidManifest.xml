@@ -1,9 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.NFC" />
+    <!-- BLE scan-only permission, Android 12+ (API 31+). neverForLocation is safe
+         since we only decode Eddystone-URL/iBeacon advertisement bytes and never
+         correlate scan results with device position. -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" tools:targetApi="s" />
+    <!-- Pre-Android 12 BLE scanning requires the legacy Bluetooth permissions
+         plus fine location (the OS treats BLE scan results as location-adjacent
+         on these versions, even though this app never reads location itself). -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
 
     <!-- Allow Android 11+ package visibility for installed speech recognition providers. -->
     <queries>
@@ -65,6 +78,30 @@
                 
             </intent-filter>
             <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
+        </activity>
+
+        <!-- Invisible handler for Sense room-presence NFC taps received while
+             Primovex is closed. Same App Link host/path as MainActivity's
+             deep-link filter above, but with a higher priority so Android
+             routes here first; it forwards anything that isn't a plain room
+             tap straight through to MainActivity unchanged. See
+             NfcSightingActivity.kt for the full routing/record logic. -->
+        <activity
+            android:name=".NfcSightingActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity="">
+            <intent-filter android:priority="10">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="app.primovex.co.uk" />
+                <data android:pathPrefix="/sense/open" />
+            </intent-filter>
         </activity>
 
         <provider

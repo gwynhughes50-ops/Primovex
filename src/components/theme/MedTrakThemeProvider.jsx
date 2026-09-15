@@ -861,10 +861,15 @@ html:not(.medtrak-light) .medtrak-temperature-card * {
     html.medtrak-light .text-amber-200,
     html.medtrak-light .text-amber-300,
     html.medtrak-light .text-amber-400,
+    html.medtrak-light .text-yellow-50,
     html.medtrak-light .text-yellow-100,
     html.medtrak-light .text-yellow-200,
+    html.medtrak-light .text-yellow-300,
+    html.medtrak-light .text-orange-50,
     html.medtrak-light .text-orange-100,
-    html.medtrak-light .text-orange-200 {
+    html.medtrak-light .text-orange-200,
+    html.medtrak-light .text-orange-300,
+    html.medtrak-light .text-orange-400 {
       color: #92400e !important;
     }
 
@@ -880,6 +885,103 @@ html:not(.medtrak-light) .medtrak-temperature-card * {
     html.medtrak-light .text-pink-200 {
       color: #991b1b !important;
     }
+
+    html.medtrak-light .text-violet-50,
+    html.medtrak-light .text-violet-100,
+    html.medtrak-light .text-violet-200,
+    html.medtrak-light .text-violet-300,
+    html.medtrak-light .text-purple-50,
+    html.medtrak-light .text-purple-100,
+    html.medtrak-light .text-purple-200,
+    html.medtrak-light .text-purple-300,
+    html.medtrak-light .text-indigo-50,
+    html.medtrak-light .text-indigo-100,
+    html.medtrak-light .text-indigo-200,
+    html.medtrak-light .text-indigo-300,
+    html.medtrak-light .text-fuchsia-50,
+    html.medtrak-light .text-fuchsia-100,
+    html.medtrak-light .text-fuchsia-200,
+    html.medtrak-light .text-fuchsia-300 {
+      color: #5b21b6 !important;
+    }
+
+    /* Sprint 34.5: the exact-class lists above (and the Sprint 25/26 ones
+       higher up this file) all miss Tailwind's opacity-suffixed variants —
+       text-slate-100/80 is a different CSS class from text-slate-100, so
+       "pale text on white background" keeps recurring on any screen that
+       uses /NN opacity (e.g. MedAI Daily Brief, Alerts Widget). Attribute
+       substring selectors catch every opacity value at once so this class of
+       bug can't come back a fourth time. */
+    html.medtrak-light [class*="text-white/"],
+    html.medtrak-light [class*="text-slate-50/"],
+    html.medtrak-light [class*="text-slate-100/"],
+    html.medtrak-light [class*="text-slate-200/"],
+    html.medtrak-light [class*="text-zinc-50/"],
+    html.medtrak-light [class*="text-neutral-50/"] {
+      color: var(--mt-text-primary) !important;
+    }
+
+    html.medtrak-light [class*="text-slate-300/"],
+    html.medtrak-light [class*="text-slate-400/"],
+    html.medtrak-light [class*="text-slate-500/"],
+    html.medtrak-light [class*="text-gray-300/"],
+    html.medtrak-light [class*="text-gray-400/"],
+    html.medtrak-light [class*="text-gray-500/"] {
+      color: var(--mt-text-secondary) !important;
+    }
+
+    html.medtrak-light [class*="text-teal-50/"],
+    html.medtrak-light [class*="text-teal-100/"],
+    html.medtrak-light [class*="text-teal-200/"],
+    html.medtrak-light [class*="text-teal-300/"],
+    html.medtrak-light [class*="text-cyan-50/"],
+    html.medtrak-light [class*="text-cyan-100/"],
+    html.medtrak-light [class*="text-cyan-200/"],
+    html.medtrak-light [class*="text-cyan-300/"],
+    html.medtrak-light [class*="text-sky-50/"],
+    html.medtrak-light [class*="text-sky-100/"],
+    html.medtrak-light [class*="text-sky-200/"],
+    html.medtrak-light [class*="text-blue-100/"],
+    html.medtrak-light [class*="text-blue-200/"] {
+      color: #075985 !important;
+    }
+
+    html.medtrak-light [class*="text-emerald-50/"],
+    html.medtrak-light [class*="text-emerald-100/"],
+    html.medtrak-light [class*="text-emerald-200/"],
+    html.medtrak-light [class*="text-emerald-300/"],
+    html.medtrak-light [class*="text-emerald-400/"],
+    html.medtrak-light [class*="text-green-100/"],
+    html.medtrak-light [class*="text-green-200/"],
+    html.medtrak-light [class*="text-green-300/"] {
+      color: #166534 !important;
+    }
+
+    html.medtrak-light [class*="text-amber-50/"],
+    html.medtrak-light [class*="text-amber-100/"],
+    html.medtrak-light [class*="text-amber-200/"],
+    html.medtrak-light [class*="text-amber-300/"],
+    html.medtrak-light [class*="text-amber-400/"],
+    html.medtrak-light [class*="text-yellow-100/"],
+    html.medtrak-light [class*="text-yellow-200/"],
+    html.medtrak-light [class*="text-orange-100/"],
+    html.medtrak-light [class*="text-orange-200/"] {
+      color: #92400e !important;
+    }
+
+    html.medtrak-light [class*="text-rose-50/"],
+    html.medtrak-light [class*="text-rose-100/"],
+    html.medtrak-light [class*="text-rose-200/"],
+    html.medtrak-light [class*="text-rose-300/"],
+    html.medtrak-light [class*="text-rose-400/"],
+    html.medtrak-light [class*="text-red-100/"],
+    html.medtrak-light [class*="text-red-200/"],
+    html.medtrak-light [class*="text-red-300/"],
+    html.medtrak-light [class*="text-pink-100/"],
+    html.medtrak-light [class*="text-pink-200/"] {
+      color: #991b1b !important;
+    }
+
 
     html.medtrak-light .bg-teal-400\/10,
     html.medtrak-light .bg-teal-500\/10,
@@ -985,6 +1087,14 @@ html:not(.medtrak-light) .medtrak-temperature-card * {
     html.medtrak-light [class*="text-red-"][class*="/"],
     html.medtrak-light [class*="text-pink-"][class*="/"] {
       color: #991b1b !important;
+      opacity: 1 !important;
+    }
+
+    html.medtrak-light [class*="text-violet-"][class*="/"],
+    html.medtrak-light [class*="text-purple-"][class*="/"],
+    html.medtrak-light [class*="text-indigo-"][class*="/"],
+    html.medtrak-light [class*="text-fuchsia-"][class*="/"] {
+      color: #5b21b6 !important;
       opacity: 1 !important;
     }
 

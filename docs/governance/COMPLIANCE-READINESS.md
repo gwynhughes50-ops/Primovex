@@ -1,7 +1,7 @@
 # Primovex Dual NHS Assurance Readiness Register
 
 Status: **Not approved for real patient data**  
-Product version: 0.15.28  
+Product version: 0.15.38  
 Primary deployment baseline: **NHS Wales**  
 Adopted compatibility overlay: **NHS England**  
 Review trigger: before any live clinical pilot and after any material processing change
@@ -55,6 +55,10 @@ Primovex records the jurisdiction that formally requires each control. Where Wal
 - Workflow events are append-only and documents use soft archive.
 - Capability controls restrict ClinFlow navigation and actions.
 - Provider secrets remain in server-side secret storage.
+- Governed audit events are written through a server callable that derives the actor, role and practice from authenticated server context.
+- Audit events are append-only, sequenced per practice and hash-linked; direct client writes and all updates/deletes are denied.
+- Audit viewing and evidence exports are themselves recorded, and sensitive free text is rejected from structured metadata.
+- The Audit Centre supports permission-controlled inspection plus CSV/JSON evidence export; retention approval, legal holds and external immutable archival remain pre-live governance gates.
 
 ## Official baselines
 
@@ -65,4 +69,3 @@ Primovex records the jurisdiction that formally requires each control. Where Wal
 - [Welsh Records Management Code of Practice 2022](https://www.gov.wales/new-records-management-code-practice-health-and-care-2022-whc2022008)
 - [NHS Data Security and Protection Toolkit](https://www.dsptoolkit.nhs.uk/)
 - [NHS DCB0129 clinical safety standard](https://digital.nhs.uk/data-and-information/information-standards/governance/latest-activity/standards-and-collections/dcb0129-clinical-risk-management-its-application-in-the-manufacture-of-health-it-systems/)
-

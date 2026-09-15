@@ -9,6 +9,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { writeAuditEvent } from "@/core/identity/auditService";
 
 export const CONNECTED_DEVICES_COLLECTION = "connected_devices";
 export const CONNECT_PROVIDER_SETTINGS_COLLECTION = "connect_provider_settings";
@@ -106,5 +107,6 @@ export async function saveDeviceAssignment(device, assignment, actor = {}) {
     createdAt: assignedAt,
   });
   await batch.commit();
+  await writeAuditEvent({ action: "connect.device.assign", module: "connect", targetType: "connected_device", targetId: device.id, summary: "Connected device assigned to equipment and Space", correlationId: unitId, metadata: { provider: device.provider || "tuya", spaceId: assignmentData.spaceId, equipmentId: assignmentData.equipmentId, unitId, min, max, alertDelayMinutes } });
   return { deviceId: device.id, unitId, ...assignmentData };
 }

@@ -1,3 +1,5 @@
+import { doc, onSnapshot, setDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { getProvider, getProviderSummary, listProviders } from "./providers/ProviderFactory";
 import { SIMULATOR_PROVIDER_ID, SIMULATED_CONNECT_DEVICES } from "./providers/SimulatorProvider";
 import { TUYA_PROVIDER_ID } from "./providers/TuyaProvider";
@@ -243,43 +245,47 @@ export function buildConnectIntelligence(devices = [], providerId = DEFAULT_CONN
   };
 }
 
-export function getConnectProviderSettings() {
-  const stored = typeof window !== "undefined" ? window.localStorage.getItem("medtrak.connect.provider") : null;
-  if (!stored) {
-    return {
-      activeProvider: DEFAULT_CONNECT_PROVIDER,
-      tuya: {
-        region: "eu",
-        accessId: "",
-        projectId: "",
-        deviceId: "",
-      },
-    };
-  }
-  try {
-    const parsed = JSON.parse(stored);
-    const platformMode = window.localStorage.getItem("medtrak.platform.mode") || "live";
-    // Older APKs wrote "simulator" as the default even in Live mode. Migrate
-    // that legacy default once so the new T13 appears without manual setup.
-    if (platformMode === "live" && parsed.activeProvider === SIMULATOR_PROVIDER_ID) {
-      const migrated = { ...parsed, activeProvider: DEFAULT_CONNECT_PROVIDER };
-      window.localStorage.setItem("medtrak.connect.provider", JSON.stringify(migrated));
-      return migrated;
-    }
-    return parsed;
-  } catch {
-    return { activeProvider: DEFAULT_CONNECT_PROVIDER, tuya: { region: "eu", accessId: "", projectId: "", deviceId: "" } };
-  }
+const CONNECT_SETTINGS_COLLECTION = "connect_provider_settings";
+const CONNECT_SETTINGS_DOC_ID = "default";
+
+export function getDefaultConnectProviderSettings() {
+  return {
+    activeProvider: DEFAULT_CONNECT_PROVIDER,
+    tuya: { region: "eu", accessId: "", projectId: "", deviceId: "" },
+  };
 }
 
-export function saveConnectProviderSettings(settings) {
-  if (typeof window === "undefined") return settings;
-  window.localStorage.setItem("medtrak.connect.provider", JSON.stringify(settings));
+function normaliseConnectProviderSettings(data) {
+  if (!data) return getDefaultConnectProviderSettings();
+  const platformMode = typeof window !== "undefined" ? window.localStorage.getItem("medtrak.platform.mode") || "live" : "live";
+  // Older APKs wrote "simulator" as the default even in Live mode. Migrate
+  // that legacy default once so the real provider appears without manual setup.
+  if (platformMode === "live" && data.activeProvider === SIMULATOR_PROVIDER_ID) {
+    return { ...data, activeProvider: DEFAULT_CONNECT_PROVIDER };
+  }
+  return data;
+}
+
+// Real, cross-device provider config (region/accessId/projectId/deviceId —
+// never the Tuya Access Secret, which only ever lives in Firebase Functions
+// secrets, never in React). Previously this was per-device localStorage, so
+// setting up Tuya on the desktop admin console never showed up on anyone
+// else's device or on mobile.
+export function subscribeConnectProviderSettings(callback) {
+  return onSnapshot(
+    doc(db, CONNECT_SETTINGS_COLLECTION, CONNECT_SETTINGS_DOC_ID),
+    (snap) => callback(normaliseConnectProviderSettings(snap.exists() ? snap.data() : null)),
+    () => callback(getDefaultConnectProviderSettings())
+  );
+}
+
+export async function saveConnectProviderSettings(settings) {
+  await setDoc(doc(db, CONNECT_SETTINGS_COLLECTION, CONNECT_SETTINGS_DOC_ID), settings);
   return settings;
 }
 
 export function subscribeConnectedDevices(callback, onError, options = {}) {
-  const settings = options.providerSettings || getConnectProviderSettings();
+  const settings = options.providerSettings || getDefaultConnectProviderSettings();
   const providerId = options.providerId || settings.activeProvider || DEFAULT_CONNECT_PROVIDER;
   const provider = getProvider(providerId);
 

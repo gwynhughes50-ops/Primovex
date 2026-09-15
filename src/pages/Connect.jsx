@@ -14,7 +14,9 @@ import {
   Signal,
   Sparkles,
   Thermometer,
+  Trash2,
   Wifi,
+  X,
   Zap,
 } from "lucide-react";
 
@@ -28,6 +30,7 @@ import { buildDeviceHistory, getDeviceStatus, listProviders } from "@/services/c
 import { buildTuyaBackendContract } from "@/services/connect/providers/TuyaProvider";
 import { getConnectCloudHealth, syncConnectProvider, buildConnectCloudDeploymentNotes } from "@/services/connect/connectCloudClient";
 import DeviceAssignmentSheet from "@/components/temperature/DeviceAssignmentSheet";
+import { addShellyLocalThermometer, pollShellyLocalThermometerOnce, removeShellyLocalThermometer, subscribeShellyLocalThermometers } from "@/services/connect/shellyLocalPoller";
 
 function ConnectBadge({ device }) {
   const status = getDeviceStatus(device);
@@ -282,9 +285,10 @@ function ProviderManager({ activeProvider, providerSettings, setActiveProvider, 
               Project ID
               <Input disabled={!canManageDevices} value={draftTuya.projectId} onChange={(e) => setDraftTuya((current) => ({ ...current, projectId: e.target.value }))} placeholder="Tuya project ID" className="mt-1" />
             </label>
-            <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Test Device ID
-              <Input disabled={!canManageDevices} value={draftTuya.deviceId} onChange={(e) => setDraftTuya((current) => ({ ...current, deviceId: e.target.value }))} placeholder="Device ID" className="mt-1" />
+            <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:col-span-2">
+              Tuya Device IDs
+              <Input disabled={!canManageDevices} value={draftTuya.deviceId} onChange={(e) => setDraftTuya((current) => ({ ...current, deviceId: e.target.value }))} placeholder="Comma-separated, e.g. bf123...,bf456..." className="mt-1" />
+              <span className="block text-[11px] font-normal normal-case text-slate-500">Every paired device's ID, comma-separated. The "Add Device" button above does this for you one at a time.</span>
             </label>
           </div>
 
@@ -312,12 +316,135 @@ function ProviderManager({ activeProvider, providerSettings, setActiveProvider, 
   );
 }
 
+function LocalThermometerManager({ canManageDevices }) {
+  const [thermometers, setThermometers] = useState([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ name: "", room: "", ip: "", min: "2", max: "8" });
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [checkingId, setCheckingId] = useState(null);
+  const [checkMessages, setCheckMessages] = useState({});
+
+  useEffect(() => subscribeShellyLocalThermometers(setThermometers), []);
+
+  async function submitAdd(event) {
+    event.preventDefault();
+    setBusy(true);
+    setMessage("");
+    try {
+      await addShellyLocalThermometer(form);
+      setForm({ name: "", room: "", ip: "", min: "2", max: "8" });
+      setShowAdd(false);
+    } catch (error) {
+      setMessage(error?.message || "Could not add this thermometer.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id) {
+    setBusy(true);
+    try {
+      await removeShellyLocalThermometer(id);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function checkNow(item) {
+    setCheckingId(item.id);
+    setCheckMessages((c) => ({ ...c, [item.id]: "" }));
+    try {
+      const value = await pollShellyLocalThermometerOnce(item);
+      setCheckMessages((c) => ({ ...c, [item.id]: `${value.toFixed(1)}°C — reachable` }));
+    } catch (error) {
+      setCheckMessages((c) => ({ ...c, [item.id]: error?.message || "Could not reach this thermometer." }));
+    } finally {
+      setCheckingId(null);
+    }
+  }
+
+  return (
+    <Card className="border border-white/10 bg-slate-900/70 p-5 shadow-2xl shadow-black/20">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <Thermometer className="h-5 w-5 text-teal-200" />
+            <h2 className="text-lg font-bold text-white">Local Thermometers</h2>
+          </div>
+          <p className="mt-1 text-sm text-slate-400">Mains-powered WiFi thermometers read directly on the practice's own network by the desktop app — no cloud account required. Readings only update while a Primovex desktop app on the same network is running.</p>
+        </div>
+        {canManageDevices && (
+          <Button type="button" variant="outline" onClick={() => setShowAdd((v) => !v)} className="rounded-full border-white/10 bg-slate-950/40 text-slate-200">
+            {showAdd ? "Cancel" : "Add thermometer"}
+          </Button>
+        )}
+      </div>
+
+      {showAdd && (
+        <form onSubmit={submitAdd} className="mt-4 grid gap-3 rounded-2xl border border-teal-400/20 bg-slate-950/40 p-4 sm:grid-cols-2">
+          <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Name
+            <Input required value={form.name} onChange={(e) => setForm((c) => ({ ...c, name: e.target.value }))} placeholder="Vaccine Fridge" className="mt-1" />
+          </label>
+          <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Room
+            <Input value={form.room} onChange={(e) => setForm((c) => ({ ...c, room: e.target.value }))} placeholder="Treatment Room 1" className="mt-1" />
+          </label>
+          <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-400 sm:col-span-2">
+            Local IP address
+            <Input required value={form.ip} onChange={(e) => setForm((c) => ({ ...c, ip: e.target.value }))} placeholder="192.168.1.50" className="mt-1" />
+            <span className="block text-[11px] font-normal normal-case text-slate-500">Find this in the device's own app, or your router's device list.</span>
+          </label>
+          <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Min °C
+            <Input type="number" step="0.1" value={form.min} onChange={(e) => setForm((c) => ({ ...c, min: e.target.value }))} className="mt-1" />
+          </label>
+          <label className="space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Max °C
+            <Input type="number" step="0.1" value={form.max} onChange={(e) => setForm((c) => ({ ...c, max: e.target.value }))} className="mt-1" />
+          </label>
+          {message && <p className="text-sm text-rose-300 sm:col-span-2">{message}</p>}
+          <div className="sm:col-span-2">
+            <Button type="submit" disabled={busy} className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 font-semibold text-slate-950">
+              {busy ? "Adding…" : "Add thermometer"}
+            </Button>
+          </div>
+        </form>
+      )}
+
+      <div className="mt-4 space-y-2">
+        {thermometers.length === 0 && <p className="text-sm text-slate-500">No local thermometers configured yet.</p>}
+        {thermometers.map((item) => (
+          <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/40 p-3">
+            <div>
+              <p className="font-semibold text-white">{item.name}</p>
+              <p className="text-xs text-slate-400">{item.room} • {item.ip} • Safe range {item.min}-{item.max}°C</p>
+              {checkMessages[item.id] && <p className="mt-1 text-xs text-teal-300">{checkMessages[item.id]}</p>}
+            </div>
+            {canManageDevices && (
+              <div className="flex items-center gap-1">
+                <Button type="button" variant="outline" size="sm" disabled={checkingId === item.id} onClick={() => checkNow(item)} className="rounded-full border-white/10 bg-slate-950/40 text-xs text-slate-200">
+                  {checkingId === item.id ? "Checking…" : "Check now"}
+                </Button>
+                <button type="button" disabled={busy} onClick={() => remove(item.id)} aria-label={`Remove ${item.name}`} className="rounded-lg p-2 text-slate-400 transition hover:bg-red-500/10 hover:text-red-400">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function DeviceCard({ device, selected, onSelect }) {
   return (
     <button
       type="button"
       onClick={() => onSelect(device)}
-      className={`w-full rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 hover:border-teal-300/40 hover:bg-slate-900/80 ${
+      className={`w-full rounded-3xl border p-4 text-left transition hover:-translate-y-0.5 hover:border-teal-300/40 ${
         selected ? "border-teal-300/50 bg-teal-500/10" : "border-white/10 bg-slate-900/60"
       }`}
     >
@@ -351,7 +478,7 @@ function DeviceCard({ device, selected, onSelect }) {
   );
 }
 
-function DeviceDetail({ device, canManage, onAssign }) {
+function DeviceDetail({ device, canManage, onAssign, onClose }) {
   if (!device) return null;
   const status = getDeviceStatus(device);
   return (
@@ -368,7 +495,14 @@ function DeviceDetail({ device, canManage, onAssign }) {
             </div>
           </div>
         </div>
-        <ConnectBadge device={device} />
+        <div className="flex items-center gap-2">
+          <ConnectBadge device={device} />
+          {onClose && (
+            <button type="button" onClick={onClose} aria-label="Close device details" className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/10 text-slate-300 hover:bg-white/5">
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -432,11 +566,7 @@ export function TemperatureMonitoring() {
   const [selectedId, setSelectedId] = useState(null);
   const [assigningDevice, setAssigningDevice] = useState(null);
 
-  useEffect(() => {
-    if (!selectedId && devices?.[0]?.id) setSelectedId(devices[0].id);
-  }, [devices, selectedId]);
-
-  const selectedDevice = devices.find((device) => device.id === selectedId) || devices[0];
+  const selectedDevice = devices.find((device) => device.id === selectedId) || null;
 
   if (!canViewConnect) {
     return <AccessDenied title="Temperature monitoring access restricted" message="You do not currently have permission to view connected temperature devices." />;
@@ -457,26 +587,33 @@ export function TemperatureMonitoring() {
         <StatTile icon={Signal} label="Signal" value={`${intelligence.avgSignal || "—"}%`} caption="Average signal health" tone="sky" />
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[0.95fr_1.35fr]">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-white">Temperature Devices</h2>
-              <p className="text-xs text-slate-400">Cold-chain and room-temperature monitoring</p>
-            </div>
-            <span className="rounded-full border border-white/10 bg-slate-900 px-3 py-1 text-xs text-slate-400">{loading ? "—" : devices.length} devices</span>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-white">Temperature Devices</h2>
+            <p className="text-xs text-slate-400">Cold-chain and room-temperature monitoring · tap a device for details</p>
           </div>
+          <span className="rounded-full border border-white/10 bg-slate-900 px-3 py-1 text-xs text-slate-400">{loading ? "—" : devices.length} devices</span>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {devices.map((device) => (
             <DeviceCard key={device.id} device={device} selected={selectedDevice?.id === device.id} onSelect={(item) => setSelectedId(item.id)} />
           ))}
-          {!loading && devices.length === 0 && (
-            <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-100">
-              No live Tuya devices are available in the Device Registry. Run a provider sync in Connected Practice, then assign the T13 to its fridge.
-            </div>
-          )}
         </div>
-        <DeviceDetail device={selectedDevice} canManage={canManageDevices} onAssign={() => setAssigningDevice(selectedDevice)} />
+        {!loading && devices.length === 0 && (
+          <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-100">
+            No live Tuya devices are available in the Device Registry. Run a provider sync in Connected Practice, then assign the T13 to its fridge.
+          </div>
+        )}
       </div>
+
+      {selectedDevice && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/75 p-4" onClick={() => setSelectedId(null)}>
+          <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto" onClick={(event) => event.stopPropagation()}>
+            <DeviceDetail device={selectedDevice} canManage={canManageDevices} onAssign={() => setAssigningDevice(selectedDevice)} onClose={() => setSelectedId(null)} />
+          </div>
+        </div>
+      )}
 
       <Card className="border border-white/10 bg-slate-900/70 p-5">
         <div className="flex items-center gap-3">
@@ -494,12 +631,74 @@ export function TemperatureMonitoring() {
   );
 }
 
+// Adding a device just means adding its Tuya Device ID to
+// connect_provider_settings.tuya.deviceId (a comma-separated list the
+// syncConnectProvider Cloud Function already reads — see
+// functions/providers/tuyaProvider.js resolveTuyaConfig). The Tuya settings
+// form further down only ever exposed a single "Test Device ID" field, so
+// there was no way to add a second device without editing Firestore by
+// hand. This reuses the exact same settings doc and immediately triggers a
+// sync so the new device shows up without a separate manual step.
+function AddDeviceModal({ providerSettings, updateProviderSettings, onClose }) {
+  const [deviceId, setDeviceId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
+
+  async function submit(event) {
+    event.preventDefault();
+    const trimmed = deviceId.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    setError("");
+    setResult(null);
+    try {
+      const tuya = providerSettings?.tuya || { region: "eu", accessId: "", projectId: "", deviceId: "" };
+      const existingIds = String(tuya.deviceId || "").split(",").map((id) => id.trim()).filter(Boolean);
+      if (existingIds.includes(trimmed)) throw new Error("That device ID is already in the list.");
+      const nextIds = [...existingIds, trimmed];
+      const nextTuya = { ...tuya, deviceId: nextIds.join(",") };
+      await updateProviderSettings({ ...providerSettings, tuya: nextTuya });
+      const sync = await syncConnectProvider({ providerId: "tuya", settings: nextTuya });
+      if (!sync.ok) throw new Error(sync.message || "Device was saved, but the sync could not confirm it's reachable.");
+      setResult(sync.message || "Device added and synced.");
+      setDeviceId("");
+    } catch (err) {
+      setError(err?.message || "Could not add this device.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/75 p-4" onClick={onClose}>
+      <Card className="w-full max-w-md border border-white/10 bg-slate-900 p-5" onClick={(event) => event.stopPropagation()}>
+        <h2 className="text-lg font-bold text-white">Add Tuya device</h2>
+        <p className="mt-1 text-sm text-slate-400">Pair the sensor in the Tuya / Smart Life app first, then enter its Device ID here. Once synced, use "Assign" on the device card to link it to a room and fridge/freezer.</p>
+        <form onSubmit={submit} className="mt-4 space-y-3">
+          <label className="block space-y-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Tuya Device ID
+            <Input autoFocus value={deviceId} onChange={(e) => setDeviceId(e.target.value)} placeholder="e.g. bf1234567890abcdef" className="mt-1" disabled={busy} />
+          </label>
+          {error && <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100">{error}</p>}
+          {result && <p className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">{result}</p>}
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="outline" onClick={onClose} className="rounded-full border-white/10 bg-slate-950/40 text-slate-200">Close</Button>
+            <Button type="submit" disabled={busy || !deviceId.trim()} className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 font-semibold text-slate-950">{busy ? "Adding…" : "Add device"}</Button>
+          </div>
+        </form>
+      </Card>
+    </div>
+  );
+}
+
 export default function Connect() {
   const { can } = useAuth();
   const canViewConnect = can("connect.view");
   const canManageDevices = can("connect.manageDevices");
   const { devices, loading, error, intelligence, provider, activeProvider, providerSettings, setActiveProvider, updateProviderSettings } = useConnectedDevices();
   const [selectedId, setSelectedId] = useState(null);
+  const [addingDevice, setAddingDevice] = useState(false);
 
   useEffect(() => {
     if (!selectedId && devices?.[0]?.id) setSelectedId(devices[0].id);
@@ -524,11 +723,19 @@ export default function Connect() {
           </p>
         </div>
         {canManageDevices && (
-          <Button className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 px-5 font-semibold text-slate-950 shadow-lg shadow-emerald-500/30">
+          <Button onClick={() => setAddingDevice(true)} className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 px-5 font-semibold text-slate-950 shadow-lg shadow-emerald-500/30">
             <Router className="mr-2 h-4 w-4" /> Add Device
           </Button>
         )}
       </div>
+
+      {addingDevice && (
+        <AddDeviceModal
+          providerSettings={providerSettings}
+          updateProviderSettings={updateProviderSettings}
+          onClose={() => setAddingDevice(false)}
+        />
+      )}
 
       {error && (
         <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">
@@ -580,6 +787,8 @@ export default function Connect() {
         updateProviderSettings={updateProviderSettings}
         canManageDevices={canManageDevices}
       />
+
+      <LocalThermometerManager canManageDevices={canManageDevices} />
 
       <div className="grid gap-5 lg:grid-cols-2">
         <Card className="border border-white/10 bg-slate-900/70 p-5">

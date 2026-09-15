@@ -23,6 +23,9 @@ import {
   orderBy,
   serverTimestamp,
   updateDoc,
+  limit,
+  where,
+  getDocs,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { TemperatureMonitoring } from "@/pages/Connect";
@@ -93,6 +96,17 @@ function getStatusForReading(unitRange, tempC) {
   }
 
   return { label: "In range", className: "text-emerald-300" };
+}
+
+// "All time" has no natural bound — this caps it to the most recent N
+// readings instead of ever loading full history. The other ranges are
+// bounded by date instead (see getDateRangeCutoff).
+const ALL_TIME_READING_LIMIT = 500;
+
+function getDateRangeCutoff(range) {
+  const days = { "24h": 1, "7d": 7, "30d": 30 }[range];
+  if (!days) return null;
+  return new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 }
 
 function toDateKey(isoOrLocal) {
@@ -267,9 +281,16 @@ function TemperatureLogTab() {
     );
   }, []);
 
-  // Logs
+  // Logs — scoped by date range at the query level (not just filtered after
+  // loading everything), so the default 7-day view stays fast and small no
+  // matter how much history has accumulated. "All time" has no date bound,
+  // so it's capped to the most recent ALL_TIME_READING_LIMIT readings
+  // instead of ever loading the full history.
   useEffect(() => {
-    const qy = query(collection(db, TEMP_COLLECTION), orderBy("created_at", "desc"));
+    const cutoff = getDateRangeCutoff(dateRange);
+    const qy = cutoff
+      ? query(collection(db, TEMP_COLLECTION), where("created_at", ">=", cutoff), orderBy("created_at", "desc"))
+      : query(collection(db, TEMP_COLLECTION), orderBy("created_at", "desc"), limit(ALL_TIME_READING_LIMIT));
     return onSnapshot(
       qy,
       (snap) => {
@@ -307,7 +328,7 @@ function TemperatureLogTab() {
       },
       (err) => console.error("temperature_logs subscribe error:", err)
     );
-  }, []);
+  }, [dateRange]);
 
   const unitsForSite = useMemo(() => {
     return units.filter((u) => u.active && u.siteId === newReading.siteId);
@@ -319,23 +340,17 @@ function TemperatureLogTab() {
     return list.filter((u) => u.siteId === siteFilter);
   }, [units, siteFilter]);
 
+  // Date range is now applied at the query level (see the Logs effect above)
+  // — `readings` only ever contains what's already in range, so this just
+  // narrows by site/unit.
   const filteredReadings = useMemo(() => {
     let list = [...readings];
 
     if (siteFilter !== "all") list = list.filter((r) => r.siteId === siteFilter);
     if (unitFilter !== "all") list = list.filter((r) => r.unitId === unitFilter);
 
-    if (dateRange !== "all") {
-      const now = new Date();
-      let days = 7;
-      if (dateRange === "24h") days = 1;
-      if (dateRange === "30d") days = 30;
-      const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
-      list = list.filter((r) => r.datetime && new Date(r.datetime) >= cutoff);
-    }
-
     return list;
-  }, [readings, siteFilter, unitFilter, dateRange]);
+  }, [readings, siteFilter, unitFilter]);
 
   const outOfRangeLatest = useMemo(() => {
     const latestByUnit = new Map();
@@ -393,11 +408,20 @@ function TemperatureLogTab() {
     const dateKey = toDateKey(newReading.datetime);
     const slot = getAmPmSlot(newReading.datetime);
 
-    // AM/PM lock per unit/day
-    const duplicate = readings.some(
-      (r) => r.unitId === newReading.unitId && r.dateKey === dateKey && r.slot === slot
-    );
-    if (duplicate) {
+    // AM/PM lock per unit/day — checked against Firestore directly rather
+    // than the currently-loaded `readings` list, since that list is now
+    // scoped to whatever date range is selected on screen (e.g. "24h").
+    // Logging a catch-up reading for an earlier day — after a bank holiday
+    // or a closed weekend, say — must still correctly detect an existing
+    // reading for that day even if it's outside the current view.
+    const dupSnap = await getDocs(query(
+      collection(db, TEMP_COLLECTION),
+      where("unitId", "==", newReading.unitId),
+      where("dateKey", "==", dateKey),
+      where("slot", "==", slot),
+      limit(1)
+    ));
+    if (!dupSnap.empty) {
       setSaveError(`AM/PM lock: a ${slot} reading already exists for this unit on ${dateKey}.`);
       return;
     }

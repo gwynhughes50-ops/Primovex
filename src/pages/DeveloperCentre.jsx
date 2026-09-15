@@ -7,7 +7,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import {
   downloadDeveloperBundle,
-  listDeveloperIssues,
+  subscribeDeveloperIssues,
   updateDeveloperIssue,
 } from '@/developer/developerIssueService';
 import { developerAccessAllowed } from '@/developer/developerAccess';
@@ -27,21 +27,19 @@ export default function DeveloperCentre() {
   const navigate = useNavigate();
   const { role, isAdmin, capabilities } = useAuth();
   const allowed = developerAccessAllowed(role);
-  const [issues, setIssues] = useState(() => listDeveloperIssues());
+  const [issues, setIssues] = useState([]);
   const [registry, setRegistry] = useState(() => getSpaceRegistryDiagnostics());
 
-  const refresh = () => {
-    setIssues(listDeveloperIssues());
-    setRegistry(getSpaceRegistryDiagnostics());
-  };
+  const refresh = () => setRegistry(getSpaceRegistryDiagnostics());
 
   useEffect(() => {
-    window.addEventListener('primovex:developer-issues-changed', refresh);
+    if (!allowed) return undefined;
+    return subscribeDeveloperIssues(setIssues);
+  }, [allowed]);
+
+  useEffect(() => {
     window.addEventListener('primovex:space-registry-changed', refresh);
-    return () => {
-      window.removeEventListener('primovex:developer-issues-changed', refresh);
-      window.removeEventListener('primovex:space-registry-changed', refresh);
-    };
+    return () => window.removeEventListener('primovex:space-registry-changed', refresh);
   }, []);
 
   const openIssues = useMemo(() => issues.filter((issue) => issue.status !== 'closed'), [issues]);
@@ -63,7 +61,7 @@ export default function DeveloperCentre() {
     <section className="rounded-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-6 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div><p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--medtrak-accent)]">Developer only</p><h1 className="mt-1 text-3xl font-bold">Developer Centre</h1><p className="mt-2 max-w-2xl text-sm text-[var(--medtrak-muted)]">Diagnostics, issue history and release evidence in one engineering cockpit.</p></div>
-        <div className="flex flex-wrap gap-2"><button onClick={() => navigate('/developer-mobile-preview')} className="inline-flex items-center gap-2 rounded-xl border border-[var(--medtrak-accent)] px-4 py-2 font-semibold text-[var(--medtrak-accent)]"><Smartphone className="h-4 w-4"/>Launch mobile preview</button><button onClick={refresh} className="inline-flex items-center gap-2 rounded-xl border border-[var(--medtrak-border)] px-4 py-2 font-semibold"><RefreshCw className="h-4 w-4"/>Refresh</button><button onClick={downloadDeveloperBundle} className="inline-flex items-center gap-2 rounded-xl bg-[var(--medtrak-accent)] px-4 py-2 font-semibold text-white"><Download className="h-4 w-4"/>Export bundle</button></div>
+        <div className="flex flex-wrap gap-2"><button onClick={() => navigate('/developer-mobile-preview')} className="inline-flex items-center gap-2 rounded-xl border border-[var(--medtrak-accent)] px-4 py-2 font-semibold text-[var(--medtrak-accent)]"><Smartphone className="h-4 w-4"/>Launch mobile preview</button><button onClick={refresh} className="inline-flex items-center gap-2 rounded-xl border border-[var(--medtrak-border)] px-4 py-2 font-semibold"><RefreshCw className="h-4 w-4"/>Refresh</button><button onClick={() => downloadDeveloperBundle(issues)} className="inline-flex items-center gap-2 rounded-xl bg-[var(--medtrak-accent)] px-4 py-2 font-semibold text-white"><Download className="h-4 w-4"/>Export bundle</button></div>
       </div>
     </section>
 
@@ -84,14 +82,14 @@ export default function DeveloperCentre() {
         <div className="flex items-center justify-between"><div><h2 className="text-xl font-bold">Issue register</h2><p className="text-sm text-[var(--medtrak-muted)]">Reports captured from mobile and desktop testing.</p></div><Bug className="h-5 w-5 text-[var(--medtrak-accent)]"/></div>
         <div className="mt-4 space-y-3">
           {issues.length === 0 ? <div className="rounded-xl border border-dashed border-[var(--medtrak-border)] p-8 text-center text-sm text-[var(--medtrak-muted)]">No issues recorded yet. Open the mobile-width view and use the bug button.</div> : issues.map((issue) => <article key={issue.id} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-[var(--medtrak-accent)]">{issue.id}</span><span className="rounded-full border border-[var(--medtrak-border)] px-2 py-0.5 text-[11px] uppercase">{issue.severity}</span><span className="rounded-full border border-[var(--medtrak-border)] px-2 py-0.5 text-[11px]">{issue.module}</span></div><h3 className="mt-2 font-bold">{issue.title}</h3><p className="mt-1 text-sm text-[var(--medtrak-muted)]">{issue.description || issue.actual || 'No additional details'}</p><p className="mt-2 text-xs text-[var(--medtrak-muted)]">{issue.route} · {new Date(issue.createdAt).toLocaleString()}</p></div><div className="flex gap-2"><button onClick={() => updateDeveloperIssue(issue.id, { status: issue.status === 'closed' ? 'open' : 'closed' })} className="rounded-lg border border-[var(--medtrak-border)] px-3 py-2 text-xs font-semibold">{issue.status === 'closed' ? 'Reopen' : 'Close'}</button></div></div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-bold text-[var(--medtrak-accent)]">{issue.ticket || issue.id}</span><span className="rounded-full border border-[var(--medtrak-border)] px-2 py-0.5 text-[11px] uppercase">{issue.severity}</span><span className="rounded-full border border-[var(--medtrak-border)] px-2 py-0.5 text-[11px]">{issue.module}</span></div><h3 className="mt-2 font-bold">{issue.title}</h3><p className="mt-1 text-sm text-[var(--medtrak-muted)]">{issue.description || issue.actual || 'No additional details'}</p><p className="mt-2 text-xs text-[var(--medtrak-muted)]">{issue.route} · {new Date(issue.createdAt).toLocaleString()}</p></div><div className="flex gap-2"><button onClick={() => updateDeveloperIssue(issue.id, { status: issue.status === 'closed' ? 'open' : 'closed' })} className="rounded-lg border border-[var(--medtrak-border)] px-3 py-2 text-xs font-semibold">{issue.status === 'closed' ? 'Reopen' : 'Close'}</button></div></div>
           </article>)}
         </div>
       </div>
 
       <aside className="space-y-4">
         <div className="rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-5"><div className="flex items-center gap-2"><Activity className="h-5 w-5 text-[var(--medtrak-accent)]"/><h2 className="font-bold">Runtime</h2></div><dl className="mt-4 space-y-3 text-sm"><div className="flex justify-between gap-4"><dt className="text-[var(--medtrak-muted)]">Version</dt><dd className="font-semibold">{import.meta.env.VITE_APP_VERSION || '0.11.9'}</dd></div><div className="flex justify-between gap-4"><dt className="text-[var(--medtrak-muted)]">Mode</dt><dd className="font-semibold">{import.meta.env.MODE}</dd></div><div className="flex justify-between gap-4"><dt className="text-[var(--medtrak-muted)]">Platform</dt><dd className="font-semibold">{document.documentElement.dataset.primovexClient || 'web'}</dd></div></dl></div>
-        <div className="rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-5"><div className="flex items-center gap-2"><HardDrive className="h-5 w-5 text-[var(--medtrak-accent)]"/><h2 className="font-bold">Local diagnostics</h2></div><p className="mt-3 text-sm text-[var(--medtrak-muted)]">Issue reports remain on this device until exported or browser storage is cleared.</p></div>
+        <div className="rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-5"><div className="flex items-center gap-2"><HardDrive className="h-5 w-5 text-[var(--medtrak-accent)]"/><h2 className="font-bold">Shared diagnostics</h2></div><p className="mt-3 text-sm text-[var(--medtrak-muted)]">Issue reports sync live across every device — a bug reported from a phone shows up here immediately.</p></div>
         <div className="rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-5"><div className="flex items-center gap-2"><Smartphone className="h-5 w-5 text-[var(--medtrak-accent)]"/><h2 className="font-bold">Mobile testing</h2></div><p className="mt-3 text-sm text-[var(--medtrak-muted)]">Launch the built-in mobile preview to mount the real Primovex mobile shell without rebuilding Android.</p></div>
       </aside>
     </section>

@@ -11,6 +11,7 @@ import { PrimovexAIProvider } from "@/ai/context/PrimovexAIContext";
 import { SessionProvider } from "@/contexts/SessionContext";
 import { SenseSessionProvider } from "@/contexts/SenseSessionContext";
 import SpaceRegistrySync from "@/modules/sense/components/SpaceRegistrySync";
+import EquipmentRegistrySync from "@/modules/equipment/components/EquipmentRegistrySync";
 import DeepLinkNavigator from "@/routes/DeepLinkNavigator";
 
 const isAndroidRuntime = /Android/i.test(navigator.userAgent) && Boolean(window.__TAURI_INTERNALS__);
@@ -37,6 +38,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       <DeepLinkNavigator />
       <AuthProvider>
         <SpaceRegistrySync />
+        <EquipmentRegistrySync />
         <SessionProvider>
           <SenseSessionProvider>
             <MedTrakThemeProvider>

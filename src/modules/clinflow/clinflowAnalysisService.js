@@ -43,6 +43,75 @@ const GOVERNED_OBSERVATION_CONCEPTS = {
   },
 };
 
+// Curated recognition rules for common diagnoses, observations, medication
+// therapies and requested investigations — a deliberately bounded, high-
+// confidence set of well-established SNOMED CT concepts, not a full
+// terminology server. Each entry still only ever produces a "candidate"
+// requiring live UK Edition validation and clinician acceptance, same as
+// every other coding suggestion in this file; anything not on this list
+// correctly stays unresolved rather than being guessed at. Extend this list
+// deliberately, not automatically — a wrong concept ID is worse than none.
+const GOVERNED_CLINICAL_CONCEPTS = [
+  ["Atrial fibrillation", "49436004", ["atrial fibrillation", "af "]],
+  ["Hypertension", "38341003", ["hypertension", "high blood pressure"]],
+  ["Type 2 diabetes mellitus", "44054006", ["type 2 diabetes", "type ii diabetes", "t2dm"]],
+  ["Type 1 diabetes mellitus", "46635009", ["type 1 diabetes", "type i diabetes", "t1dm"]],
+  ["Asthma", "195967001", ["asthma"]],
+  ["Chronic obstructive pulmonary disease", "13645005", ["copd", "chronic obstructive pulmonary"]],
+  ["Heart failure", "84114007", ["heart failure", "cardiac failure"]],
+  ["Chronic kidney disease", "709044004", ["chronic kidney disease", "ckd"]],
+  ["Acute kidney injury", "14669001", ["acute kidney injury", "aki"]],
+  ["Ischaemic heart disease", "414545008", ["ischaemic heart disease", "ischemic heart disease"]],
+  ["Myocardial infarction", "22298006", ["myocardial infarction", "heart attack"]],
+  ["Stroke", "230690007", ["stroke"]],
+  ["Transient ischaemic attack", "266257000", ["transient ischaemic attack", "tia"]],
+  ["Depression", "35489007", ["depression"]],
+  ["Anxiety disorder", "48694002", ["anxiety"]],
+  ["Hypothyroidism", "40930008", ["hypothyroidism", "underactive thyroid"]],
+  ["Hyperthyroidism", "34486009", ["hyperthyroidism", "overactive thyroid"]],
+  ["Osteoarthritis", "396275006", ["osteoarthritis"]],
+  ["Rheumatoid arthritis", "69896004", ["rheumatoid arthritis"]],
+  ["Gastro-oesophageal reflux disease", "235595009", ["gastro-oesophageal reflux", "gord", "gerd"]],
+  ["Urinary tract infection", "68566005", ["urinary tract infection", "uti"]],
+  ["Pneumonia", "233604007", ["pneumonia"]],
+  ["Anaemia", "271737000", ["anaemia", "anemia"]],
+  ["Hyperlipidaemia", "55822004", ["hyperlipidaemia", "hyperlipidemia", "high cholesterol"]],
+  ["Obesity", "414916001", ["obesity", "obese"]],
+  ["Epilepsy", "84757009", ["epilepsy"]],
+  ["Migraine", "37796009", ["migraine"]],
+  ["Osteoporosis", "64859006", ["osteoporosis"]],
+  ["Deep vein thrombosis", "128053003", ["deep vein thrombosis", "dvt"]],
+  ["Pulmonary embolism", "59282003", ["pulmonary embolism", "pe "]],
+  ["Sepsis", "91302008", ["sepsis"]],
+  ["Syndrome of inappropriate antidiuretic hormone secretion", "237847003", ["siadh", "inappropriate adh"]],
+  ["Hyponatraemia", "89627008", ["hyponatraemia", "hyponatremia"]],
+  ["Palpitations", "80313002", ["palpitation"]],
+  ["Dyspnoea", "267036007", ["dyspnoea", "dyspnea", "shortness of breath", "breathlessness"]],
+  ["Chest pain", "29857009", ["chest pain", "chest tightness"]],
+  ["Dizziness", "404640003", ["dizziness", "dizzy"]],
+  ["Fatigue", "84229001", ["fatigue"]],
+  ["Nausea", "422587007", ["nausea"]],
+  ["Cough", "49727002", ["cough"]],
+  // Medication-therapy concepts — kept deliberately short; a wrong drug-class
+  // concept is higher-risk than a missing one.
+  ["Anticoagulant therapy", "182754009", ["anticoagul", "apixaban", "rivaroxaban", "warfarin", "edoxaban", "dabigatran"]],
+  ["Bisoprolol therapy", "429503008", ["bisoprolol"]],
+  // Requested investigations/procedures.
+  ["Blood test requested", "38665006", ["blood test", "bloods requested"]],
+  ["Renal function test requested", "444237003", ["renal function", "u&e", "urea and electrolytes"]],
+  ["Echocardiography", "40701008", ["echocardiog", "echo "]],
+  ["Full blood count", "26604007", ["full blood count", "fbc"]],
+  ["Electrocardiogram", "29303009", ["electrocardiogram", "ecg "]],
+  ["Chest X-ray", "399208008", ["chest x-ray", "chest radiograph", "cxr"]],
+];
+
+function matchGovernedConcept(value) {
+  const text = normalise(value);
+  if (!text) return null;
+  const entry = GOVERNED_CLINICAL_CONCEPTS.find(([, , phrases]) => phrases.some((phrase) => text.includes(phrase)));
+  return entry ? { conceptId: entry[1], preferredTerm: entry[0] } : null;
+}
+
 const SYNTHETIC_CLINICAL_PROFILES = {
   "respiratory-clinic-letter": {
     findings: [
@@ -236,6 +305,70 @@ function uniqueTerminologyCandidates(items) {
   });
 }
 
+// Real-document counterpart to profileFindings(): shapes the LLM's
+// structured extraction (see azureOpenAiExtractionService.js server-side)
+// into the same {label, kind, value, ...} findings the rest of this file
+// already knows how to merge, filter and dedupe. Only used when there is no
+// bundled sample-letter profile to fall back on.
+function llmFindings(ocr) {
+  const extraction = ocr.llmExtraction;
+  if (!extraction) return [];
+  const toFindings = (values, kind, label) => (values || []).map((value) => ({
+    label,
+    kind,
+    value,
+    evidence: value,
+    assertion: "present",
+    detected: true,
+    status: "extracted_needs_review",
+    source: "llm_extraction",
+  }));
+  return [
+    ...toFindings(extraction.diagnoses, "diagnosis", "Diagnosis"),
+    ...toFindings(extraction.currentMedications, "medication", "Current medication"),
+    ...toFindings(extraction.medicationInstructions, "medication-instruction", "Medication instruction"),
+    ...toFindings(extraction.actions, "action", "Follow-up"),
+    ...toFindings(extraction.observations, "observation", "Observation"),
+  ];
+}
+
+// Turns the already-extracted, already-verified-safe fields (missing items,
+// urgency, medication change, actions, coding candidates, destination) into
+// a plain-English checklist for whoever opens this document next. Built from
+// data ClinFlow has already computed rather than a fresh LLM pass over the
+// letter, so it carries no new hallucination risk and costs nothing extra.
+export function buildReviewerBrief(analysis) {
+  if (!analysis) return [];
+  const steps = [];
+  if (analysis.docmanDraft?.urgent) {
+    steps.push({ tone: "danger", text: "Urgent — escalate immediately" });
+  }
+  if (analysis.missing?.some((item) => item.field.startsWith("patient."))) {
+    steps.push({ tone: "warning", text: "Confirm patient identity" });
+  }
+  const diagnosisCount = analysis.diagnoses?.length || 0;
+  const medicineCount = analysis.medicines?.length || 0;
+  if (diagnosisCount || medicineCount) {
+    steps.push({ tone: "info", text: `Check ${diagnosisCount} diagnos${diagnosisCount === 1 ? "is" : "es"} · ${medicineCount} medicine${medicineCount === 1 ? "" : "s"}` });
+  }
+  if (analysis.docmanDraft?.medicationChanged) {
+    steps.push({ tone: "warning", text: "Medication change — verify & update record" });
+  } else if (analysis.medicationInstructions?.length) {
+    steps.push({ tone: "info", text: `${analysis.medicationInstructions.length} temporary medication instruction${analysis.medicationInstructions.length === 1 ? "" : "s"} to check` });
+  }
+  if (analysis.safetyNettingAdvice) {
+    steps.push({ tone: "warning", text: "Safety-net advice given — check it's actioned if it applies" });
+  }
+  if (analysis.actions?.length) {
+    steps.push({ tone: "info", text: `${analysis.actions.length} follow-up action${analysis.actions.length === 1 ? "" : "s"} to complete` });
+  }
+  if (analysis.terminologyCandidates?.length) {
+    steps.push({ tone: "info", text: `${analysis.terminologyCandidates.length} SNOMED candidate${analysis.terminologyCandidates.length === 1 ? "" : "s"} to verify` });
+  }
+  steps.push({ tone: "success", text: `Route to ${analysis.triage?.destination || analysis.workflowDecision?.suggestedDestination || "the correct team"} → mark Finished` });
+  return steps;
+}
+
 export function analyseClinFlowOcr(ocr = {}) {
   const fields = (ocr.groundTruth || []).map((field) => ({
     label: field.label,
@@ -244,21 +377,25 @@ export function analyseClinFlowOcr(ocr = {}) {
     status: field.matched ? "extracted_needs_review" : "not_detected",
   }));
   const patientField = fields.find((field) => field.label === "Patient");
-  const patient = splitPatientName(patientField?.value);
+  const patient = ocr.llmExtraction?.patientName
+    ? splitPatientName(ocr.llmExtraction.patientName)
+    : splitPatientName(patientField?.value);
   const profile = documentProfile(ocr.document?.id);
-  const enriched = profileFindings(ocr);
-  const medicines = uniqueFindings([...fields.filter((field) => MEDICATION_LABELS.has(field.label)), ...enriched.filter((field) => field.kind === "medication")]);
+  const enriched = ocr.llmExtraction ? llmFindings(ocr) : profileFindings(ocr);
+  const medicines = uniqueFindings([...fields.filter((field) => MEDICATION_LABELS.has(field.label)), ...enriched.filter((field) => ["medication", "medication-instruction"].includes(field.kind))]);
+  const currentMedications = uniqueFindings(enriched.filter((field) => field.kind === "medication"));
+  const medicationInstructions = uniqueFindings(enriched.filter((field) => field.kind === "medication-instruction"));
   const actions = uniqueFindings([...fields.filter((field) => ACTION_LABELS.has(field.label)), ...enriched.filter((field) => ["action", "safety-net"].includes(field.kind))]);
   const diagnoses = uniqueFindings([...fields.filter((field) => field.label === "Diagnosis"), ...enriched.filter((field) => ["diagnosis", "condition"].includes(field.kind))]);
   const observations = uniqueFindings([...fields.filter((field) => TERM_LABELS.has(field.label) && field.label !== "Diagnosis"), ...enriched.filter((field) => ["symptom", "observation", "finding", "investigation"].includes(field.kind))]);
   const structuredObservations = extractStructuredObservations(observations);
   const codingEvidence = uniqueFindings([
     ...fields.filter((field) => TERM_LABELS.has(field.label)),
-    ...enriched.filter((field) => !["medication", "action", "safety-net"].includes(field.kind) && field.assertion !== "negated"),
+    ...enriched.filter((field) => !["medication", "medication-instruction", "action", "safety-net"].includes(field.kind) && field.assertion !== "negated"),
   ]);
   const bloodPressureByValue = new Map(structuredObservations.map((item) => [normalise(item.sourceValue), item]));
   const terminologyCandidates = uniqueTerminologyCandidates([...codingEvidence.map((field) => {
-    const structured = bloodPressureByValue.get(normalise(field.value));
+    const structured = bloodPressureByValue.get(normalise(field.value)) || matchGovernedConcept(field.value);
     return {
     sourceLabel: field.label,
     sourceValue: field.value,
@@ -270,11 +407,29 @@ export function analyseClinFlowOcr(ocr = {}) {
     scheme: 2,
     codeSystem: "SNOMED CT UK Edition",
     system: SNOMED_SYSTEM,
-    terminologyVersionChecked: structured?.terminologyVersionChecked || null,
+    terminologyVersionChecked: structured ? SNOMED_INTERNATIONAL_VERSION : null,
     status: structured ? "governed_concept_candidate_human_review_required" : "terminology_lookup_required",
     acceptedByUid: null,
     };
-  }), ...structuredObservations.filter((observation) => observation.type === "blood_pressure").flatMap((observation) => [
+  }), ...[...currentMedications, ...actions].map((field) => {
+    const match = matchGovernedConcept(field.value);
+    if (!match) return null;
+    return {
+      sourceLabel: field.label,
+      sourceValue: field.value,
+      searchTerm: field.value,
+      conceptId: match.conceptId,
+      descriptionId: null,
+      preferredTerm: match.preferredTerm,
+      assertion: field.assertion || "present",
+      scheme: 2,
+      codeSystem: "SNOMED CT UK Edition",
+      system: SNOMED_SYSTEM,
+      terminologyVersionChecked: SNOMED_INTERNATIONAL_VERSION,
+      status: "governed_concept_candidate_human_review_required",
+      acceptedByUid: null,
+    };
+  }).filter(Boolean), ...structuredObservations.filter((observation) => observation.type === "blood_pressure").flatMap((observation) => [
     {
       sourceLabel: "Systolic blood pressure",
       sourceValue: `${observation.systolic.value} ${observation.unit.display}`,
@@ -327,8 +482,21 @@ export function analyseClinFlowOcr(ocr = {}) {
     framework: "Wales GMS Unified Contract / local governed ruleset required",
   }));
   const lowerText = clean(ocr.content).toLowerCase();
-  const urgent = ocr.document?.id?.includes("emergency") || /\burgent\b|immediate review|same day/.test(lowerText);
-  const medicationChanged = medicines.length > 0 && /start|started|increase|increased|reduce|reduced|stop|stopped|restart|changed/.test(lowerText);
+  // Real letters trust the LLM's documentUrgent/medicationChangePresent flags
+  // exclusively — a blunt word-match for "urgent" anywhere in the OCR text
+  // was flipping whole documents urgent on conditional safety-netting wording
+  // ("attend hospital urgently IF symptoms worsen"), and similarly matching
+  // start/stop/restart anywhere was flagging temporary test-prep medication
+  // holds as permanent changes. The curated synthetic sample profiles have no
+  // llmExtraction and keep the original hand-verified regex behaviour.
+  const urgent = ocr.llmExtraction
+    ? Boolean(ocr.llmExtraction.documentUrgent)
+    : Boolean(ocr.document?.id?.includes("emergency") || /\burgent\b|immediate review|same day/.test(lowerText));
+  const medicationChanged = ocr.llmExtraction
+    ? Boolean(ocr.llmExtraction.medicationChangePresent)
+    : Boolean(medicines.length > 0 && /start|started|increase|increased|reduce|reduced|stop|stopped|restart|changed/.test(lowerText));
+  const safetyNettingAdvice = ocr.llmExtraction?.safetyNettingAdvice || null;
+  const clinicalConclusion = ocr.llmExtraction?.clinicalConclusion || null;
   const actionRequired = actions.length > 0 || urgent || medicationChanged;
   const triage = createClinFlowTriage({ ocr, actions, medicines, diagnoses, observations, urgent, medicationChanged });
   const quality = createClinFlowQualityPrompts({
@@ -352,12 +520,16 @@ export function analyseClinFlowOcr(ocr = {}) {
     specialty: profile.type.replace(/ (clinic letter|summary|note|handover)$/i, ""),
     patient: { ...patient, identifier: "", birthDate: "", gender: 0, matchStatus: "unverified" },
     medicines,
+    currentMedications,
+    medicationInstructions,
     medicationCandidates,
     actions,
     observations,
     structuredObservations,
     diagnoses,
     terminologyCandidates,
+    clinicalConclusion,
+    safetyNettingAdvice,
     triage,
     clinicalTriggers: triage.clinicalTriggers,
     nfwfAssessment: triage.nfwf,

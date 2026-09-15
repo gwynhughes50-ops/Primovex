@@ -46,15 +46,22 @@ import {
   UserPlus,
   MoreVertical,
   Pin,
+  BrainCircuit,
 } from "lucide-react";
 
 import AddUser from "./admin/AddUser";
+import OrbLearningReview from "@/orb/OrbLearningReview";
+import OrbKnowledgeManager from "@/orb/OrbKnowledgeManager";
+import SpaceBuilder from "@/modules/sense/components/SpaceBuilder";
+import { loadSenseState, saveSenseState } from "@/modules/sense/services/senseStore";
+import { loadFacilitiesState } from "@/modules/facilities/services/facilitiesStore";
 
 // ✅ Firestore activity feed
 import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { CAPABILITY_CATALOG, ROLE_TEMPLATES } from "@/core/identity/capabilities";
 import { useAuth } from "@/contexts/AuthContext";
+import { subscribeUsers, updateUserRole } from "@/services/adminUserService";
 
 // --------------------------
 // ✅ Route Guard (Admin only)
@@ -127,6 +134,7 @@ function AdminTabs({ showUsers }) {
       ? [
           { to: "users", label: "Users", icon: <Users className="h-4 w-4" /> },
           { to: "users/add", label: "Add User", icon: <UserPlus className="h-4 w-4" /> },
+          { to: "orb-learning", label: "Orb Learning", icon: <BrainCircuit className="h-4 w-4" /> },
         ]
       : []),
     { to: "activity", label: "Activity Log", icon: <Activity className="h-4 w-4" /> },
@@ -197,56 +205,12 @@ function prettyPermissions(perms = []) {
 }
 
 export default function AdminDashboard() {
-  const { isAdmin, loading: authLoading, can } = useAuth();
+  const { isAdmin, loading: authLoading, can, displayName, user } = useAuth();
 
   const { totalItems, lowStockItems, loading: stockLoading } = useStockSummary();
 
   const seed = useMemo(
     () => ({
-      sites: [
-        {
-          id: "main",
-          name: "Main Surgery",
-          address: "123 Medical Centre, High Street",
-          phone: "0101 234 5678",
-          locations: [
-            { id: "l1", name: "Treatment Room 1", type: "Room" },
-            { id: "l2", name: "Treatment Room 2", type: "Room" },
-            { id: "l3", name: "Vaccine Fridge A", type: "Fridge" },
-            { id: "l4", name: "Store Cupboard", type: "Storage" },
-            { id: "l5", name: "Reception", type: "Area" },
-          ],
-          itemCount: 12,
-        },
-        {
-          id: "branch",
-          name: "Branch Surgery",
-          address: "45 Branch Road",
-          phone: "0101 987 6543",
-          locations: [
-            { id: "b1", name: "Treatment Room", type: "Room" },
-            { id: "b2", name: "Vaccine Fridge", type: "Fridge" },
-            { id: "b3", name: "Storage", type: "Storage" },
-          ],
-          itemCount: 0,
-        },
-      ],
-      users: [
-        {
-          id: "u1",
-          display: "gwyn.hughes",
-          email: "gwyn.hughes@wales.nhs.uk",
-          role: "User",
-          joined: "04 Dec 2025",
-        },
-        {
-          id: "u2",
-          display: "Gwyn Hughes",
-          email: "gwynhughes50@gmail.com",
-          role: "System Admin",
-          joined: "04 Dec 2025",
-        },
-      ],
       deleteItems: [
         { id: "d1", name: "Disposable Bed Rolls", meta: "non_medical • 45 rolls" },
         { id: "d2", name: "Surgical Masks (Box 50)", meta: "non_medical • 8 boxes" },
@@ -257,19 +221,30 @@ export default function AdminDashboard() {
     []
   );
 
-  const [sites, setSites] = useState(seed.sites);
-  const [users, setUsers] = useState(seed.users);
-  const [activeSiteId, setActiveSiteId] = useState(seed.sites[0]?.id || "main");
+  const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(true);
 
-  // ✅ NEW: keep activeSiteId valid when sites change (this is what makes delete reliable)
+  // Sites & Locations now reads/writes the real Sense space registry (same
+  // data as Facilities/Spaces/ClinFlow) via SpaceBuilder, instead of the old
+  // in-memory-only fake site/location list that never persisted anywhere.
+  const [senseState, setSenseState] = useState(() => loadSenseState());
+  function commitSense(next) {
+    setSenseState(next);
+    saveSenseState(next);
+  }
   useEffect(() => {
-    if (!sites || sites.length === 0) {
-      if (activeSiteId !== "") setActiveSiteId("");
-      return;
-    }
-    const exists = sites.some((s) => s.id === activeSiteId);
-    if (!exists) setActiveSiteId(sites[0].id);
-  }, [sites, activeSiteId]);
+    const refresh = () => setSenseState(loadSenseState());
+    window.addEventListener("primovex:sense-changed", refresh);
+    return () => window.removeEventListener("primovex:sense-changed", refresh);
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeUsers(
+      (rows) => { setUsers(rows); setUsersLoading(false); },
+      () => setUsersLoading(false)
+    );
+    return () => unsub?.();
+  }, []);
 
   // Notifications scaffold state
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -313,145 +288,16 @@ export default function AdminDashboard() {
   const [assignUserId, setAssignUserId] = useState(null);
   const [assignRoleId, setAssignRoleId] = useState("");
 
-  // Add Site modal
-  const [isAddSiteOpen, setIsAddSiteOpen] = useState(false);
-  const [newSite, setNewSite] = useState({ name: "", address: "", phone: "" });
-
-  // ✅ Edit Site modal
-  const [isEditSiteOpen, setIsEditSiteOpen] = useState(false);
-  const [editSite, setEditSite] = useState({ id: "", name: "", address: "", phone: "" });
-
-  // Add Location modal
-  const [isAddLocationOpen, setIsAddLocationOpen] = useState(false);
-  const [newLocation, setNewLocation] = useState({ name: "", type: "Room" });
-
-  // ✅ Edit Location modal
-  const [isEditLocationOpen, setIsEditLocationOpen] = useState(false);
-  const [editLocation, setEditLocation] = useState({ id: "", name: "", type: "Room" });
-
   // Danger zone state
   const [deleteChecks, setDeleteChecks] = useState(() => new Set());
 
   // Derived
-  const totalSites = sites.length;
-  const totalLocations = sites.reduce((a, s) => a + s.locations.length, 0);
+  const totalSites = senseState.sites.length;
+  const totalLocations = senseState.spaces.filter((space) => space.status !== "archived").length;
   const totalUsers = users.length;
-  const activeSite = sites.find((s) => s.id === activeSiteId) || sites[0];
 
   const roleOptions = useMemo(() => roles.map((r) => ({ id: r.id, name: r.name })), [roles]);
   const getRoleByName = (name) => roles.find((r) => r.name.toLowerCase() === String(name || "").toLowerCase());
-
-  const addSite = () => {
-    const name = newSite.name.trim();
-    if (!name) return;
-
-    const siteId = makeId("site");
-    const siteToAdd = {
-      id: siteId,
-      name,
-      address: newSite.address.trim(),
-      phone: newSite.phone.trim(),
-      locations: [],
-      itemCount: 0,
-    };
-
-    setSites((prev) => [...prev, siteToAdd]);
-    setActiveSiteId(siteId);
-    setNewSite({ name: "", address: "", phone: "" });
-    setIsAddSiteOpen(false);
-  };
-
-  const openEditSite = () => {
-    if (!activeSite) return;
-    setEditSite({
-      id: activeSite.id,
-      name: activeSite.name || "",
-      address: activeSite.address || "",
-      phone: activeSite.phone || "",
-    });
-    setIsEditSiteOpen(true);
-  };
-
-  const saveEditSite = () => {
-    const name = editSite.name.trim();
-    if (!editSite.id || !name) return;
-
-    setSites((prev) =>
-      prev.map((s) =>
-        s.id === editSite.id
-          ? {
-              ...s,
-              name,
-              address: (editSite.address || "").trim(),
-              phone: (editSite.phone || "").trim(),
-            }
-          : s
-      )
-    );
-
-    setIsEditSiteOpen(false);
-    setEditSite({ id: "", name: "", address: "", phone: "" });
-  };
-
-  // ✅ FIXED: deleteSite is now simple + reliable (activeSiteId is handled by the effect)
-  const deleteSite = (siteId) => {
-    if (!siteId) return;
-    setSites((prev) => prev.filter((s) => s.id !== siteId));
-  };
-
-  const addLocation = () => {
-    const name = newLocation.name.trim();
-    if (!name) return;
-
-    setSites((prev) =>
-      prev.map((s) =>
-        s.id === activeSiteId
-          ? {
-              ...s,
-              locations: [...s.locations, { id: makeId("loc"), name, type: newLocation.type }],
-            }
-          : s
-      )
-    );
-
-    setNewLocation({ name: "", type: "Room" });
-    setIsAddLocationOpen(false);
-  };
-
-  const openEditLocation = (loc) => {
-    if (!loc?.id) return;
-    setEditLocation({ id: loc.id, name: loc.name || "", type: loc.type || "Room" });
-    setIsEditLocationOpen(true);
-  };
-
-  const saveEditLocation = () => {
-    const name = editLocation.name.trim();
-    if (!name || !editLocation.id) return;
-
-    setSites((prev) =>
-      prev.map((s) =>
-        s.id === activeSiteId
-          ? {
-              ...s,
-              locations: (s.locations || []).map((l) =>
-                l.id === editLocation.id ? { ...l, name, type: editLocation.type } : l
-              ),
-            }
-          : s
-      )
-    );
-
-    setIsEditLocationOpen(false);
-    setEditLocation({ id: "", name: "", type: "Room" });
-  };
-
-  const deleteLocation = (locId) => {
-    setSites((prev) =>
-      prev.map((s) =>
-        s.id === activeSiteId ? { ...s, locations: s.locations.filter((l) => l.id !== locId) } : s
-      )
-    );
-  };
 
   const openAssignRole = (userId, currentRoleName) => {
     setAssignUserId(userId);
@@ -460,16 +306,26 @@ export default function AdminDashboard() {
     setIsAssignOpen(true);
   };
 
-  const saveAssignedRole = () => {
+  const [assignRoleError, setAssignRoleError] = useState("");
+  const [assignRoleBusy, setAssignRoleBusy] = useState(false);
+
+  const saveAssignedRole = async () => {
     if (!assignUserId) return;
     const picked = roles.find((r) => r.id === assignRoleId);
     const roleNameToStore = picked?.name || "No Role";
 
-    setUsers((prev) => prev.map((u) => (u.id === assignUserId ? { ...u, role: roleNameToStore } : u)));
-
-    setIsAssignOpen(false);
-    setAssignUserId(null);
-    setAssignRoleId("");
+    setAssignRoleBusy(true);
+    setAssignRoleError("");
+    try {
+      await updateUserRole(assignUserId, roleNameToStore);
+      setIsAssignOpen(false);
+      setAssignUserId(null);
+      setAssignRoleId("");
+    } catch (error) {
+      setAssignRoleError(error?.message || "Could not save this role change.");
+    } finally {
+      setAssignRoleBusy(false);
+    }
   };
 
   const addRole = () => {
@@ -602,20 +458,29 @@ export default function AdminDashboard() {
                       <CardTitle>Sites Overview</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {sites.map((s) => (
-                        <div
-                          key={s.id}
-                          className="rounded-xl bg-slate-950/40 border border-slate-800/70 p-4 flex items-center justify-between"
-                        >
-                          <div>
-                            <div className="font-semibold text-slate-50">{s.name}</div>
-                            <div className="text-sm text-slate-400">{s.locations.length} locations</div>
+                      {senseState.sites.length === 0 ? (
+                        <p className="text-sm text-slate-400">No sites yet — add one under Sites & Locations.</p>
+                      ) : (() => {
+                        const equipment = loadFacilitiesState().equipment || [];
+                        return senseState.sites.map((s) => {
+                        const siteSpaceIds = new Set(senseState.spaces.filter((space) => space.siteId === s.id && space.status !== "archived").map((space) => space.id));
+                        const itemCount = equipment.filter((item) => siteSpaceIds.has(item.roomId)).length;
+                        return (
+                          <div
+                            key={s.id}
+                            className="rounded-xl bg-slate-950/40 border border-slate-800/70 p-4 flex items-center justify-between"
+                          >
+                            <div>
+                              <div className="font-semibold text-slate-50">{s.name}</div>
+                              <div className="text-sm text-slate-400">{siteSpaceIds.size} locations</div>
+                            </div>
+                            <Badge variant="outline" className="border-slate-700/70 text-slate-200">
+                              {itemCount} items
+                            </Badge>
                           </div>
-                          <Badge variant="outline" className="border-slate-700/70 text-slate-200">
-                            {s.itemCount || 0} items
-                          </Badge>
-                        </div>
-                      ))}
+                        );
+                        });
+                      })()}
                     </CardContent>
                   </Card>
                 </div>
@@ -623,173 +488,21 @@ export default function AdminDashboard() {
             }
           />
 
-          {/* Sites */}
+          {/* Sites & Locations — real Sense space registry (same data as
+              Facilities/Spaces/ClinFlow), not a separate local system. */}
           <Route
             path="sites"
             element={
               <div className="mt-6 space-y-5">
-                <div className="flex items-center justify-between gap-3 flex-wrap">
-                  <Tabs value={activeSiteId} onValueChange={setActiveSiteId}>
-                    <TabsList className="bg-slate-900/40 border border-slate-800/60 rounded-2xl">
-                      {sites.map((s) => (
-                        <TabsTrigger
-                          key={s.id}
-                          value={s.id}
-                          className="data-[state=active]:bg-slate-800/60 data-[state=active]:text-slate-50"
-                        >
-                          {s.name}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                  </Tabs>
-
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
-                      onClick={() => setIsAddLocationOpen(true)}
-                      disabled={!activeSite}
-                      title={!activeSite ? "No site selected" : ""}
-                    >
-                      <Plus className="h-4 w-4 mr-2" /> Add Location
-                    </Button>
-
-                    <Button
-                      className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30"
-                      onClick={() => setIsAddSiteOpen(true)}
-                    >
-                      <Plus className="h-4 w-4 mr-2" /> Add Site
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Active Site details */}
                 <Card className="rounded-2xl border border-slate-800/70 bg-slate-900/60 text-slate-100 backdrop-blur">
-                  <CardHeader className="flex flex-row items-start justify-between gap-3">
-                    <div>
-                      <CardTitle className="flex items-center gap-2">
-                        <Pin className="h-4 w-4 text-teal-300" />
-                        {activeSite?.name || "Site"}
-                      </CardTitle>
-                      <CardDescription className="text-slate-300/80">
-                        {activeSite?.address || "No address set"} {activeSite?.phone ? `• ${activeSite.phone}` : ""}
-                      </CardDescription>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="border-slate-700/70 text-slate-200">
-                        {activeSite?.locations?.length || 0} locations
-                      </Badge>
-
-                      <Button
-                        variant="outline"
-                        className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
-                        onClick={openEditSite}
-                        disabled={!activeSite}
-                      >
-                        <Pencil className="h-4 w-4 mr-2" /> Edit Site
-                      </Button>
-
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className="rounded-full border-rose-400/30 bg-rose-500/10 text-rose-200 hover:bg-rose-500/15"
-                            disabled={!activeSite}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" /> Delete Site
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent className="border border-slate-700/60 bg-slate-950 text-slate-100">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Delete this site?</AlertDialogTitle>
-                            <AlertDialogDescription className="text-slate-300">
-                              Are you sure you want to delete{" "}
-                              <span className="text-slate-100 font-medium">
-                                {activeSite?.name || "this site"}
-                              </span>
-                              ? This will remove the site and all its locations from the admin scaffold.
-                              <br />
-                              <br />
-                              <span className="text-rose-200">This cannot be undone.</span>
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel className="bg-slate-900 text-slate-200 border-slate-700/70">
-                              Cancel
-                            </AlertDialogCancel>
-                            <AlertDialogAction
-                              className="bg-rose-500 text-white hover:bg-rose-600"
-                              onClick={() => activeSite?.id && deleteSite(activeSite.id)}
-                            >
-                              Delete
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
+                  <CardHeader>
+                    <CardTitle>Sites & Locations</CardTitle>
+                    <CardDescription className="text-slate-300/80">
+                      This is the same site/floor/zone/room structure used across Facilities, Sense and ClinFlow — changes here show up everywhere immediately.
+                    </CardDescription>
                   </CardHeader>
-
-                  <CardContent>
-                    <Separator className="bg-slate-800/70 mb-4" />
-
-                    <div className="rounded-xl border border-slate-800/70 bg-slate-950/40 overflow-hidden">
-                      <div className="px-4 py-3 flex items-center justify-between">
-                        <div className="font-semibold text-slate-50">Locations</div>
-                        <div className="text-xs text-slate-400">Site = building • Location = room/cupboard</div>
-                      </div>
-
-                      <Table>
-                        <TableHeader>
-                          <TableRow className="border-slate-800/70">
-                            <TableHead className="text-slate-300">Name</TableHead>
-                            <TableHead className="text-slate-300">Type</TableHead>
-                            <TableHead className="text-slate-300 text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {(activeSite?.locations || []).length === 0 ? (
-                            <TableRow className="border-slate-800/70">
-                              <TableCell colSpan={3} className="text-slate-400 py-8 text-center">
-                                No locations yet. Click <span className="text-slate-200 font-medium">Add Location</span>.
-                              </TableCell>
-                            </TableRow>
-                          ) : (
-                            activeSite.locations.map((loc) => (
-                              <TableRow key={loc.id} className="border-slate-800/70">
-                                <TableCell className="text-slate-100">{loc.name}</TableCell>
-                                <TableCell className="text-slate-300">{loc.type}</TableCell>
-                                <TableCell className="text-right">
-                                  <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                      <Button
-                                        variant="outline"
-                                        className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
-                                      >
-                                        <MoreVertical className="h-4 w-4" />
-                                      </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent className="border border-slate-700/60 bg-slate-950 text-slate-100">
-                                      <DropdownMenuItem className="cursor-pointer" onClick={() => openEditLocation(loc)}>
-                                        <Pencil className="h-4 w-4 mr-2" /> Edit
-                                      </DropdownMenuItem>
-                                      <DropdownMenuItem
-                                        className="cursor-pointer text-rose-200 focus:text-rose-200"
-                                        onClick={() => deleteLocation(loc.id)}
-                                      >
-                                        <Trash2 className="h-4 w-4 mr-2" /> Delete
-                                      </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                  </DropdownMenu>
-                                </TableCell>
-                              </TableRow>
-                            ))
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
                 </Card>
+                <SpaceBuilder state={senseState} commit={commitSense} actor={displayName || user?.email || "Admin"} />
               </div>
             }
           />
@@ -826,16 +539,20 @@ export default function AdminDashboard() {
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {users.map((u) => (
+                            {usersLoading ? (
+                              <TableRow><TableCell colSpan={5} className="text-center text-slate-400">Loading…</TableCell></TableRow>
+                            ) : users.length === 0 ? (
+                              <TableRow><TableCell colSpan={5} className="text-center text-slate-400">No users found.</TableCell></TableRow>
+                            ) : users.map((u) => (
                               <TableRow key={u.id} className="border-slate-800/70">
-                                <TableCell className="text-slate-100">{u.display}</TableCell>
-                                <TableCell className="text-slate-300">{u.email}</TableCell>
+                                <TableCell className="text-slate-100">{u.displayName || "—"}</TableCell>
+                                <TableCell className="text-slate-300">{u.email || "—"}</TableCell>
                                 <TableCell>
                                   <Badge variant="outline" className="border-slate-700/70 text-slate-200">
-                                    {u.role}
+                                    {u.role || "No role"}
                                   </Badge>
                                 </TableCell>
-                                <TableCell className="text-slate-300">{u.joined}</TableCell>
+                                <TableCell className="text-slate-300">{u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString("en-GB") : "—"}</TableCell>
                                 <TableCell className="text-right">
                                   <Button
                                     variant="outline"
@@ -851,7 +568,7 @@ export default function AdminDashboard() {
                         </Table>
                       </div>
                       <div className="mt-3 text-xs text-slate-400">
-                        Note: this is currently using scaffold user data. Next step is wiring users to Firestore.
+                        {users.length} real account{users.length === 1 ? "" : "s"}, live from Firestore.
                       </div>
                     </CardContent>
                   </Card>
@@ -866,6 +583,20 @@ export default function AdminDashboard() {
             element={
               <RequireAdmin isAdmin={isAdmin} loading={authLoading}>
                 <AddUser />
+              </RequireAdmin>
+            }
+          />
+
+          {/* Orb Learning (Admin-only) — phrase-learning suggestions Orb has
+              picked up from clarification prompts, awaiting approve/reject. */}
+          <Route
+            path="orb-learning"
+            element={
+              <RequireAdmin isAdmin={isAdmin} loading={authLoading}>
+                <div className="mt-6 space-y-6">
+                  <OrbLearningReview />
+                  <OrbKnowledgeManager />
+                </div>
               </RequireAdmin>
             }
           />
@@ -1145,233 +876,6 @@ export default function AdminDashboard() {
           MODALS
          ========================= */}
 
-      {/* Add Site Modal */}
-      {isAddSiteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800/70 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
-            <div className="text-lg font-semibold text-slate-50">Add Site</div>
-            <div className="text-xs text-slate-400 mt-1">Create a new building/site.</div>
-
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="text-xs text-slate-300">Site name</label>
-                <Input
-                  value={newSite.name}
-                  onChange={(e) => setNewSite((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="e.g. Main Surgery"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-300">Address</label>
-                <Input
-                  value={newSite.address}
-                  onChange={(e) => setNewSite((p) => ({ ...p, address: e.target.value }))}
-                  placeholder="Optional"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-300">Phone</label>
-                <Input
-                  value={newSite.phone}
-                  onChange={(e) => setNewSite((p) => ({ ...p, phone: e.target.value }))}
-                  placeholder="Optional"
-                />
-              </div>
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <Button
-                variant="outline"
-                className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
-                onClick={() => {
-                  setNewSite({ name: "", address: "", phone: "" });
-                  setIsAddSiteOpen(false);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30"
-                onClick={addSite}
-              >
-                Save
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ✅ Edit Site Modal */}
-      {isEditSiteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800/70 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
-            <div className="text-lg font-semibold text-slate-50">Edit Site</div>
-            <div className="text-xs text-slate-400 mt-1">Update site name, address and phone.</div>
-
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="text-xs text-slate-300">Site name</label>
-                <Input
-                  value={editSite.name}
-                  onChange={(e) => setEditSite((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="e.g. Main Surgery"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-300">Address</label>
-                <Input
-                  value={editSite.address}
-                  onChange={(e) => setEditSite((p) => ({ ...p, address: e.target.value }))}
-                  placeholder="Optional"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-300">Phone</label>
-                <Input
-                  value={editSite.phone}
-                  onChange={(e) => setEditSite((p) => ({ ...p, phone: e.target.value }))}
-                  placeholder="Optional"
-                />
-              </div>
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <Button
-                variant="outline"
-                className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
-                onClick={() => {
-                  setIsEditSiteOpen(false);
-                  setEditSite({ id: "", name: "", address: "", phone: "" });
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30"
-                onClick={saveEditSite}
-              >
-                Save
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add Location Modal */}
-      {isAddLocationOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800/70 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
-            <div className="text-lg font-semibold text-slate-50">Add Location</div>
-            <div className="text-xs text-slate-400 mt-1">
-              Add a room/cupboard for:{" "}
-              <span className="text-slate-200 font-medium">{activeSite?.name || "Site"}</span>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="text-xs text-slate-300">Location name</label>
-                <Input
-                  value={newLocation.name}
-                  onChange={(e) => setNewLocation((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="e.g. Treatment Room 1"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-300">Type</label>
-                <select
-                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-                  value={newLocation.type}
-                  onChange={(e) => setNewLocation((p) => ({ ...p, type: e.target.value }))}
-                >
-                  <option value="Room">Room</option>
-                  <option value="Storage">Storage</option>
-                  <option value="Fridge">Fridge</option>
-                  <option value="Freezer">Freezer</option>
-                  <option value="Area">Area</option>
-                  <option value="Cupboard">Cupboard</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <Button
-                variant="outline"
-                className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
-                onClick={() => {
-                  setNewLocation({ name: "", type: "Room" });
-                  setIsAddLocationOpen(false);
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30"
-                onClick={addLocation}
-              >
-                Save
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ✅ Edit Location Modal */}
-      {isEditLocationOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800/70 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
-            <div className="text-lg font-semibold text-slate-50">Edit Location</div>
-            <div className="text-xs text-slate-400 mt-1">Update location name and type.</div>
-
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="text-xs text-slate-300">Location name</label>
-                <Input
-                  value={editLocation.name}
-                  onChange={(e) => setEditLocation((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="e.g. Treatment Room 1"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-300">Type</label>
-                <select
-                  className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-                  value={editLocation.type}
-                  onChange={(e) => setEditLocation((p) => ({ ...p, type: e.target.value }))}
-                >
-                  <option value="Room">Room</option>
-                  <option value="Storage">Storage</option>
-                  <option value="Fridge">Fridge</option>
-                  <option value="Freezer">Freezer</option>
-                  <option value="Area">Area</option>
-                  <option value="Cupboard">Cupboard</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="mt-5 flex justify-end gap-2">
-              <Button
-                variant="outline"
-                className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
-                onClick={() => {
-                  setIsEditLocationOpen(false);
-                  setEditLocation({ id: "", name: "", type: "Room" });
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30"
-                onClick={saveEditLocation}
-              >
-                Save
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Assign Role Modal */}
       {isAssignOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur">
@@ -1395,14 +899,22 @@ export default function AdminDashboard() {
               </select>
             </div>
 
+            {assignRoleError && (
+              <div className="mt-3 rounded-xl border border-rose-500/25 bg-rose-500/10 p-3 text-xs text-rose-100">
+                {assignRoleError}
+              </div>
+            )}
+
             <div className="mt-5 flex justify-end gap-2">
               <Button
                 variant="outline"
                 className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
+                disabled={assignRoleBusy}
                 onClick={() => {
                   setIsAssignOpen(false);
                   setAssignUserId(null);
                   setAssignRoleId("");
+                  setAssignRoleError("");
                 }}
               >
                 Cancel
@@ -1410,8 +922,9 @@ export default function AdminDashboard() {
               <Button
                 className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30"
                 onClick={saveAssignedRole}
+                disabled={assignRoleBusy}
               >
-                Save
+                {assignRoleBusy ? "Saving…" : "Save"}
               </Button>
             </div>
           </div>

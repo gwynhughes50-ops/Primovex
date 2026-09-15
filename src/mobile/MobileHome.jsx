@@ -3,9 +3,12 @@ import { useEffect, useMemo, useState } from "react";
 import useStock from "@/hooks/useStock";
 import { useAuth } from "@/contexts/AuthContext";
 import useOperationsSummary from "@/operations/hooks/useOperationsSummary";
+import useRoomOperationalContext from "@/operations/hooks/useRoomOperationalContext";
 import usePracticeManagerOverview from "./usePracticeManagerOverview";
 import { getOperationalEscalations } from "@/operations/escalations/operationalEscalationService";
 import ReleaseUpdateCard from "@/release/ReleaseUpdateCard";
+import { normalizeStockItemCategory } from "@/services/stockService";
+import { STOCK_CATEGORIES, categoryLabel } from "@/data/stockCategories";
 
 const FACILITY_KEY = "primovex.facilities.v2";
 function facilitiesData() { try { return JSON.parse(localStorage.getItem(FACILITY_KEY) || "{}"); } catch { return {}; } }
@@ -15,7 +18,21 @@ export default function MobileHome({ mode="home", onNavigate, onScan, onSearch, 
   const { displayName, role, capabilities=[] } = useAuth();
   const { allItems=[], loading } = useStock({ includeArchived:false });
   const low = useMemo(() => allItems.filter(i => Number(i.current_stock||0) <= Number(i.min_stock||0)), [allItems]);
-  const context = useMemo(() => ({ inventory:{ totalItems:allItems.length, lowStockItems:low.length, expiringSoon:0, loading }, temperature:{ loading:false, hasReading:false }, recentMoves:[] }), [allItems.length, low.length, loading]);
+  const [stockCategoryFilter, setStockCategoryFilter] = useState(null);
+  const stockCategoryCounts = useMemo(() => {
+    const counts = {};
+    allItems.forEach((item) => {
+      const { category } = normalizeStockItemCategory(item);
+      counts[category] = (counts[category] || 0) + 1;
+    });
+    return counts;
+  }, [allItems]);
+  const stockCategoryItems = useMemo(() => {
+    if (!stockCategoryFilter) return [];
+    return allItems.filter((item) => normalizeStockItemCategory(item).category === stockCategoryFilter);
+  }, [allItems, stockCategoryFilter]);
+  const roomOperationalContext = useRoomOperationalContext();
+  const context = useMemo(() => ({ inventory:{ totalItems:allItems.length, lowStockItems:low.length, expiringSoon:0, loading }, temperature:{ loading:false, hasReading:false }, recentMoves:[], rooms: roomOperationalContext }), [allItems.length, low.length, loading, roomOperationalContext]);
   const summary = useOperationsSummary(context);
   const governance = usePracticeManagerOverview();
   const facility = facilitiesData();
@@ -40,9 +57,28 @@ export default function MobileHome({ mode="home", onNavigate, onScan, onSearch, 
   if (mode === "stock") return (
     <Page title="Stock" subtitle={`${allItems.length} active items`}>
       <div className="grid grid-cols-2 gap-3"><Quick icon={Package} label="Scan item" onClick={onScan}/><Quick icon={Search} label="Search" onClick={onSearch}/></div>
-      <Section title="Needs attention">
-        {low.length ? low.slice(0,8).map(item => <button key={item.id} onClick={() => onSelectItem?.(item)} className="flex w-full items-center justify-between border-b border-[var(--medtrak-border)] py-3 text-left last:border-0"><span><b>{item.name}</b><small className="block text-[var(--medtrak-muted)]">Minimum {item.min_stock||0}</small></span><b className="text-red-600">{item.current_stock||0}</b></button>) : <Empty text="Stock levels look healthy" />}
-      </Section>
+
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {STOCK_CATEGORIES.filter((cat) => stockCategoryCounts[cat.id]).map((cat) => (
+          <button
+            key={cat.id}
+            onClick={() => setStockCategoryFilter((current) => (current === cat.id ? null : cat.id))}
+            className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold ${stockCategoryFilter === cat.id ? "border-[var(--medtrak-accent)] bg-[var(--medtrak-accent)]/15 text-[var(--medtrak-accent)]" : "border-[var(--medtrak-border)] text-[var(--medtrak-muted)]"}`}
+          >
+            {cat.icon} {cat.label} ({stockCategoryCounts[cat.id]})
+          </button>
+        ))}
+      </div>
+
+      {stockCategoryFilter ? (
+        <Section title={`${categoryLabel(stockCategoryFilter)} (${stockCategoryItems.length})`}>
+          {stockCategoryItems.length ? stockCategoryItems.slice(0,25).map(item => <button key={item.id} onClick={() => onSelectItem?.(item)} className="flex w-full items-center justify-between border-b border-[var(--medtrak-border)] py-3 text-left last:border-0"><span><b>{item.name}</b><small className="block text-[var(--medtrak-muted)]">Minimum {item.min_stock||0}</small></span><b className={Number(item.current_stock||0) <= Number(item.min_stock||0) ? "text-red-600" : ""}>{item.current_stock||0}</b></button>) : <Empty text="No items in this category yet" />}
+        </Section>
+      ) : (
+        <Section title="Needs attention">
+          {low.length ? low.slice(0,8).map(item => <button key={item.id} onClick={() => onSelectItem?.(item)} className="flex w-full items-center justify-between border-b border-[var(--medtrak-border)] py-3 text-left last:border-0"><span><b>{item.name}</b><small className="block text-[var(--medtrak-muted)]">Minimum {item.min_stock||0}</small></span><b className="text-red-600">{item.current_stock||0}</b></button>) : <Empty text="Stock levels look healthy" />}
+        </Section>
+      )}
     </Page>
   );
 

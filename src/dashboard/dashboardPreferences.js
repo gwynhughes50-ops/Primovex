@@ -9,6 +9,8 @@ export const DASHBOARD_WIDGETS = [
   { id: "issues", label: "Warnings", description: "Low stock, expiry and cold-chain exceptions." },
   { id: "stockActivity", label: "Recent stock activity", description: "The latest inventory movements." },
   { id: "quickActions", label: "Quick actions", description: "Theme and stock-use controls." },
+  { id: "quickNotes", label: "Quick notes", description: "Your open reminders and shared practice tasks." },
+  { id: "whoIsWhere", label: "Who's where", description: "Last scanned location for each active staff member (NFC/BLE tap snapshot)." },
 ];
 
 const ALL = DASHBOARD_WIDGETS.map((widget) => widget.id);
@@ -16,24 +18,43 @@ const ALL = DASHBOARD_WIDGETS.map((widget) => widget.id);
 export function defaultWidgetsForRole(role = "") {
   const value = String(role || "").toLowerCase();
   if (value.includes("practice manager") || value.includes("system admin")) {
-    return ["brief", "management", "issues", "stockSummary", "quickActions"];
+    return ["brief", "management", "whoIsWhere", "issues", "stockSummary", "quickActions", "quickNotes"];
   }
   if (value.includes("nurse") || value.includes("healthcare") || value.includes("hca")) {
-    return ["brief", "issues", "stockSummary", "quickActions"];
+    return ["brief", "issues", "stockSummary", "quickActions", "quickNotes"];
   }
   if (value.includes("caretaker") || value.includes("facilities") || value.includes("cleaner")) {
     return ["brief", "management", "timeline"];
   }
-  return ["brief", "management", "issues", "quickActions"];
+  return ["brief", "management", "issues", "quickActions", "quickNotes"];
+}
+
+function dedupe(ids) {
+  return Array.from(new Set(ids));
 }
 
 export function normaliseDashboardPreferences(preferences, role) {
   const fallback = defaultWidgetsForRole(role);
-  const visible = Array.isArray(preferences?.visible)
-    ? preferences.visible.filter((id) => ALL.includes(id))
-    : fallback;
   const orderSource = Array.isArray(preferences?.order) ? preferences.order : ALL;
-  const order = [...orderSource.filter((id) => ALL.includes(id)), ...ALL.filter((id) => !orderSource.includes(id))];
+  // dedupe() guards against a stale saved doc that already has a duplicate
+  // id in it (e.g. from an earlier version of this function) — filtering for
+  // validity alone doesn't remove duplicates that are already present.
+  const order = dedupe([...orderSource.filter((id) => ALL.includes(id)), ...ALL.filter((id) => !orderSource.includes(id))]);
+
+  if (!Array.isArray(preferences?.visible)) {
+    return { visible: fallback, order };
+  }
+
+  // Widgets that didn't exist when this user last saved their layout aren't
+  // in their old order at all — surface those automatically if the role
+  // default recommends them, same as `order` already does. Widgets the user
+  // has actually seen before and explicitly hidden are left alone. Without
+  // this, a brand-new widget can never appear for anyone who already has a
+  // saved layout, no matter what their role's defaults say.
+  const savedVisible = preferences.visible.filter((id) => ALL.includes(id));
+  const newWidgetIds = ALL.filter((id) => !orderSource.includes(id));
+  const visible = dedupe([...savedVisible, ...newWidgetIds.filter((id) => fallback.includes(id))]);
+
   return { visible: visible.length ? visible : fallback, order };
 }
 

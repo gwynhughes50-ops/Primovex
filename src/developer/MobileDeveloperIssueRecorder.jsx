@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react';
 import { Bug, Download, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { developerAccessAllowed } from './developerAccess';
-import { createDeveloperIssue, downloadDeveloperBundle, listDeveloperIssues } from './developerIssueService';
+import { createDeveloperIssue, downloadDeveloperBundle, subscribeDeveloperIssues } from './developerIssueService';
 
 export default function MobileDeveloperIssueRecorder() {
   const { role } = useAuth();
   const allowed = developerAccessAllowed(role);
-  const [open, setOpen] = useState(false); const [issues, setIssues] = useState(() => listDeveloperIssues());
+  const [open, setOpen] = useState(false); const [issues, setIssues] = useState([]);
   const [form, setForm] = useState({ title: '', description: '', expected: '', actual: '', module: 'Mobile', severity: 'minor' });
-  useEffect(() => { const refresh = () => setIssues(listDeveloperIssues()); window.addEventListener('primovex:developer-issues-changed', refresh); return () => window.removeEventListener('primovex:developer-issues-changed', refresh); }, []);
+  useEffect(() => { if (!allowed) return; return subscribeDeveloperIssues(setIssues); }, [allowed]);
   if (!allowed) return null;
   const save = (event) => { event.preventDefault(); if (!form.title.trim()) return; createDeveloperIssue(form); setForm({ title: '', description: '', expected: '', actual: '', module: 'Mobile', severity: 'minor' }); setOpen(false); };
   return <>
@@ -19,7 +19,7 @@ export default function MobileDeveloperIssueRecorder() {
       <textarea value={form.description} onChange={e=>setForm({...form,description:e.target.value})} placeholder="Steps to reproduce" rows="3" className="mt-3 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3"/>
       <div className="mt-3 grid grid-cols-2 gap-2"><select value={form.module} onChange={e=>setForm({...form,module:e.target.value})} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3"><option>Mobile</option><option>Sense</option><option>Spaces</option><option>Facilities</option><option>Inventory</option><option>Connect</option><option>Login</option><option>Theme</option></select><select value={form.severity} onChange={e=>setForm({...form,severity:e.target.value})} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3"><option value="cosmetic">Cosmetic</option><option value="minor">Minor</option><option value="major">Major</option><option value="blocking">Blocking</option></select></div>
       <input value={form.expected} onChange={e=>setForm({...form,expected:e.target.value})} placeholder="Expected result" className="mt-3 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3"/><input value={form.actual} onChange={e=>setForm({...form,actual:e.target.value})} placeholder="Actual result" className="mt-3 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3"/>
-      <button className="mt-4 w-full rounded-xl bg-[var(--medtrak-accent)] p-3 font-bold text-white">Save issue</button><button type="button" onClick={downloadDeveloperBundle} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--medtrak-border)] p-3 font-semibold"><Download className="h-4 w-4"/>Export development bundle</button>
+      <button className="mt-4 w-full rounded-xl bg-[var(--medtrak-accent)] p-3 font-bold text-white">Save issue</button><button type="button" onClick={() => downloadDeveloperBundle(issues)} className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--medtrak-border)] p-3 font-semibold"><Download className="h-4 w-4"/>Export development bundle</button>
     </form></div>}
   </>;
 }

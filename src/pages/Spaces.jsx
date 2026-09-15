@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Activity, BatteryMedium, Bluetooth, Building2, CheckCircle2, LocateFixed, MapPin, PackageSearch, Radio, RotateCcw, ScanLine, ShieldCheck, Wrench } from 'lucide-react';
+import { Activity, BatteryMedium, Bluetooth, Building2, CheckCircle2, ChevronDown, ChevronRight, LocateFixed, MapPin, PackageSearch, Radio, RotateCcw, ScanLine, ShieldCheck, Wrench } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { loadFacilitiesState } from '@/modules/facilities/services/facilitiesStore';
 import useSenseContext from '@/modules/sense/hooks/useSenseContext';
@@ -36,6 +36,24 @@ export default function Spaces() {
 
   const activeSpaces = senseState.spaces.filter((space) => space.status !== 'archived');
   const selectedSpace = senseState.spaces.find((space) => space.id === selectedSpaceId);
+  const [expandedFloors, setExpandedFloors] = useState(() => new Set(selectedSpace?.floorId ? [selectedSpace.floorId] : []));
+  const spacesByFloor = useMemo(() => {
+    const map = new Map();
+    activeSpaces.forEach((space) => {
+      const key = space.floorId || '__none__';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(space);
+    });
+    return map;
+  }, [activeSpaces]);
+  function toggleFloor(floorId) {
+    setExpandedFloors((prev) => {
+      const next = new Set(prev);
+      if (next.has(floorId)) next.delete(floorId); else next.add(floorId);
+      return next;
+    });
+  }
+  const floorsInUse = senseState.floors.filter((floor) => spacesByFloor.has(floor.id)).length;
   const readiness = selectedSpace ? calculateSpaceReadiness(selectedSpace, senseState, facilities) : null;
   const assetsHere = senseState.assets.filter((asset) => asset.currentSpaceId === selectedSpaceId);
   const expectedAssets = senseState.assets.filter((asset) => selectedSpace?.expectedAssetIds?.includes(asset.id));
@@ -85,7 +103,7 @@ export default function Spaces() {
       </section>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric label="Managed spaces" value={activeSpaces.length} icon={Building2} />
+        <Metric label="Floors" value={floorsInUse} icon={Building2} />
         <Metric label="Sense nodes enabled" value={senseState.spaces.filter((space) => space.senseNode?.enabled).length} icon={Bluetooth} />
         <Metric label="Tracked assets" value={trackedAssets.length} icon={PackageSearch} />
         <Metric label="Away from home" value={awayFromHome.length} icon={MapPin} warning={awayFromHome.length > 0} />
@@ -104,11 +122,27 @@ export default function Spaces() {
 
       <div className="grid gap-5 xl:grid-cols-[0.85fr_1.5fr]">
         <section className={`${panel} p-4 sm:p-5`}>
-          <div className="mb-4"><h2 className="text-lg font-semibold">Spaces registry</h2><p className={`text-sm ${muted}`}>Select a space to review readiness, expected assets and its operational timeline.</p></div>
+          <div className="mb-4"><h2 className="text-lg font-semibold">Spaces registry</h2><p className={`text-sm ${muted}`}>Select a floor to see its rooms, then pick a space for readiness, expected assets and its operational timeline.</p></div>
           <div className="space-y-2">
-            {activeSpaces.map((space) => {
-              const score = calculateSpaceReadiness(space, senseState, facilities).overall;
-              return <button key={space.id} onClick={() => setSelectedSpaceId(space.id)} className={`flex w-full items-center justify-between rounded-2xl border p-3 text-left transition ${selectedSpaceId === space.id ? 'border-[color:var(--medtrak-accent)] bg-[color:color-mix(in_srgb,var(--medtrak-accent)_9%,var(--medtrak-panel))]' : 'border-[color:var(--medtrak-border)] hover:bg-white/5'}`}><span><b className="block">{space.name}</b><small className={muted}>{senseState.floors.find((item) => item.id === space.floorId)?.name || space.floor || 'Multi-floor'} · {senseState.zones.find((item) => item.id === space.zoneId)?.name || space.zone || 'No zone'} · {space.id}</small></span><span className="text-right"><b className="block text-lg">{score}%</b><small className={muted}>{space.senseNode?.enabled ? 'Sense enabled' : 'No node'}</small></span></button>;
+            {[...senseState.floors.filter((floor) => spacesByFloor.has(floor.id)), ...(spacesByFloor.has('__none__') ? [{ id: '__none__', name: 'No floor assigned' }] : [])].map((floor) => {
+              const floorSpaces = spacesByFloor.get(floor.id) || [];
+              const isExpanded = expandedFloors.has(floor.id);
+              return (
+                <div key={floor.id} className="overflow-hidden rounded-2xl border border-[color:var(--medtrak-border)]">
+                  <button onClick={() => toggleFloor(floor.id)} className="flex w-full items-center justify-between px-3 py-2.5 text-left font-semibold hover:bg-white/5">
+                    <span className="flex items-center gap-2">{isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}{floor.name}</span>
+                    <span className={`text-xs font-normal ${muted}`}>{floorSpaces.length} room{floorSpaces.length === 1 ? '' : 's'}</span>
+                  </button>
+                  {isExpanded && (
+                    <div className="space-y-2 border-t border-[color:var(--medtrak-border)] p-3">
+                      {floorSpaces.map((space) => {
+                        const score = calculateSpaceReadiness(space, senseState, facilities).overall;
+                        return <button key={space.id} onClick={() => setSelectedSpaceId(space.id)} className={`flex w-full items-center justify-between rounded-2xl border p-3 text-left transition ${selectedSpaceId === space.id ? 'border-[color:var(--medtrak-accent)] bg-[color:color-mix(in_srgb,var(--medtrak-accent)_9%,var(--medtrak-panel))]' : 'border-[color:var(--medtrak-border)] hover:bg-white/5'}`}><span><b className="block">{space.name}</b><small className={muted}>{senseState.zones.find((item) => item.id === space.zoneId)?.name || space.zone || 'No zone'} · {space.id}</small></span><span className="text-right"><b className="block text-lg">{score}%</b><small className={muted}>{space.senseNode?.enabled ? 'Sense enabled' : 'No node'}</small></span></button>;
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
             })}
           </div>
         </section>

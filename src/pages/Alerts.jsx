@@ -40,6 +40,10 @@ import { db, auth } from "../lib/firebase";
 import { buildOperationsIntelligence } from "../services/medAiOperationsService";
 import StockVerificationWidget from "../components/stock/StockVerificationWidget";
 import useConnectedDevices from "@/hooks/useConnectedDevices";
+import { normalizeStockItemCategory } from "@/services/stockService";
+import { categoryLabel as stockCategoryLabel } from "@/data/stockCategories";
+import { CONCERNS_COLLECTION, CONCERN_STATUSES, getDeadlineTone as getConcernDeadlineTone } from "@/modules/governance/services/concernService";
+import { SAR_COLLECTION, getSarDeadlineTone } from "@/modules/governance/services/sarService";
 
 /**
  * Collections used:
@@ -61,13 +65,21 @@ const SETTINGS_DOC_PATH = "settings/alerts";
  */
 const DEFAULT_EXPIRY_SOON_DAYS = 30;
 
+// Keyed by the fixed taxonomy's main category id (src/data/stockCategories.js).
+// A value of 0 means "no override, use the global default" below.
 const DEFAULT_CATEGORY_THRESHOLDS = {
-  medicinal: 30,
-  vaccines: 30,
-  emergency_drugs: 60,
-  dressings: 30,
-  equipment: 0,
-  non_medical: 0,
+  medicines: 30,
+  "emergency-equipment": 60,
+  "clinical-consumables": 30,
+  diagnostics: 30,
+  laboratory: 30,
+  "cold-chain": 30,
+  "cleaning-infection-control": 0,
+  "office-administration": 0,
+  "equipment-assets": 0,
+  "rooms-facilities": 0,
+  "general-stores": 0,
+  uncategorised: 0,
 };
 
 /**
@@ -217,6 +229,11 @@ export default function Alerts() {
   const [draftGlobalExpirySoonDays, setDraftGlobalExpirySoonDays] = useState(DEFAULT_EXPIRY_SOON_DAYS);
   const [draftCategoryThresholds, setDraftCategoryThresholds] = useState(DEFAULT_CATEGORY_THRESHOLDS);
   const [savingSettings, setSavingSettings] = useState(false);
+
+  // Governance activity (concerns + SARs due/overdue) — was previously a
+  // hardcoded "Awaiting SAR feed" placeholder that never read real data.
+  const [concernsDueOrOverdue, setConcernsDueOrOverdue] = useState(0);
+  const [sarsDueOrOverdue, setSarsDueOrOverdue] = useState(0);
 
   // -------------------------
   // Auth subscription
@@ -383,6 +400,38 @@ export default function Alerts() {
   }, []);
 
   // -------------------------
+  // Subscribe: governance concerns + SARs (due/overdue counts only, for the
+  // "What's Changed Since Yesterday" Governance row)
+  // -------------------------
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, CONCERNS_COLLECTION),
+      (snap) => {
+        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const open = rows.filter((c) => ![CONCERN_STATUSES.closed, CONCERN_STATUSES.archived].includes(c.status));
+        const dueOrOverdue = open.filter((c) => ["critical", "warning"].includes(getConcernDeadlineTone(c).status));
+        setConcernsDueOrOverdue(dueOrOverdue.length);
+      },
+      (err) => console.error("Alerts governance_concerns subscribe error:", err)
+    );
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const unsub = onSnapshot(
+      collection(db, SAR_COLLECTION),
+      (snap) => {
+        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const open = rows.filter((s) => !["completed", "closed"].includes(String(s.status || "").toLowerCase()));
+        const dueOrOverdue = open.filter((s) => ["critical", "high", "warning"].includes(getSarDeadlineTone(s).status));
+        setSarsDueOrOverdue(dueOrOverdue.length);
+      },
+      (err) => console.error("Alerts governance_sars subscribe error:", err)
+    );
+    return () => unsub();
+  }, []);
+
+  // -------------------------
   // Subscribe: alert_resolutions
   // -------------------------
   useEffect(() => {
@@ -419,9 +468,7 @@ export default function Alerts() {
       const location =
         firstDefined(item, ["location", "locationName", "location_id", "locationId"]) || "";
 
-      const category =
-        String(firstDefined(item, ["category", "categoryKey", "category_key"]) || "").trim() ||
-        "unknown";
+      const category = normalizeStockItemCategory(item).category;
 
       const currentStock =
         safeNumber(firstDefined(item, ["current_stock", "currentStock", "qty", "quantity"])) ?? null;
@@ -657,10 +704,11 @@ export default function Alerts() {
     { label: "Resolved", value: counts.resolved, tone: "emerald", icon: CheckCircle },
   ];
 
+  const governanceDueOrOverdue = concernsDueOrOverdue + sarsDueOrOverdue;
   const changedSinceYesterday = [
     { label: "Stock alerts", value: counts.stock, change: counts.stock > 0 ? "+" + counts.stock : "No change", icon: Package },
     { label: "Temperature", value: counts.temp, change: counts.temp > 0 ? "+" + counts.temp : "Stable", icon: Thermometer },
-    { label: "Governance", value: 0, change: "Awaiting SAR feed", icon: ShieldCheck },
+    { label: "Governance", value: governanceDueOrOverdue, change: governanceDueOrOverdue > 0 ? "Due or overdue" : "All on track", icon: ShieldCheck },
     { label: "Purchasing", value: counts.stock, change: counts.stock > 0 ? "Action likely" : "Quiet", icon: ClipboardList },
   ];
 
@@ -1025,8 +1073,8 @@ export default function Alerts() {
 
       {/* Settings Drawer */}
       {settingsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur">
-          <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur">
+          <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-lg font-semibold text-slate-50 flex items-center gap-2">
@@ -1101,9 +1149,15 @@ export default function Alerts() {
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {Object.keys({ ...DEFAULT_CATEGORY_THRESHOLDS, ...draftCategoryThresholds }).map((cat) => (
+                  {/* Only the fixed taxonomy's own categories, never whatever
+                      raw keys happen to already be saved in Firestore — the
+                      settings doc can still hold pre-taxonomy-migration keys
+                      (e.g. "non_medical", "emergency_drugs") that have no
+                      friendly label and would otherwise render as their own
+                      broken-looking row. */}
+                  {Object.keys(DEFAULT_CATEGORY_THRESHOLDS).map((cat) => (
                     <div key={cat}>
-                      <label className="text-xs text-slate-300">{cat} (days)</label>
+                      <label className="text-xs text-slate-300">{stockCategoryLabel(cat)} (days)</label>
                       <Input
                         disabled={!isAdmin || savingSettings}
                         value={String(draftCategoryThresholds?.[cat] ?? DEFAULT_CATEGORY_THRESHOLDS[cat] ?? 0)}

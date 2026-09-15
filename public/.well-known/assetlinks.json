@@ -7,7 +7,8 @@
       "namespace": "android_app",
       "package_name": "uk.co.primovex.app",
       "sha256_cert_fingerprints": [
-        "53:9A:8B:06:4D:54:63:F4:27:32:BB:38:4A:55:E0:D0:D1:BA:7A:3D:C0:26:E8:DD:A2:A8:84:12:22:44:8A:A0"
+        "53:9A:8B:06:4D:54:63:F4:27:32:BB:38:4A:55:E0:D0:D1:BA:7A:3D:C0:26:E8:DD:A2:A8:84:12:22:44:8A:A0",
+        "55:8F:8B:77:A5:29:08:5C:D3:91:E7:9F:7E:E4:C5:05:24:07:16:A4:FB:DC:77:33:FB:DD:48:A3:1C:63:20:4D"
       ]
     }
   }

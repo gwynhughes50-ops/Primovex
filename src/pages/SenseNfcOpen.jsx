@@ -18,10 +18,18 @@ export default function SenseNfcOpen() {
   const readiness = entityType === 'space' && entity ? calculateSpaceReadiness(entity, { ...state, spaces: registry.spaces }, facilities) : null;
 
   useEffect(() => {
-    if (entityType !== 'space' || !entity) return;
-    saveSenseState(confirmSpaceContext(state, entity.id, displayName || user?.email || 'Signed-in user', 'nfc', 1));
-    activate({ id: entity.id, name: entity.name, type: 'space', source: 'nfc' })
-      .catch((error) => console.error('Unable to activate shared Sense room session', error));
+    if (!entity) return;
+    if (entityType === 'space') {
+      saveSenseState(confirmSpaceContext(state, entity.id, displayName || user?.email || 'Signed-in user', 'nfc', 1));
+      activate({ id: entity.id, name: entity.name, type: 'space', source: 'nfc' })
+        .catch((error) => console.error('Unable to activate shared Sense room session', error));
+    } else if (entityType === 'asset') {
+      // Scanning a fridge/equipment tag is the access log for that item (who/when),
+      // same as a room tap — this was previously only wired for spaces, so equipment
+      // scans silently never activated a session at all.
+      activate({ id: entity.id, name: entity.name, type: 'asset', source: 'nfc' })
+        .catch((error) => console.error('Unable to activate shared Sense asset session', error));
+    }
   }, [entityType, entity?.id, entity?.name, displayName, user?.email, activate]);
 
   if (!entity) return <div className="min-h-screen bg-[var(--medtrak-bg)] p-6 text-[var(--medtrak-text)]"><div className="mx-auto max-w-lg rounded-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-6"><h1 className="text-xl font-bold">NFC tag not recognised</h1><p className="mt-2 text-[var(--medtrak-muted)]">This tag points to an item that is not registered on this device.</p><Link to="/spaces" className="mt-5 inline-block rounded-xl bg-[var(--medtrak-accent)] px-4 py-3 font-semibold text-white">Open Sense</Link></div></div>;

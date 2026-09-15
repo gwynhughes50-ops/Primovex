@@ -5,6 +5,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { normalizeStockItemCategory } from "./stockService";
 
 const STOCK_ITEMS_COL = "stock_items";
 const STOCK_VERIFICATIONS_COL = "stock_verifications";
@@ -37,19 +38,25 @@ function normalizeActor(actor) {
   };
 }
 
+// 90-day tier: anything clinically time-sensitive to get wrong (medicines,
+// vaccines, emergency kit). 180-day tier: high-turnover clinical consumables
+// where a stale count is a minor inconvenience, not a safety issue.
+const NINETY_DAY_CATEGORIES = new Set(["medicines", "emergency-equipment"]);
+const ONE_EIGHTY_DAY_CATEGORIES = new Set(["clinical-consumables", "laboratory", "diagnostics"]);
+
 function getVerificationIntervalDays(item) {
   const explicit = toNumber(item?.verification_interval_days, 0);
   if (explicit > 0) return explicit;
 
-  const category = String(item?.category || "").toLowerCase();
+  const { category } = normalizeStockItemCategory(item);
   const currentStock = toNumber(item?.current_stock, 0);
   const minStock = toNumber(item?.min_stock, 0);
   const discrepancies = toNumber(item?.verification_discrepancy_count, 0);
 
   if (discrepancies > 0) return 90;
-  if (["emergency_drugs", "vaccines", "medicinal"].includes(category)) return 90;
+  if (NINETY_DAY_CATEGORIES.has(category)) return 90;
   if (minStock > 0 && currentStock <= minStock) return 120;
-  if (["dressings", "clinical", "consumables"].includes(category)) return 180;
+  if (ONE_EIGHTY_DAY_CATEGORIES.has(category)) return 180;
 
   return 365;
 }

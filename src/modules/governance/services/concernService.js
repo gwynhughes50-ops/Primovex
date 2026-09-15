@@ -1,5 +1,7 @@
 import {
   addDoc,
+  arrayRemove,
+  arrayUnion,
   collection,
   doc,
   onSnapshot,
@@ -197,6 +199,7 @@ export function buildConcernPayload(form, actor = {}) {
     mddusRequired: !!form.mddusRequired,
     learningRequired: form.learningRequired !== false,
     learningRecordedAt: null,
+    involvedUserIds: Array.isArray(form.involvedUserIds) ? form.involvedUserIds : [],
     createdByUid: actor.uid || null,
     createdByName: actor.displayName || actor.email || "Unknown",
     createdAt: serverTimestamp(),
@@ -284,6 +287,28 @@ export async function closeConcern(concern, actor = {}) {
   await addConcernTimeline(concern.id, { type: "closed", title: "Case closed", message: "Concern closed after response/learning review.", actor });
 }
 
+// A restricted-scope timeline entry a shared-with (but not Concerns-team)
+// user can add — the Firestore rules for governance_concern_timeline only
+// let a non-team involved user create entries with type "note", never any
+// of the status-changing types the functions above write.
+export async function addConcernQuickNote(concernId, message, actor = {}) {
+  const text = String(message || "").trim();
+  if (!text) return null;
+  return addConcernTimeline(concernId, { type: "note", title: "Note added", message: text, actor });
+}
+
+export async function addInvolvedUser(concernId, uid, actor = {}) {
+  if (isSafeSyntheticMode() || !concernId || !uid) return;
+  await updateDoc(doc(db, CONCERNS_COLLECTION, concernId), { involvedUserIds: arrayUnion(uid), updatedAt: serverTimestamp() });
+  await addConcernTimeline(concernId, { type: "shared", title: "Case shared", message: "A staff member was given visibility on this case.", actor });
+}
+
+export async function removeInvolvedUser(concernId, uid, actor = {}) {
+  if (isSafeSyntheticMode() || !concernId || !uid) return;
+  await updateDoc(doc(db, CONCERNS_COLLECTION, concernId), { involvedUserIds: arrayRemove(uid), updatedAt: serverTimestamp() });
+  await addConcernTimeline(concernId, { type: "unshared", title: "Case visibility removed", message: "A staff member's visibility on this case was removed.", actor });
+}
+
 export async function addLearningAction(concernId, action = {}, actor = {}) {
   if (isSafeSyntheticMode()) return `demo-learning-${Date.now()}`;
   const ref = await addDoc(collection(db, CONCERN_LEARNING_COLLECTION), {
@@ -304,14 +329,24 @@ export async function addLearningAction(concernId, action = {}, actor = {}) {
   return ref.id;
 }
 
-export function subscribeConcerns(callback, onError) {
+// Concerns-team/Partner callers get every case (unconstrained query - allowed
+// broadly by the Firestore rules). Everyone else must pass involvedUid: a
+// query scoped to array-contains their own uid is the only shape Firestore's
+// per-document rule evaluation can actually satisfy for someone who isn't
+// team/partner - an unconstrained query would be rejected outright the
+// moment it could return a case they're not listed on.
+export function subscribeConcerns(callback, onError, { involvedUid } = {}) {
   if (isSafeSyntheticMode()) {
     const timer = setTimeout(() => callback(demoGovernanceCases), 50);
     return () => clearTimeout(timer);
   }
-  const q = query(collection(db, CONCERNS_COLLECTION), orderBy("receivedAt", "desc"));
+  const q = involvedUid
+    ? query(collection(db, CONCERNS_COLLECTION), where("involvedUserIds", "array-contains", involvedUid))
+    : query(collection(db, CONCERNS_COLLECTION), orderBy("receivedAt", "desc"));
   return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+    const rows = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+    if (involvedUid) rows.sort((a, b) => (toDate(b.receivedAt)?.getTime() || 0) - (toDate(a.receivedAt)?.getTime() || 0));
+    callback(rows);
   }, onError);
 }
 

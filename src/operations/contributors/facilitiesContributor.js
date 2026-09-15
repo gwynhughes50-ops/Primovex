@@ -1,20 +1,38 @@
 import { getFacilitiesSnapshot } from '@/modules/facilities/services/facilitiesStore';
 
-function nextCleanAt(room) {
-  if (!room.lastCleanedAt) return null;
-  return new Date(new Date(room.lastCleanedAt).getTime() + (room.cleaningFrequencyHours || 24) * 3600000);
+function toDate(value) {
+  if (!value) return null;
+  if (typeof value?.toDate === 'function') return value.toDate();
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+// lastCleanedAt/lastCleanedBy live in the real Firestore room_operational
+// collection (cleaningRecordService.js), not on the space registry itself —
+// callers pass the live map in via context.rooms.operational (see
+// useRoomOperationalContext / readOnlyTools.js's readRoomOperational).
+function nextCleanAt(room, operational) {
+  const lastCleanedAt = operational?.[room.id]?.lastCleanedAt;
+  const date = toDate(lastCleanedAt);
+  if (!date) return null;
+  return new Date(date.getTime() + (room.cleaningFrequencyHours || 24) * 3600000);
 }
 
 export const facilitiesContributor = {
   id: 'facilities',
   label: 'Facilities',
   weight: 1.1,
-  calculate() {
+  calculate(context = {}) {
+    if (context.rooms?.loading) {
+      return { status: 'loading', readiness: null, priorities: [], warnings: [], summary: 'Facilities loading.', changedSinceYesterday: [], recommendedActions: [] };
+    }
+
     const state = getFacilitiesSnapshot();
+    const operational = context.rooms?.operational || {};
     const now = Date.now();
     const openIssues = state.maintenance.filter((item) => item.status !== 'closed');
     const overdueRooms = state.rooms.filter((room) => {
-      const next = nextCleanAt(room);
+      const next = nextCleanAt(room, operational);
       return !next || next.getTime() < now;
     });
     const readyRooms = state.rooms.length - overdueRooms.length;

@@ -29,5 +29,8 @@ export function createDefaultKnowledgeRegistry() {
   registry.register({ id: 'cleaning', label: 'Cleaning', intents: ['cleaning.'] });
   registry.register({ id: 'tasks', label: 'Tasks and escalations', intents: ['tasks.'] });
   registry.register({ id: 'alerts', label: 'Alerts', intents: ['alerts.'] });
+  registry.register({ id: 'admin', label: 'Users and administration', intents: ['admin.'] });
+  registry.register({ id: 'governance', label: 'Concerns and SARs', intents: ['governance.'] });
+  registry.register({ id: 'knowledge', label: 'Practice knowledge', intents: ['knowledge.'] });
   return registry;
 }

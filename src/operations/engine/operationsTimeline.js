@@ -17,7 +17,10 @@ export function buildOperationsTimeline(context = {}) {
   const facilities = getFacilitiesSnapshot();
   const rows = [];
 
-  facilities.cleaningLogs.forEach((log) => rows.push(event({
+  // cleaningLogs no longer lives on the localStorage facilities snapshot — it's
+  // the real Firestore cleaning_logs collection now, passed in via
+  // context.rooms.logs (see useRoomOperationalContext / readOnlyTools.js).
+  (context.rooms?.logs || []).forEach((log) => rows.push(event({
     id: `cleaning-${log.id}`,
     at: log.cleanedAt,
     module: 'Facilities',

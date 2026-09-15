@@ -1,11 +1,14 @@
 // src/contexts/AuthContext.jsx
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { onAuthStateChanged, signOut as fbSignOut } from "firebase/auth";
+import { onAuthStateChanged, onIdTokenChanged, signOut as fbSignOut } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
-import { getCapabilitiesForProfile, hasCapability, hasAnyCapability } from "@/core/identity/capabilities";
+import { getCapabilitiesForProfile, hasCapability, hasAnyCapability, CAPABILITY_CATALOG } from "@/core/identity/capabilities";
 import { getStoredPlatformMode, isSafeSyntheticMode, setPlatformMode } from "@/config/platformMode";
 import { getActiveDemoProfile } from "@/config/demoMode";
+import { writeAuditEvent } from "@/core/identity/auditService";
+import { getDeviceId } from "@/services/deviceSessionService";
+import { startShellyLocalPolling } from "@/services/connect/shellyLocalPoller";
 
 const AuthContext = createContext(null);
 
@@ -37,6 +40,7 @@ export function AuthProvider({ children }) {
   const [platformMode, setPlatformModeState] = useState(() => getStoredPlatformMode());
   const [user, setUser] = useState(null); // firebase auth user or synthetic demo user
   const [profile, setProfile] = useState(null); // firestore /users/{uid} or synthetic profile
+  const [moduleToggles, setModuleToggles] = useState(null); // practice_config.moduleToggles — per-module on/off with an allow-list
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
   const [error, setError] = useState("");
@@ -117,8 +121,79 @@ export function AuthProvider({ children }) {
     };
   }, [platformMode]);
 
+  // Caches a bearer session (uid, ID token, expiry, device id) into native
+  // Android storage so NfcSightingActivity can record a room-presence NFC
+  // tap without ever booting this webview. window.PrimovexAuth only exists
+  // inside the Android Tauri shell, so this is a no-op on desktop/web.
+  useEffect(() => {
+    if (isSafeSyntheticMode(platformMode)) return undefined;
+    return onIdTokenChanged(auth, async (u) => {
+      const bridge = window.PrimovexAuth;
+      if (!bridge) return;
+      if (!u) {
+        bridge.clearSession?.();
+        return;
+      }
+      try {
+        const result = await u.getIdTokenResult();
+        const expiresAtMillis = new Date(result.expirationTime).getTime();
+        bridge.cacheSession?.(u.uid, result.token, expiresAtMillis, getDeviceId(), u.displayName || u.email || "");
+      } catch (error) {
+        console.warn("Unable to cache native session", error);
+      }
+    });
+  }, [platformMode]);
+
+  useEffect(() => {
+    if (!user?.uid || String(user.uid).startsWith("synthetic-")) return undefined;
+    const forwardGovernedAudit = (event) => {
+      if (!event?.detail?.action) return;
+      writeAuditEvent(event.detail).catch(() => {});
+    };
+    window.addEventListener("primovex:governed-audit", forwardGovernedAudit);
+    return () => window.removeEventListener("primovex:governed-audit", forwardGovernedAudit);
+  }, [user?.uid]);
+
+  // Polls any registered local-network thermometers directly from this PC —
+  // see shellyLocalPoller.js. Safely no-ops outside the Tauri desktop shell
+  // and in synthetic/demo mode, same guard as the audit forwarder above.
+  useEffect(() => {
+    if (!user?.uid || String(user.uid).startsWith("synthetic-")) return undefined;
+    return startShellyLocalPolling();
+  }, [user?.uid]);
+
+  // Lets an admin switch a whole module off for everyone except a chosen
+  // allow-list (e.g. "turn ClinFlow off for everyone but me") without
+  // touching per-role permissions. Read by every signed-in user (practice_config
+  // already allows that), written only by admins — see PracticeAdministration's
+  // Modules tab.
+  useEffect(() => {
+    if (isSafeSyntheticMode(platformMode)) { setModuleToggles(null); return undefined; }
+    return onSnapshot(doc(db, "practice_config", "main"), (snap) => {
+      setModuleToggles(snap.exists() ? snap.data()?.moduleToggles || null : null);
+    }, () => setModuleToggles(null));
+  }, [platformMode]);
+
   const role = profile?.role || null;
-  const capabilities = getCapabilitiesForProfile(profile);
+  const rawCapabilities = getCapabilitiesForProfile(profile);
+  // Modules switched off (practice_config.moduleToggles) are removed from the
+  // capabilities list itself — not just checked in can()/canAny() — because
+  // navigation.js filters the sidebar straight off this array, bypassing
+  // can() entirely. Filtering here means a blocked module disappears from
+  // the nav AND its route, from one place, for every capability check in the
+  // app including a System Admin's "*" wildcard (expanded against the full
+  // catalog so the block actually applies rather than being shortcut past).
+  const blockedDomains = new Set(
+    Object.keys(moduleToggles || {}).filter((domain) => {
+      const toggle = moduleToggles[domain];
+      if (!toggle?.disabled) return false;
+      return !(toggle.allowUids || []).includes(user?.uid);
+    })
+  );
+  const capabilities = blockedDomains.size === 0
+    ? rawCapabilities
+    : (rawCapabilities.includes("*") ? CAPABILITY_CATALOG.map((item) => item.id) : rawCapabilities)
+        .filter((capability) => !blockedDomains.has(String(capability).split(".")[0]));
   const can = (required) => hasCapability(capabilities, required);
   const canAny = (required = []) => hasAnyCapability(capabilities, required);
   const displayName =
@@ -136,6 +211,15 @@ export function AuthProvider({ children }) {
       setPlatformModeState("live");
       return;
     }
+    await writeAuditEvent({
+      action: "auth.logout",
+      module: "identity",
+      targetType: "user_session",
+      targetId: user?.uid || "current",
+      summary: "User signed out",
+      classification: "security",
+      disclosureLevel: "restricted",
+    }).catch(() => {});
     return fbSignOut(auth);
   }
 
@@ -155,7 +239,7 @@ export function AuthProvider({ children }) {
       error,
       signOut,
     }),
-    [user, profile, role, capabilities, displayName, isAdmin, platformMode, loading, profileLoading, error]
+    [user, profile, role, capabilities, moduleToggles, displayName, isAdmin, platformMode, loading, profileLoading, error]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

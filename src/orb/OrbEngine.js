@@ -13,7 +13,7 @@ import { approvedIntentChoices } from './clinicalIntentCatalog';
 import { TrustPolicy } from './TrustPolicy';
 
 export class OrbEngine {
-  constructor({ provider = getPrimovexAIProvider('mock') } = {}) {
+  constructor({ provider = getPrimovexAIProvider() } = {}) {
     this.version = ORB_CORE_VERSION;
     this.provider = provider;
     this.intent = new IntentEngine();
@@ -32,6 +32,19 @@ export class OrbEngine {
     const context = this.context.build({ ...rawContext, conversation });
     const request = createOrbRequest({ input, inputType, context, conversation });
     if (!request.input) throw new Error('Orb requires a request.');
+
+    // Providers that can route for themselves (a real LLM doing its own
+    // tool-use planning) see every request directly — the old regex
+    // classifier below only ever forwarded requests it had already matched,
+    // so a provider capable of understanding novel phrasing never got a
+    // chance to prove it. Providers without that capability (the mock
+    // provider) keep the original classify-first behaviour, including the
+    // structured clarification/learning flow, since they have no other way
+    // to handle an unmatched phrase.
+    if (this.provider.handlesRouting) {
+      const raw = await this.provider.ask({ prompt: request.input, toolContext: context, conversation });
+      return this._finaliseResponse({ raw, request, context, startedAt, fallbackIntent: 'llm.response' });
+    }
 
     const classified = this.intent.classify(request.input, context);
     if (!classified.toolId) {
@@ -56,17 +69,21 @@ export class OrbEngine {
       return { ...response, auditId };
     }
     const raw = await this.provider.ask({ prompt: request.input, toolContext: context, orbIntent: classified });
+    return this._finaliseResponse({ raw, request, context, startedAt, fallbackIntent: classified.id });
+  }
+
+  _finaliseResponse({ raw, request, context, startedAt, fallbackIntent }) {
     const providerResponse = assertProviderResponse(raw);
     const confidence = this.confidence.normalise(providerResponse.confidence);
 
     let response = createOrbResponse({
       ...providerResponse,
-      intent: providerResponse.intent || classified.id,
+      intent: providerResponse.intent || fallbackIntent,
       confidence,
       confidenceBand: this.confidence.band(confidence),
       warnings: raw.warnings || [],
       evidence: raw.evidence || providerResponse.sources,
-      modulesUsed: this.knowledge.modulesForIntent(providerResponse.intent || classified.id),
+      modulesUsed: this.knowledge.modulesForIntent(providerResponse.intent || fallbackIntent),
       explanation: raw.explanation || null,
       data: raw.data ?? null,
       freshness: raw.freshness || null,

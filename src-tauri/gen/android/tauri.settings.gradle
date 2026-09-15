@@ -5,3 +5,5 @@ include ':tauri-plugin-barcode-scanner'
 project(':tauri-plugin-barcode-scanner').projectDir = new File("C:\\Users\\gwynh\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\tauri-plugin-barcode-scanner-2.4.5\\android")
 include ':tauri-plugin-deep-link'
 project(':tauri-plugin-deep-link').projectDir = new File("C:\\Users\\gwynh\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\tauri-plugin-deep-link-2.4.9\\android")
+include ':tauri-plugin-opener'
+project(':tauri-plugin-opener').projectDir = new File("C:\\Users\\gwynh\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\tauri-plugin-opener-2.5.4\\android")

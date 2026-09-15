@@ -12,6 +12,8 @@ import {
   createStockItem,
   updateStockItem,
   applyStockMovement,
+  assignStockToLocation,
+  unassignStockFromLocation,
 } from "../services/stockService";
 
 function useStockImpl(options = {}) {
@@ -59,6 +61,9 @@ function useStockImpl(options = {}) {
       supplier_name: meta?.supplier_name || "",
       purchase_order_id: meta?.purchase_order_id || "",
       po_number: meta?.po_number || "",
+      locationId: meta?.locationId || null,
+      locationName: meta?.locationName || null,
+      locationType: meta?.locationType || null,
     });
   };
 
@@ -69,7 +74,18 @@ function useStockImpl(options = {}) {
       actor: meta?.actor || null,
       reason: meta?.reason || null,
       notes: meta?.notes || null,
+      locationId: meta?.locationId || null,
+      locationName: meta?.locationName || null,
+      locationType: meta?.locationType || null,
     });
+  };
+
+  const assignLocation = async (id, { locationId, locationName, locationType, quantity }, meta = {}) => {
+    return assignStockToLocation(id, { locationId, locationName, locationType, quantity }, meta?.actor || null);
+  };
+
+  const unassignLocation = async (id, locationId, quantity, meta = {}) => {
+    return unassignStockFromLocation(id, locationId, quantity, meta?.actor || null);
   };
 
   useEffect(() => {
@@ -149,6 +165,8 @@ function useStockImpl(options = {}) {
     updateItem,
     receiveStock,
     useStockQty,
+    assignLocation,
+    unassignLocation,
   };
 }
 

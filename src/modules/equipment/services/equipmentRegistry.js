@@ -1,10 +1,34 @@
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase';
 import { defaultEquipment } from '@/modules/facilities/data/defaultFacilities';
 import { defaultAssetPassports } from '@/modules/sense/data/defaultSense';
 
 const KEY = 'primovex.equipmentRegistry.v1';
 const FACILITIES_KEYS = ['primovex.facilities.v3', 'primovex.facilities.v2'];
 const SENSE_KEY = 'primovex.sense.v1';
+const REMOTE_COLLECTION = 'equipment_registry';
+const REMOTE_DOCUMENT = 'primary';
 const clone = (value) => JSON.parse(JSON.stringify(value));
+
+// Real, cross-device equipment registry. This was localStorage-only (per
+// browser/device), so equipment added or linked to a Tuya sensor on one
+// device — the desktop, say — was invisible everywhere else, including the
+// phone that's meant to scan its NFC tag. Mirrors sharedSpaceRegistry.js's
+// pattern exactly: reads/writes stay synchronous against a local cache (this
+// function has dozens of call sites that can't all become async), and a
+// debounced background push keeps Firestore in sync. subscribeToSharedEquipmentRegistry
+// (called once, from EquipmentRegistrySync.jsx) pulls remote changes back in.
+let remoteWriteTimer = null;
+let applyingRemote = false;
+
+function isAndroidClient() {
+  return document.documentElement.dataset.primovexClient === 'android'
+    || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+function audit(detail) {
+  try { window.dispatchEvent(new CustomEvent('primovex:governed-audit', { detail })); } catch { /* local registry remains available offline */ }
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -49,6 +73,17 @@ function normaliseEquipment(input = {}, fallback = {}) {
       qrCode: identity.qrCode || input.qrCode || '',
       nfcTagId: identity.nfcTagId || input.nfcTagId || '',
     },
+    // Cheap BLE beacon tags (e.g. the DX-CP35) can't be reconfigured to
+    // broadcast a Primovex URL directly — Eddystone-URL's ~17-byte payload
+    // limit after compression can't fit our URLs. Instead we bind the tag's
+    // existing iBeacon identity (UUID is shared per batch, Major/Minor are
+    // per-tag) straight to the equipment record; see MobileFridgeSheet.jsx's
+    // "Link this BLE tag" flow.
+    bleTag: input.bleTag === null
+      ? null
+      : input.bleTag?.uuid
+        ? { uuid: String(input.bleTag.uuid).toLowerCase(), major: Number(input.bleTag.major), minor: Number(input.bleTag.minor) }
+        : (fallback.bleTag || null),
     tracking: {
       provider: tracking.provider || input.trackerProvider || 'none',
       trackerId: tracking.trackerId || input.trackerId || '',
@@ -119,6 +154,23 @@ function initialRegistry() {
   };
 }
 
+function remotePayload(registry) {
+  return { ...registry, updatedByUid: auth.currentUser?.uid || null, sourceClient: isAndroidClient() ? 'android' : 'desktop' };
+}
+
+async function pushRegistryToFirestore(registry) {
+  if (!auth.currentUser || applyingRemote) return;
+  await setDoc(doc(db, REMOTE_COLLECTION, REMOTE_DOCUMENT), remotePayload(registry));
+}
+
+function queueRemoteWrite(registry) {
+  if (!auth.currentUser || applyingRemote) return;
+  window.clearTimeout(remoteWriteTimer);
+  remoteWriteTimer = window.setTimeout(() => pushRegistryToFirestore(registry).catch((error) => {
+    console.error('Unable to sync Equipment Registry to Firestore', error);
+  }), 350);
+}
+
 export function loadEquipmentRegistry() {
   try {
     const raw = localStorage.getItem(KEY);
@@ -152,11 +204,64 @@ export function saveEquipmentRegistry(registry, source = 'equipment-registry') {
   };
   localStorage.setItem(KEY, JSON.stringify(payload));
   window.dispatchEvent(new CustomEvent('primovex:equipment-registry-changed', { detail: { revision: payload.revision, source } }));
+  if (source !== 'remote-sync') queueRemoteWrite(payload);
   return payload;
+}
+
+export function subscribeToSharedEquipmentRegistry(onStatus) {
+  if (!auth.currentUser) return () => {};
+  const reference = doc(db, REMOTE_COLLECTION, REMOTE_DOCUMENT);
+  return onSnapshot(reference, async (snapshot) => {
+    const local = loadEquipmentRegistry();
+    if (!snapshot.exists()) {
+      if (!isAndroidClient() && local.equipment.length > 0) {
+        try { await pushRegistryToFirestore(local); onStatus?.({ state: 'published' }); }
+        catch (error) { onStatus?.({ state: 'error', error }); }
+      } else onStatus?.({ state: 'waiting-for-registry' });
+      return;
+    }
+
+    const remote = snapshot.data();
+    const remoteRevision = Number(remote.revision || 0);
+    const localRevision = Number(local.revision || 0);
+    const remoteTime = Date.parse(remote.updatedAt || 0) || 0;
+    const localTime = Date.parse(local.updatedAt || 0) || 0;
+
+    // Firestore is authoritative once it exists — a local cache can only
+    // publish automatically when it has a strictly newer revision (same
+    // conflict rule sharedSpaceRegistry.js already uses for spaces).
+    const safeLocalPublish = !isAndroidClient()
+      && local.equipment.length > 0
+      && localRevision > remoteRevision
+      && localTime > remoteTime + 1000;
+
+    if (safeLocalPublish) {
+      try { await pushRegistryToFirestore(local); onStatus?.({ state: 'published-newer-revision' }); }
+      catch (error) { onStatus?.({ state: 'error', error }); }
+      return;
+    }
+
+    applyingRemote = true;
+    try {
+      const applied = saveEquipmentRegistry(remote, 'remote-sync');
+      onStatus?.({ state: 'synced', registry: applied });
+    } finally { applyingRemote = false; }
+  }, (error) => {
+    console.error('Equipment Registry Firestore subscription failed', error);
+    onStatus?.({ state: 'error', error });
+  });
 }
 
 export function listEquipment() {
   return loadEquipmentRegistry().equipment;
+}
+
+export function findEquipmentByBleTag(uuid, major, minor) {
+  const needle = String(uuid || '').toLowerCase();
+  const majorNum = Number(major);
+  const minorNum = Number(minor);
+  if (!needle || !Number.isFinite(majorNum) || !Number.isFinite(minorNum)) return null;
+  return listEquipment().find((item) => item.bleTag?.uuid === needle && item.bleTag?.major === majorNum && item.bleTag?.minor === minorNum) || null;
 }
 
 export function upsertEquipment(input, source = 'equipment-wizard') {
@@ -165,12 +270,14 @@ export function upsertEquipment(input, source = 'equipment-wizard') {
   if (!id) throw new Error('equipmentId is required');
   const existing = registry.equipment.find((item) => item.id === id);
   const equipment = normaliseEquipment({ ...existing, ...input, id, equipmentId: id }, existing);
-  return saveEquipmentRegistry({
+  const saved = saveEquipmentRegistry({
     ...registry,
     equipment: existing
       ? registry.equipment.map((item) => item.id === id ? equipment : item)
       : [equipment, ...registry.equipment],
   }, source);
+  audit({ action: existing ? 'equipment.update' : 'equipment.register', module: 'equipment', targetType: 'equipment', targetId: id, summary: existing ? 'Equipment registry record updated' : 'Equipment registered', metadata: { source, equipmentType: equipment.equipmentType, spaceId: equipment.currentSpaceId || '', assignmentType: equipment.assignment?.type || 'unassigned' } });
+  return saved;
 }
 
 export function moveEquipmentInRegistry(equipmentId, spaceId, actor = 'Signed-in user') {
@@ -178,7 +285,7 @@ export function moveEquipmentInRegistry(equipmentId, spaceId, actor = 'Signed-in
   const existing = registry.equipment.find((item) => item.id === equipmentId);
   if (!existing || existing.currentSpaceId === spaceId) return registry;
   const movedAt = nowIso();
-  return saveEquipmentRegistry({
+  const saved = saveEquipmentRegistry({
     ...registry,
     equipment: registry.equipment.map((item) => item.id === equipmentId
       ? normaliseEquipment({ ...item, currentSpaceId: spaceId, roomId: spaceId, lastConfirmedAt: movedAt, lastConfirmedBy: actor })
@@ -192,6 +299,8 @@ export function moveEquipmentInRegistry(equipmentId, spaceId, actor = 'Signed-in
       movedBy: actor,
     }, ...(registry.movements || [])],
   }, 'equipment-movement');
+  audit({ action: 'equipment.move', module: 'equipment', targetType: 'equipment', targetId: equipmentId, summary: 'Equipment location changed', metadata: { fromSpaceId: existing.currentSpaceId || '', toSpaceId: spaceId || '' } });
+  return saved;
 }
 
 export function equipmentToFacilitiesItem(item) {

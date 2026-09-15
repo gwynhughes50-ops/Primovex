@@ -1,4 +1,4 @@
-import { ClipboardCheck, Package, ScanLine, Sparkles, SprayCan, Stethoscope, Thermometer, Wrench } from "lucide-react";
+import { ClipboardCheck, Package, ScanLine, ShieldAlert, Sparkles, SprayCan, Stethoscope, Thermometer, Wrench } from "lucide-react";
 
 const normalise = (value = "") => String(value).trim().toLowerCase();
 
@@ -65,6 +65,7 @@ export function getMobilePersona(role, capabilities = []) {
         { key: "room", label: "Spaces", helper: "Practice context", Icon: ScanLine },
         { key: "checks", label: "Compliance", helper: "Outstanding work", Icon: ClipboardCheck },
         { key: "temperature", label: "Temperature", helper: "Cold-chain status", Icon: Thermometer },
+        { key: "concerns", label: "Concerns", helper: "Listening to People", Icon: ShieldAlert },
       ],
     };
   }

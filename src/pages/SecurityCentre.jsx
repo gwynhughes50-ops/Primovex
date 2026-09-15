@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Icons } from "@/config/medtrakIcons";
 import ReleaseUpdateCard from "@/release/ReleaseUpdateCard";
 import PrimovexHero from "@/components/common/PrimovexHero";
 import { ASSURANCE_PROFILES, CLINICAL_GOVERNANCE_REQUIREMENTS, getAssuranceProfile, getClinicalGovernanceReadiness } from "@/governance/clinicalDataGate";
+import AuditLedgerPanel from "@/components/security/AuditLedgerPanel";
 
 function Metric({ label, value, note, status = "green" }) {
   const colour = status === "green" ? "text-emerald-200 bg-emerald-500/10 border-emerald-400/20" : status === "amber" ? "text-amber-100 bg-amber-500/10 border-amber-400/20" : "text-rose-100 bg-rose-500/10 border-rose-400/20";
@@ -45,11 +46,12 @@ export default function SecurityCentre() {
   const walesReadiness = useMemo(() => getAssuranceProfile("wales"), []);
   const englandReadiness = useMemo(() => getAssuranceProfile("england"), []);
   const canManageSecurity = can?.("admin.manageSettings") || can?.("admin.manageUsers");
+  const [auditOpen, setAuditOpen] = useState(false);
 
   const exportReadiness = () => {
     const payload = {
       product: "Primovex",
-      version: "0.15.37",
+      version: "0.15.41",
       generatedAt: new Date().toISOString(),
       clinicalDataMode: clinicalReadiness.mode,
       liveClinicalDataAllowed: false,
@@ -62,7 +64,7 @@ export default function SecurityCentre() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `primovex-v0.15.37-clinflow-numbered-pages-layout-repair-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `primovex-v0.15.41-governed-audit-ledger-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -82,6 +84,8 @@ export default function SecurityCentre() {
           </div>
         }
       />
+
+      {auditOpen && <AuditLedgerPanel onClose={() => setAuditOpen(false)} />}
 
       <section className="grid gap-4 md:grid-cols-4">
         <Metric label="Clinical data" value="Locked" note="Synthetic workflows only" status="green" />
@@ -161,7 +165,7 @@ export default function SecurityCentre() {
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button onClick={exportReadiness} className="rounded-full bg-gradient-to-r from-teal-400 to-emerald-300 text-slate-950">Export dual-framework evidence</Button>
-              <Button variant="ghost" className="rounded-full border border-slate-700/70 text-slate-100">View audit events</Button>
+              <Button variant="ghost" onClick={() => setAuditOpen(true)} className="rounded-full border border-slate-700/70 text-slate-100">View audit events</Button>
               {canManageSecurity && <Button variant="ghost" onClick={() => navigate("/setup")} className="rounded-full border border-slate-700/70 text-slate-100">Reopen setup</Button>}
             </div>
           </CardContent>

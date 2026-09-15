@@ -27,9 +27,12 @@ assert(requestedAction.decision === "workflow_required", "An explicit practice a
 assert(requestedAction.workflowDecision.stillNeedsWorkflow === "Yes", "Action correspondence must say workflow is still required.");
 assert(requestedAction.nfwf.blockers.length > 0, "Action correspondence must carry NFWF blockers.");
 
-const medicineChange = triage("Bisoprolol was increased. Please reconcile medicines.", { medicines: [{ value: "Bisoprolol increased" }], medicationChanged: true });
+const medicineChange = triage("Bisoprolol was increased. Please reconcile medicines.", { medicines: [{ value: "Bisoprolol increased" }], medicationChanged: true, diagnoses: [] });
 assert(medicineChange.decision === "workflow_required", "A medicine change must require workflow.");
-assert(medicineChange.destination === "Pharmacist", "A medicine change should suggest the pharmacist route.");
+assert(medicineChange.destination === "Pharmacist", "A medicine-only letter with no other clinical complexity should suggest the pharmacist route.");
+
+const medicineChangeWithDiagnosis = triage("New diagnosis confirmed. Bisoprolol was increased. Please reconcile medicines.", { medicines: [{ value: "Bisoprolol increased" }], medicationChanged: true });
+assert(medicineChangeWithDiagnosis.destination === "GP", "A medicine change alongside a real diagnosis should route to GP, not be pulled straight to Pharmacist.");
 
 const safeguarding = triage("Safeguarding concern. Same-day review is required.");
 assert(safeguarding.decision === "urgent", "Safeguarding language must produce an urgent suggestion.");

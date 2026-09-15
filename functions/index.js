@@ -9,6 +9,11 @@ const { syncProvider } = require("./services/deviceSyncService");
 const { publishEvent } = require("./services/eventBus");
 const { getSyntheticPackDocument } = require("./config/clinflowSyntheticPack");
 const { API_VERSION, MODEL_ID, analyzeDocument, summariseAnalyzeResult } = require("./services/azureDocumentIntelligenceService");
+const { extractClinicalFacts } = require("./services/azureOpenAiExtractionService");
+const { appendGovernedAuditEvent } = require("./services/governedAuditService");
+const { reportRoomIssue } = require("./services/roomIssueService");
+const { recordSensePresenceTap } = require("./services/sensePresenceService");
+const { createUserAccount } = require("./services/userAccountService");
 
 initializeApp();
 const db = getFirestore();
@@ -21,6 +26,9 @@ const TUYA_SECRETS = [
 
 const AZURE_DOCUMENT_INTELLIGENCE_KEY = defineSecret("AZURE_DOCUMENT_INTELLIGENCE_KEY");
 const AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT = defineSecret("AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT");
+const AZURE_OPENAI_KEY = defineSecret("AZURE_OPENAI_KEY");
+const AZURE_OPENAI_ENDPOINT = defineSecret("AZURE_OPENAI_ENDPOINT");
+const AZURE_OPENAI_DEPLOYMENT = defineSecret("AZURE_OPENAI_DEPLOYMENT");
 const CLINFLOW_MAX_DOCUMENT_BYTES = 4 * 1024 * 1024;
 
 function assertSignedIn(request) {
@@ -35,6 +43,14 @@ async function assertConnectManager(request) {
   const data = profile.data() || {};
   const permitted = data.role === "System Admin" || data.permissions?.connect?.manageDevices === true;
   if (!permitted) throw new HttpsError("permission-denied", "Connect device management permission is required.");
+}
+
+async function assertAdmin(request) {
+  assertSignedIn(request);
+  const profile = await db.collection("users").doc(request.auth.uid).get();
+  const data = profile.data() || {};
+  const permitted = data.role === "System Admin" || data.permissions?.admin?.access === true;
+  if (!permitted) throw new HttpsError("permission-denied", "Admin access is required.");
 }
 
 function hasProfileCapability(profile, capability) {
@@ -53,6 +69,23 @@ async function requireClinFlowCapture(request) {
   return profile;
 }
 
+exports.recordGovernedAuditEvent = onCall(
+  { region: "europe-west2", timeoutSeconds: 15, memory: "256MiB" },
+  async (request) => {
+    assertSignedIn(request);
+    const profileSnapshot = await db.collection("users").doc(request.auth.uid).get();
+    if (!profileSnapshot.exists) {
+      throw new HttpsError("failed-precondition", "A Primovex user profile is required for governed audit logging.");
+    }
+    return appendGovernedAuditEvent({
+      db,
+      auth: request.auth,
+      data: request.data,
+      profile: profileSnapshot.data() || {},
+    });
+  }
+);
+
 function decodeApprovedSyntheticPdf(data) {
   if (data?.dataMode !== "synthetic" || data?.syntheticAttestation !== true) {
     throw new HttpsError("failed-precondition", "Confirm that this is synthetic test data before analysis.");
@@ -68,15 +101,9 @@ function decodeApprovedSyntheticPdf(data) {
   if (!bytes.length || bytes.length > CLINFLOW_MAX_DOCUMENT_BYTES || bytes.subarray(0, 5).toString("ascii") !== "%PDF-") {
     throw new HttpsError("invalid-argument", "Only a valid PDF up to 4 MB can be analysed.");
   }
-  const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
-  const packDocument = getSyntheticPackDocument(sha256);
-  if (!packDocument) {
-    throw new HttpsError(
-      "failed-precondition",
-      "This foundation release accepts only the approved Primovex synthetic hospital test pack."
-    );
-  }
-  return { base64, bytes, sha256, packDocument };
+   const sha256 = crypto.createHash("sha256").update(bytes).digest("hex");
+  const packDocument = getSyntheticPackDocument(sha256) || { id: "attested-upload", title: "Attested anonymised document", expected: [] };
+  return { base64, bytes, sha256, packDocument, isKnownPackDocument: Boolean(getSyntheticPackDocument(sha256)) };
 }
 
 function safeFileName(value) {
@@ -110,7 +137,7 @@ exports.analyzeSyntheticClinFlowDocument = onCall(
     memory: "512MiB",
     maxInstances: 1,
     concurrency: 1,
-    secrets: [AZURE_DOCUMENT_INTELLIGENCE_KEY, AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT],
+    secrets: [AZURE_DOCUMENT_INTELLIGENCE_KEY, AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT, AZURE_OPENAI_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT],
   },
   async (request) => {
     const profile = await requireClinFlowCapture(request);
@@ -147,6 +174,25 @@ exports.analyzeSyntheticClinFlowDocument = onCall(
         base64Source: decoded.base64,
       });
       const result = summariseAnalyzeResult(providerResult, decoded.packDocument);
+      // The 5 bundled sample letters already have a hand-verified extraction
+      // path client-side (ClinFlow's known-answer demo). Anything else is a
+      // real attested document with no pre-written answers, so this is where
+      // actual document understanding happens — everything it returns is
+      // still routed through ClinFlow's existing "suggestion only, human
+      // review required" workflow, unchanged.
+      if (!decoded.isKnownPackDocument) {
+        try {
+          result.llmExtraction = await extractClinicalFacts({
+            endpoint: AZURE_OPENAI_ENDPOINT.value(),
+            key: AZURE_OPENAI_KEY.value(),
+            deployment: AZURE_OPENAI_DEPLOYMENT.value(),
+            ocrText: result.content,
+          });
+        } catch (extractionError) {
+          console.error("ClinFlow LLM extraction failed", { eventId: eventRef.id, message: extractionError?.message });
+          result.llmExtractionError = extractionError?.message || "Extraction was unavailable.";
+        }
+      }
       await eventRef.set({
         status: "succeeded",
         pageCount: result.pageCount,
@@ -212,6 +258,56 @@ exports.ingestConnectReading = onCall({ region: "europe-west2" }, async (request
     severity: "info",
   });
   return { ok: true };
+});
+
+exports.reportRoomIssue = onCall({ region: "europe-west2" }, async (request) => {
+  assertSignedIn(request);
+  const { roomId, roomName, note } = request.data || {};
+  if (!String(note || "").trim()) {
+    throw new HttpsError("invalid-argument", "Add a short note describing the issue.");
+  }
+  const profileSnap = await db.collection("users").doc(request.auth.uid).get();
+  const profile = profileSnap.data() || {};
+  const practiceId = profile.practiceId || profile.organisationId || profile.organizationId || null;
+  const reporterName = profile.displayName || request.auth.token?.name || request.auth.token?.email || "Cleaning team";
+
+  const result = await reportRoomIssue(db, {
+    roomId,
+    roomName,
+    note: String(note).trim(),
+    reporterUid: request.auth.uid,
+    reporterName,
+    practiceId,
+  });
+
+  if (!result.notifiedCount) {
+    throw new HttpsError("failed-precondition", "No Caretaker or Practice Manager is set up to receive this yet — ask an admin to add one in Practice Admin.");
+  }
+  return result;
+});
+
+// Called by the invisible native NfcSightingActivity (Android) when a Sense
+// room tag is tapped with Primovex closed, using a cached ID token rather
+// than a live client SDK session — see AuthContext.jsx's onIdTokenChanged
+// bridge and NfcSightingActivity.kt.
+exports.recordSensePresenceTap = onCall({ region: "europe-west2", timeoutSeconds: 15, memory: "256MiB" }, async (request) => {
+  assertSignedIn(request);
+  const profileSnapshot = await db.collection("users").doc(request.auth.uid).get();
+  if (!profileSnapshot.exists) {
+    throw new HttpsError("failed-precondition", "A Primovex user profile is required to record a location.");
+  }
+  return recordSensePresenceTap({
+    db,
+    auth: request.auth,
+    data: request.data,
+    profile: profileSnapshot.data() || {},
+  });
+});
+
+exports.createUserAccount = onCall({ region: "europe-west2" }, async (request) => {
+  await assertAdmin(request);
+  const { displayName, email, role } = request.data || {};
+  return createUserAccount({ displayName, email, role, creatorUid: request.auth.uid });
 });
 
 exports.scheduledConnectSimulatorSync = onSchedule(
