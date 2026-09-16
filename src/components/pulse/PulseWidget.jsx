@@ -320,7 +320,7 @@ export default function PulseWidget({ variant = 'desktop' }) {
   const showPreview = hovered && !dragging && variant !== 'mobile' && !state.expanded;
 
   return (
-    <div ref={widgetRef} className="fixed z-[90] select-none" style={positionStyle}>
+    <div ref={widgetRef} className="fixed z-40 select-none" style={positionStyle}>
       <div
         ref={orbRef}
         role="button"
@@ -417,13 +417,13 @@ export default function PulseWidget({ variant = 'desktop' }) {
       </div>
 
       {showHint && (
-        <div className="absolute left-1/2 top-[calc(100%+10px)] z-[95] w-56 -translate-x-1/2 rounded-2xl border px-3 py-2 text-center text-xs shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
+        <div className="absolute left-1/2 top-[calc(100%+10px)] z-[45] w-56 -translate-x-1/2 rounded-2xl border px-3 py-2 text-center text-xs shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
           Drag anywhere · Double-click to open
         </div>
       )}
 
       {showPreview && (
-        <div className="absolute left-1/2 top-[calc(100%+10px)] z-[95] w-56 -translate-x-1/2 rounded-2xl border p-3 shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
+        <div className="absolute left-1/2 top-[calc(100%+10px)] z-[45] w-56 -translate-x-1/2 rounded-2xl border p-3 shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-[0.18em] mt-pulse-muted">Pulse</span>
             <span className="text-xs font-bold" style={{ color: tone.accent }}>{tone.label}</span>
@@ -455,7 +455,7 @@ export default function PulseWidget({ variant = 'desktop' }) {
       )}
 
       {state.expanded && variant === 'mobile' && (
-        <div className="fixed inset-x-3 bottom-20 top-16 z-[100] flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-xl mt-pulse-panel mt-pulse-text">
+        <div className="fixed inset-x-3 bottom-20 top-16 z-[49] flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-xl mt-pulse-panel mt-pulse-text">
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pr-3 [scrollbar-gutter:stable]">
             <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} theme={theme} primovexAI={primovexAI} compact />
           </div>
@@ -475,7 +475,7 @@ export default function PulseWidget({ variant = 'desktop' }) {
 function PulseDrawer({ side, pulse, score, tone, band, state, updateState, resetPosition, navigate, theme, primovexAI }) {
   const sideClass = side === 'left' ? 'right-[calc(100%+14px)]' : 'left-[calc(100%+14px)]';
   return (
-    <div className={`absolute top-0 z-[92] flex max-h-[min(82dvh,760px)] w-[min(92vw,430px)] flex-col overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-xl mt-pulse-panel mt-pulse-text ${sideClass}`}>
+    <div className={`absolute top-0 z-[42] flex max-h-[min(82dvh,760px)] w-[min(92vw,430px)] flex-col overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-xl mt-pulse-panel mt-pulse-text ${sideClass}`}>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pr-3 [scrollbar-gutter:stable]">
         <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} theme={theme} primovexAI={primovexAI} />
       </div>
