@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { ROLE_TEMPLATES } from "@/core/identity/capabilities";
 import { createUserAccount } from "@/services/adminUserService";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ROLE_HINTS = {
   "System Admin": "Full platform access, including user management and destructive actions.",
@@ -35,7 +36,7 @@ const ROLE_HINTS = {
   ReadOnly: "Can view stock and logs, cannot edit.",
 };
 
-const roles = Object.keys(ROLE_TEMPLATES).map((name) => ({
+const builtInRoles = Object.keys(ROLE_TEMPLATES).map((name) => ({
   value: name,
   label: name,
   hint: ROLE_HINTS[name] || `${name} capability template.`,
@@ -47,6 +48,19 @@ function isValidEmail(email) {
 
 export default function AddUser() {
   const navigate = useNavigate();
+  const { customRoles } = useAuth();
+
+  const roles = useMemo(
+    () => [
+      ...builtInRoles,
+      ...customRoles.map((r) => ({
+        value: r.name,
+        label: r.name,
+        hint: r.description || `${r.name} custom role.`,
+      })),
+    ],
+    [customRoles]
+  );
 
   const [form, setForm] = useState({
     displayName: "",
@@ -61,7 +75,7 @@ export default function AddUser() {
 
   const roleMeta = useMemo(
     () => roles.find((r) => r.value === form.role) || roles[0],
-    [form.role]
+    [form.role, roles]
   );
 
   const canSubmit = useMemo(() => {

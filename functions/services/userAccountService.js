@@ -29,7 +29,17 @@ async function createUserAccount({ displayName, email, role, creatorUid }) {
   const cleanEmail = String(email || "").trim().toLowerCase();
   if (!cleanName) throw new HttpsError("invalid-argument", "Enter a display name.");
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) throw new HttpsError("invalid-argument", "Enter a valid email address.");
-  if (!VALID_ROLES.includes(role)) throw new HttpsError("invalid-argument", `Unknown role "${role}".`);
+
+  const db = getFirestore();
+
+  if (!VALID_ROLES.includes(role)) {
+    // Not a built-in role — check the admin-defined roles collection
+    // (see AdminDashboard.jsx's Add Role) before rejecting it.
+    const customRole = await db.collection("roles").doc(String(role || "")).get();
+    if (!customRole.exists || customRole.data()?.active === false) {
+      throw new HttpsError("invalid-argument", `Unknown role "${role}".`);
+    }
+  }
 
   const auth = getAuth();
   let userRecord;
@@ -42,7 +52,6 @@ async function createUserAccount({ displayName, email, role, creatorUid }) {
     throw new HttpsError("internal", error.message || "Could not create the account.");
   }
 
-  const db = getFirestore();
   await db.collection("users").doc(userRecord.uid).set({
     displayName: cleanName,
     email: cleanEmail,

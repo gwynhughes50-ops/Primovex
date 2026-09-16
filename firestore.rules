@@ -215,6 +215,15 @@ match /practice_config/{docId} {
 }
 
 // -------------------------
+// CUSTOM ROLES (admin-defined, on top of the built-in ROLE_TEMPLATES)
+// -------------------------
+match /roles/{roleId} {
+  allow get, list: if signedIn();
+  allow create, update: if isAdmin();
+  allow delete: if isAdmin();
+}
+
+// -------------------------
 // PRACTICE SITES
 // -------------------------
 match /practice_sites/{siteId} {

@@ -57,7 +57,7 @@ import { loadSenseState, saveSenseState } from "@/modules/sense/services/senseSt
 import { loadFacilitiesState } from "@/modules/facilities/services/facilitiesStore";
 
 // ✅ Firestore activity feed
-import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { CAPABILITY_CATALOG, ROLE_TEMPLATES } from "@/core/identity/capabilities";
 import { useAuth } from "@/contexts/AuthContext";
@@ -96,14 +96,6 @@ const defaultRoles = Object.entries(ROLE_TEMPLATES).map(([name, permissions]) =>
 
 // Capability catalogue drives Role Builder and keeps permissions consistent.
 const PERMISSIONS = CAPABILITY_CATALOG;
-
-function slugifyRole(name) {
-  return String(name || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
 
 function makeId(prefix = "id") {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -205,7 +197,7 @@ function prettyPermissions(perms = []) {
 }
 
 export default function AdminDashboard() {
-  const { isAdmin, loading: authLoading, can, displayName, user } = useAuth();
+  const { isAdmin, loading: authLoading, can, displayName, user, customRoles: liveCustomRoles } = useAuth();
 
   const { totalItems, lowStockItems, loading: stockLoading } = useStockSummary();
 
@@ -274,8 +266,23 @@ export default function AdminDashboard() {
     return () => unsub?.();
   }, []);
 
-  // Roles (stateful)
-  const [roles, setRoles] = useState(defaultRoles);
+  // Roles: built-in templates (hardcoded, from ROLE_TEMPLATES) plus any
+  // admin-created roles, live from Firestore via AuthContext's "roles"
+  // subscription — see capabilities.js/getCapabilitiesForProfile for how
+  // these feed into actual permission checks app-wide.
+  const roles = useMemo(
+    () => [
+      ...defaultRoles,
+      ...liveCustomRoles.map((r) => ({
+        id: r.id,
+        name: r.name,
+        description: r.description || `${r.name} custom role.`,
+        permissions: r.capabilities || [],
+        protected: false,
+      })),
+    ],
+    [liveCustomRoles]
+  );
   const [isAddRoleOpen, setIsAddRoleOpen] = useState(false);
   const [newRole, setNewRole] = useState({
     name: "",
@@ -328,34 +335,45 @@ export default function AdminDashboard() {
     }
   };
 
-  const addRole = () => {
+  const [addRoleError, setAddRoleError] = useState("");
+  const [addRoleBusy, setAddRoleBusy] = useState(false);
+
+  const addRole = async () => {
     const name = newRole.name.trim();
+    setAddRoleError("");
     if (!name) return;
 
     if (name.toLowerCase().includes("admin")) {
-      alert("Admin roles are protected. Create non-admin roles only.");
+      setAddRoleError("Admin roles are protected. Create non-admin roles only.");
       return;
     }
     if (roles.some((r) => r.name.toLowerCase() === name.toLowerCase())) {
-      alert("Role already exists.");
+      setAddRoleError("Role already exists.");
       return;
     }
 
-    const id = `role-${slugifyRole(name) || Date.now()}`;
-
-    setRoles((prev) => [
-      ...prev,
-      {
-        id,
+    setAddRoleBusy(true);
+    try {
+      // Doc id is the exact role name — every other place that reads this
+      // collection (createUserAccount Cloud Function, AddUser's dropdown)
+      // looks a role up by that same name, so no separate slug/id mapping.
+      await setDoc(doc(db, "roles", name), {
         name,
         description: newRole.description.trim(),
-        permissions: newRole.permissions,
-        protected: false,
-      },
-    ]);
+        capabilities: newRole.permissions,
+        builtIn: false,
+        createdAt: serverTimestamp(),
+        createdByUid: user?.uid || null,
+        active: true,
+      });
 
-    setNewRole({ name: "", description: "", permissions: ["inventory.read"] });
-    setIsAddRoleOpen(false);
+      setNewRole({ name: "", description: "", permissions: ["inventory.read"] });
+      setIsAddRoleOpen(false);
+    } catch (error) {
+      setAddRoleError(error?.message || "Could not save this role.");
+    } finally {
+      setAddRoleBusy(false);
+    }
   };
 
   const toggleDeleteCheck = (id) => {
@@ -730,7 +748,7 @@ export default function AdminDashboard() {
                         Roles & Permissions
                       </CardTitle>
                       <CardDescription className="text-slate-300/80">
-                        Scaffold roles list (later: store roles in Firestore).
+                        Built-in roles plus any custom roles your practice has created.
                       </CardDescription>
                     </div>
                     <Button
@@ -983,12 +1001,20 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            {addRoleError && (
+              <div className="mx-5 rounded-xl border border-rose-500/25 bg-rose-500/10 p-3 text-xs text-rose-100">
+                {addRoleError}
+              </div>
+            )}
+
             <div className="flex justify-end gap-2 p-5 pt-4 border-t border-slate-800/70">
               <Button
                 variant="outline"
                 className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
+                disabled={addRoleBusy}
                 onClick={() => {
                   setNewRole({ name: "", description: "", permissions: ["inventory.read"] });
+                  setAddRoleError("");
                   setIsAddRoleOpen(false);
                 }}
               >
@@ -996,9 +1022,10 @@ export default function AdminDashboard() {
               </Button>
               <Button
                 className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30"
+                disabled={addRoleBusy}
                 onClick={addRole}
               >
-                Save
+                {addRoleBusy ? "Saving…" : "Save"}
               </Button>
             </div>
           </div>

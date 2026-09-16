@@ -366,9 +366,13 @@ function flattenProfilePermissions(profile) {
   return flattened;
 }
 
-export function getCapabilitiesForProfile(profile) {
+// customRoleCapabilities: { [roleName]: capabilityId[] }, admin-defined roles
+// loaded live from Firestore (see AuthContext's "roles" subscription) — kept
+// as a plain argument rather than importing Firestore here so this stays a
+// framework-agnostic pure function.
+export function getCapabilitiesForProfile(profile, customRoleCapabilities = {}) {
   const role = profile?.role || "ReadOnly";
-  const roleCapabilities = ROLE_TEMPLATES[role] || ROLE_TEMPLATES.User || [];
+  const roleCapabilities = ROLE_TEMPLATES[role] || customRoleCapabilities[role] || ROLE_TEMPLATES.User || [];
   const profileCapabilities = flattenProfilePermissions(profile);
   const merged = new Set([...roleCapabilities, ...profileCapabilities]);
   return Array.from(merged);

@@ -1,7 +1,7 @@
 // src/contexts/AuthContext.jsx
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, onIdTokenChanged, signOut as fbSignOut } from "firebase/auth";
-import { doc, onSnapshot } from "firebase/firestore";
+import { collection, doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { getCapabilitiesForProfile, hasCapability, hasAnyCapability, CAPABILITY_CATALOG } from "@/core/identity/capabilities";
 import { getStoredPlatformMode, isSafeSyntheticMode, setPlatformMode } from "@/config/platformMode";
@@ -41,6 +41,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null); // firebase auth user or synthetic demo user
   const [profile, setProfile] = useState(null); // firestore /users/{uid} or synthetic profile
   const [moduleToggles, setModuleToggles] = useState(null); // practice_config.moduleToggles — per-module on/off with an allow-list
+  const [customRoles, setCustomRoles] = useState([]); // admin-defined roles/{roleId} docs, on top of the built-in ROLE_TEMPLATES
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
   const [error, setError] = useState("");
@@ -174,8 +175,22 @@ export function AuthProvider({ children }) {
     }, () => setModuleToggles(null));
   }, [platformMode]);
 
+  // Admin-created roles (see AdminDashboard's Add Role) — same live-subscription
+  // shape as moduleToggles above, just a collection instead of a single doc.
+  useEffect(() => {
+    if (isSafeSyntheticMode(platformMode)) { setCustomRoles([]); return undefined; }
+    return onSnapshot(collection(db, "roles"), (snap) => {
+      setCustomRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((r) => r.active !== false));
+    }, () => setCustomRoles([]));
+  }, [platformMode]);
+
+  const customRoleCapabilities = useMemo(
+    () => Object.fromEntries(customRoles.map((r) => [r.name, r.capabilities || []])),
+    [customRoles]
+  );
+
   const role = profile?.role || null;
-  const rawCapabilities = getCapabilitiesForProfile(profile);
+  const rawCapabilities = getCapabilitiesForProfile(profile, customRoleCapabilities);
   // Modules switched off (practice_config.moduleToggles) are removed from the
   // capabilities list itself — not just checked in can()/canAny() — because
   // navigation.js filters the sidebar straight off this array, bypassing
@@ -231,6 +246,7 @@ export function AuthProvider({ children }) {
       capabilities,
       can,
       canAny,
+      customRoles,
       displayName,
       isAdmin,
       platformMode,
@@ -239,7 +255,7 @@ export function AuthProvider({ children }) {
       error,
       signOut,
     }),
-    [user, profile, role, capabilities, moduleToggles, displayName, isAdmin, platformMode, loading, profileLoading, error]
+    [user, profile, role, capabilities, moduleToggles, customRoles, displayName, isAdmin, platformMode, loading, profileLoading, error]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
