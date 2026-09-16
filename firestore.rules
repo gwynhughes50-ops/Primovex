@@ -102,9 +102,13 @@ service cloud.firestore {
       // requirement rather than a general staff-directory widening.
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || hasPermission("governance", "concernsTeam"));
 
+      // Self-created profiles (the invite/register flow) may only take the
+      // lowest-privilege roles. Anything higher must go through the
+      // admin-only createUserAccount Cloud Function, which writes via the
+      // Admin SDK and bypasses these rules entirely.
       allow create: if signedIn()
         && request.auth.uid == uid
-        && request.resource.data.role in ["User", "ReadOnly", "System Admin", "Caretaker"];
+        && request.resource.data.role in ["User", "ReadOnly"];
 
       // user can update own profile but cannot change role
       allow update: if signedIn()

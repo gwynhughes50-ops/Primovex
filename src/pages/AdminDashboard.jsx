@@ -933,55 +933,57 @@ export default function AdminDashboard() {
 
       {/* Add Role Modal */}
       {isAddRoleOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800/70 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
-            <div className="text-lg font-semibold text-slate-50">Add Role</div>
-            <div className="text-xs text-slate-400 mt-1">Create a non-admin role.</div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur p-4">
+          <div className="flex w-full max-w-md max-h-[85vh] flex-col rounded-2xl border border-slate-800/70 bg-slate-900/95 shadow-2xl text-slate-100">
+            <div className="p-5 pb-0">
+              <div className="text-lg font-semibold text-slate-50">Add Role</div>
+              <div className="text-xs text-slate-400 mt-1">Create a non-admin role.</div>
 
-            <div className="mt-4 space-y-3">
-              <div>
-                <label className="text-xs text-slate-300">Role name</label>
-                <Input
-                  value={newRole.name}
-                  onChange={(e) => setNewRole((p) => ({ ...p, name: e.target.value }))}
-                  placeholder="e.g. Stock Manager"
-                />
-              </div>
+              <div className="mt-4 space-y-3">
+                <div>
+                  <label className="text-xs text-slate-300">Role name</label>
+                  <Input
+                    value={newRole.name}
+                    onChange={(e) => setNewRole((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="e.g. Stock Manager"
+                  />
+                </div>
 
-              <div>
-                <label className="text-xs text-slate-300">Description</label>
-                <Input
-                  value={newRole.description}
-                  onChange={(e) => setNewRole((p) => ({ ...p, description: e.target.value }))}
-                  placeholder="Optional"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-300">Permissions</label>
-                <div className="mt-2 space-y-2 text-sm">
-                  {PERMISSIONS.map((p) => (
-                    <label key={p.id} className="flex items-center gap-2 text-slate-200">
-                      <Checkbox
-                        checked={newRole.permissions.includes(p.id)}
-                        onCheckedChange={(v) => {
-                          setNewRole((prev) => {
-                            const next = new Set(prev.permissions);
-                            if (v) next.add(p.id);
-                            else next.delete(p.id);
-                            return { ...prev, permissions: Array.from(next) };
-                          });
-                        }}
-                      />
-                      <span className="text-slate-100">{p.label}</span>
-                      <span className="text-[11px] text-slate-400 ml-1">({p.id})</span>
-                    </label>
-                  ))}
+                <div>
+                  <label className="text-xs text-slate-300">Description</label>
+                  <Input
+                    value={newRole.description}
+                    onChange={(e) => setNewRole((p) => ({ ...p, description: e.target.value }))}
+                    placeholder="Optional"
+                  />
                 </div>
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="mt-4 flex-1 min-h-0 overflow-y-auto px-5">
+              <label className="text-xs text-slate-300">Permissions</label>
+              <div className="mt-2 space-y-2 text-sm pb-2">
+                {PERMISSIONS.map((p) => (
+                  <label key={p.id} className="flex items-center gap-2 text-slate-200">
+                    <Checkbox
+                      checked={newRole.permissions.includes(p.id)}
+                      onCheckedChange={(v) => {
+                        setNewRole((prev) => {
+                          const next = new Set(prev.permissions);
+                          if (v) next.add(p.id);
+                          else next.delete(p.id);
+                          return { ...prev, permissions: Array.from(next) };
+                        });
+                      }}
+                    />
+                    <span className="text-slate-100">{p.label}</span>
+                    <span className="text-[11px] text-slate-400 ml-1">({p.id})</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 p-5 pt-4 border-t border-slate-800/70">
               <Button
                 variant="outline"
                 className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"

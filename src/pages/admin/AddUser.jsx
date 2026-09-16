@@ -31,6 +31,7 @@ const ROLE_HINTS = {
   Reception: "Front-desk access — ClinFlow intake, governance concerns.",
   Caretaker: "Facilities access — spaces, compliance, temperature.",
   Cleaner: "The dedicated cleaning-only mobile screen — scan to start/finish, report issues.",
+  Partner: "Read-only visibility across every governance record (concerns, SARs, complaints), no edit rights.",
   ReadOnly: "Can view stock and logs, cannot edit.",
 };
 

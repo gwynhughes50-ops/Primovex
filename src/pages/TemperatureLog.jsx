@@ -29,6 +29,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { TemperatureMonitoring } from "@/pages/Connect";
+import { useAuth } from "@/contexts/AuthContext";
 
 /* =========================================================
    Shared constants + helpers
@@ -138,10 +139,6 @@ function formatDateTime(ts) {
   });
 }
 
-function getCurrentRole() {
-  return localStorage.getItem("aurora_role") || "practice_manager";
-}
-
 /* =========================================================
    Tab Button UI
    ========================================================= */
@@ -226,8 +223,8 @@ function TemperatureLogTab() {
     notes: "",
   });
 
-  const role = getCurrentRole();
-  const canLog = role === "admin" || role === "practice_manager";
+  const { can } = useAuth();
+  const canLog = can("temperature.write");
 
   // Units
   useEffect(() => {

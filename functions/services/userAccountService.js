@@ -15,6 +15,7 @@ const VALID_ROLES = [
   "Reception",
   "Caretaker",
   "Cleaner",
+  "Partner",
   "ReadOnly",
 ];
 
