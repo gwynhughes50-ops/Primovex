@@ -47,6 +47,8 @@ import {
   MoreVertical,
   Pin,
   BrainCircuit,
+  Ban,
+  RotateCcw,
 } from "lucide-react";
 
 import AddUser from "./admin/AddUser";
@@ -61,7 +63,7 @@ import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, se
 import { db } from "../lib/firebase";
 import { CAPABILITY_CATALOG, ROLE_TEMPLATES } from "@/core/identity/capabilities";
 import { useAuth } from "@/contexts/AuthContext";
-import { subscribeUsers, updateUserRole } from "@/services/adminUserService";
+import { subscribeUsers, updateUserRole, setUserActive, deleteUserAccount } from "@/services/adminUserService";
 
 // --------------------------
 // ✅ Route Guard (Admin only)
@@ -335,6 +337,43 @@ export default function AdminDashboard() {
     }
   };
 
+  // Deactivate / reactivate (reversible — see deleteUserAccount for the
+  // permanent one, gated separately below via a confirm dialog).
+  const [activeActionUid, setActiveActionUid] = useState(null);
+  const [activeActionError, setActiveActionError] = useState("");
+
+  const toggleUserActive = async (targetUser) => {
+    setActiveActionUid(targetUser.id);
+    setActiveActionError("");
+    try {
+      await setUserActive(targetUser.id, targetUser.active === false);
+    } catch (error) {
+      setActiveActionError(error?.message || "Could not update this account.");
+    } finally {
+      setActiveActionUid(null);
+    }
+  };
+
+  // Permanent delete — only offered once an account is already deactivated,
+  // so removing access is always the first, reversible step.
+  const [deleteUserTarget, setDeleteUserTarget] = useState(null);
+  const [deleteUserBusy, setDeleteUserBusy] = useState(false);
+  const [deleteUserError, setDeleteUserError] = useState("");
+
+  const confirmDeleteUser = async () => {
+    if (!deleteUserTarget) return;
+    setDeleteUserBusy(true);
+    setDeleteUserError("");
+    try {
+      await deleteUserAccount(deleteUserTarget.id);
+      setDeleteUserTarget(null);
+    } catch (error) {
+      setDeleteUserError(error?.message || "Could not delete this account.");
+    } finally {
+      setDeleteUserBusy(false);
+    }
+  };
+
   const [addRoleError, setAddRoleError] = useState("");
   const [addRoleBusy, setAddRoleBusy] = useState(false);
 
@@ -552,16 +591,19 @@ export default function AdminDashboard() {
                               <TableHead className="text-slate-300">Name</TableHead>
                               <TableHead className="text-slate-300">Email</TableHead>
                               <TableHead className="text-slate-300">Role</TableHead>
+                              <TableHead className="text-slate-300">Status</TableHead>
                               <TableHead className="text-slate-300">Joined</TableHead>
                               <TableHead className="text-slate-300 text-right">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
                           <TableBody>
                             {usersLoading ? (
-                              <TableRow><TableCell colSpan={5} className="text-center text-slate-400">Loading…</TableCell></TableRow>
+                              <TableRow><TableCell colSpan={6} className="text-center text-slate-400">Loading…</TableCell></TableRow>
                             ) : users.length === 0 ? (
-                              <TableRow><TableCell colSpan={5} className="text-center text-slate-400">No users found.</TableCell></TableRow>
-                            ) : users.map((u) => (
+                              <TableRow><TableCell colSpan={6} className="text-center text-slate-400">No users found.</TableCell></TableRow>
+                            ) : users.map((u) => {
+                              const isInactive = u.active === false;
+                              return (
                               <TableRow key={u.id} className="border-slate-800/70">
                                 <TableCell className="text-slate-100">{u.displayName || "—"}</TableCell>
                                 <TableCell className="text-slate-300">{u.email || "—"}</TableCell>
@@ -570,24 +612,56 @@ export default function AdminDashboard() {
                                     {u.role || "No role"}
                                   </Badge>
                                 </TableCell>
+                                <TableCell>
+                                  {isInactive ? (
+                                    <Badge className="bg-rose-500/15 text-rose-200 hover:bg-rose-500/15">Inactive</Badge>
+                                  ) : (
+                                    <Badge className="bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/15">Active</Badge>
+                                  )}
+                                </TableCell>
                                 <TableCell className="text-slate-300">{u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString("en-GB") : "—"}</TableCell>
                                 <TableCell className="text-right">
-                                  <Button
-                                    variant="outline"
-                                    className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
-                                    onClick={() => openAssignRole(u.id, u.role)}
-                                  >
-                                    <KeyRound className="h-4 w-4 mr-2" /> Assign role
-                                  </Button>
+                                  <div className="flex items-center justify-end gap-2 flex-wrap">
+                                    <Button
+                                      variant="outline"
+                                      className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
+                                      onClick={() => openAssignRole(u.id, u.role)}
+                                    >
+                                      <KeyRound className="h-4 w-4 mr-2" /> Assign role
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
+                                      disabled={activeActionUid === u.id}
+                                      onClick={() => toggleUserActive(u)}
+                                    >
+                                      {isInactive ? <RotateCcw className="h-4 w-4 mr-2" /> : <Ban className="h-4 w-4 mr-2" />}
+                                      {activeActionUid === u.id ? "Working…" : isInactive ? "Reactivate" : "Deactivate"}
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      className="rounded-full border-rose-500/40 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20 disabled:opacity-40"
+                                      disabled={!isInactive}
+                                      title={!isInactive ? "Deactivate the account first" : "Permanently delete this account"}
+                                      onClick={() => setDeleteUserTarget(u)}
+                                    >
+                                      <Trash2 className="h-4 w-4 mr-2" /> Delete
+                                    </Button>
+                                  </div>
                                 </TableCell>
                               </TableRow>
-                            ))}
+                            );})}
                           </TableBody>
                         </Table>
                       </div>
                       <div className="mt-3 text-xs text-slate-400">
                         {users.length} real account{users.length === 1 ? "" : "s"}, live from Firestore.
                       </div>
+                      {activeActionError && (
+                        <div className="mt-3 rounded-xl border border-rose-500/25 bg-rose-500/10 p-3 text-xs text-rose-100">
+                          {activeActionError}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </div>
@@ -943,6 +1017,44 @@ export default function AdminDashboard() {
                 disabled={assignRoleBusy}
               >
                 {assignRoleBusy ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Confirmation */}
+      {deleteUserTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur p-4">
+          <div className="w-full max-w-md rounded-2xl border border-rose-500/30 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
+            <div className="flex items-center gap-2 text-lg font-semibold text-rose-200">
+              <AlertTriangle className="h-5 w-5" /> Delete this account permanently?
+            </div>
+            <div className="text-sm text-slate-300 mt-2">
+              <strong className="text-slate-100">{deleteUserTarget.displayName || deleteUserTarget.email}</strong> ({deleteUserTarget.email}) will be permanently removed — sign-in access and their profile. This can't be undone. If you might need this account again, use Reactivate instead of Delete.
+            </div>
+
+            {deleteUserError && (
+              <div className="mt-3 rounded-xl border border-rose-500/25 bg-rose-500/10 p-3 text-xs text-rose-100">
+                {deleteUserError}
+              </div>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
+                disabled={deleteUserBusy}
+                onClick={() => { setDeleteUserTarget(null); setDeleteUserError(""); }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="rounded-full bg-rose-500 text-white hover:bg-rose-600"
+                disabled={deleteUserBusy}
+                onClick={confirmDeleteUser}
+              >
+                {deleteUserBusy ? "Deleting…" : "Delete permanently"}
               </Button>
             </div>
           </div>

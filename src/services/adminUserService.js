@@ -30,3 +30,19 @@ export async function createUserAccount({ displayName, email, role }) {
 export async function updateUserRole(uid, role) {
   await updateDoc(doc(db, "users", uid), { role });
 }
+
+// Disables/re-enables sign-in via the setUserActive Cloud Function — the
+// client SDK can't touch another user's Firebase Auth account directly, same
+// reason createUserAccount is a Cloud Function rather than a client write.
+export async function setUserActive(uid, active) {
+  const call = httpsCallable(functions, "setUserActive");
+  await call({ uid, active });
+}
+
+// Permanently removes the account (Auth + Firestore profile) via the
+// deleteUserAccount Cloud Function. Irreversible — see setUserActive for the
+// reversible "remove access" action.
+export async function deleteUserAccount(uid) {
+  const call = httpsCallable(functions, "deleteUserAccount");
+  await call({ uid });
+}

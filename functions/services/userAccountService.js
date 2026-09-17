@@ -65,4 +65,65 @@ async function createUserAccount({ displayName, email, role, creatorUid }) {
   return { uid: userRecord.uid, inviteLink };
 }
 
-module.exports = { createUserAccount, VALID_ROLES };
+// Disables/re-enables the Firebase Auth account (so they genuinely can't
+// sign in) and mirrors that onto the Firestore profile. Reversible — data
+// and audit history are untouched. This is the everyday "remove someone's
+// access" action; see deleteUserAccount for the irreversible one.
+async function setUserActive({ uid, active, actorUid }) {
+  const cleanUid = String(uid || "");
+  if (!cleanUid) throw new HttpsError("invalid-argument", "Missing user id.");
+  if (cleanUid === actorUid) throw new HttpsError("failed-precondition", "You can't deactivate your own account.");
+
+  const auth = getAuth();
+  const db = getFirestore();
+
+  try {
+    await auth.updateUser(cleanUid, { disabled: !active });
+  } catch (error) {
+    if (error.code === "auth/user-not-found") throw new HttpsError("not-found", "That account no longer exists.");
+    throw new HttpsError("internal", error.message || "Could not update the account.");
+  }
+
+  await db.collection("users").doc(cleanUid).update({
+    active: !!active,
+    updatedAt: FieldValue.serverTimestamp(),
+    updatedByUid: actorUid || null,
+  });
+
+  return { uid: cleanUid, active: !!active };
+}
+
+// Permanently removes the Firebase Auth account and its Firestore profile.
+// For accounts that should never have existed (wrong email, duplicate) —
+// deactivate is the right tool for someone who's actually leaving, since it
+// keeps their history. Guarded against self-deletion and removing the last
+// System Admin so the practice can't lock itself out.
+async function deleteUserAccount({ uid, actorUid }) {
+  const cleanUid = String(uid || "");
+  if (!cleanUid) throw new HttpsError("invalid-argument", "Missing user id.");
+  if (cleanUid === actorUid) throw new HttpsError("failed-precondition", "You can't delete your own account.");
+
+  const db = getFirestore();
+  const snap = await db.collection("users").doc(cleanUid).get();
+
+  if (snap.exists && snap.data()?.role === "System Admin") {
+    const remaining = await db.collection("users").where("role", "==", "System Admin").get();
+    if (remaining.size <= 1) {
+      throw new HttpsError("failed-precondition", "Can't delete the last System Admin.");
+    }
+  }
+
+  try {
+    await getAuth().deleteUser(cleanUid);
+  } catch (error) {
+    if (error.code !== "auth/user-not-found") {
+      throw new HttpsError("internal", error.message || "Could not delete the account.");
+    }
+  }
+
+  await db.collection("users").doc(cleanUid).delete();
+
+  return { uid: cleanUid };
+}
+
+module.exports = { createUserAccount, setUserActive, deleteUserAccount, VALID_ROLES };

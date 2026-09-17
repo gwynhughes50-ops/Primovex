@@ -13,7 +13,7 @@ const { extractClinicalFacts } = require("./services/azureOpenAiExtractionServic
 const { appendGovernedAuditEvent } = require("./services/governedAuditService");
 const { reportRoomIssue } = require("./services/roomIssueService");
 const { recordSensePresenceTap } = require("./services/sensePresenceService");
-const { createUserAccount } = require("./services/userAccountService");
+const { createUserAccount, setUserActive, deleteUserAccount } = require("./services/userAccountService");
 
 initializeApp();
 const db = getFirestore();
@@ -308,6 +308,18 @@ exports.createUserAccount = onCall({ region: "europe-west2" }, async (request) =
   await assertAdmin(request);
   const { displayName, email, role } = request.data || {};
   return createUserAccount({ displayName, email, role, creatorUid: request.auth.uid });
+});
+
+exports.setUserActive = onCall({ region: "europe-west2" }, async (request) => {
+  await assertAdmin(request);
+  const { uid, active } = request.data || {};
+  return setUserActive({ uid, active, actorUid: request.auth.uid });
+});
+
+exports.deleteUserAccount = onCall({ region: "europe-west2" }, async (request) => {
+  await assertAdmin(request);
+  const { uid } = request.data || {};
+  return deleteUserAccount({ uid, actorUid: request.auth.uid });
 });
 
 exports.scheduledConnectSimulatorSync = onSchedule(
