@@ -138,7 +138,7 @@ export default function ClinicalAssetChecklist({
 }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { can, role, user, profile } = useAuth();
+  const { can, role, user, profile, isAdmin } = useAuth();
   const { items: stockItems } = useStock({ includeArchived: false });
   const [entities, setEntities] = useState([]);
   const [selectedId, setSelectedId] = useState("");
@@ -312,6 +312,7 @@ export default function ClinicalAssetChecklist({
 
   async function submit() {
     if (!selected) return;
+    if (!can('inventory.verify')) return;
     try {
       setSaving(true);
       const payload = {
@@ -447,7 +448,10 @@ export default function ClinicalAssetChecklist({
     return <div className="rounded-2xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] p-5 text-[color:var(--medtrak-text)]">Loading {entityLabelPlural}...</div>;
   }
 
-  const canManage = Boolean(auth?.currentUser);
+  // emergency_assets/anaphylaxis_boxes writes require isAdmin() at the
+  // Firestore rule level — this must match, or a non-admin sees an enabled
+  // button that then fails with an unexplained permission error.
+  const canManage = Boolean(isAdmin);
   const existingIds = entities.map((entity) => entity.id);
   const qrPayload = selected ? buildAssetQrPayload(collectionName, selected.id) : "";
   const medtrakAssetId = selected ? getMedTrakAssetId(collectionName, selected.id) : "";
@@ -676,7 +680,7 @@ export default function ClinicalAssetChecklist({
                 <button
                   type="button"
                   onClick={submit}
-                  disabled={saving || !selected}
+                  disabled={saving || !selected || !can('inventory.verify')}
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <ClipboardCheck className="h-4 w-4" /> {saving ? "Saving..." : "Save verification"}

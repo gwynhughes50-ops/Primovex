@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { BadgeCheck, ClipboardCheck, RotateCcw, Sparkles, UserPlus } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   buildSmartVerificationPlan,
   calculateInventoryConfidence,
@@ -17,6 +18,8 @@ function toneForScore(score) {
 }
 
 export default function StockVerificationWidget({ items = [], actor = null, compact = false }) {
+  const { can } = useAuth();
+  const canVerify = can("inventory.verify");
   const [actuals, setActuals] = useState({});
   const [savingId, setSavingId] = useState(null);
   const [message, setMessage] = useState("");
@@ -25,6 +28,7 @@ export default function StockVerificationWidget({ items = [], actor = null, comp
   const plan = useMemo(() => buildSmartVerificationPlan(items, { maxItems: compact ? 3 : 5 }), [items, compact]);
 
   const verify = async (row) => {
+    if (!canVerify) return;
     setMessage("");
     const actualQty = actuals[row.itemId] ?? row.expectedQty;
     setSavingId(row.itemId);
@@ -137,7 +141,7 @@ export default function StockVerificationWidget({ items = [], actor = null, comp
                     type="button"
                     className="rounded-full"
                     onClick={() => verify(row)}
-                    disabled={savingId === row.itemId}
+                    disabled={savingId === row.itemId || !canVerify}
                   >
                     <BadgeCheck className="mr-2 h-4 w-4" />
                     {savingId === row.itemId ? "Saving…" : "Verify"}

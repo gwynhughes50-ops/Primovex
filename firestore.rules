@@ -176,6 +176,17 @@ match /reorder_requests/{requestId} {
       allow create, update: if signedIn();
       allow delete: if isAdmin();
     }
+
+    // -------------------------
+    // STOCK VERIFICATIONS
+    // -------------------------
+    // Audit records written by Smart Stock Verification. Immutable once
+    // created, same convention as stock_movements.
+    match /stock_verifications/{docId} {
+      allow get, list: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if false;
+    }
     
     // -------------------------
 // PURCHASE ORDERS

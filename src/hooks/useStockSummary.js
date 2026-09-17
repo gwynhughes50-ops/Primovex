@@ -42,7 +42,10 @@ export default function useStockSummary() {
           const current = Number(d.current_stock ?? 0);
           const min = Number(d.min_stock ?? 0);
 
-          if (min > 0 && current <= min) {
+          // Flag both a real threshold breach and a genuine stockout (an
+          // item with no minimum set that hits zero shouldn't be invisible
+          // here — it must match the desktop card badge's logic exactly).
+          if ((min > 0 && current <= min) || current <= 0) {
             low += 1;
           }
         });

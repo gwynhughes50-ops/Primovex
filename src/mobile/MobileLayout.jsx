@@ -97,6 +97,19 @@ export default function MobileLayout({ initialTab = "home" }) {
 
   const handleBottomNavigation = (nextTab) => {
     if (showRoutedChecklist) navigate('/', { replace: true });
+    // A dismissed-looking sheet or error from one flow (e.g. a failed
+    // space/room scan, or a stock-scan sheet left open) must not linger and
+    // stack on top of an unrelated screen — these all render as fixed,
+    // high-z-index sheets outside the tab-content branch, so switching tabs
+    // is the only reset point they have.
+    setSpaceScanError("");
+    setUnknownBarcode("");
+    setScanError("");
+    setUseError("");
+    setShowReorderForm(false);
+    setShowStockMore(false);
+    setScannedItem(null);
+    setRecentMovement(null);
     setActiveTab(nextTab);
   };
 
@@ -298,6 +311,7 @@ export default function MobileLayout({ initialTab = "home" }) {
     if (!scannedCode) return;
 
     setScanError("");
+    setSpaceScanError("");
     setScannedItem(null);
 
     try {
@@ -419,6 +433,16 @@ export default function MobileLayout({ initialTab = "home" }) {
       return;
     }
 
+    if (!can("inventory.write")) {
+      alert("Your role cannot record stock receipts.");
+      return;
+    }
+
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      alert("You are offline. Nothing was changed. Reconnect and try again.");
+      return;
+    }
+
     try {
       setUseBusy(true);
 
@@ -448,6 +472,11 @@ export default function MobileLayout({ initialTab = "home" }) {
   const handleRequestReorder = async () => {
     const item = reorderItem || scannedItem;
     if (!item) return;
+
+    if (!can("inventory.write")) {
+      alert("Your role cannot request a reorder.");
+      return;
+    }
 
     try {
       setReorderBusy(true);
@@ -617,7 +646,7 @@ export default function MobileLayout({ initialTab = "home" }) {
             <h2 className="text-lg font-bold">More inventory options</h2>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button type="button" onClick={handleReceiveStock} disabled={!can("inventory.write") || useBusy} className="rounded-2xl border border-[var(--medtrak-border)] p-3 font-bold disabled:opacity-40">Receive 1</button>
-              <button type="button" onClick={() => { setReorderQty(1); setReorderNote(""); setShowStockMore(false); setShowReorderForm(true); }} className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] p-3 font-bold"><BellRing className="h-5 w-5" />Reorder</button>
+              <button type="button" disabled={!can("inventory.write")} onClick={() => { setReorderQty(1); setReorderNote(""); setShowStockMore(false); setShowReorderForm(true); }} className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] p-3 font-bold disabled:opacity-40"><BellRing className="h-5 w-5" />Reorder</button>
               <button type="button" onClick={() => { setShowStockMore(false); setScannedItem(null); setActiveTab("stock"); }} className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] p-3 font-bold"><Eye className="h-5 w-5" />Details</button>
               <button type="button" onClick={() => { setShowStockMore(false); askAboutScannedItem(); }} className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] p-3 font-bold"><Sparkles className="h-5 w-5" />Ask Orb</button>
             </div>

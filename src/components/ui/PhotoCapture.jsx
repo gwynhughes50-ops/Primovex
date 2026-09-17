@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Button } from "./button";
 import { Camera, X, Check } from "lucide-react";
 
-export default function PhotoCapture({ onCapture, buttonLabel = "Take photo" }) {
+export default function PhotoCapture({ onCapture, buttonLabel = "Take photo", disabled = false }) {
   const [open, setOpen] = useState(false);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -68,6 +68,7 @@ export default function PhotoCapture({ onCapture, buttonLabel = "Take photo" }) 
         variant="outline"
         className="text-xs px-3 py-2 flex items-center gap-1"
         onClick={() => setOpen(true)}
+        disabled={disabled}
       >
         <Camera className="h-4 w-4" />
         {buttonLabel}

@@ -417,13 +417,13 @@ export default function PulseWidget({ variant = 'desktop' }) {
       </div>
 
       {showHint && (
-        <div className="absolute left-1/2 top-[calc(100%+10px)] z-[45] w-56 -translate-x-1/2 rounded-2xl border px-3 py-2 text-center text-xs shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
+        <div className="pointer-events-none absolute left-1/2 top-[calc(100%+10px)] z-[45] w-56 -translate-x-1/2 rounded-2xl border px-3 py-2 text-center text-xs shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
           Drag anywhere · Double-click to open
         </div>
       )}
 
       {showPreview && (
-        <div className="absolute left-1/2 top-[calc(100%+10px)] z-[45] w-56 -translate-x-1/2 rounded-2xl border p-3 shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
+        <div className="pointer-events-none absolute left-1/2 top-[calc(100%+10px)] z-[45] w-56 -translate-x-1/2 rounded-2xl border p-3 shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-[0.18em] mt-pulse-muted">Pulse</span>
             <span className="text-xs font-bold" style={{ color: tone.accent }}>{tone.label}</span>

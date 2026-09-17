@@ -61,6 +61,7 @@ export default function StockMovementDialog({
   const current = Number(item?.current_stock ?? 0);
   const next = mode === "use" ? current - qty : current + qty;
   const title = mode === "use" ? "Use stock" : "Receive stock";
+  const boxSize = Number(item?.units_per_box ?? 0);
 
   if (!open) return null;
 
@@ -137,6 +138,18 @@ export default function StockMovementDialog({
                 +
               </Button>
             </div>
+
+            {mode === "use" && boxSize > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-2 w-full border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800 disabled:opacity-40"
+                disabled={boxSize > current}
+                onClick={() => setQtyRaw(String(boxSize))}
+              >
+                Take a full box ({boxSize})
+              </Button>
+            )}
           </div>
 
           {/* New stock level */}

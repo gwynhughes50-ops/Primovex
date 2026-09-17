@@ -231,7 +231,7 @@ export default function AddUser() {
                   type="button"
                   variant="ghost"
                   className="rounded-full px-4"
-                  onClick={() => navigate("/reports/users")}
+                  onClick={() => navigate("/admin/users")}
                   disabled={status === "sending"}
                 >
                   <ArrowLeft className="h-4 w-4 mr-2" />
@@ -277,7 +277,7 @@ export default function AddUser() {
                 <Button
                   variant="ghost"
                   className="rounded-full px-4"
-                  onClick={() => navigate("/reports/users")}
+                  onClick={() => navigate("/admin/users")}
                 >
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back to users

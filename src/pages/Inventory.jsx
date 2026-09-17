@@ -23,9 +23,9 @@ import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry"
 import { listEquipment } from "@/modules/equipment/services/equipmentRegistry";
 import AssignLocationModal from "@/components/stock/AssignLocationModal";
 import { STOCK_CATEGORIES, getSubcategories, categoryLabel, subcategoryLabel, UNCATEGORISED_CATEGORY } from "@/data/stockCategories";
-import { normalizeStockItemCategory, migrateStockItemCategoryIfNeeded } from "@/services/stockService";
+import { normalizeStockItemCategory, migrateStockItemCategoryIfNeeded, createReorderRequest } from "@/services/stockService";
 
-import { Search, Package, Pencil, History, Trash2, Archive, RotateCcw, MapPin } from "lucide-react";
+import { Search, Package, Pencil, History, Trash2, Archive, RotateCcw, MapPin, BellRing } from "lucide-react";
 
 /* helpers */
 const getStockBadge = (qty, min) => {
@@ -124,6 +124,7 @@ export default function Inventory() {
     category: UNCATEGORISED_CATEGORY,
     subcategory: "",
     min_stock: 0,
+    units_per_box: 0,
     preferred_supplier_id: "",
     preferred_supplier_name: "",
     supplier_sku: "",
@@ -147,6 +148,37 @@ export default function Inventory() {
   const openLocations = (item) => {
     setLocationsItem(item);
     setLocationsOpen(true);
+  };
+
+  const [reorderOpen, setReorderOpen] = useState(false);
+  const [reorderItem, setReorderItem] = useState(null);
+  const [reorderQty, setReorderQty] = useState(1);
+  const [reorderNote, setReorderNote] = useState("");
+  const [reorderBusy, setReorderBusy] = useState(false);
+  const [reorderError, setReorderError] = useState("");
+  const openReorder = (item) => {
+    setReorderItem(item);
+    setReorderQty(Math.max(1, Number(item?.order_quantity || 1)));
+    setReorderNote("");
+    setReorderError("");
+    setReorderOpen(true);
+  };
+  const confirmReorder = async () => {
+    if (!reorderItem) return;
+    try {
+      setReorderBusy(true);
+      setReorderError("");
+      await createReorderRequest(
+        { ...reorderItem, requested_qty: Number(reorderQty || 1), note: reorderNote },
+        actorUser
+      );
+      setReorderOpen(false);
+      setReorderItem(null);
+    } catch (err) {
+      setReorderError(err?.message || "Failed to create reorder request.");
+    } finally {
+      setReorderBusy(false);
+    }
   };
 
   useEffect(() => {
@@ -344,6 +376,7 @@ const handleBarcodeScan = (code) => {
       category: resolvedCategory.category,
       subcategory: resolvedCategory.subcategory,
       min_stock: typeof item?.min_stock === "number" ? item.min_stock : Number(item?.min_stock ?? 0) || 0,
+      units_per_box: typeof item?.units_per_box === "number" ? item.units_per_box : Number(item?.units_per_box ?? 0) || 0,
       preferred_supplier_id: item?.preferred_supplier_id ?? "",
       preferred_supplier_name: item?.preferred_supplier_name ?? "",
       supplier_sku: item?.supplier_sku ?? "",
@@ -393,6 +426,7 @@ const handleBarcodeScan = (code) => {
         category: (editForm.category || "").trim() || UNCATEGORISED_CATEGORY,
         subcategory: (editForm.subcategory || "").trim(),
         min_stock: Number(editForm.min_stock) || 0,
+        units_per_box: Number(editForm.units_per_box) || 0,
         preferred_supplier_id: editForm.preferred_supplier_id || "",
         preferred_supplier_name: editForm.preferred_supplier_name || "",
         supplier_sku: (editForm.supplier_sku || "").trim(),
@@ -450,28 +484,20 @@ const handleBarcodeScan = (code) => {
                 {showArchived ? "Hide archived" : "Show archived"}
               </Button>
 
-              <Button onClick={() => setManualAddOpen(true)}>Add item</Button>
+              <Button onClick={() => setManualAddOpen(true)} disabled={!canWriteInventory}>Add item</Button>
 
               <MobileBarcodeScanner onScan={handleBarcodeScan} />
             </div>
 
-            {/* Debug / status line (helps confirm toggle is actually switching) */}
             <div className="mt-2 text-[11px] text-slate-400 flex flex-wrap gap-2">
               <span className="rounded-full border border-slate-800/70 bg-slate-900/40 px-2 py-0.5">
-                Mode: {showArchived ? "Showing archived" : "Hiding archived"}
+                {counts.active} active{counts.archived ? ` · ${counts.archived} archived` : ""}
               </span>
-              <span className="rounded-full border border-slate-800/70 bg-slate-900/40 px-2 py-0.5">
-                Total: {counts.total}
-              </span>
-              <span className="rounded-full border border-slate-800/70 bg-slate-900/40 px-2 py-0.5">
-                Active: {counts.active}
-              </span>
-              <span className="rounded-full border border-slate-800/70 bg-slate-900/40 px-2 py-0.5">
-                Archived: {counts.archived}
-              </span>
-              <span className="rounded-full border border-slate-800/70 bg-slate-900/40 px-2 py-0.5">
-                Showing: {filtered.length}
-              </span>
+              {filtered.length !== counts.total && (
+                <span className="rounded-full border border-slate-800/70 bg-slate-900/40 px-2 py-0.5">
+                  Showing {filtered.length}
+                </span>
+              )}
             </div>
           </div>
 
@@ -531,22 +557,6 @@ const handleBarcodeScan = (code) => {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((item) => {
               const archived = isArchivedItem(item);
-              const handleBarcodeScan = (code) => {
-                const scannedCode = String(code || "").trim();
-                if (!scannedCode) return;
-              
-                setSearch(scannedCode);
-              
-                const match = (items || []).find(
-                  (it) => String(it?.barcode || "").trim() === scannedCode
-                );
-              
-                if (match && !isArchivedItem(match)) {
-                  setActiveItem(match);
-                  setMoveMode("use");
-                  setMoveOpen(true);
-                }
-              };
 
               return (
                 <Card
@@ -582,6 +592,7 @@ const handleBarcodeScan = (code) => {
                           return `${categoryLabel(resolved.category)}${label && label !== categoryLabel(resolved.category) ? ` › ${label}` : ""}`;
                         })()}
                         {item.min_stock !== undefined ? ` - Min: ${item.min_stock}` : ""}
+                        {Number(item.units_per_box) > 0 ? ` - Box: ${item.units_per_box}` : ""}
                       </p>
 
                       {item.preferred_supplier_name && (
@@ -615,21 +626,31 @@ const handleBarcodeScan = (code) => {
                   )}
 
                   {!archived && (
-                    <Button
-                      variant="outline"
-                      className="mt-2 w-full"
-                      onClick={() => openLocations(item)}
-                      disabled={!canWriteInventory}
-                    >
-                      <MapPin className="mr-2 h-4 w-4" />
-                      Locations{Array.isArray(item.locations) && item.locations.length > 0 ? ` (${item.locations.length})` : ""}
-                    </Button>
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => openLocations(item)}
+                        disabled={!canWriteInventory}
+                      >
+                        <MapPin className="mr-2 h-4 w-4" />
+                        Locations{Array.isArray(item.locations) && item.locations.length > 0 ? ` (${item.locations.length})` : ""}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => openReorder(item)}
+                        disabled={!canWriteInventory}
+                      >
+                        <BellRing className="mr-2 h-4 w-4" />
+                        Reorder
+                      </Button>
+                    </div>
                   )}
 
                   <div className="mt-3 flex justify-between items-center">
                     <PhotoCapture
                       buttonLabel="Photo"
                       onCapture={(img) => updateItem(item.id, { photo_url: img }, { actor: actorUser })}
+                      disabled={!canWriteInventory}
                     />
 
                     <div className="flex gap-1">
@@ -838,6 +859,18 @@ const handleBarcodeScan = (code) => {
                       />
                     </div>
 
+                    <div>
+                      <p className="text-xs text-slate-400 mb-1">Units per box</p>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={editForm.units_per_box}
+                        onChange={(e) => setEditForm((f) => ({ ...f, units_per_box: e.target.value }))}
+                        placeholder="Optional, e.g. 100"
+                      />
+                      <p className="mt-1 text-[11px] text-slate-500">Lets staff take a full box in one tap when using stock.</p>
+                    </div>
+
                     <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-3">
                       <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-cyan-300">
                         Supplier Information
@@ -929,6 +962,61 @@ const handleBarcodeScan = (code) => {
                       }
                     >
                       {editSaving ? "Saving..." : "Save changes"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {reorderOpen && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+                <div className="bg-slate-900 p-4 rounded-2xl max-w-sm w-full border border-slate-800">
+                  <p className="font-semibold text-slate-50">Request reorder</p>
+                  <p className="text-sm text-slate-400 mt-1">
+                    Raise a reorder request for <strong>{reorderItem?.name}</strong>.
+                  </p>
+
+                  <div className="mt-3 space-y-3">
+                    <div>
+                      <label className="text-xs text-slate-400">Quantity</label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={reorderQty}
+                        onChange={(e) => setReorderQty(e.target.value)}
+                        className="mt-1 bg-slate-950/40 border-slate-800/70 text-slate-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-slate-400">Note (optional)</label>
+                      <Input
+                        value={reorderNote}
+                        onChange={(e) => setReorderNote(e.target.value)}
+                        placeholder="e.g. urgent, low ahead of clinic"
+                        className="mt-1 bg-slate-950/40 border-slate-800/70 text-slate-100"
+                      />
+                    </div>
+                  </div>
+
+                  {reorderError && (
+                    <div className="mt-3 rounded-xl border border-rose-500/25 bg-rose-500/10 p-2 text-xs text-rose-100">
+                      {reorderError}
+                    </div>
+                  )}
+
+                  <div className="mt-4 flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setReorderOpen(false);
+                        setReorderItem(null);
+                      }}
+                      disabled={reorderBusy}
+                    >
+                      Cancel
+                    </Button>
+                    <Button onClick={confirmReorder} disabled={reorderBusy || !Number(reorderQty) || Number(reorderQty) <= 0}>
+                      {reorderBusy ? "Requesting..." : "Request reorder"}
                     </Button>
                   </div>
                 </div>

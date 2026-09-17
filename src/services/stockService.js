@@ -43,6 +43,7 @@ function normalizeItemPatch(patch = {}) {
   if ("current_stock" in out) out.current_stock = toNumber(out.current_stock, 0);
   if ("min_stock" in out) out.min_stock = toNumber(out.min_stock, 0);
   if ("max_stock" in out) out.max_stock = toNumber(out.max_stock, 0);
+  if ("units_per_box" in out) out.units_per_box = toNumber(out.units_per_box, 0);
 
   if ("name" in out) out.name = cleanString(out.name);
   if ("category" in out) out.category = cleanString(out.category) || UNCATEGORISED_CATEGORY;
@@ -208,6 +209,7 @@ export async function createStockItem(data) {
     current_stock: toNumber(data?.current_stock, 0),
     min_stock: toNumber(data?.min_stock, 0),
     max_stock: toNumber(data?.max_stock, 0),
+    units_per_box: toNumber(data?.units_per_box, 0),
 
     unit: cleanString(data?.unit),
     photo_url: cleanString(data?.photo_url),

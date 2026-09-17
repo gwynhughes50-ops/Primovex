@@ -23,6 +23,7 @@ export default function ManualAddItemDialog({ open, onOpenChange, onCreate, init
     min_stock: 1,
     max_stock: 10,
     unit: "",
+    units_per_box: "",
   });
 
   useEffect(() => {
@@ -47,6 +48,7 @@ export default function ManualAddItemDialog({ open, onOpenChange, onCreate, init
         min_stock: 1,
         max_stock: 10,
         unit: "",
+        units_per_box: "",
       });
     }
   }, [open, initialBarcode]);
@@ -166,6 +168,18 @@ export default function ManualAddItemDialog({ open, onOpenChange, onCreate, init
             <label className="text-xs text-slate-400">Unit</label>
             <Input className="mt-1" value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} />
           </div>
+
+          <div>
+            <label className="text-xs text-slate-400">Units per box</label>
+            <Input
+              className="mt-1"
+              type="number"
+              min={0}
+              value={form.units_per_box}
+              onChange={(e) => setForm((p) => ({ ...p, units_per_box: e.target.value }))}
+              placeholder="Optional, e.g. 100"
+            />
+          </div>
         </div>
 
         <div className="flex shrink-0 justify-end gap-2 border-t border-slate-800/80 bg-slate-900/95 px-4 py-3">
@@ -182,6 +196,7 @@ export default function ManualAddItemDialog({ open, onOpenChange, onCreate, init
                 current_stock: Number(form.current_stock || 0),
                 min_stock: Number(form.min_stock || 0),
                 max_stock: Number(form.max_stock || 0),
+                units_per_box: Number(form.units_per_box || 0),
               });
               onOpenChange(false);
             }}

@@ -20,6 +20,7 @@ export default function MobileRapidStockAction({
   const [customQty, setCustomQty] = useState(1);
   const [showCustom, setShowCustom] = useState(false);
   const stock = Number(item?.current_stock || 0);
+  const boxSize = Number(item?.units_per_box || 0);
 
   if (!item) return null;
 
@@ -68,6 +69,16 @@ export default function MobileRapidStockAction({
               {[1, 2, 5].map((qty) => <button key={qty} type="button" disabled={busy || qty > stock} onClick={() => use(qty)} className="min-h-14 rounded-2xl bg-[var(--medtrak-accent)] px-3 py-3 text-lg font-bold text-white disabled:opacity-35">Use {qty}</button>)}
               <button type="button" disabled={busy} onClick={() => setShowCustom((value) => !value)} className="min-h-14 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-3 text-lg font-bold">Other</button>
             </div>
+            {boxSize > 0 && (
+              <button
+                type="button"
+                disabled={busy || boxSize > stock}
+                onClick={() => use(boxSize)}
+                className="mt-2 min-h-14 w-full rounded-2xl border border-[var(--medtrak-accent)] bg-[var(--medtrak-bg)] px-3 py-3 text-lg font-bold text-[var(--medtrak-accent)] disabled:opacity-35"
+              >
+                Take a full box ({boxSize})
+              </button>
+            )}
             {showCustom && <div className="mt-3 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3">
               <div className="grid grid-cols-[3.25rem_1fr_3.25rem] gap-2">
                 <button type="button" onClick={() => setCustomQty((value) => Math.max(1, Number(value || 1) - 1))} className="grid place-items-center rounded-xl border border-[var(--medtrak-border)]"><Minus className="h-5 w-5" /></button>
