@@ -84,7 +84,7 @@ export default function DesktopApp() {
         <Route path="temperature" element={<TemperatureLog />} />
         <Route path="compliance" element={<Compliance />} />
         <Route path="admin/*" element={<AdminDashboard />} />
-        <Route path="reports" element={<Reports />} />
+        <Route path="reports" element={<PermissionGate capability="reports.read"><Reports /></PermissionGate>} />
         <Route path="clinflow" element={<PermissionGate capability="clinflow.read"><ClinFlowWorkspace /></PermissionGate>} />
         <Route path="help" element={<Help />} />
         <Route path="developer-centre" element={<DeveloperCentre />} />

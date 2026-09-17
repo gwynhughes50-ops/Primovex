@@ -10,6 +10,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { subscribeUsers } from "@/services/adminUserService";
 import {
   CONCERN_CATEGORIES,
+  CONCERN_OUTCOME_LABELS,
+  CONCERN_OUTCOMES,
   CONCERN_PRIORITIES,
   CONCERN_SOURCES,
   CONCERN_STAGES,
@@ -43,6 +45,7 @@ import {
   toDate,
   updateConcern,
   updateConcernDetails,
+  updateConcernOutcome,
   updateLfeReportStatus,
 } from "@/modules/governance/services/concernService";
 
@@ -283,6 +286,10 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
   const [correspondenceForm, setCorrespondenceForm] = useState({ type: "letter", occurredAt: formatDateInput(new Date()), notes: "" });
   const [extendDate, setExtendDate] = useState("");
   const [extendReason, setExtendReason] = useState("");
+  const [closingOutcome, setClosingOutcome] = useState("");
+  const [closeBusy, setCloseBusy] = useState(false);
+  const [closeError, setCloseError] = useState("");
+  const [outcomeEdit, setOutcomeEdit] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -338,6 +345,25 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
     setExtendReason("");
   };
 
+  const submitClose = async () => {
+    if (!closingOutcome) return;
+    try {
+      setCloseBusy(true);
+      setCloseError("");
+      await closeConcern(concern, actor, closingOutcome);
+      setClosingOutcome("");
+    } catch (err) {
+      setCloseError(err?.message || "Could not close the case.");
+    } finally {
+      setCloseBusy(false);
+    }
+  };
+
+  const submitOutcomeChange = async () => {
+    if (!outcomeEdit || outcomeEdit === concern.outcome) return;
+    await updateConcernOutcome(concern.id, outcomeEdit, actor);
+  };
+
   const submitCorrespondence = async () => {
     if (!correspondenceForm.notes.trim()) return;
     await addConcernCorrespondence(concern.id, correspondenceForm, actor);
@@ -370,6 +396,7 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
               <StatusBadge status={getPriorityBadge(concern.priority)}>{String(concern.priority || "low").toUpperCase()}</StatusBadge>
               <StatusBadge status={getStatusBadge(concern.status)}>{friendly(concern.status)}</StatusBadge>
               <StatusBadge status={deadline.status}>{deadline.label}</StatusBadge>
+              {concern.outcome && <StatusBadge status="neutral">{CONCERN_OUTCOME_LABELS[concern.outcome] || friendly(concern.outcome)}</StatusBadge>}
             </div>
             <p className="text-sm text-slate-300">{concern.summary}</p>
             <p className="text-xs text-slate-500">Identifier: {concern.emisNumber ? `EMIS ${concern.emisNumber}` : `${concern.patientInitials || "Initials missing"} | DOB ${concern.dateOfBirth || "missing"}`}</p>
@@ -413,6 +440,32 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
           </div>
         )}
 
+        {isTeam && concern.status !== CONCERN_STATUSES.closed && (
+          <div className="mt-4 flex flex-wrap items-end gap-2 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Closing outcome</label>
+              <select value={closingOutcome} onChange={(e) => setClosingOutcome(e.target.value)} className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white">
+                <option value="">Select outcome…</option>
+                {CONCERN_OUTCOMES.map((o) => <option key={o} value={o}>{CONCERN_OUTCOME_LABELS[o]}</option>)}
+              </select>
+            </div>
+            <Button onClick={submitClose} disabled={!closingOutcome || closeBusy} className="rounded-full bg-emerald-500 text-slate-950 hover:bg-emerald-400">{closeBusy ? "Closing…" : "Close case"}</Button>
+            {closeError && <p className="text-xs text-rose-300">{closeError}</p>}
+          </div>
+        )}
+
+        {isTeam && concern.status === CONCERN_STATUSES.closed && (
+          <div className="mt-4 flex flex-wrap items-end gap-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Change outcome</label>
+              <select value={outcomeEdit || concern.outcome || ""} onChange={(e) => setOutcomeEdit(e.target.value)} className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white">
+                {CONCERN_OUTCOMES.map((o) => <option key={o} value={o}>{CONCERN_OUTCOME_LABELS[o]}</option>)}
+              </select>
+            </div>
+            <Button onClick={submitOutcomeChange} disabled={!outcomeEdit || outcomeEdit === concern.outcome} variant="outline" className="rounded-full">Save</Button>
+          </div>
+        )}
+
         <div className="mt-5"><StageProgress status={concern.status} /></div>
 
         {isTeam && (
@@ -424,7 +477,6 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
             <Button onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.investigation }, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Move to investigation</Button>
             <Button onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.response }, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Move to response</Button>
             <Button onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.learning }, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Move to learning</Button>
-            <Button onClick={() => closeConcern(concern, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-emerald-500 py-2.5 text-center leading-snug text-slate-950 hover:bg-emerald-400">Close case</Button>
           </div>
         )}
       </SectionCard>

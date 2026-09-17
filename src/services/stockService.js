@@ -546,6 +546,11 @@ export async function applyStockMovement(itemId, movement) {
       item_strength,
       item_form,
       product_identity_key,
+      // Snapshot the item's site/location at the moment of the movement —
+      // if the item is later moved between sites, historical movements must
+      // keep reporting where they actually happened, not where the item is now.
+      site: item?.site || "",
+      location: item?.location || "",
       type,
       delta,
       qty_before: before,

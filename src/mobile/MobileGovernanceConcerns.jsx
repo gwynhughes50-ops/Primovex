@@ -4,6 +4,8 @@ import { ChevronLeft, Plus, ShieldAlert, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { subscribeUsers } from '@/services/adminUserService';
 import {
+  CONCERN_OUTCOME_LABELS,
+  CONCERN_OUTCOMES,
   CONCERN_PRIORITIES,
   CONCERN_SOURCES,
   CONCERN_CATEGORIES,
@@ -35,6 +37,7 @@ import {
   toDate,
   updateConcern,
   updateConcernDetails,
+  updateConcernOutcome,
   updateLfeReportStatus,
 } from '@/modules/governance/services/concernService';
 
@@ -211,6 +214,10 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, isAdmi
   const [correspondenceForm, setCorrespondenceForm] = useState({ type: 'letter', occurredAt: formatDateInput(new Date()), notes: '' });
   const [extendDate, setExtendDate] = useState('');
   const [extendReason, setExtendReason] = useState('');
+  const [closingOutcome, setClosingOutcome] = useState('');
+  const [closeBusy, setCloseBusy] = useState(false);
+  const [closeError, setCloseError] = useState('');
+  const [outcomeEdit, setOutcomeEdit] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
 
@@ -259,6 +266,25 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, isAdmi
     setExtendReason('');
   }
 
+  async function submitClose() {
+    if (!closingOutcome) return;
+    try {
+      setCloseBusy(true);
+      setCloseError('');
+      await closeConcern(concern, actor, closingOutcome);
+      setClosingOutcome('');
+    } catch (err) {
+      setCloseError(err?.message || 'Could not close the case.');
+    } finally {
+      setCloseBusy(false);
+    }
+  }
+
+  async function submitOutcomeChange() {
+    if (!outcomeEdit || outcomeEdit === concern.outcome) return;
+    await updateConcernOutcome(concern.id, outcomeEdit, actor);
+  }
+
   async function submitCorrespondence() {
     if (!correspondenceForm.notes.trim()) return;
     await addConcernCorrespondence(concern.id, correspondenceForm, actor);
@@ -300,6 +326,7 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, isAdmi
           <span className="rounded-full border border-[var(--medtrak-border)] px-3 py-1 text-xs font-bold uppercase">{String(concern.priority || 'low')}</span>
           <span className={`rounded-full px-3 py-1 text-xs font-bold ${deadline.status === 'critical' ? 'bg-rose-500/10 text-rose-600' : deadline.status === 'warning' ? 'bg-amber-500/10 text-amber-600' : 'bg-emerald-500/10 text-emerald-600'}`}>{deadline.label}</span>
           <span className="rounded-full bg-teal-500/10 px-3 py-1 text-xs font-bold text-teal-700">Case health {health}%</span>
+          {concern.outcome && <span className="rounded-full border border-[var(--medtrak-border)] px-3 py-1 text-xs font-bold">{CONCERN_OUTCOME_LABELS[concern.outcome] || friendly(concern.outcome)}</span>}
         </div>
 
         {isTeam && (
@@ -334,6 +361,32 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, isAdmi
           </div>
         )}
 
+        {isTeam && concern.status !== CONCERN_STATUSES.closed && (
+          <div className="mt-3 rounded-xl border border-emerald-400/30 bg-emerald-500/5 p-2.5">
+            <p className="text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Closing outcome</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <select value={closingOutcome} onChange={(e) => setClosingOutcome(e.target.value)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-2 py-1.5 text-sm">
+                <option value="">Select outcome…</option>
+                {CONCERN_OUTCOMES.map((o) => <option key={o} value={o}>{CONCERN_OUTCOME_LABELS[o]}</option>)}
+              </select>
+              <button type="button" onClick={submitClose} disabled={!closingOutcome || closeBusy} className="rounded-xl bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-60">{closeBusy ? 'Closing…' : 'Close case'}</button>
+            </div>
+            {closeError && <p className="mt-1.5 text-xs text-rose-500">{closeError}</p>}
+          </div>
+        )}
+
+        {isTeam && concern.status === CONCERN_STATUSES.closed && (
+          <div className="mt-3 rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-2.5">
+            <p className="text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Change outcome</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <select value={outcomeEdit || concern.outcome || ''} onChange={(e) => setOutcomeEdit(e.target.value)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-2 py-1.5 text-sm">
+                {CONCERN_OUTCOMES.map((o) => <option key={o} value={o}>{CONCERN_OUTCOME_LABELS[o]}</option>)}
+              </select>
+              <button type="button" onClick={submitOutcomeChange} disabled={!outcomeEdit || outcomeEdit === concern.outcome} className="rounded-xl border border-[var(--medtrak-border)] px-3 py-1.5 text-sm font-semibold disabled:opacity-60">Save</button>
+            </div>
+          </div>
+        )}
+
         <div className="mt-4"><StageProgress status={concern.status} /></div>
 
         {isTeam && (
@@ -345,7 +398,6 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, isAdmi
             <button type="button" onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.investigation }, actor)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-2.5 text-sm font-semibold">Move to investigation</button>
             <button type="button" onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.response }, actor)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-2.5 text-sm font-semibold">Move to response</button>
             <button type="button" onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.learning }, actor)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-2.5 text-sm font-semibold">Move to learning</button>
-            <button type="button" onClick={() => closeConcern(concern, actor)} className="rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white">Close case</button>
           </div>
         )}
 

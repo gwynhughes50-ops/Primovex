@@ -56,6 +56,17 @@ export const CONCERN_STAGES = [
 export const CONCERN_SOURCES = ["patient", "relative", "pals", "bcuhb", "mddus", "gmpi", "solicitor", "coroner", "ombudsman", "staff", "other"];
 export const CONCERN_CATEGORIES = ["access", "communication", "clinical_care", "medication", "results", "confidentiality", "attitude", "records", "referral", "bereavement", "safeguarding", "other"];
 
+// Recorded once a case is closed — the finding, not the workflow status.
+// Needed so an annual return can answer "how many were upheld", which the
+// workflow status (received -> ... -> closed) alone cannot answer.
+export const CONCERN_OUTCOMES = ["upheld", "partially_upheld", "not_upheld", "no_case_to_answer"];
+export const CONCERN_OUTCOME_LABELS = {
+  upheld: "Upheld",
+  partially_upheld: "Partially upheld",
+  not_upheld: "Not upheld",
+  no_case_to_answer: "No case to answer",
+};
+
 export function toDate(value) {
   if (!value) return null;
   if (value?.toDate) return value.toDate();
@@ -359,9 +370,19 @@ export async function recordListeningDiscussion(concern, actor = {}, completed =
   await addConcernTimeline(concern.id, { type: "listening", title: completed ? "Listening discussion completed" : "Listening discussion offered", message: "Listening to People discussion step updated.", actor });
 }
 
-export async function closeConcern(concern, actor = {}) {
-  await updateConcern(concern.id, { status: CONCERN_STATUSES.closed, closedAt: serverTimestamp() }, actor);
-  await addConcernTimeline(concern.id, { type: "closed", title: "Case closed", message: "Concern closed after response/learning review.", actor });
+export async function closeConcern(concern, actor = {}, outcome) {
+  if (!CONCERN_OUTCOMES.includes(outcome)) throw new Error("An outcome is required to close a case.");
+  await updateConcern(concern.id, { status: CONCERN_STATUSES.closed, closedAt: serverTimestamp(), outcome }, actor);
+  await addConcernTimeline(concern.id, { type: "closed", title: "Case closed", message: `Concern closed after response/learning review. Outcome: ${CONCERN_OUTCOME_LABELS[outcome]}.`, actor });
+}
+
+// Corrects the recorded outcome on an already-closed case — mistakes happen,
+// and an annual return needs the final figure to be right, not just the
+// first one entered.
+export async function updateConcernOutcome(concernId, outcome, actor = {}) {
+  if (!CONCERN_OUTCOMES.includes(outcome)) throw new Error("Not a valid outcome.");
+  await updateConcern(concernId, { outcome }, actor);
+  await addConcernTimeline(concernId, { type: "outcome_changed", title: "Outcome updated", message: `Outcome changed to ${CONCERN_OUTCOME_LABELS[outcome]}.`, actor });
 }
 
 // A restricted-scope timeline entry a shared-with (but not Concerns-team)

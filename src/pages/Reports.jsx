@@ -14,15 +14,34 @@ import {
   LocateFixed,
   Tags,
   AlertTriangle,
+  ShieldAlert,
+  FileSearch,
 } from "lucide-react";
 
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, limit, onSnapshot, orderBy, query, Timestamp, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { normalizeStockItemCategory } from "@/services/stockService";
 import { categoryLabel as taxonomyCategoryLabel, subcategoryLabel as taxonomySubcategoryLabel } from "@/data/stockCategories";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  CONCERN_CATEGORIES,
+  CONCERN_OUTCOME_LABELS,
+  CONCERN_SOURCES,
+  friendly as friendlyConcern,
+  subscribeConcerns,
+  toDate as toConcernDate,
+} from "@/modules/governance/services/concernService";
+import {
+  SAR_COLLECTION,
+  SAR_REQUEST_TYPES,
+  SAR_STATUSES,
+  getRequestTypeLabel,
+  getStatusLabel as getSarStatusLabel,
+  toDate as toSarDate,
+} from "@/modules/governance/services/sarService";
 
 // -------------------- Firestore collections --------------------
 const ITEMS_COL = "stock_items";
@@ -47,8 +66,9 @@ function resolveSite(row) {
       ""
   ).trim();
 
-  // Treat "Both sites" as "no specific building"
-  if (raw.toLowerCase() === "both sites") return "";
+  // "Both sites" is a real, legitimate value for dual-site stock — it must
+  // not be treated as missing (that used to false-flag "Needs attention"
+  // and silently drop these items from a site-specific report).
   return raw;
 }
 
@@ -99,6 +119,21 @@ function stockStatus(item) {
   };
 }
 
+// Parses a bare "YYYY-MM-DD" date as a LOCAL calendar date, not UTC midnight
+// — `new Date("2026-03-01")` parses as UTC, which can flip Expired vs.
+// Expiring-soon status early/late by up to an hour right at the day
+// boundary, depending on time of day and BST. Compares calendar dates only.
+function parseCalendarDate(value) {
+  if (!value) return null;
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+  if (match) {
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  }
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
 function formatDateTimeAny(v) {
   let d = null;
   if (!v) return "";
@@ -128,9 +163,15 @@ function downloadBlob(filename, blob) {
   URL.revokeObjectURL(url);
 }
 
+// Neutralizes CSV/Excel formula injection — a value starting with =, +, -
+// or @ can execute as a formula when the export is opened in Excel.
+function neutralizeFormula(s) {
+  return /^[=+\-@]/.test(s) ? `'${s}` : s;
+}
+
 function toCSV(rows) {
   const escape = (v) => {
-    const s = String(v ?? "");
+    const s = neutralizeFormula(String(v ?? ""));
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const headers = Object.keys(rows[0] || {});
@@ -147,7 +188,13 @@ function toExcelSpreadsheetXml(rows) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
   const headers = Object.keys(rows[0] || {});
-  const rowXml = (values) => `<Row>${values.map((value) => `<Cell><Data ss:Type="String">${escapeXml(value)}</Data></Cell>`).join("")}</Row>`;
+  const cellXml = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return `<Cell><Data ss:Type="Number">${value}</Data></Cell>`;
+    }
+    return `<Cell><Data ss:Type="String">${escapeXml(neutralizeFormula(String(value ?? "")))}</Data></Cell>`;
+  };
+  const rowXml = (values) => `<Row>${values.map(cellXml).join("")}</Row>`;
   return `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Report"><Table>${rowXml(headers)}${rows.map((row) => rowXml(headers.map((header) => row[header]))).join("")}</Table></Worksheet></Workbook>`;
 }
 
@@ -412,9 +459,105 @@ function TempTable({ rows }) {
   );
 }
 
+function ConcernsTable({ rows }) {
+  return (
+    <table className="min-w-full text-left text-sm">
+      <thead>
+        <tr className="border-b border-white/10 bg-slate-900/60 text-xs font-medium text-slate-300">
+          <th className="px-4 py-2">Reference</th>
+          <th className="px-4 py-2">Received</th>
+          <th className="px-4 py-2">Category</th>
+          <th className="px-4 py-2">Source</th>
+          <th className="px-4 py-2">Status</th>
+          <th className="px-4 py-2">Outcome</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.length === 0 ? (
+          <EmptyRow cols={6} />
+        ) : (
+          rows.map((c) => (
+            <tr key={c.id} className="border-b border-white/10 last:border-0">
+              <td className="px-4 py-3 text-xs text-slate-100">{c.reference}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{formatDateTimeAny(c.receivedAt)}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{friendlyConcern(c.category)}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{friendlyConcern(c.source)}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{friendlyConcern(c.status)}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{c.outcome ? CONCERN_OUTCOME_LABELS[c.outcome] : "—"}</td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  );
+}
+
+function SarsTable({ rows }) {
+  return (
+    <table className="min-w-full text-left text-sm">
+      <thead>
+        <tr className="border-b border-white/10 bg-slate-900/60 text-xs font-medium text-slate-300">
+          <th className="px-4 py-2">Reference</th>
+          <th className="px-4 py-2">Received</th>
+          <th className="px-4 py-2">Request type</th>
+          <th className="px-4 py-2">Status</th>
+          <th className="px-4 py-2">Due</th>
+          <th className="px-4 py-2">Assigned to</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.length === 0 ? (
+          <EmptyRow cols={6} />
+        ) : (
+          rows.map((s) => (
+            <tr key={s.id} className="border-b border-white/10 last:border-0">
+              <td className="px-4 py-3 text-xs text-slate-100">{s.reference}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{formatDateTimeAny(s.receivedDate)}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{s.requestTypeLabel || getRequestTypeLabel(s.requestType)}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{getSarStatusLabel(s.status)}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{formatDateTimeAny(s.dueDate)}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{s.assignedToName || "—"}</td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  );
+}
+
+// A simple horizontal-bar breakdown — count per category/type/status, the
+// core of an annual return ("how many of each").
+function BreakdownCard({ title, counts, labelFor, total }) {
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  return (
+    <Card className="border border-white/10 bg-slate-900/60 backdrop-blur p-4 shadow-lg">
+      <p className="text-sm font-semibold text-slate-100">{title}</p>
+      <div className="mt-3 space-y-2">
+        {entries.length === 0 ? (
+          <p className="text-xs text-slate-400">No records for the current filters.</p>
+        ) : (
+          entries.map(([key, count]) => {
+            const pct = total ? Math.round((count / total) * 100) : 0;
+            return (
+              <div key={key} className="flex items-center gap-2 text-xs text-slate-300">
+                <span className="w-32 shrink-0 truncate">{labelFor ? labelFor(key) : key}</span>
+                <div className="h-2 flex-1 rounded-full bg-slate-800">
+                  <div className="h-2 rounded-full bg-gradient-to-r from-teal-500 to-emerald-400" style={{ width: `${pct}%` }} />
+                </div>
+                <span className="w-8 shrink-0 text-right font-mono">{count}</span>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </Card>
+  );
+}
+
 // -------------------- Main component --------------------
 export default function Reports() {
-  const [tab, setTab] = useState("stock"); // stock | expiry | tx | temp
+  const { can } = useAuth();
+  const [tab, setTab] = useState("stock"); // stock | expiry | tx | temp | concerns | sars
 
   // Filters
   const [siteFilter, setSiteFilter] = useState(ALL_SITES);
@@ -425,10 +568,37 @@ export default function Reports() {
   // Extra helper filter
   const [needsAttentionOnly, setNeedsAttentionOnly] = useState(false);
 
+  // Date range — applies across every tab. datePreset drives dateFrom/dateTo.
+  const [datePreset, setDatePreset] = useState("all"); // all | this_year | last_year | custom
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+
+  const { dateFrom, dateTo } = useMemo(() => {
+    const now = new Date();
+    if (datePreset === "this_year") {
+      return { dateFrom: new Date(now.getFullYear(), 0, 1), dateTo: new Date(now.getFullYear(), 11, 31, 23, 59, 59) };
+    }
+    if (datePreset === "last_year") {
+      return { dateFrom: new Date(now.getFullYear() - 1, 0, 1), dateTo: new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59) };
+    }
+    if (datePreset === "custom") {
+      return {
+        dateFrom: customFrom ? parseCalendarDate(customFrom) : null,
+        dateTo: customTo ? new Date(parseCalendarDate(customTo).getTime() + 24 * 60 * 60 * 1000 - 1) : null,
+      };
+    }
+    return { dateFrom: null, dateTo: null };
+  }, [datePreset, customFrom, customTo]);
+
+  const canSeeConcerns = can("governance.concernsTeam") || can("governance.partnerAccess");
+  const canSeeSars = can("governance.read");
+
   // Data
   const [stock, setStock] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [temps, setTemps] = useState([]);
+  const [concerns, setConcerns] = useState([]);
+  const [sars, setSars] = useState([]);
 
   // item_id -> site fallback
   const siteByItemId = useMemo(() => {
@@ -447,9 +617,16 @@ export default function Reports() {
     );
   }, []);
 
-  // Subscribe stock_movements
+  // Subscribe stock_movements — bounded by the selected date range (falls
+  // back to a hard ceiling when no range is set, so a full history never
+  // loads and renders unbounded).
   useEffect(() => {
-    const qy = query(collection(db, MOVES_COL), orderBy("created_at", "desc"));
+    const clauses = [collection(db, MOVES_COL)];
+    if (dateFrom) clauses.push(where("created_at", ">=", Timestamp.fromDate(dateFrom)));
+    if (dateTo) clauses.push(where("created_at", "<=", Timestamp.fromDate(dateTo)));
+    clauses.push(orderBy("created_at", "desc"));
+    clauses.push(limit(2000));
+    const qy = query(...clauses);
     return onSnapshot(
       qy,
       (snap) => {
@@ -503,11 +680,16 @@ export default function Reports() {
       },
       (err) => console.error("Reports movements subscribe error:", err)
     );
-  }, [siteByItemId]);
+  }, [siteByItemId, dateFrom, dateTo]);
 
-  // Subscribe temperature_logs
+  // Subscribe temperature_logs — same date-bounding as movements.
   useEffect(() => {
-    const qy = query(collection(db, TEMP_COL), orderBy("created_at", "desc"));
+    const clauses = [collection(db, TEMP_COL)];
+    if (dateFrom) clauses.push(where("created_at", ">=", Timestamp.fromDate(dateFrom)));
+    if (dateTo) clauses.push(where("created_at", "<=", Timestamp.fromDate(dateTo)));
+    clauses.push(orderBy("created_at", "desc"));
+    clauses.push(limit(2000));
+    const qy = query(...clauses);
     return onSnapshot(
       qy,
       (snap) => {
@@ -526,15 +708,40 @@ export default function Reports() {
       },
       (err) => console.error("Reports temperature subscribe error:", err)
     );
-  }, []);
+  }, [dateFrom, dateTo]);
 
-  // On tx/temp tabs, location/category aren’t reliable -> disable + reset
+  // Subscribe governance_concerns — reuses the same helper the Concerns
+  // page itself uses, so visibility already matches isConcernsTeam /
+  // partnerAccess / involvement exactly, no new Firestore rule needed.
   useEffect(() => {
-    if (tab === "tx" || tab === "temp") {
+    if (!canSeeConcerns) { setConcerns([]); return undefined; }
+    return subscribeConcerns(setConcerns, (err) => console.error("Reports concerns subscribe error:", err));
+  }, [canSeeConcerns]);
+
+  // Subscribe governance_sars — same read pattern GovernanceSARs.jsx uses.
+  useEffect(() => {
+    if (!canSeeSars) { setSars([]); return undefined; }
+    const qy = query(collection(db, SAR_COLLECTION), orderBy("receivedDate", "desc"), limit(2000));
+    return onSnapshot(
+      qy,
+      (snap) => setSars(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      (err) => console.error("Reports SARs subscribe error:", err)
+    );
+  }, [canSeeSars]);
+
+  // Site/location/category filters only apply to stock-based tabs -> reset
+  // them (and the search text, since its meaning changes per tab) when
+  // switching to a tab where they don't apply.
+  useEffect(() => {
+    if (tab === "tx" || tab === "temp" || tab === "concerns" || tab === "sars") {
       setCategoryFilter(ALL_CATEGORIES);
       setLocationFilter(ALL_LOCATIONS);
       setNeedsAttentionOnly(false);
     }
+    if (tab === "concerns" || tab === "sars") {
+      setSiteFilter(ALL_SITES);
+    }
+    setQueryText("");
   }, [tab]);
 
   // Options from stock
@@ -644,20 +851,87 @@ export default function Reports() {
     });
   }, [temps, siteFilter, queryText]);
 
+  // Concerns filter (date range + query) — category/site/needsAttention
+  // don't apply to this tab.
+  const filteredConcerns = useMemo(() => {
+    const q = norm(queryText);
+    return concerns.filter((c) => {
+      const received = toConcernDate(c.receivedAt);
+      const matchesDate = (!dateFrom || (received && received >= dateFrom)) && (!dateTo || (received && received <= dateTo));
+      const matchesQuery =
+        !q ||
+        norm(c.reference).includes(q) ||
+        norm(c.summary).includes(q) ||
+        norm(c.category).includes(q) ||
+        norm(c.source).includes(q) ||
+        norm(c.status).includes(q);
+      return matchesDate && matchesQuery;
+    });
+  }, [concerns, dateFrom, dateTo, queryText]);
+
+  const concernBreakdown = useMemo(() => {
+    const byCategory = {};
+    const byStatus = {};
+    const byOutcome = {};
+    const bySource = {};
+    for (const c of filteredConcerns) {
+      byCategory[c.category || "other"] = (byCategory[c.category || "other"] || 0) + 1;
+      byStatus[c.status || "received"] = (byStatus[c.status || "received"] || 0) + 1;
+      bySource[c.source || "other"] = (bySource[c.source || "other"] || 0) + 1;
+      if (c.outcome) byOutcome[c.outcome] = (byOutcome[c.outcome] || 0) + 1;
+    }
+    const closedCount = filteredConcerns.filter((c) => c.status === "closed").length;
+    return { byCategory, byStatus, byOutcome, bySource, closedCount };
+  }, [filteredConcerns]);
+
+  // SARs filter (date range + query)
+  const filteredSars = useMemo(() => {
+    const q = norm(queryText);
+    return sars.filter((s) => {
+      const received = toSarDate(s.receivedDate);
+      const matchesDate = (!dateFrom || (received && received >= dateFrom)) && (!dateTo || (received && received <= dateTo));
+      const matchesQuery =
+        !q ||
+        norm(s.reference).includes(q) ||
+        norm(s.requestTypeLabel).includes(q) ||
+        norm(s.status).includes(q) ||
+        norm(s.assignedToName).includes(q);
+      return matchesDate && matchesQuery;
+    });
+  }, [sars, dateFrom, dateTo, queryText]);
+
+  const sarBreakdown = useMemo(() => {
+    const byType = {};
+    const byStatus = {};
+    let onTime = 0;
+    let late = 0;
+    for (const s of filteredSars) {
+      byType[s.requestType || "other"] = (byType[s.requestType || "other"] || 0) + 1;
+      byStatus[s.status || "new"] = (byStatus[s.status || "new"] || 0) + 1;
+      if (s.status === SAR_STATUSES.completed && s.completedAt && s.dueDate) {
+        const completed = toSarDate(s.completedAt);
+        const due = toSarDate(s.dueDate);
+        if (completed && due) { if (completed <= due) onTime += 1; else late += 1; }
+      }
+    }
+    return { byType, byStatus, onTime, late };
+  }, [filteredSars]);
+
   // Expiry report
   const expiryRows = useMemo(() => {
-    const now = new Date();
-    const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const in30 = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     return filteredStock
       .filter((i) => i.expiry_date)
       .map((i) => {
-        const exp = new Date(i.expiry_date);
+        const exp = parseCalendarDate(i.expiry_date);
         const status =
-          exp < now ? "Expired" : exp <= in30 ? "Expiring soon" : "OK";
+          !exp ? "OK" : exp < today ? "Expired" : exp <= in30 ? "Expiring soon" : "OK";
         return { ...i, expiry_status: status };
       })
-      .sort((a, b) => new Date(a.expiry_date) - new Date(b.expiry_date));
+      .sort((a, b) => (parseCalendarDate(a.expiry_date)?.getTime() || 0) - (parseCalendarDate(b.expiry_date)?.getTime() || 0));
   }, [filteredStock]);
 
   const needsAttentionCount = useMemo(() => stock.filter(isNeedsAttention).length, [stock]);
@@ -680,6 +954,22 @@ export default function Reports() {
         totalUnits: filteredTemps.length,
       };
     }
+    if (tab === "concerns") {
+      return {
+        totalItems: filteredConcerns.length,
+        outOfStock: filteredConcerns.filter((c) => c.priority === "high").length,
+        lowStock: concernBreakdown.closedCount,
+        totalUnits: filteredConcerns.length - concernBreakdown.closedCount,
+      };
+    }
+    if (tab === "sars") {
+      return {
+        totalItems: filteredSars.length,
+        outOfStock: sarBreakdown.late,
+        lowStock: sarBreakdown.onTime,
+        totalUnits: filteredSars.filter((s) => s.status !== SAR_STATUSES.completed).length,
+      };
+    }
 
     const rows = tab === "expiry" ? expiryRows : filteredStock;
     const outOfStock = rows.filter((i) => Number(i.current_stock ?? i.qty ?? 0) === 0).length;
@@ -697,7 +987,7 @@ export default function Reports() {
       lowStock,
       totalUnits,
     };
-  }, [tab, filteredStock, expiryRows, filteredTransactions, filteredTemps]);
+  }, [tab, filteredStock, expiryRows, filteredTransactions, filteredTemps, filteredConcerns, concernBreakdown, filteredSars, sarBreakdown]);
 
   // Export rows match current tab
   const exportRows = useMemo(() => {
@@ -740,16 +1030,41 @@ export default function Reports() {
       }));
     }
 
-    return filteredTemps.map((t) => ({
-      DateTime: formatDateTimeAny(t.datetime),
-      Site: t.site,
-      Unit: t.unit,
-      UnitType: t.unitType,
-      TemperatureC: t.temp,
-      RecordedBy: t.recordedBy,
-      Notes: t.notes || "",
+    if (tab === "temp") {
+      return filteredTemps.map((t) => ({
+        DateTime: formatDateTimeAny(t.datetime),
+        Site: t.site,
+        Unit: t.unit,
+        UnitType: t.unitType,
+        TemperatureC: t.temp,
+        RecordedBy: t.recordedBy,
+        Notes: t.notes || "",
+      }));
+    }
+
+    if (tab === "concerns") {
+      return filteredConcerns.map((c) => ({
+        Reference: c.reference || "",
+        Received: formatDateTimeAny(c.receivedAt),
+        Category: friendlyConcern(c.category),
+        Source: friendlyConcern(c.source),
+        Priority: friendlyConcern(c.priority),
+        Status: friendlyConcern(c.status),
+        Outcome: c.outcome ? CONCERN_OUTCOME_LABELS[c.outcome] : "",
+        Closed: c.closedAt ? formatDateTimeAny(c.closedAt) : "",
+      }));
+    }
+
+    return filteredSars.map((s) => ({
+      Reference: s.reference || "",
+      Received: formatDateTimeAny(s.receivedDate),
+      RequestType: s.requestTypeLabel || getRequestTypeLabel(s.requestType),
+      Status: getSarStatusLabel(s.status),
+      Due: formatDateTimeAny(s.dueDate),
+      Completed: s.completedAt ? formatDateTimeAny(s.completedAt) : "",
+      AssignedTo: s.assignedToName || "",
     }));
-  }, [tab, filteredStock, expiryRows, filteredTransactions, filteredTemps]);
+  }, [tab, filteredStock, expiryRows, filteredTransactions, filteredTemps, filteredConcerns, filteredSars]);
 
   const exportBaseName = useMemo(() => {
     const map = {
@@ -757,12 +1072,18 @@ export default function Reports() {
       expiry: "expiry-report",
       tx: "transactions",
       temp: "temperature",
+      concerns: "concerns",
+      sars: "sars",
     };
-    return `aurora-${map[tab]}-${new Date().toISOString().slice(0, 10)}`;
+    return `primovex-${map[tab]}-${new Date().toISOString().slice(0, 10)}`;
   }, [tab]);
 
+  const [exportMessage, setExportMessage] = useState("");
+  const [exportBusy, setExportBusy] = useState(false);
+
   const handleExportCSV = () => {
-    if (!exportRows.length) return;
+    if (!exportRows.length) { setExportMessage("Nothing to export — no rows match the current filters."); return; }
+    setExportMessage("");
     downloadBlob(
       `${exportBaseName}.csv`,
       new Blob([toCSV(exportRows)], { type: "text/csv;charset=utf-8" })
@@ -770,7 +1091,8 @@ export default function Reports() {
   };
 
   const handleExportExcel = () => {
-    if (!exportRows.length) return;
+    if (!exportRows.length) { setExportMessage("Nothing to export — no rows match the current filters."); return; }
+    setExportMessage("");
     downloadBlob(
       `${exportBaseName}.xml`,
       new Blob([toExcelSpreadsheetXml(exportRows)], { type: "application/vnd.ms-excel;charset=utf-8" })
@@ -778,26 +1100,40 @@ export default function Reports() {
   };
 
   const handleExportPDF = () => {
-    if (!exportRows.length) return;
+    if (!exportRows.length) { setExportMessage("Nothing to export — no rows match the current filters."); return; }
+    setExportMessage("");
+    setExportBusy(true);
+    try {
+      const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+      doc.setFontSize(14);
+      doc.text(`Primovex Reports — ${exportBaseName}`, 40, 40);
 
-    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
-    doc.setFontSize(14);
-    doc.text(`Aurora Stock Control — ${exportBaseName}`, 40, 40);
+      const columns = Object.keys(exportRows[0] || {});
+      const body = exportRows.map((r) => columns.map((c) => String(r[c] ?? "")));
 
-    const columns = Object.keys(exportRows[0] || {});
-    const body = exportRows.map((r) => columns.map((c) => String(r[c] ?? "")));
+      doc.autoTable({
+        startY: 60,
+        head: [columns],
+        body,
+        styles: { fontSize: 8, cellPadding: 4 },
+        headStyles: { fillColor: [15, 23, 42] },
+        margin: { left: 40, right: 40 },
+      });
 
-    doc.autoTable({
-      startY: 60,
-      head: [columns],
-      body,
-      styles: { fontSize: 8, cellPadding: 4 },
-      headStyles: { fillColor: [15, 23, 42] },
-      margin: { left: 40, right: 40 },
-    });
-
-    doc.save(`${exportBaseName}.pdf`);
+      doc.save(`${exportBaseName}.pdf`);
+    } finally {
+      setExportBusy(false);
+    }
   };
+
+  const searchPlaceholder = {
+    stock: "Search item, barcode, batch, location…",
+    expiry: "Search item, barcode, batch, location…",
+    tx: "Search item, action, user, site…",
+    temp: "Search site, unit, recorded by, notes…",
+    concerns: "Search reference, summary, category, source…",
+    sars: "Search reference, request type, status, assigned to…",
+  }[tab];
 
   return (
     <div className="space-y-6">
@@ -810,35 +1146,39 @@ export default function Reports() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-100">Reports</h1>
             <p className="text-sm text-slate-400">
-              Filter by Site (building), Location (room/cupboard), and Category.
+              Filter by Site, Location, Category and date range. Exports match what you see.
             </p>
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
-            onClick={handleExportCSV}
-          >
-            <Download className="mr-1.5 h-4 w-4" />
-            Export CSV
-          </Button>
-          <Button
-            variant="outline"
-            className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
-            onClick={handleExportExcel}
-          >
-            <Download className="mr-1.5 h-4 w-4" />
-            Export Excel XML
-          </Button>
-          <Button
-            className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 px-4 py-2 text-xs font-medium text-slate-950 shadow-sm hover:from-teal-400 hover:to-emerald-300"
-            onClick={handleExportPDF}
-          >
-            <Download className="mr-1.5 h-4 w-4" />
-            Export PDF
-          </Button>
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
+              onClick={handleExportCSV}
+            >
+              <Download className="mr-1.5 h-4 w-4" />
+              Export CSV
+            </Button>
+            <Button
+              variant="outline"
+              className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
+              onClick={handleExportExcel}
+            >
+              <Download className="mr-1.5 h-4 w-4" />
+              Export Excel XML
+            </Button>
+            <Button
+              className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 px-4 py-2 text-xs font-medium text-slate-950 shadow-sm hover:from-teal-400 hover:to-emerald-300"
+              onClick={handleExportPDF}
+              disabled={exportBusy}
+            >
+              <Download className="mr-1.5 h-4 w-4" />
+              {exportBusy ? "Generating…" : "Export PDF"}
+            </Button>
+          </div>
+          {exportMessage && <p className="text-xs text-amber-300">{exportMessage}</p>}
         </div>
       </div>
 
@@ -849,6 +1189,41 @@ export default function Reports() {
           <TabButton active={tab === "expiry"} onClick={() => setTab("expiry")} icon={Calendar} label="Expiry Report" />
           <TabButton active={tab === "tx"} onClick={() => setTab("tx")} icon={ArrowLeftRight} label="Transactions" />
           <TabButton active={tab === "temp"} onClick={() => setTab("temp")} icon={Thermometer} label="Temperature" />
+          {canSeeConcerns && <TabButton active={tab === "concerns"} onClick={() => setTab("concerns")} icon={ShieldAlert} label="Concerns" />}
+          {canSeeSars && <TabButton active={tab === "sars"} onClick={() => setTab("sars")} icon={FileSearch} label="SARs" />}
+        </div>
+      </Card>
+
+      {/* Date range — applies to every tab */}
+      <Card className="border border-white/10 bg-slate-900/70 backdrop-blur p-3 shadow-lg">
+        <div className="flex flex-wrap items-center gap-2">
+          <Calendar className="h-4 w-4 text-slate-400" />
+          {[
+            { value: "all", label: "All time" },
+            { value: "this_year", label: "This year" },
+            { value: "last_year", label: "Last year" },
+            { value: "custom", label: "Custom" },
+          ].map((preset) => (
+            <button
+              key={preset.value}
+              type="button"
+              onClick={() => setDatePreset(preset.value)}
+              className={
+                datePreset === preset.value
+                  ? "rounded-full bg-teal-500/20 border border-teal-400/40 px-3 py-1.5 text-xs font-semibold text-teal-100"
+                  : "rounded-full border border-white/10 bg-slate-800/70 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800"
+              }
+            >
+              {preset.label}
+            </button>
+          ))}
+          {datePreset === "custom" && (
+            <>
+              <Input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} className="h-9 w-40 rounded-full border-white/10 bg-slate-800/70 text-xs text-slate-100" />
+              <span className="text-xs text-slate-500">to</span>
+              <Input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="h-9 w-40 rounded-full border-white/10 bg-slate-800/70 text-xs text-slate-100" />
+            </>
+          )}
         </div>
       </Card>
 
@@ -856,14 +1231,14 @@ export default function Reports() {
       <Card className="border border-white/10 bg-slate-900/70 backdrop-blur p-4 shadow-lg">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-3 items-center">
-            <PillSelect icon={MapPin} value={siteFilter} onChange={setSiteFilter} options={siteOptions} />
+            <PillSelect icon={MapPin} value={siteFilter} onChange={setSiteFilter} options={siteOptions} disabled={tab === "concerns" || tab === "sars"} />
 
             <PillSelect
               icon={LocateFixed}
               value={locationFilter}
               onChange={setLocationFilter}
               options={locationOptions}
-              disabled={tab === "tx" || tab === "temp"}
+              disabled={tab === "tx" || tab === "temp" || tab === "concerns" || tab === "sars"}
             />
 
             <PillSelect
@@ -871,13 +1246,13 @@ export default function Reports() {
               value={categoryFilter}
               onChange={setCategoryFilter}
               options={categoryOptions}
-              disabled={tab === "tx" || tab === "temp"}
+              disabled={tab === "tx" || tab === "temp" || tab === "concerns" || tab === "sars"}
             />
 
             <Input
               value={queryText}
               onChange={(e) => setQueryText(e.target.value)}
-              placeholder="Search item, barcode, batch, location…"
+              placeholder={searchPlaceholder}
               className="h-10 w-72 rounded-full border-white/10 bg-slate-800/70 text-slate-100 placeholder:text-slate-400"
             />
 
@@ -890,7 +1265,7 @@ export default function Reports() {
                   : "inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-800/70 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800"
               }
               title="Show only items missing a real Site or Location"
-              disabled={tab === "tx" || tab === "temp"}
+              disabled={tab === "tx" || tab === "temp" || tab === "concerns" || tab === "sars"}
             >
               <AlertTriangle className="h-4 w-4" />
               Needs attention
@@ -905,20 +1280,46 @@ export default function Reports() {
       {/* Summary cards */}
       <div className="grid gap-3 md:grid-cols-4">
         <MiniStat
-          title={tab === "tx" || tab === "temp" ? "Records" : "Total Items"}
+          title={tab === "tx" || tab === "temp" || tab === "concerns" || tab === "sars" ? "Records" : "Total Items"}
           value={summary.totalItems}
           icon={Package}
           tone="teal"
         />
-        <MiniStat title="Out of Stock" value={summary.outOfStock} icon={FileText} tone="rose" />
-        <MiniStat title="Low Stock" value={summary.lowStock} icon={FileText} tone="amber" />
         <MiniStat
-          title={tab === "tx" ? "Total Qty" : tab === "temp" ? "Logs" : "Total Units"}
+          title={tab === "concerns" ? "High priority" : tab === "sars" ? "Completed late" : "Out of Stock"}
+          value={summary.outOfStock}
+          icon={tab === "concerns" || tab === "sars" ? AlertTriangle : FileText}
+          tone="rose"
+        />
+        <MiniStat
+          title={tab === "concerns" ? "Closed" : tab === "sars" ? "Completed on time" : "Low Stock"}
+          value={summary.lowStock}
+          icon={tab === "concerns" || tab === "sars" ? FileText : FileText}
+          tone="amber"
+        />
+        <MiniStat
+          title={tab === "tx" ? "Total Qty" : tab === "temp" ? "Logs" : tab === "concerns" ? "Still open" : tab === "sars" ? "Not yet completed" : "Total Units"}
           value={summary.totalUnits}
           icon={Package}
           tone="emerald"
         />
       </div>
+
+      {/* Breakdown — the core of an annual return */}
+      {tab === "concerns" && (
+        <div className="grid gap-3 md:grid-cols-2">
+          <BreakdownCard title="By category" counts={concernBreakdown.byCategory} labelFor={friendlyConcern} total={filteredConcerns.length} />
+          <BreakdownCard title="By outcome (closed cases)" counts={concernBreakdown.byOutcome} labelFor={(k) => CONCERN_OUTCOME_LABELS[k] || k} total={concernBreakdown.closedCount} />
+          <BreakdownCard title="By status" counts={concernBreakdown.byStatus} labelFor={friendlyConcern} total={filteredConcerns.length} />
+          <BreakdownCard title="By source" counts={concernBreakdown.bySource} labelFor={friendlyConcern} total={filteredConcerns.length} />
+        </div>
+      )}
+      {tab === "sars" && (
+        <div className="grid gap-3 md:grid-cols-2">
+          <BreakdownCard title="By request type" counts={sarBreakdown.byType} labelFor={getRequestTypeLabel} total={filteredSars.length} />
+          <BreakdownCard title="By status" counts={sarBreakdown.byStatus} labelFor={getSarStatusLabel} total={filteredSars.length} />
+        </div>
+      )}
 
       {/* Table */}
       <Card className="border border-white/10 bg-slate-900/60 backdrop-blur shadow-lg">
@@ -928,6 +1329,8 @@ export default function Reports() {
             {tab === "expiry" && "Expiry Report"}
             {tab === "tx" && "Transactions"}
             {tab === "temp" && "Temperature"}
+            {tab === "concerns" && "Concerns"}
+            {tab === "sars" && "SARs"}
           </p>
           <p className="mt-0.5 text-[0.7rem] text-slate-400">
             Filters apply to the current tab. Exports match what you see.
@@ -939,6 +1342,8 @@ export default function Reports() {
           {tab === "expiry" && <ExpiryTable rows={expiryRows} />}
           {tab === "tx" && <TransactionsTable rows={filteredTransactions} />}
           {tab === "temp" && <TempTable rows={filteredTemps} />}
+          {tab === "concerns" && <ConcernsTable rows={filteredConcerns} />}
+          {tab === "sars" && <SarsTable rows={filteredSars} />}
         </div>
       </Card>
     </div>
