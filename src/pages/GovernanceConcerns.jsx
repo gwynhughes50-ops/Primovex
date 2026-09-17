@@ -115,7 +115,7 @@ function StageProgress({ status }) {
   );
 }
 
-function ConcernFormModal({ open, onClose, actor, onCreated }) {
+function ConcernFormModal({ open, onClose, actor, onCreated, users }) {
   const [form, setForm] = useState(getInitialForm);
   const [busy, setBusy] = useState(false);
 
@@ -125,6 +125,11 @@ function ConcernFormModal({ open, onClose, actor, onCreated }) {
 
   if (!open) return null;
   const update = (patch) => setForm((current) => ({ ...current, ...patch }));
+
+  const chooseOwner = (uid) => {
+    const selected = users.find((u) => u.id === uid);
+    update({ ownerUid: uid, ownerName: selected?.displayName || selected?.email || "Unassigned" });
+  };
 
   const submit = async () => {
     try {
@@ -185,6 +190,15 @@ function ConcernFormModal({ open, onClose, actor, onCreated }) {
               <option value="high">HIGH - patient safety / external / serious harm</option>
             </select>
           </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-200">Owner</label>
+            <select value={form.ownerUid} onChange={(e) => chooseOwner(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-white">
+              <option value="">Unassigned</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.displayName || u.email || u.id}</option>)}
+            </select>
+          </div>
+          <div className="space-y-2 lg:col-span-2"><label className="text-sm font-semibold text-slate-200">Named contact for complainant</label><Input value={form.namedContactName} onChange={(e) => update({ namedContactName: e.target.value })} placeholder="Who the person raising this can ask for" /></div>
 
           <div className="space-y-2 lg:col-span-3"><label className="text-sm font-semibold text-slate-200">Anonymised summary</label><textarea value={form.summary} onChange={(e) => update({ summary: e.target.value })} rows={4} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-3 py-3 text-white" placeholder="Brief factual summary. Do not include patient name." /></div>
           <div className="space-y-2 lg:col-span-3"><label className="text-sm font-semibold text-slate-200">Desired outcome / what would help?</label><textarea value={form.desiredOutcome} onChange={(e) => update({ desiredOutcome: e.target.value })} rows={3} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-3 py-3 text-white" placeholder="Record what the person wants from the process, where known." /></div>
@@ -255,6 +269,11 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, users }) {
     setAddUserId("");
   };
 
+  const reassignOwner = async (uid) => {
+    const selected = users.find((u) => u.id === uid);
+    await updateConcern(concern.id, { ownerUid: uid, ownerName: selected?.displayName || selected?.email || "Unassigned" }, actor);
+  };
+
   return (
     <div className="space-y-4">
       <SectionCard title={concern.reference} description="Listening to People workflow and case health.">
@@ -267,6 +286,17 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, users }) {
             </div>
             <p className="text-sm text-slate-300">{concern.summary}</p>
             <p className="text-xs text-slate-500">Identifier: {concern.emisNumber ? `EMIS ${concern.emisNumber}` : `${concern.patientInitials || "Initials missing"} | DOB ${concern.dateOfBirth || "missing"}`}</p>
+            {isTeam ? (
+              <div className="flex items-center gap-2 pt-1">
+                <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner</label>
+                <select value={concern.ownerUid || ""} onChange={(e) => reassignOwner(e.target.value)} className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-white">
+                  <option value="">Unassigned</option>
+                  {users.map((u) => <option key={u.id} value={u.id}>{u.displayName || u.email || u.id}</option>)}
+                </select>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-500">Owner: {concern.ownerName || "Unassigned"}</p>
+            )}
           </div>
           <div className="rounded-3xl border border-teal-400/30 bg-teal-500/10 p-4 text-center text-teal-100">
             <p className="text-xs font-semibold uppercase tracking-wide text-teal-200/80">Case Health</p>
@@ -280,7 +310,11 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, users }) {
           <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Button onClick={() => acknowledgeConcern(concern, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Mark acknowledged</Button>
             <Button onClick={() => recordListeningDiscussion(concern, actor, false)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Listening offered</Button>
+            <Button onClick={() => recordListeningDiscussion(concern, actor, true)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Listening completed</Button>
+            <Button onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.early_resolution }, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Move to early resolution</Button>
             <Button onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.investigation }, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Move to investigation</Button>
+            <Button onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.response }, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Move to response</Button>
+            <Button onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.learning }, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Move to learning</Button>
             <Button onClick={() => closeConcern(concern, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-emerald-500 py-2.5 text-center leading-snug text-slate-950 hover:bg-emerald-400">Close case</Button>
           </div>
         )}
@@ -463,7 +497,7 @@ export default function GovernanceConcerns() {
           <ConcernDetail concern={selected} actor={actor} isTeam={isTeam} isPartner={isPartner} users={users} />
         </div>
 
-        <ConcernFormModal open={openCreate} onClose={() => setOpenCreate(false)} actor={actor} />
+        <ConcernFormModal open={openCreate} onClose={() => setOpenCreate(false)} actor={actor} users={users} />
     </div>
   );
 }

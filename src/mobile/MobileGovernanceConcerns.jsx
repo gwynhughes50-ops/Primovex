@@ -47,6 +47,9 @@ function getInitialForm() {
     priority: CONCERN_PRIORITIES.low,
     summary: '',
     desiredOutcome: '',
+    ownerUid: '',
+    ownerName: 'Unassigned',
+    namedContactName: '',
   };
 }
 
@@ -68,11 +71,16 @@ function StageProgress({ status }) {
   );
 }
 
-function NewConcernSheet({ actor, onClose, onCreated }) {
+function NewConcernSheet({ actor, onClose, onCreated, users }) {
   const [form, setForm] = useState(getInitialForm);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const update = (patch) => setForm((current) => ({ ...current, ...patch }));
+
+  const chooseOwner = (uid) => {
+    const selected = users.find((u) => u.id === uid);
+    update({ ownerUid: uid, ownerName: selected?.displayName || selected?.email || 'Unassigned' });
+  };
 
   async function submit() {
     setBusy(true);
@@ -130,6 +138,15 @@ function NewConcernSheet({ actor, onClose, onCreated }) {
               <option value="high">HIGH — patient safety / external / serious harm</option>
             </select>
           </label>
+          <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Owner
+            <select value={form.ownerUid} onChange={(e) => chooseOwner(e.target.value)} className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case">
+              <option value="">Unassigned</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.displayName || u.email || u.id}</option>)}
+            </select>
+          </label>
+          <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Named contact for complainant
+            <input value={form.namedContactName} onChange={(e) => update({ namedContactName: e.target.value })} placeholder="Who the person raising this can ask for" className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case" />
+          </label>
           <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Anonymised summary
             <textarea value={form.summary} onChange={(e) => update({ summary: e.target.value })} rows={3} placeholder="Brief factual summary. Do not include patient name." className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case" />
           </label>
@@ -185,6 +202,11 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, users 
     setAddUserId('');
   }
 
+  async function reassignOwner(uid) {
+    const selected = users.find((u) => u.id === uid);
+    await updateConcern(concern.id, { ownerUid: uid, ownerName: selected?.displayName || selected?.email || 'Unassigned' }, actor);
+  }
+
   return (
     <div className="pvx-mobile-sheet-backdrop backdrop-blur-sm" style={{ zIndex: 125 }} role="dialog" aria-modal="true">
       <section className="pvx-mobile-sheet max-h-[90vh] overflow-y-auto px-5 pt-4 text-[var(--medtrak-text)]">
@@ -206,13 +228,29 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, users 
 
         {concern.summary && <p className="mt-3 text-sm text-[var(--medtrak-muted)]">{concern.summary}</p>}
 
+        {isTeam ? (
+          <div className="mt-3 flex items-center gap-2">
+            <label className="text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Owner</label>
+            <select value={concern.ownerUid || ''} onChange={(e) => reassignOwner(e.target.value)} className="flex-1 rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-2 py-1.5 text-sm">
+              <option value="">Unassigned</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.displayName || u.email || u.id}</option>)}
+            </select>
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-[var(--medtrak-muted)]">Owner: {concern.ownerName || 'Unassigned'}</p>
+        )}
+
         <div className="mt-4"><StageProgress status={concern.status} /></div>
 
         {isTeam && (
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button type="button" onClick={() => acknowledgeConcern(concern, actor)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-2.5 text-sm font-semibold">Mark acknowledged</button>
             <button type="button" onClick={() => recordListeningDiscussion(concern, actor, false)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-2.5 text-sm font-semibold">Listening offered</button>
+            <button type="button" onClick={() => recordListeningDiscussion(concern, actor, true)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-2.5 text-sm font-semibold">Listening completed</button>
+            <button type="button" onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.early_resolution }, actor)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-2.5 text-sm font-semibold">Move to early resolution</button>
             <button type="button" onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.investigation }, actor)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-2.5 text-sm font-semibold">Move to investigation</button>
+            <button type="button" onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.response }, actor)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-2.5 text-sm font-semibold">Move to response</button>
+            <button type="button" onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.learning }, actor)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-2.5 text-sm font-semibold">Move to learning</button>
             <button type="button" onClick={() => closeConcern(concern, actor)} className="rounded-xl bg-emerald-500 px-3 py-2.5 text-sm font-semibold text-white">Close case</button>
           </div>
         )}
@@ -374,7 +412,7 @@ export default function MobileGovernanceConcerns() {
       </div>
 
       {selected && <ConcernDetailSheet concern={selected} actor={actor} onClose={() => setSelectedId('')} isTeam={isTeam} isPartner={isPartner} users={users} />}
-      {creating && isTeam && <NewConcernSheet actor={actor} onClose={() => setCreating(false)} onCreated={() => {}} />}
+      {creating && isTeam && <NewConcernSheet actor={actor} onClose={() => setCreating(false)} onCreated={() => {}} users={users} />}
     </main>
   );
 }
