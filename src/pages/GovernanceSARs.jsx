@@ -32,7 +32,7 @@ import {
 
 const requestedByOptions = ["patient", "parent", "solicitor", "executor", "court", "other"];
 const receivedViaOptions = ["email", "letter", "in_person", "telephone", "solicitor", "other"];
-const deliveryOptions = ["email", "collection", "recorded_post", "other"];
+const deliveryOptions = ["email", "collection", "other"];
 const statusFilters = ["all", "open", "due_week", "overdue", "completed"];
 
 function friendly(value) {
@@ -63,6 +63,7 @@ function getInitialForm() {
     dueDate: formatDateInput(calculateDueDate(today)),
     requestedBy: "patient",
     receivedVia: "email",
+    solicitorReference: "",
     requestType: "summary",
     requestOptions: [],
     informationRequired: "",
@@ -222,6 +223,11 @@ function NewSarPanel({ open, onClose, users, actor, onCreated }) {
             <select value={form.receivedVia} onChange={(e) => update({ receivedVia: e.target.value })} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-white">
               {receivedViaOptions.map((option) => <option key={option} value={option}>{friendly(option)}</option>)}
             </select>
+          </div>
+
+          <div className="space-y-3">
+            <label className="block text-sm font-semibold text-slate-200">Solicitor Reference</label>
+            <Input value={form.solicitorReference} onChange={(e) => update({ solicitorReference: e.target.value })} placeholder="Their file/case reference, if requested via a solicitor" />
           </div>
 
           <div className="space-y-3 lg:col-span-2">
@@ -405,6 +411,7 @@ function SarDetailPanel({ sar, actor, onClose }) {
               <div><span className="text-slate-500">Due</span><div className="font-semibold text-white">{formatDisplayDate(sar.dueDate)}</div></div>
               <div><span className="text-slate-500">Requested by</span><div className="font-semibold text-white">{friendly(sar.requestedBy)}</div></div>
               <div><span className="text-slate-500">Received via</span><div className="font-semibold text-white">{friendly(sar.receivedVia)}</div></div>
+              <div><span className="text-slate-500">Solicitor ref</span><div className="font-semibold text-white">{sar.solicitorReference || "—"}</div></div>
               <div><span className="text-slate-500">Assigned to</span><div className="font-semibold text-white">{sar.assignedToName || "Unassigned"}</div></div>
               <div><span className="text-slate-500">Manager</span><div className="font-semibold text-white">{sar.managerName || "Not set"}</div></div>
             </div>
@@ -518,7 +525,7 @@ export default function GovernanceSARs() {
       if (filter === "overdue" && !(days !== null && days < 0 && !completed)) return false;
       if (filter === "due_week" && !(days !== null && days >= 0 && days <= 7 && !completed)) return false;
       if (!term) return true;
-      return [sar.reference, sar.emisNumber, sar.requestTypeLabel, sar.assignedToName, sar.informationRequired]
+      return [sar.reference, sar.emisNumber, sar.requestTypeLabel, sar.assignedToName, sar.informationRequired, sar.solicitorReference]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term));
     });
