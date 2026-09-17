@@ -9,7 +9,10 @@ import {
   CONCERN_CATEGORIES,
   CONCERN_STAGES,
   CONCERN_STATUSES,
+  CORRESPONDENCE_TYPES,
+  LFE_REPORT_STATUSES,
   acknowledgeConcern,
+  addConcernCorrespondence,
   addConcernQuickNote,
   addInvolvedUser,
   addLearningAction,
@@ -17,17 +20,22 @@ import {
   closeConcern,
   createConcern,
   createConcernReference,
+  deleteConcern,
+  extendConcernDeadline,
   friendly,
   formatDateInput,
   getConcernMetrics,
   getDeadlineTone,
   recordListeningDiscussion,
   removeInvolvedUser,
+  subscribeConcernCorrespondence,
   subscribeConcernTimeline,
   subscribeConcerns,
   subscribeLearningActions,
   toDate,
   updateConcern,
+  updateConcernDetails,
+  updateLfeReportStatus,
 } from '@/modules/governance/services/concernService';
 
 function actorFromUser(user, displayName) {
@@ -50,6 +58,7 @@ function getInitialForm() {
     ownerUid: '',
     ownerName: 'Unassigned',
     namedContactName: '',
+    gmpiReference: '',
   };
 }
 
@@ -71,8 +80,28 @@ function StageProgress({ status }) {
   );
 }
 
-function NewConcernSheet({ actor, onClose, onCreated, users }) {
-  const [form, setForm] = useState(getInitialForm);
+function getFormFromConcern(concern) {
+  return {
+    ...getInitialForm(),
+    reference: concern.reference || '',
+    emisNumber: concern.emisNumber || '',
+    patientInitials: concern.patientInitials || '',
+    dateOfBirth: concern.dateOfBirth || '',
+    source: concern.source || 'patient',
+    category: concern.category || 'communication',
+    priority: concern.priority || CONCERN_PRIORITIES.low,
+    summary: concern.summary || '',
+    desiredOutcome: concern.desiredOutcome || '',
+    ownerUid: concern.ownerUid || '',
+    ownerName: concern.ownerName || 'Unassigned',
+    namedContactName: concern.namedContactName || '',
+    gmpiReference: concern.gmpiReference || '',
+  };
+}
+
+function NewConcernSheet({ actor, onClose, onCreated, users, concern }) {
+  const isEdit = !!concern;
+  const [form, setForm] = useState(() => (isEdit ? getFormFromConcern(concern) : getInitialForm()));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const update = (patch) => setForm((current) => ({ ...current, ...patch }));
@@ -86,11 +115,15 @@ function NewConcernSheet({ actor, onClose, onCreated, users }) {
     setBusy(true);
     setError('');
     try {
-      await createConcern(form, actor);
+      if (isEdit) {
+        await updateConcernDetails(concern.id, form, actor);
+      } else {
+        await createConcern(form, actor);
+      }
       onCreated?.();
       onClose();
     } catch (err) {
-      setError(err?.message || 'Failed to create concern.');
+      setError(err?.message || `Failed to ${isEdit ? 'save' : 'create'} concern.`);
     } finally {
       setBusy(false);
     }
@@ -103,7 +136,7 @@ function NewConcernSheet({ actor, onClose, onCreated, users }) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--medtrak-accent)]">Listening to People</p>
-            <h2 className="mt-1 text-xl font-bold">New concern</h2>
+            <h2 className="mt-1 text-xl font-bold">{isEdit ? `Edit ${concern.reference}` : 'New concern'}</h2>
             <p className="mt-1 text-sm text-[var(--medtrak-muted)]">Anonymised identifiers only — no patient names.</p>
           </div>
           <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-2xl border border-[var(--medtrak-border)]"><X className="h-5 w-5" /></button>
@@ -138,14 +171,19 @@ function NewConcernSheet({ actor, onClose, onCreated, users }) {
               <option value="high">HIGH — patient safety / external / serious harm</option>
             </select>
           </label>
-          <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Owner
-            <select value={form.ownerUid} onChange={(e) => chooseOwner(e.target.value)} className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case">
-              <option value="">Unassigned</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.displayName || u.email || u.id}</option>)}
-            </select>
-          </label>
+          {!isEdit && (
+            <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Owner
+              <select value={form.ownerUid} onChange={(e) => chooseOwner(e.target.value)} className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case">
+                <option value="">Unassigned</option>
+                {users.map((u) => <option key={u.id} value={u.id}>{u.displayName || u.email || u.id}</option>)}
+              </select>
+            </label>
+          )}
           <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Named contact for complainant
             <input value={form.namedContactName} onChange={(e) => update({ namedContactName: e.target.value })} placeholder="Who the person raising this can ask for" className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case" />
+          </label>
+          <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">GMPI / solicitor reference
+            <input value={form.gmpiReference} onChange={(e) => update({ gmpiReference: e.target.value })} placeholder="Assigned solicitor and/or their case reference" className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case" />
           </label>
           <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Anonymised summary
             <textarea value={form.summary} onChange={(e) => update({ summary: e.target.value })} rows={3} placeholder="Brief factual summary. Do not include patient name." className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case" />
@@ -156,25 +194,32 @@ function NewConcernSheet({ actor, onClose, onCreated, users }) {
 
           {error && <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-600">{error}</p>}
 
-          <button type="button" onClick={submit} disabled={busy} className="w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 py-3.5 font-bold text-white disabled:opacity-60">{busy ? 'Creating…' : 'Create concern'}</button>
+          <button type="button" onClick={submit} disabled={busy} className="w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 py-3.5 font-bold text-white disabled:opacity-60">{isEdit ? (busy ? 'Saving…' : 'Save changes') : (busy ? 'Creating…' : 'Create concern')}</button>
         </div>
       </section>
     </div>
   );
 }
 
-function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, users }) {
+function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, isAdmin, users, onEdit, onDeleted }) {
   const [timeline, setTimeline] = useState([]);
   const [learning, setLearning] = useState([]);
+  const [correspondence, setCorrespondence] = useState([]);
   const [learningTitle, setLearningTitle] = useState('');
   const [noteText, setNoteText] = useState('');
   const [addUserId, setAddUserId] = useState('');
+  const [correspondenceForm, setCorrespondenceForm] = useState({ type: 'letter', occurredAt: formatDateInput(new Date()), notes: '' });
+  const [extendDate, setExtendDate] = useState('');
+  const [extendReason, setExtendReason] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
     if (!concern?.id) return undefined;
     const unsubTimeline = subscribeConcernTimeline(concern.id, setTimeline, console.error);
     const unsubLearning = subscribeLearningActions(concern.id, setLearning, console.error);
-    return () => { unsubTimeline?.(); unsubLearning?.(); };
+    const unsubCorrespondence = subscribeConcernCorrespondence(concern.id, setCorrespondence, console.error);
+    return () => { unsubTimeline?.(); unsubLearning?.(); unsubCorrespondence?.(); };
   }, [concern?.id]);
 
   if (!concern) return null;
@@ -207,6 +252,36 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, users 
     await updateConcern(concern.id, { ownerUid: uid, ownerName: selected?.displayName || selected?.email || 'Unassigned' }, actor);
   }
 
+  async function submitExtension() {
+    if (!extendDate) return;
+    await extendConcernDeadline(concern.id, concern.finalResponseDueAt, extendDate, extendReason.trim(), actor);
+    setExtendDate('');
+    setExtendReason('');
+  }
+
+  async function submitCorrespondence() {
+    if (!correspondenceForm.notes.trim()) return;
+    await addConcernCorrespondence(concern.id, correspondenceForm, actor);
+    setCorrespondenceForm({ type: 'letter', occurredAt: formatDateInput(new Date()), notes: '' });
+  }
+
+  async function setLfeStatus(status) {
+    await updateLfeReportStatus(concern.id, status, actor);
+  }
+
+  async function confirmDeleteCase() {
+    try {
+      setDeleteBusy(true);
+      await deleteConcern(concern.id, actor);
+      setConfirmDelete(false);
+      onDeleted?.();
+    } catch (err) {
+      alert(err?.message || 'Failed to delete concern');
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
   return (
     <div className="pvx-mobile-sheet-backdrop backdrop-blur-sm" style={{ zIndex: 125 }} role="dialog" aria-modal="true">
       <section className="pvx-mobile-sheet max-h-[90vh] overflow-y-auto px-5 pt-4 text-[var(--medtrak-text)]">
@@ -216,6 +291,7 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, users 
             <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--medtrak-accent)]">{concern.reference}</p>
             <h2 className="mt-1 text-xl font-bold">{friendly(concern.status)}</h2>
             <p className="mt-1 text-xs text-[var(--medtrak-muted)]">{concern.emisNumber ? `EMIS ${concern.emisNumber}` : `${concern.patientInitials || 'Initials?'} · DOB ${concern.dateOfBirth || '?'}`}</p>
+            {concern.mddusRequired && <p className="mt-0.5 text-xs text-[var(--medtrak-muted)]">GMPI/solicitor: {concern.gmpiReference || 'Not yet recorded'}</p>}
           </div>
           <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-2xl border border-[var(--medtrak-border)]"><X className="h-5 w-5" /></button>
         </div>
@@ -225,6 +301,13 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, users 
           <span className={`rounded-full px-3 py-1 text-xs font-bold ${deadline.status === 'critical' ? 'bg-rose-500/10 text-rose-600' : deadline.status === 'warning' ? 'bg-amber-500/10 text-amber-600' : 'bg-emerald-500/10 text-emerald-600'}`}>{deadline.label}</span>
           <span className="rounded-full bg-teal-500/10 px-3 py-1 text-xs font-bold text-teal-700">Case health {health}%</span>
         </div>
+
+        {isTeam && (
+          <div className="mt-3 flex gap-2">
+            <button type="button" onClick={() => onEdit?.(concern)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-2 text-sm font-semibold">Edit</button>
+            {isAdmin && <button type="button" onClick={() => setConfirmDelete(true)} className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-600">Delete</button>}
+          </div>
+        )}
 
         {concern.summary && <p className="mt-3 text-sm text-[var(--medtrak-muted)]">{concern.summary}</p>}
 
@@ -238,6 +321,17 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, users 
           </div>
         ) : (
           <p className="mt-3 text-xs text-[var(--medtrak-muted)]">Owner: {concern.ownerName || 'Unassigned'}</p>
+        )}
+
+        {isTeam && (
+          <div className="mt-3 rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-2.5">
+            <p className="text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Extend final response deadline</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <input type="date" value={extendDate} onChange={(e) => setExtendDate(e.target.value)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-2 py-1.5 text-sm" />
+              <input value={extendReason} onChange={(e) => setExtendReason(e.target.value)} placeholder="Reason" className="flex-1 min-w-[120px] rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-2 py-1.5 text-sm" />
+              <button type="button" onClick={submitExtension} disabled={!extendDate} className="rounded-xl bg-[var(--medtrak-accent)] px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-60">Extend</button>
+            </div>
+          </div>
         )}
 
         <div className="mt-4"><StageProgress status={concern.status} /></div>
@@ -289,6 +383,53 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, users 
               <div key={item.id} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-2.5 text-sm">{item.title}</div>
             ))}
           </div>
+
+          <div className="mt-3 rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-2.5">
+            <p className="text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Welsh Risk Pool — LFE report</p>
+            {isTeam ? (
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <select value={concern.lfeReportStatus || 'not_required'} onChange={(e) => setLfeStatus(e.target.value)} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-2 py-1.5 text-sm">
+                  {LFE_REPORT_STATUSES.map((s) => <option key={s} value={s}>{friendly(s)}</option>)}
+                </select>
+                {concern.lfeReportStatus === 'sent' && <span className="text-xs text-[var(--medtrak-muted)]">Sent {toDate(concern.lfeReportSentAt)?.toLocaleDateString('en-GB') || ''}</span>}
+              </div>
+            ) : (
+              <p className="mt-1 text-sm">{friendly(concern.lfeReportStatus || 'not_required')}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-5">
+          <p className="text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Correspondence & contact log</p>
+          <p className="mt-0.5 text-xs text-[var(--medtrak-muted)]">Every letter, meeting or call with the complainant — extension and follow-up letters go here as separate entries.</p>
+          {isTeam && (
+            <div className="mt-2 space-y-1.5">
+              <div className="flex gap-2">
+                <select value={correspondenceForm.type} onChange={(e) => setCorrespondenceForm((f) => ({ ...f, type: e.target.value }))} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-2 py-2 text-sm">
+                  {CORRESPONDENCE_TYPES.map((t) => <option key={t} value={t}>{t === 'meeting' ? 'Face-to-face meeting' : friendly(t)}</option>)}
+                </select>
+                <input type="date" value={correspondenceForm.occurredAt} onChange={(e) => setCorrespondenceForm((f) => ({ ...f, occurredAt: e.target.value }))} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-2 py-2 text-sm" />
+              </div>
+              <div className="flex gap-2">
+                <input value={correspondenceForm.notes} onChange={(e) => setCorrespondenceForm((f) => ({ ...f, notes: e.target.value }))} placeholder="What was sent/discussed" className="flex-1 rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2 text-sm" />
+                <button type="button" onClick={submitCorrespondence} disabled={!correspondenceForm.notes.trim()} className="rounded-xl bg-[var(--medtrak-accent)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">Add</button>
+              </div>
+            </div>
+          )}
+          <div className="mt-2 space-y-1.5">
+            {correspondence.length === 0 ? <p className="text-xs text-[var(--medtrak-muted)]">No correspondence logged yet.</p> : correspondence.map((item) => {
+              const date = toDate(item.occurredAt);
+              return (
+                <div key={item.id} className="rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-2.5 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="rounded-full bg-teal-500/10 px-2 py-0.5 text-xs font-bold text-teal-700">{item.type === 'meeting' ? 'Face-to-face meeting' : friendly(item.type)}</span>
+                    <span className="text-xs text-[var(--medtrak-muted)]">{date ? date.toLocaleDateString('en-GB') : ''}</span>
+                  </div>
+                  {item.notes && <p className="mt-1 text-xs text-[var(--medtrak-muted)]">{item.notes}</p>}
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         <div className="mt-5 pb-4">
@@ -312,13 +453,26 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, users 
           </div>
         </div>
       </section>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-rose-400/30 bg-[var(--medtrak-panel)] p-5 text-[var(--medtrak-text)]">
+            <h3 className="text-base font-bold text-rose-600">Delete {concern.reference} permanently?</h3>
+            <p className="mt-2 text-sm text-[var(--medtrak-muted)]">This removes the case entirely and can't be undone. If the case is genuinely finished, closing it is usually the right action instead.</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" disabled={deleteBusy} onClick={() => setConfirmDelete(false)} className="rounded-xl border border-[var(--medtrak-border)] px-3 py-2 text-sm font-semibold">Cancel</button>
+              <button type="button" disabled={deleteBusy} onClick={confirmDeleteCase} className="rounded-xl bg-rose-500 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60">{deleteBusy ? 'Deleting…' : 'Delete permanently'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function MobileGovernanceConcerns() {
   const navigate = useNavigate();
-  const { user, displayName, can } = useAuth();
+  const { user, displayName, can, isAdmin } = useAuth();
   const actor = useMemo(() => actorFromUser(user, displayName), [user, displayName]);
   const isTeam = can('governance.concernsTeam');
   const isPartner = !isTeam && can('governance.partnerAccess');
@@ -328,6 +482,7 @@ export default function MobileGovernanceConcerns() {
   const [filter, setFilter] = useState('open');
   const [selectedId, setSelectedId] = useState('');
   const [creating, setCreating] = useState(false);
+  const [editingConcern, setEditingConcern] = useState(null);
 
   useEffect(() => subscribeConcerns(setConcerns, console.error, involvedOnly ? { involvedUid: user?.uid } : {}), [involvedOnly, user?.uid]);
 
@@ -411,8 +566,21 @@ export default function MobileGovernanceConcerns() {
         })}
       </div>
 
-      {selected && <ConcernDetailSheet concern={selected} actor={actor} onClose={() => setSelectedId('')} isTeam={isTeam} isPartner={isPartner} users={users} />}
+      {selected && (
+        <ConcernDetailSheet
+          concern={selected}
+          actor={actor}
+          onClose={() => setSelectedId('')}
+          isTeam={isTeam}
+          isPartner={isPartner}
+          isAdmin={isAdmin}
+          users={users}
+          onEdit={setEditingConcern}
+          onDeleted={() => setSelectedId('')}
+        />
+      )}
       {creating && isTeam && <NewConcernSheet actor={actor} onClose={() => setCreating(false)} onCreated={() => {}} users={users} />}
+      {editingConcern && <NewConcernSheet actor={actor} concern={editingConcern} onClose={() => setEditingConcern(null)} onCreated={() => {}} users={users} />}
     </main>
   );
 }

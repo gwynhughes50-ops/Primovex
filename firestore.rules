@@ -300,6 +300,15 @@ match /governance_concern_learning_actions/{actionId} {
   allow delete: if isAdmin();
 }
 
+match /governance_concern_correspondence/{entryId} {
+  allow get, list: if signedIn() && (
+    isConcernsTeam() || isGovernancePartner()
+    || isInvolvedInConcern(get(/databases/$(database)/documents/governance_concerns/$(resource.data.concernId)).data)
+  );
+  allow create, update: if isConcernsTeam();
+  allow delete: if isAdmin();
+}
+
 // -------------------------
 // SAR GOVERNANCE COLLECTIONS (new module names)
 // -------------------------

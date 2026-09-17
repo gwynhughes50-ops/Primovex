@@ -3,6 +3,7 @@ import {
   arrayRemove,
   arrayUnion,
   collection,
+  deleteDoc,
   doc,
   onSnapshot,
   orderBy,
@@ -20,6 +21,8 @@ import { demoGovernanceCases, demoConcernTimeline, demoLearningActions } from "@
 export const CONCERNS_COLLECTION = "governance_concerns";
 export const CONCERN_TIMELINE_COLLECTION = "governance_concern_timeline";
 export const CONCERN_LEARNING_COLLECTION = "governance_concern_learning_actions";
+export const CONCERN_CORRESPONDENCE_COLLECTION = "governance_concern_correspondence";
+export const CORRESPONDENCE_TYPES = ["letter", "meeting", "phone", "email", "other"];
 
 export const CONCERN_PRIORITIES = {
   low: "low",
@@ -197,6 +200,9 @@ export function buildConcernPayload(form, actor = {}) {
     dutyOfCandourTriggered: !!form.dutyOfCandourTriggered,
     clinicalReviewRequired: !!form.clinicalReviewRequired,
     mddusRequired: !!form.mddusRequired,
+    gmpiReference: String(form.gmpiReference || "").trim(),
+    lfeReportStatus: "not_required",
+    lfeReportSentAt: null,
     learningRequired: form.learningRequired !== false,
     learningRecordedAt: null,
     involvedUserIds: Array.isArray(form.involvedUserIds) ? form.involvedUserIds : [],
@@ -269,9 +275,80 @@ export async function updateConcern(concernId, patch = {}, actor = {}) {
   }
 }
 
+// Deliberately whitelisted to the intake fields only — never touches status,
+// ownerUid/ownerName, involvedUserIds, createdAt/createdByUid or the
+// listening/learning timestamps, all of which have their own dedicated
+// controls already (assign owner, move-to-stage buttons, etc.).
+export async function updateConcernDetails(concernId, form, actor = {}) {
+  const emisNumber = String(form.emisNumber || "").trim();
+  await updateConcern(concernId, {
+    reference: form.reference,
+    patientIdentifierType: emisNumber ? "emis" : "initials_dob",
+    emisNumber,
+    patientInitials: String(form.patientInitials || "").trim().toUpperCase(),
+    dateOfBirth: form.dateOfBirth || "",
+    source: form.source || "patient",
+    externalReference: String(form.externalReference || "").trim(),
+    category: form.category || "other",
+    priority: form.priority || CONCERN_PRIORITIES.low,
+    summary: String(form.summary || "").trim(),
+    desiredOutcome: String(form.desiredOutcome || "").trim(),
+    namedContactName: String(form.namedContactName || "").trim(),
+    earlyResolutionSuitable: !!form.earlyResolutionSuitable,
+    dutyOfCandourConsidered: !!form.dutyOfCandourConsidered,
+    dutyOfCandourTriggered: !!form.dutyOfCandourTriggered,
+    clinicalReviewRequired: !!form.clinicalReviewRequired,
+    mddusRequired: !!form.mddusRequired,
+    gmpiReference: String(form.gmpiReference || "").trim(),
+  }, actor);
+  await addConcernTimeline(concernId, { type: "edited", title: "Case details updated", message: "Intake details were edited.", actor });
+}
+
+// Firestore rules restrict this to isAdmin (stricter than the general
+// isConcernsTeam write access) — deleting a case is meant to correct a
+// mistake (wrong case created entirely), not a routine action. Timeline/
+// learning-action/correspondence sub-documents are left behind as orphans;
+// Firestore has no cascading delete, and since they're only ever queried by
+// concernId they simply stop being reachable once the parent's gone.
+export async function deleteConcern(concernId, actor = {}) {
+  if (isSafeSyntheticMode() || !concernId) return;
+  await deleteDoc(doc(db, CONCERNS_COLLECTION, concernId));
+}
+
+// dueDateBefore is the concern's current finalResponseDueAt (pass the raw
+// Firestore value/Date in from the caller) so the timeline entry can record
+// what changed, not just the new value.
+export async function extendConcernDeadline(concernId, dueDateBefore, newDueDate, reason, actor = {}) {
+  await updateConcern(concernId, { finalResponseDueAt: Timestamp.fromDate(new Date(newDueDate)) }, actor);
+  const before = toDate(dueDateBefore);
+  const beforeLabel = before ? before.toLocaleDateString("en-GB") : "unknown";
+  const afterLabel = new Date(newDueDate).toLocaleDateString("en-GB");
+  await addConcernTimeline(concernId, {
+    type: "extended",
+    title: "Response deadline extended",
+    message: `Extended from ${beforeLabel} to ${afterLabel}.${reason ? ` Reason: ${reason}` : ""}`,
+    actor,
+  });
+}
+
 export async function acknowledgeConcern(concern, actor = {}) {
   await updateConcern(concern.id, { status: CONCERN_STATUSES.acknowledged, acknowledgedAt: serverTimestamp() }, actor);
   await addConcernTimeline(concern.id, { type: "acknowledged", title: "Acknowledgement recorded", message: "Acknowledgement sent/recorded within the case timeline.", actor });
+}
+
+export const LFE_REPORT_STATUSES = ["not_required", "in_progress", "sent"];
+
+// Welsh Risk Pool "Learning from Events" report — distinct from the internal
+// learningActions list. Tracked as its own small status (not required /
+// in progress / sent) rather than on the intake form, since it's a process
+// that develops over the life of the case, same pattern as the listening
+// discussion offered/completed timestamps.
+export async function updateLfeReportStatus(concernId, status, actor = {}) {
+  const patch = { lfeReportStatus: status };
+  if (status === "sent") patch.lfeReportSentAt = serverTimestamp();
+  await updateConcern(concernId, patch, actor);
+  const label = status === "sent" ? "sent to the Welsh Risk Pool" : status === "in_progress" ? "started" : "marked not required";
+  await addConcernTimeline(concernId, { type: "lfe_report", title: `Learning from Events report ${label}`, message: "", actor });
 }
 
 export async function recordListeningDiscussion(concern, actor = {}, completed = true) {
@@ -329,6 +406,25 @@ export async function addLearningAction(concernId, action = {}, actor = {}) {
   return ref.id;
 }
 
+// Covers multiple letters, extension notices and face-to-face meetings under
+// one chronological log per case, rather than separate near-identical
+// features for each.
+export async function addConcernCorrespondence(concernId, entry = {}, actor = {}) {
+  if (isSafeSyntheticMode()) return `demo-correspondence-${Date.now()}`;
+  const type = CORRESPONDENCE_TYPES.includes(entry.type) ? entry.type : "letter";
+  const ref = await addDoc(collection(db, CONCERN_CORRESPONDENCE_COLLECTION), {
+    concernId,
+    type,
+    notes: String(entry.notes || "").trim(),
+    occurredAt: entry.occurredAt ? Timestamp.fromDate(new Date(entry.occurredAt)) : serverTimestamp(),
+    createdByUid: actor.uid || null,
+    createdByName: actor.displayName || actor.email || "Unknown",
+    createdAt: serverTimestamp(),
+  });
+  await addConcernTimeline(concernId, { type: "correspondence", title: `${friendly(type)} logged`, message: entry.notes || "", actor });
+  return ref.id;
+}
+
 // Concerns-team/Partner callers get every case (unconstrained query - allowed
 // broadly by the Firestore rules). Everyone else must pass involvedUid: a
 // query scoped to array-contains their own uid is the only shape Firestore's
@@ -373,6 +469,18 @@ export function subscribeLearningActions(concernId, callback, onError) {
   }
   if (!concernId) return () => {};
   const q = query(collection(db, CONCERN_LEARNING_COLLECTION), where("concernId", "==", concernId), orderBy("createdAt", "desc"));
+  return onSnapshot(q, (snapshot) => {
+    callback(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+  }, onError);
+}
+
+export function subscribeConcernCorrespondence(concernId, callback, onError) {
+  if (isSafeSyntheticMode()) {
+    const timer = setTimeout(() => callback([]), 50);
+    return () => clearTimeout(timer);
+  }
+  if (!concernId) return () => {};
+  const q = query(collection(db, CONCERN_CORRESPONDENCE_COLLECTION), where("concernId", "==", concernId), orderBy("occurredAt", "desc"));
   return onSnapshot(q, (snapshot) => {
     callback(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
   }, onError);

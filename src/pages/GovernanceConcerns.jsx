@@ -14,15 +14,20 @@ import {
   CONCERN_SOURCES,
   CONCERN_STAGES,
   CONCERN_STATUSES,
+  CORRESPONDENCE_TYPES,
   acknowledgeConcern,
+  addConcernCorrespondence,
   addConcernQuickNote,
   addInvolvedUser,
+  LFE_REPORT_STATUSES,
   addLearningAction,
   buildGovernancePrompts,
   calculateCaseHealth,
   closeConcern,
   createConcern,
   createConcernReference,
+  deleteConcern,
+  extendConcernDeadline,
   friendly,
   formatDateInput,
   getConcernMetrics,
@@ -31,11 +36,14 @@ import {
   getStatusBadge,
   recordListeningDiscussion,
   removeInvolvedUser,
+  subscribeConcernCorrespondence,
   subscribeConcernTimeline,
   subscribeConcerns,
   subscribeLearningActions,
   toDate,
   updateConcern,
+  updateConcernDetails,
+  updateLfeReportStatus,
 } from "@/modules/governance/services/concernService";
 
 function actorFromUser(user, displayName) {
@@ -76,6 +84,7 @@ function getInitialForm() {
     dutyOfCandourTriggered: false,
     clinicalReviewRequired: false,
     mddusRequired: false,
+    gmpiReference: "",
     learningRequired: true,
   };
 }
@@ -115,13 +124,40 @@ function StageProgress({ status }) {
   );
 }
 
-function ConcernFormModal({ open, onClose, actor, onCreated, users }) {
+function getFormFromConcern(concern) {
+  return {
+    ...getInitialForm(),
+    reference: concern.reference || "",
+    emisNumber: concern.emisNumber || "",
+    patientInitials: concern.patientInitials || "",
+    dateOfBirth: concern.dateOfBirth || "",
+    source: concern.source || "patient",
+    externalReference: concern.externalReference || "",
+    receivedAt: formatDateInput(toDate(concern.receivedAt)) || getInitialForm().receivedAt,
+    category: concern.category || "communication",
+    priority: concern.priority || CONCERN_PRIORITIES.low,
+    summary: concern.summary || "",
+    desiredOutcome: concern.desiredOutcome || "",
+    ownerUid: concern.ownerUid || "",
+    ownerName: concern.ownerName || "Unassigned",
+    namedContactName: concern.namedContactName || "",
+    earlyResolutionSuitable: !!concern.earlyResolutionSuitable,
+    dutyOfCandourConsidered: !!concern.dutyOfCandourConsidered,
+    dutyOfCandourTriggered: !!concern.dutyOfCandourTriggered,
+    clinicalReviewRequired: !!concern.clinicalReviewRequired,
+    mddusRequired: !!concern.mddusRequired,
+    gmpiReference: concern.gmpiReference || "",
+  };
+}
+
+function ConcernFormModal({ open, onClose, actor, onCreated, users, concern }) {
+  const isEdit = !!concern;
   const [form, setForm] = useState(getInitialForm);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (open) setForm(getInitialForm());
-  }, [open]);
+    if (open) setForm(isEdit ? getFormFromConcern(concern) : getInitialForm());
+  }, [open, concern, isEdit]);
 
   if (!open) return null;
   const update = (patch) => setForm((current) => ({ ...current, ...patch }));
@@ -134,11 +170,15 @@ function ConcernFormModal({ open, onClose, actor, onCreated, users }) {
   const submit = async () => {
     try {
       setBusy(true);
-      await createConcern(form, actor);
+      if (isEdit) {
+        await updateConcernDetails(concern.id, form, actor);
+      } else {
+        await createConcern(form, actor);
+      }
       onCreated?.();
       onClose?.();
     } catch (err) {
-      alert(err?.message || "Failed to create concern");
+      alert(err?.message || `Failed to ${isEdit ? "save" : "create"} concern`);
     } finally {
       setBusy(false);
     }
@@ -152,7 +192,7 @@ function ConcernFormModal({ open, onClose, actor, onCreated, users }) {
             <div className="inline-flex items-center gap-2 rounded-full border border-teal-400/30 bg-teal-400/10 px-3 py-1 text-xs font-semibold text-teal-200">
               <Icons.governance className="h-3.5 w-3.5" /> Listening to People
             </div>
-            <h2 className="mt-3 text-2xl font-black text-white">New Governance Concern</h2>
+            <h2 className="mt-3 text-2xl font-black text-white">{isEdit ? `Edit ${concern.reference}` : "New Governance Concern"}</h2>
             <p className="mt-1 text-sm text-slate-400">MedTrak+ stores anonymised identifiers only. Use EMIS number first, or initials and DOB if EMIS is unavailable.</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-full bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Close</button>
@@ -191,14 +231,16 @@ function ConcernFormModal({ open, onClose, actor, onCreated, users }) {
             </select>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-semibold text-slate-200">Owner</label>
-            <select value={form.ownerUid} onChange={(e) => chooseOwner(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-white">
-              <option value="">Unassigned</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.displayName || u.email || u.id}</option>)}
-            </select>
-          </div>
-          <div className="space-y-2 lg:col-span-2"><label className="text-sm font-semibold text-slate-200">Named contact for complainant</label><Input value={form.namedContactName} onChange={(e) => update({ namedContactName: e.target.value })} placeholder="Who the person raising this can ask for" /></div>
+          {!isEdit && (
+            <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-200">Owner</label>
+              <select value={form.ownerUid} onChange={(e) => chooseOwner(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-white">
+                <option value="">Unassigned</option>
+                {users.map((u) => <option key={u.id} value={u.id}>{u.displayName || u.email || u.id}</option>)}
+              </select>
+            </div>
+          )}
+          <div className={`space-y-2 lg:col-span-2 ${isEdit ? "lg:col-start-1" : ""}`}><label className="text-sm font-semibold text-slate-200">Named contact for complainant</label><Input value={form.namedContactName} onChange={(e) => update({ namedContactName: e.target.value })} placeholder="Who the person raising this can ask for" /></div>
 
           <div className="space-y-2 lg:col-span-3"><label className="text-sm font-semibold text-slate-200">Anonymised summary</label><textarea value={form.summary} onChange={(e) => update({ summary: e.target.value })} rows={4} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-3 py-3 text-white" placeholder="Brief factual summary. Do not include patient name." /></div>
           <div className="space-y-2 lg:col-span-3"><label className="text-sm font-semibold text-slate-200">Desired outcome / what would help?</label><textarea value={form.desiredOutcome} onChange={(e) => update({ desiredOutcome: e.target.value })} rows={3} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-3 py-3 text-white" placeholder="Record what the person wants from the process, where known." /></div>
@@ -213,10 +255,17 @@ function ConcernFormModal({ open, onClose, actor, onCreated, users }) {
           ))}
         </div>
 
+        {form.mddusRequired && (
+          <div className="mt-3 space-y-2">
+            <label className="text-sm font-semibold text-slate-200">GMPI / solicitor reference</label>
+            <Input value={form.gmpiReference} onChange={(e) => update({ gmpiReference: e.target.value })} placeholder="Assigned solicitor and/or their case reference" />
+          </div>
+        )}
+
         <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:justify-end">
           <Button variant="ghost" className="rounded-full" onClick={onClose}>Cancel</Button>
           <Button disabled={busy} onClick={submit} className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950">
-            {busy ? "Creating…" : "Create concern"}
+            {isEdit ? (busy ? "Saving…" : "Save changes") : (busy ? "Creating…" : "Create concern")}
           </Button>
         </div>
       </div>
@@ -224,20 +273,28 @@ function ConcernFormModal({ open, onClose, actor, onCreated, users }) {
   );
 }
 
-function ConcernDetail({ concern, actor, isTeam, isPartner, users }) {
+function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEdit, onDeleted }) {
   const [timeline, setTimeline] = useState([]);
   const [learning, setLearning] = useState([]);
+  const [correspondence, setCorrespondence] = useState([]);
   const [learningTitle, setLearningTitle] = useState("");
   const [noteText, setNoteText] = useState("");
   const [addUserId, setAddUserId] = useState("");
+  const [correspondenceForm, setCorrespondenceForm] = useState({ type: "letter", occurredAt: formatDateInput(new Date()), notes: "" });
+  const [extendDate, setExtendDate] = useState("");
+  const [extendReason, setExtendReason] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
     if (!concern?.id) return undefined;
     const unsubTimeline = subscribeConcernTimeline(concern.id, setTimeline, console.error);
     const unsubLearning = subscribeLearningActions(concern.id, setLearning, console.error);
+    const unsubCorrespondence = subscribeConcernCorrespondence(concern.id, setCorrespondence, console.error);
     return () => {
       unsubTimeline?.();
       unsubLearning?.();
+      unsubCorrespondence?.();
     };
   }, [concern?.id]);
 
@@ -274,6 +331,36 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, users }) {
     await updateConcern(concern.id, { ownerUid: uid, ownerName: selected?.displayName || selected?.email || "Unassigned" }, actor);
   };
 
+  const submitExtension = async () => {
+    if (!extendDate) return;
+    await extendConcernDeadline(concern.id, concern.finalResponseDueAt, extendDate, extendReason.trim(), actor);
+    setExtendDate("");
+    setExtendReason("");
+  };
+
+  const submitCorrespondence = async () => {
+    if (!correspondenceForm.notes.trim()) return;
+    await addConcernCorrespondence(concern.id, correspondenceForm, actor);
+    setCorrespondenceForm({ type: "letter", occurredAt: formatDateInput(new Date()), notes: "" });
+  };
+
+  const setLfeStatus = async (status) => {
+    await updateLfeReportStatus(concern.id, status, actor);
+  };
+
+  const confirmDeleteCase = async () => {
+    try {
+      setDeleteBusy(true);
+      await deleteConcern(concern.id, actor);
+      setConfirmDelete(false);
+      onDeleted?.();
+    } catch (err) {
+      alert(err?.message || "Failed to delete concern");
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <SectionCard title={concern.reference} description="Listening to People workflow and case health.">
@@ -286,6 +373,7 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, users }) {
             </div>
             <p className="text-sm text-slate-300">{concern.summary}</p>
             <p className="text-xs text-slate-500">Identifier: {concern.emisNumber ? `EMIS ${concern.emisNumber}` : `${concern.patientInitials || "Initials missing"} | DOB ${concern.dateOfBirth || "missing"}`}</p>
+            {concern.mddusRequired && <p className="text-xs text-slate-500">GMPI / solicitor: {concern.gmpiReference || "Not yet recorded"}</p>}
             {isTeam ? (
               <div className="flex items-center gap-2 pt-1">
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Owner</label>
@@ -298,11 +386,32 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, users }) {
               <p className="text-xs text-slate-500">Owner: {concern.ownerName || "Unassigned"}</p>
             )}
           </div>
-          <div className="rounded-3xl border border-teal-400/30 bg-teal-500/10 p-4 text-center text-teal-100">
-            <p className="text-xs font-semibold uppercase tracking-wide text-teal-200/80">Case Health</p>
-            <p className="text-4xl font-black">{health}%</p>
+          <div className="flex flex-col items-end gap-3">
+            {isTeam && (
+              <div className="flex gap-2">
+                <Button onClick={() => onEdit?.(concern)} variant="outline" className="rounded-full border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800">Edit</Button>
+                {isAdmin && (
+                  <Button onClick={() => setConfirmDelete(true)} variant="outline" className="rounded-full border-rose-500/40 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20">Delete</Button>
+                )}
+              </div>
+            )}
+            <div className="rounded-3xl border border-teal-400/30 bg-teal-500/10 p-4 text-center text-teal-100">
+              <p className="text-xs font-semibold uppercase tracking-wide text-teal-200/80">Case Health</p>
+              <p className="text-4xl font-black">{health}%</p>
+            </div>
           </div>
         </div>
+
+        {isTeam && (
+          <div className="mt-4 flex flex-wrap items-end gap-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-3">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Extend final response deadline</label>
+              <Input type="date" value={extendDate} onChange={(e) => setExtendDate(e.target.value)} />
+            </div>
+            <Input value={extendReason} onChange={(e) => setExtendReason(e.target.value)} placeholder="Reason (e.g. awaiting clinical statement)" className="flex-1 min-w-[200px]" />
+            <Button onClick={submitExtension} disabled={!extendDate} className="rounded-full">Extend</Button>
+          </div>
+        )}
 
         <div className="mt-5"><StageProgress status={concern.status} /></div>
 
@@ -364,8 +473,53 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, users }) {
               </div>
             ))}
           </div>
+
+          <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900/60 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Welsh Risk Pool — Learning from Events report</p>
+            {isTeam ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <select value={concern.lfeReportStatus || "not_required"} onChange={(e) => setLfeStatus(e.target.value)} className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-white">
+                  {LFE_REPORT_STATUSES.map((s) => <option key={s} value={s}>{friendly(s)}</option>)}
+                </select>
+                {concern.lfeReportStatus === "sent" && <span className="text-xs text-slate-400">Sent {formatDisplayDate(concern.lfeReportSentAt)}</span>}
+              </div>
+            ) : (
+              <p className="mt-1 text-sm text-slate-300">{friendly(concern.lfeReportStatus || "not_required")}{concern.lfeReportStatus === "sent" ? ` — ${formatDisplayDate(concern.lfeReportSentAt)}` : ""}</p>
+            )}
+          </div>
         </SectionCard>
       </div>
+
+      <SectionCard title="Correspondence & contact log" description="Every letter, meeting or call with the complainant — extension letters and follow-up letters all belong here as separate entries.">
+        {isTeam && (
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Type</label>
+              <select value={correspondenceForm.type} onChange={(e) => setCorrespondenceForm((f) => ({ ...f, type: e.target.value }))} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white">
+                {CORRESPONDENCE_TYPES.map((t) => <option key={t} value={t}>{t === "meeting" ? "Face-to-face meeting" : friendly(t)}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Date</label>
+              <Input type="date" value={correspondenceForm.occurredAt} onChange={(e) => setCorrespondenceForm((f) => ({ ...f, occurredAt: e.target.value }))} />
+            </div>
+            <Input value={correspondenceForm.notes} onChange={(e) => setCorrespondenceForm((f) => ({ ...f, notes: e.target.value }))} placeholder="What was sent/discussed" className="flex-1 min-w-[200px]" />
+            <Button onClick={submitCorrespondence} disabled={!correspondenceForm.notes.trim()} className="rounded-full">Add</Button>
+          </div>
+        )}
+        <div className="mt-3 space-y-2">
+          {correspondence.length === 0 ? <p className="text-sm text-slate-400">No correspondence logged yet.</p> : correspondence.map((item) => (
+            <div key={item.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3 text-sm text-slate-200">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <StatusBadge status="info">{item.type === "meeting" ? "Face-to-face meeting" : friendly(item.type)}</StatusBadge>
+                <p className="text-xs text-slate-500">{formatDisplayDate(item.occurredAt)}</p>
+              </div>
+              {item.notes && <p className="mt-1.5 text-slate-300">{item.notes}</p>}
+              <p className="mt-1 text-xs text-slate-500">Logged by {item.createdByName || "Unknown"}</p>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
 
       <SectionCard title="Case timeline" description="Chronological audit trail of key concern activity.">
         {!isPartner && (
@@ -387,12 +541,27 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, users }) {
           ))}
         </div>
       </SectionCard>
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-3xl border border-rose-500/30 bg-slate-950 p-5 shadow-2xl">
+            <h3 className="text-lg font-black text-rose-200">Delete {concern.reference} permanently?</h3>
+            <p className="mt-2 text-sm text-slate-300">This removes the case entirely — its timeline, learning actions and correspondence log stay orphaned and unreachable. This can't be undone. If the case is genuinely finished, closing it is usually the right action instead.</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="ghost" className="rounded-full" disabled={deleteBusy} onClick={() => setConfirmDelete(false)}>Cancel</Button>
+              <Button disabled={deleteBusy} onClick={confirmDeleteCase} className="rounded-full bg-rose-500 text-white hover:bg-rose-600">
+                {deleteBusy ? "Deleting…" : "Delete permanently"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function GovernanceConcerns() {
-  const { user, displayName, can } = useAuth();
+  const { user, displayName, can, isAdmin } = useAuth();
   const actor = useMemo(() => actorFromUser(user, displayName), [user, displayName]);
   const isTeam = can("governance.concernsTeam");
   const isPartner = !isTeam && can("governance.partnerAccess");
@@ -401,6 +570,7 @@ export default function GovernanceConcerns() {
   const [users, setUsers] = useState([]);
   const [error, setError] = useState("");
   const [openCreate, setOpenCreate] = useState(false);
+  const [editingConcern, setEditingConcern] = useState(null);
   const [selectedId, setSelectedId] = useState("");
   const [filter, setFilter] = useState("open");
 
@@ -494,10 +664,20 @@ export default function GovernanceConcerns() {
             </div>
           </SectionCard>
 
-          <ConcernDetail concern={selected} actor={actor} isTeam={isTeam} isPartner={isPartner} users={users} />
+          <ConcernDetail
+            concern={selected}
+            actor={actor}
+            isTeam={isTeam}
+            isPartner={isPartner}
+            isAdmin={isAdmin}
+            users={users}
+            onEdit={setEditingConcern}
+            onDeleted={() => setSelectedId("")}
+          />
         </div>
 
         <ConcernFormModal open={openCreate} onClose={() => setOpenCreate(false)} actor={actor} users={users} />
+        <ConcernFormModal open={!!editingConcern} concern={editingConcern} onClose={() => setEditingConcern(null)} actor={actor} users={users} />
     </div>
   );
 }
