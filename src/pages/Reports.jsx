@@ -591,7 +591,7 @@ export default function Reports() {
   }, [datePreset, customFrom, customTo]);
 
   const canSeeConcerns = can("governance.concernsTeam") || can("governance.partnerAccess");
-  const canSeeSars = can("governance.read");
+  const canSeeSars = can("governance.manageSars") || can("governance.partnerAccess");
 
   // Data
   const [stock, setStock] = useState([]);

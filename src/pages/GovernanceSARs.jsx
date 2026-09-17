@@ -332,7 +332,7 @@ function NewSarPanel({ open, onClose, users, actor, onCreated }) {
   );
 }
 
-function SarDetailPanel({ sar, actor, onClose }) {
+function SarDetailPanel({ sar, actor, isTeam, onClose }) {
   const [activity, setActivity] = useState([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -429,7 +429,7 @@ function SarDetailPanel({ sar, actor, onClose }) {
           <SectionCard title="Workflow">
             <div className="space-y-2">
               {[SAR_STATUSES.assigned, SAR_STATUSES.in_progress, SAR_STATUSES.quality_check, SAR_STATUSES.completed].map((status) => (
-                <Button key={status} type="button" variant="outline" disabled={busy} onClick={() => setStatus(status)} className="w-full justify-start rounded-xl border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800">
+                <Button key={status} type="button" variant="outline" disabled={busy || !isTeam} onClick={() => setStatus(status)} className="w-full justify-start rounded-xl border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800">
                   {getStatusLabel(status)}
                 </Button>
               ))}
@@ -445,6 +445,7 @@ function SarDetailPanel({ sar, actor, onClose }) {
                   <input
                     type="checkbox"
                     checked={!!checklist?.[item.key]}
+                    disabled={!isTeam}
                     onChange={(e) => saveChecklist({ ...checklist, [item.key]: e.target.checked })}
                   />
                   {item.label}
@@ -456,8 +457,8 @@ function SarDetailPanel({ sar, actor, onClose }) {
           <SectionCard title="Timeline">
             <div className="space-y-3">
               <div className="flex gap-2">
-                <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add internal note" />
-                <Button type="button" onClick={addNote} disabled={busy || !note.trim()} className="rounded-xl bg-teal-400 font-bold text-slate-950 hover:bg-teal-300">Add</Button>
+                <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add internal note" disabled={!isTeam} />
+                <Button type="button" onClick={addNote} disabled={busy || !note.trim() || !isTeam} className="rounded-xl bg-teal-400 font-bold text-slate-950 hover:bg-teal-300">Add</Button>
               </div>
               {activity.length === 0 ? <p className="text-sm text-slate-400">No activity yet.</p> : activity.map((row) => (
                 <div key={row.id} className="rounded-xl border border-slate-800 bg-slate-950 p-3 text-sm">
@@ -478,7 +479,8 @@ function SarDetailPanel({ sar, actor, onClose }) {
 }
 
 export default function GovernanceSARs() {
-  const { user, displayName } = useAuth();
+  const { user, displayName, can } = useAuth();
+  const isTeam = can("governance.manageSars");
   const actor = useMemo(() => actorFromUser(user, displayName), [user, displayName]);
   const [rows, setRows] = useState([]);
   const [users, setUsers] = useState([]);
@@ -538,7 +540,7 @@ export default function GovernanceSARs() {
         eyebrow="Governance Suite"
         title="Subject Access Requests"
         description="Track SARs without storing patient names or dates of birth. EMIS number only, clear ownership, countdowns, audit trail and Inbox reminders."
-        actions={<Button type="button" onClick={() => setShowNew(true)} className="rounded-full bg-teal-400 px-4 font-bold text-slate-950 hover:bg-teal-300"><Icons.add className="mr-2 h-4 w-4" />New SAR</Button>}
+        actions={isTeam && <Button type="button" onClick={() => setShowNew(true)} className="rounded-full bg-teal-400 px-4 font-bold text-slate-950 hover:bg-teal-300"><Icons.add className="mr-2 h-4 w-4" />New SAR</Button>}
       />
 
       {error && <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-100">{error}</div>}
@@ -611,7 +613,7 @@ export default function GovernanceSARs() {
       </SectionCard>
 
       <NewSarPanel open={showNew} onClose={() => setShowNew(false)} users={users} actor={actor} onCreated={() => setFilter("open")} />
-      <SarDetailPanel sar={selected} actor={actor} onClose={() => setSelected(null)} />
+      <SarDetailPanel sar={selected} actor={actor} isTeam={isTeam} onClose={() => setSelected(null)} />
     </div>
   );
 }

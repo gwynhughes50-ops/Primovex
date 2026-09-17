@@ -281,16 +281,25 @@ export default function AdminDashboard() {
         description: r.description || `${r.name} custom role.`,
         permissions: r.capabilities || [],
         protected: false,
+        custom: true,
       })),
     ],
     [liveCustomRoles]
   );
   const [isAddRoleOpen, setIsAddRoleOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState(null);
   const [newRole, setNewRole] = useState({
     name: "",
     description: "",
     permissions: ["inventory.read"],
   });
+
+  const openEditRole = (role) => {
+    setEditingRole(role);
+    setNewRole({ name: role.name, description: role.description || "", permissions: role.permissions || [] });
+    setAddRoleError("");
+    setIsAddRoleOpen(true);
+  };
 
   // Role assignment modal
   const [isAssignOpen, setIsAssignOpen] = useState(false);
@@ -386,7 +395,7 @@ export default function AdminDashboard() {
       setAddRoleError("Admin roles are protected. Create non-admin roles only.");
       return;
     }
-    if (roles.some((r) => r.name.toLowerCase() === name.toLowerCase())) {
+    if (!editingRole && roles.some((r) => r.name.toLowerCase() === name.toLowerCase())) {
       setAddRoleError("Role already exists.");
       return;
     }
@@ -396,17 +405,22 @@ export default function AdminDashboard() {
       // Doc id is the exact role name — every other place that reads this
       // collection (createUserAccount Cloud Function, AddUser's dropdown)
       // looks a role up by that same name, so no separate slug/id mapping.
-      await setDoc(doc(db, "roles", name), {
-        name,
-        description: newRole.description.trim(),
-        capabilities: newRole.permissions,
-        builtIn: false,
-        createdAt: serverTimestamp(),
-        createdByUid: user?.uid || null,
-        active: true,
-      });
+      // merge:true so editing an existing role only touches these fields —
+      // a plain setDoc would silently wipe createdAt/createdByUid/active.
+      await setDoc(
+        doc(db, "roles", name),
+        {
+          name,
+          description: newRole.description.trim(),
+          capabilities: newRole.permissions,
+          builtIn: false,
+          ...(editingRole ? {} : { createdAt: serverTimestamp(), createdByUid: user?.uid || null, active: true }),
+        },
+        { merge: true }
+      );
 
       setNewRole({ name: "", description: "", permissions: ["inventory.read"] });
+      setEditingRole(null);
       setIsAddRoleOpen(false);
     } catch (error) {
       setAddRoleError(error?.message || "Could not save this role.");
@@ -827,7 +841,12 @@ export default function AdminDashboard() {
                     </div>
                     <Button
                       className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30"
-                      onClick={() => setIsAddRoleOpen(true)}
+                      onClick={() => {
+                        setEditingRole(null);
+                        setNewRole({ name: "", description: "", permissions: ["inventory.read"] });
+                        setAddRoleError("");
+                        setIsAddRoleOpen(true);
+                      }}
                     >
                       <Plus className="h-4 w-4 mr-2" /> Add Role
                     </Button>
@@ -842,6 +861,7 @@ export default function AdminDashboard() {
                             <TableHead className="text-slate-300">Description</TableHead>
                             <TableHead className="text-slate-300">Permissions</TableHead>
                             <TableHead className="text-slate-300 text-right">Protected</TableHead>
+                            <TableHead className="text-slate-300 text-right">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -854,6 +874,18 @@ export default function AdminDashboard() {
                                 <Badge variant="outline" className="border-slate-700/70 text-slate-200">
                                   {r.protected ? "Yes" : "No"}
                                 </Badge>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {r.custom && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
+                                    onClick={() => openEditRole(r)}
+                                  >
+                                    Edit
+                                  </Button>
+                                )}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -1066,8 +1098,8 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur p-4">
           <div className="flex w-full max-w-md max-h-[85vh] flex-col rounded-2xl border border-slate-800/70 bg-slate-900/95 shadow-2xl text-slate-100">
             <div className="p-5 pb-0">
-              <div className="text-lg font-semibold text-slate-50">Add Role</div>
-              <div className="text-xs text-slate-400 mt-1">Create a non-admin role.</div>
+              <div className="text-lg font-semibold text-slate-50">{editingRole ? "Edit Role" : "Add Role"}</div>
+              <div className="text-xs text-slate-400 mt-1">{editingRole ? `Update ${editingRole.name}'s permissions.` : "Create a non-admin role."}</div>
 
               <div className="mt-4 space-y-3">
                 <div>
@@ -1076,6 +1108,7 @@ export default function AdminDashboard() {
                     value={newRole.name}
                     onChange={(e) => setNewRole((p) => ({ ...p, name: e.target.value }))}
                     placeholder="e.g. Stock Manager"
+                    disabled={!!editingRole}
                   />
                 </div>
 
@@ -1126,6 +1159,7 @@ export default function AdminDashboard() {
                 disabled={addRoleBusy}
                 onClick={() => {
                   setNewRole({ name: "", description: "", permissions: ["inventory.read"] });
+                  setEditingRole(null);
                   setAddRoleError("");
                   setIsAddRoleOpen(false);
                 }}
@@ -1137,7 +1171,7 @@ export default function AdminDashboard() {
                 disabled={addRoleBusy}
                 onClick={addRole}
               >
-                {addRoleBusy ? "Saving…" : "Save"}
+                {addRoleBusy ? "Saving…" : editingRole ? "Save changes" : "Save"}
               </Button>
             </div>
           </div>

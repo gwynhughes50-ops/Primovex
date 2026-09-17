@@ -276,6 +276,9 @@ function isConcernsTeam() {
 function isGovernancePartner() {
   return isAdmin() || hasPermission("governance", "partnerAccess");
 }
+function isSarsTeam() {
+  return isAdmin() || hasPermission("governance", "manageSars");
+}
 function isInvolvedInConcern(concernData) {
   return signedIn() && request.auth.uid in (concernData.involvedUserIds != null ? concernData.involvedUserIds : []);
 }
@@ -324,14 +327,19 @@ match /governance_concern_correspondence/{entryId} {
 // SAR GOVERNANCE COLLECTIONS (new module names)
 // -------------------------
 match /governance_sars/{sarId} {
-  allow get, list: if signedIn();
-  allow create, update: if signedIn();
+  allow get, list: if signedIn() && (
+    isSarsTeam() || isGovernancePartner()
+    || resource.data.assignedToUid == request.auth.uid
+    || resource.data.managerUid == request.auth.uid
+    || resource.data.createdByUid == request.auth.uid
+  );
+  allow create, update: if isSarsTeam();
   allow delete: if isAdmin();
 }
 
 match /governance_sar_activity/{activityId} {
   allow get, list: if signedIn();
-  allow create: if signedIn();
+  allow create: if isSarsTeam();
   allow update, delete: if false;
 }
 
