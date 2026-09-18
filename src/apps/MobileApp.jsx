@@ -11,8 +11,22 @@ import FirstRunSetupGate from "@/setup/FirstRunSetupGate";
 
 const MINIMUM_SPLASH_MS = 1200;
 
+// mobile.access is granted to every role's template except ReadOnly (a
+// desktop-reporting-only role) — this is the one place that actually
+// enforces it; until now it was defined but never checked anywhere.
+function MobileAccessDenied() {
+  const { signOut } = useAuth();
+  return (
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 bg-slate-950 p-6 text-center text-slate-100">
+      <p className="text-lg font-semibold">Mobile access isn't enabled for this account</p>
+      <p className="max-w-sm text-sm text-slate-400">Your role doesn't include mobile access. Use the Primovex desktop app, or ask an admin to grant it if this looks wrong.</p>
+      <button type="button" onClick={signOut} className="rounded-full bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-100 hover:bg-slate-700">Sign out</button>
+    </div>
+  );
+}
+
 function MobileBootController({ initialTab = "home" }) {
-  const { user, loading } = useAuth();
+  const { user, loading, can } = useAuth();
   const [minimumSplashComplete, setMinimumSplashComplete] = useState(false);
 
   useEffect(() => {
@@ -24,24 +38,26 @@ function MobileBootController({ initialTab = "home" }) {
     return <MobileBootSplash message={loading ? "Checking your secure session" : "Preparing Primovex Mobile"} />;
   }
 
-  return user
-    ? <FirstRunSetupGate><MobileLayout initialTab={initialTab} /></FirstRunSetupGate>
-    : <MobileAccountLogin />;
+  if (!user) return <MobileAccountLogin />;
+  if (!can("mobile.access")) return <MobileAccessDenied />;
+  return <FirstRunSetupGate><MobileLayout initialTab={initialTab} /></FirstRunSetupGate>;
 }
 
 function MobileSenseRoute() {
-  const { user, loading } = useAuth();
+  const { user, loading, can } = useAuth();
   if (loading) return <MobileBootSplash message="Opening Primovex Sense" />;
   // Keep the deep-link route in place while the user signs in. Once Firebase
   // restores the session this component opens the intended room automatically.
   if (!user) return <MobileAccountLogin />;
+  if (!can("mobile.access")) return <MobileAccessDenied />;
   return <SenseNfcOpen />;
 }
 
 function MobileGovernanceConcernsRoute() {
-  const { user, loading } = useAuth();
+  const { user, loading, can } = useAuth();
   if (loading) return <MobileBootSplash message="Opening Concerns" />;
   if (!user) return <MobileAccountLogin />;
+  if (!can("mobile.access")) return <MobileAccessDenied />;
   // Wrapped in the same session lock as the rest of the app — this carries
   // real patient governance data (EMIS numbers, complaint details), reached
   // by a normal nav action rather than a physical NFC tap, so it should not

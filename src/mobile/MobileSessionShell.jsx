@@ -2,17 +2,12 @@
 import { Fingerprint, KeyRound, LockKeyhole, LogOut, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSession } from "@/contexts/SessionContext";
+import { digest } from "@/lib/localPin";
 
 const PIN_KEY = "primovex.mobile.pin";
 const UNLOCK_KEY = "primovex.mobile.unlocked";
 const BIOMETRIC_KEY = "primovex.mobile.biometricCredentialId";
 const IDLE_LIMIT = 15 * 60 * 1000;
-
-async function digest(value) {
-  const bytes = new TextEncoder().encode(value);
-  const hash = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
 
 function base64urlToBuffer(base64url) {
   const padding = "=".repeat((4 - (base64url.length % 4)) % 4);

@@ -53,7 +53,11 @@ export const CONCERN_STAGES = [
   { key: "closed", label: "Closed" },
 ];
 
-export const CONCERN_SOURCES = ["patient", "relative", "pals", "bcuhb", "mddus", "gmpi", "solicitor", "coroner", "ombudsman", "staff", "other"];
+// "Llais" replaced PALS and the old Community Health Councils in Wales in
+// 2023 — PALS itself doesn't operate here, so it's not just a missing
+// option, it was the wrong one for a BCUHB practice.
+export const CONCERN_SOURCES = ["patient", "relative", "next_of_kin", "parent_guardian", "friend", "llais", "bcuhb", "mddus", "gmpi", "solicitor", "coroner", "police", "ombudsman", "staff", "other"];
+export const CONCERN_RAISED_BY_CONTACT_METHODS = ["none", "email", "mobile"];
 export const CONCERN_CATEGORIES = ["access", "communication", "clinical_care", "medication", "results", "confidentiality", "attitude", "records", "referral", "bereavement", "safeguarding", "other"];
 
 // Recorded once a case is closed — the finding, not the workflow status.
@@ -191,6 +195,9 @@ export function buildConcernPayload(form, actor = {}) {
     patientInitials: initials,
     dateOfBirth: form.dateOfBirth || "",
     source: form.source || "patient",
+    raisedByInitials: String(form.raisedByInitials || "").trim().toUpperCase(),
+    raisedByContactMethod: CONCERN_RAISED_BY_CONTACT_METHODS.includes(form.raisedByContactMethod) ? form.raisedByContactMethod : "none",
+    raisedByContactValue: String(form.raisedByContactValue || "").trim(),
     externalReference: String(form.externalReference || "").trim(),
     receivedAt: Timestamp.fromDate(received),
     acknowledgementDueAt: Timestamp.fromDate(acknowledgementDue),
@@ -299,6 +306,9 @@ export async function updateConcernDetails(concernId, form, actor = {}) {
     patientInitials: String(form.patientInitials || "").trim().toUpperCase(),
     dateOfBirth: form.dateOfBirth || "",
     source: form.source || "patient",
+    raisedByInitials: String(form.raisedByInitials || "").trim().toUpperCase(),
+    raisedByContactMethod: CONCERN_RAISED_BY_CONTACT_METHODS.includes(form.raisedByContactMethod) ? form.raisedByContactMethod : "none",
+    raisedByContactValue: String(form.raisedByContactValue || "").trim(),
     externalReference: String(form.externalReference || "").trim(),
     category: form.category || "other",
     priority: form.priority || CONCERN_PRIORITIES.low,

@@ -33,6 +33,7 @@ import ForgotPassword from "@/pages/ForgotPassword";
 import RequireAuth from "@/routes/RequireAuth";
 import PermissionGate from "@/components/security/PermissionGate";
 import FirstRunSetupGate from "@/setup/FirstRunSetupGate";
+import DesktopSessionShell from "@/desktop/DesktopSessionShell";
 
 export default function DesktopApp() {
   return (
@@ -61,7 +62,9 @@ export default function DesktopApp() {
         element={
           <RequireAuth>
             <FirstRunSetupGate>
-              <Layout />
+              <DesktopSessionShell>
+                <Layout />
+              </DesktopSessionShell>
             </FirstRunSetupGate>
           </RequireAuth>
         }
@@ -73,17 +76,17 @@ export default function DesktopApp() {
         <Route path="purchasing" element={<Purchasing />} />
         <Route path="suppliers" element={<SupplierDirectory />} />
         <Route path="practice-admin" element={<PermissionGate capability="practiceAdmin.read"><PracticeAdministration /></PermissionGate>} />
-        <Route path="governance/concerns" element={<GovernanceConcerns />} />
-        <Route path="governance/sars" element={<GovernanceSARs />} />
+        <Route path="governance/concerns" element={<PermissionGate capability="governance.read"><GovernanceConcerns /></PermissionGate>} />
+        <Route path="governance/sars" element={<PermissionGate capability="governance.read"><GovernanceSARs /></PermissionGate>} />
         <Route path="alerts" element={<Alerts />} />
-        <Route path="connect" element={<Connect />} />
+        <Route path="connect" element={<PermissionGate capability="connect.view"><Connect /></PermissionGate>} />
         <Route path="theme-lab" element={<ThemeLab />} />
         <Route path="security-centre" element={<SecurityCentre />} />
-        <Route path="facilities" element={<Facilities />} />
-        <Route path="spaces" element={<Spaces />} />
-        <Route path="temperature" element={<TemperatureLog />} />
-        <Route path="compliance" element={<Compliance />} />
-        <Route path="admin/*" element={<AdminDashboard />} />
+        <Route path="facilities" element={<PermissionGate capability="operations.read"><Facilities /></PermissionGate>} />
+        <Route path="spaces" element={<PermissionGate capability="operations.read"><Spaces /></PermissionGate>} />
+        <Route path="temperature" element={<PermissionGate capability="temperature.read"><TemperatureLog /></PermissionGate>} />
+        <Route path="compliance" element={<PermissionGate capability="compliance.read"><Compliance /></PermissionGate>} />
+        <Route path="admin/*" element={<PermissionGate capability="admin.access"><AdminDashboard /></PermissionGate>} />
         <Route path="reports" element={<PermissionGate capability="reports.read"><Reports /></PermissionGate>} />
         <Route path="clinflow" element={<PermissionGate capability="clinflow.read"><ClinFlowWorkspace /></PermissionGate>} />
         <Route path="help" element={<Help />} />

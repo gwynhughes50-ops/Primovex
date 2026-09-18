@@ -139,7 +139,7 @@ service cloud.firestore {
     // -------------------------
     match /stock_movements/{docId} {
       allow get, list: if signedIn();
-      allow create: if signedIn();
+      allow create: if hasPermission("inventory", "write") || isAdmin();
       // Historical movements are immutable except for the single controlled
       // transition that links an original stock-use entry to its compensating
       // reversal. No quantities, actor, reason or source fields can be edited.
@@ -154,17 +154,16 @@ service cloud.firestore {
       allow delete: if false;
     }
     match /stock_barcodes/{barcodeId} {
-  allow read: if request.auth != null;
-  allow create, update, delete: if request.auth != null;
+  allow read: if signedIn();
+  allow create, update, delete: if hasPermission("inventory", "write") || isAdmin();
 }
-  
+
   // -------------------------
 // REORDER REQUESTS
 // -------------------------
 match /reorder_requests/{requestId} {
   allow get, list: if signedIn();
-  allow create: if signedIn();
-  allow update: if signedIn();
+  allow create, update: if hasPermission("inventory", "write") || isAdmin();
   allow delete: if isAdmin();
 }
 
@@ -173,7 +172,7 @@ match /reorder_requests/{requestId} {
     // -------------------------
     match /stock_items/{docId} {
       allow get, list: if signedIn();
-      allow create, update: if signedIn();
+      allow create, update: if hasPermission("inventory", "write") || isAdmin();
       allow delete: if isAdmin();
     }
 
@@ -193,7 +192,7 @@ match /reorder_requests/{requestId} {
 // -------------------------
 match /purchase_orders/{orderId} {
   allow get, list: if signedIn();
-  allow create, update: if signedIn();
+  allow create, update: if hasPermission("purchasing", "write") || isAdmin();
   allow delete: if isAdmin();
 }
 
@@ -202,17 +201,16 @@ match /purchase_orders/{orderId} {
 // -------------------------
 match /purchase_order_activity/{activityId} {
   allow get, list: if signedIn();
-  allow create: if signedIn();
+  allow create: if hasPermission("purchasing", "write") || isAdmin();
   allow update, delete: if isAdmin();
 }
-    
+
     // -------------------------
 // SUPPLIERS
 // -------------------------
 match /suppliers/{supplierId} {
   allow get, list: if signedIn();
-  allow create: if signedIn();
-  allow update: if signedIn();
+  allow create, update: if hasPermission("suppliers", "write") || isAdmin();
   allow delete: if isAdmin();
 }
 
@@ -344,17 +342,17 @@ match /governance_sar_activity/{activityId} {
 }
 
 // -------------------------
-// SUBJECT ACCESS REQUESTS
+// SUBJECT ACCESS REQUESTS (legacy, superseded by governance_sars)
 // -------------------------
+// Orphaned — confirmed zero references anywhere in src/ or functions/.
+// Left open to any signed-in user for read/write despite that; locked to
+// admin rather than deleted, since it may hold real historical records
+// from before the SAR module was renamed.
 match /subject_access_requests/{requestId} {
-  allow get, list: if signedIn();
-  allow create, update: if signedIn();
-  allow delete: if isAdmin();
+  allow get, list, create, update, delete: if isAdmin();
 
   match /timeline/{timelineId} {
-    allow get, list: if signedIn();
-    allow create: if signedIn();
-    allow update, delete: if isAdmin();
+    allow get, list, create, update, delete: if isAdmin();
   }
 }
 
@@ -363,7 +361,7 @@ match /subject_access_requests/{requestId} {
     // -------------------------
     match /temperature_logs/{docId} {
       allow get, list: if signedIn();
-      allow create: if signedIn();
+      allow create: if hasPermission("temperature", "write") || isAdmin();
       allow update, delete: if isAdmin();
     }
 
@@ -374,17 +372,20 @@ match /subject_access_requests/{requestId} {
 
     match /temperature_incidents/{docId} {
       allow get, list: if signedIn();
-      allow create: if signedIn();
-      allow update: if signedIn();       // staff can resolve + add notes
+      allow create: if hasPermission("temperature", "write") || isAdmin();
+      allow update: if hasPermission("temperature", "write") || hasPermission("temperature", "resolveIncident") || isAdmin();
       allow delete: if isAdmin();
     }
 
     // -------------------------
     // ALERT RESOLUTIONS
     // -------------------------
+    // Covers both stock (expiry/low-stock) and temperature alerts — see
+    // Alerts.jsx, which resolves both alert families into this one
+    // collection — so either write capability is accepted.
     match /alert_resolutions/{docId} {
       allow get, list: if signedIn();
-      allow create, update: if signedIn();
+      allow create, update: if hasPermission("inventory", "write") || hasPermission("temperature", "write") || isAdmin();
       allow delete: if isAdmin();
     }
 

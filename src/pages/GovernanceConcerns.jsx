@@ -13,6 +13,7 @@ import {
   CONCERN_OUTCOME_LABELS,
   CONCERN_OUTCOMES,
   CONCERN_PRIORITIES,
+  CONCERN_RAISED_BY_CONTACT_METHODS,
   CONCERN_SOURCES,
   CONCERN_STAGES,
   CONCERN_STATUSES,
@@ -70,6 +71,9 @@ function getInitialForm() {
     patientInitials: "",
     dateOfBirth: "",
     source: "patient",
+    raisedByInitials: "",
+    raisedByContactMethod: "none",
+    raisedByContactValue: "",
     externalReference: "",
     receivedAt: formatDateInput(today),
     acknowledgementDueAt: "",
@@ -135,6 +139,9 @@ function getFormFromConcern(concern) {
     patientInitials: concern.patientInitials || "",
     dateOfBirth: concern.dateOfBirth || "",
     source: concern.source || "patient",
+    raisedByInitials: concern.raisedByInitials || "",
+    raisedByContactMethod: concern.raisedByContactMethod || "none",
+    raisedByContactValue: concern.raisedByContactValue || "",
     externalReference: concern.externalReference || "",
     receivedAt: formatDateInput(toDate(concern.receivedAt)) || getInitialForm().receivedAt,
     category: concern.category || "communication",
@@ -211,7 +218,7 @@ function ConcernFormModal({ open, onClose, actor, onCreated, users, concern }) {
           <div className="space-y-2"><label className="text-sm font-semibold text-slate-200">Initials if no EMIS</label><Input value={form.patientInitials} onChange={(e) => update({ patientInitials: e.target.value.toUpperCase() })} placeholder="e.g. A.B." /></div>
           <div className="space-y-2"><label className="text-sm font-semibold text-slate-200">DOB if no EMIS</label><Input type="date" value={form.dateOfBirth} onChange={(e) => update({ dateOfBirth: e.target.value })} /></div>
           <div className="space-y-2"><label className="text-sm font-semibold text-slate-200">Date received</label><Input type="date" value={form.receivedAt} onChange={(e) => update({ receivedAt: e.target.value })} /></div>
-          <div className="space-y-2"><label className="text-sm font-semibold text-slate-200">External reference</label><Input value={form.externalReference} onChange={(e) => update({ externalReference: e.target.value })} placeholder="PALS / GMPI / BCUHB / MDDUS" /></div>
+          <div className="space-y-2"><label className="text-sm font-semibold text-slate-200">External reference</label><Input value={form.externalReference} onChange={(e) => update({ externalReference: e.target.value })} placeholder="Llais / GMPI / BCUHB / MDDUS" /></div>
 
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-200">Source</label>
@@ -219,6 +226,32 @@ function ConcernFormModal({ open, onClose, actor, onCreated, users, concern }) {
               {CONCERN_SOURCES.map((option) => <option key={option} value={option}>{friendly(option)}</option>)}
             </select>
           </div>
+
+          {form.source !== "patient" && (
+            <div className="space-y-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/5 p-4 lg:col-span-3">
+              <p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Raised by — anonymised contact details</p>
+              <p className="text-xs text-slate-400">Initials only, plus a way to respond to them. Their full name and address stay in the paper file — reference it by {form.reference || "this case's reference"}.</p>
+              <div className="grid gap-4 pt-1 sm:grid-cols-3">
+                <div className="space-y-2"><label className="text-xs text-slate-300">Initials</label><Input value={form.raisedByInitials} onChange={(e) => update({ raisedByInitials: e.target.value.toUpperCase() })} placeholder="e.g. J.S." /></div>
+                <div className="space-y-2">
+                  <label className="text-xs text-slate-300">Contact method</label>
+                  <select value={form.raisedByContactMethod} onChange={(e) => update({ raisedByContactMethod: e.target.value, raisedByContactValue: e.target.value === "none" ? "" : form.raisedByContactValue })} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-white">
+                    {CONCERN_RAISED_BY_CONTACT_METHODS.map((option) => <option key={option} value={option}>{option === "none" ? "Not recorded" : friendly(option)}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs text-slate-300">Contact details</label>
+                  <Input
+                    value={form.raisedByContactValue}
+                    onChange={(e) => update({ raisedByContactValue: e.target.value })}
+                    disabled={form.raisedByContactMethod === "none"}
+                    placeholder={form.raisedByContactMethod === "email" ? "name@example.com" : form.raisedByContactMethod === "mobile" ? "07…" : "Select a method first"}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-200">Category</label>
             <select value={form.category} onChange={(e) => update({ category: e.target.value })} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-white">
@@ -400,6 +433,13 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
             </div>
             <p className="text-sm text-slate-300">{concern.summary}</p>
             <p className="text-xs text-slate-500">Identifier: {concern.emisNumber ? `EMIS ${concern.emisNumber}` : `${concern.patientInitials || "Initials missing"} | DOB ${concern.dateOfBirth || "missing"}`}</p>
+            {concern.source && concern.source !== "patient" && (
+              <p className="text-xs text-slate-500">
+                Raised by: {friendly(concern.source)}
+                {concern.raisedByInitials ? ` — ${concern.raisedByInitials}` : ""}
+                {concern.raisedByContactMethod && concern.raisedByContactMethod !== "none" ? `, ${friendly(concern.raisedByContactMethod)}: ${concern.raisedByContactValue || "not recorded"}` : ""}
+              </p>
+            )}
             {concern.mddusRequired && <p className="text-xs text-slate-500">GMPI / solicitor: {concern.gmpiReference || "Not yet recorded"}</p>}
             {isTeam ? (
               <div className="flex items-center gap-2 pt-1">
