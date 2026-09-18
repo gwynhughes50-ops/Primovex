@@ -14,6 +14,7 @@ const { appendGovernedAuditEvent } = require("./services/governedAuditService");
 const { reportRoomIssue } = require("./services/roomIssueService");
 const { recordSensePresenceTap } = require("./services/sensePresenceService");
 const { createUserAccount, setUserActive, deleteUserAccount } = require("./services/userAccountService");
+const { getEffectiveCapabilities, hasCapability } = require("./services/roleCapabilities");
 
 initializeApp();
 const db = getFirestore();
@@ -37,35 +38,50 @@ function assertSignedIn(request) {
   }
 }
 
+// These used to check profile.permissions (a nested-map shape the app never
+// actually writes onto users/{uid} — capabilities are computed client-side
+// from the user's role, see capabilities.js's getCapabilitiesForProfile), so
+// every role except the literal "System Admin" was silently denied here
+// regardless of what their role actually grants — same bug class fixed in
+// firestore.rules' hasPermission() after Craig hit it on SARs. Fixed to
+// derive capabilities from role the same way, via roleCapabilities.js.
 async function assertConnectManager(request) {
   assertSignedIn(request);
   const profile = await db.collection("users").doc(request.auth.uid).get();
   const data = profile.data() || {};
-  const permitted = data.role === "System Admin" || data.permissions?.connect?.manageDevices === true;
-  if (!permitted) throw new HttpsError("permission-denied", "Connect device management permission is required.");
+  if (data.role === "System Admin") return;
+  const capabilities = await getEffectiveCapabilities(db, data.role);
+  if (!hasCapability(capabilities, "connect.manageDevices")) {
+    throw new HttpsError("permission-denied", "Connect device management permission is required.");
+  }
 }
 
+// Returns the caller's role once admin.access is confirmed, so callers that
+// need to know whether the caller is a *real* System Admin (not just
+// admin.access-capable — e.g. createUserAccount granting the System Admin
+// role itself) don't need a second profile read.
 async function assertAdmin(request) {
   assertSignedIn(request);
   const profile = await db.collection("users").doc(request.auth.uid).get();
   const data = profile.data() || {};
-  const permitted = data.role === "System Admin" || data.permissions?.admin?.access === true;
-  if (!permitted) throw new HttpsError("permission-denied", "Admin access is required.");
-}
-
-function hasProfileCapability(profile, capability) {
-  const permissions = profile?.permissions;
-  if (Array.isArray(permissions)) return permissions.includes("*") || permissions.includes(capability);
-  const [domain, action] = capability.split(".");
-  return permissions?.[domain]?.[action] === true || permissions?.[capability] === true;
+  if (data.role === "System Admin") return data.role;
+  const capabilities = await getEffectiveCapabilities(db, data.role);
+  if (!hasCapability(capabilities, "admin.access")) {
+    throw new HttpsError("permission-denied", "Admin access is required.");
+  }
+  return data.role;
 }
 
 async function requireClinFlowCapture(request) {
   assertSignedIn(request);
   const snapshot = await db.collection("users").doc(request.auth.uid).get();
   const profile = snapshot.data() || {};
-  const permitted = profile.role === "System Admin" || hasProfileCapability(profile, "clinflow.capture");
-  if (!permitted) throw new HttpsError("permission-denied", "ClinFlow capture permission is required.");
+  if (profile.role !== "System Admin") {
+    const capabilities = await getEffectiveCapabilities(db, profile.role);
+    if (!hasCapability(capabilities, "clinflow.capture")) {
+      throw new HttpsError("permission-denied", "ClinFlow capture permission is required.");
+    }
+  }
   return profile;
 }
 
@@ -241,7 +257,12 @@ exports.syncConnectProvider = onCall({ region: "europe-west2", secrets: TUYA_SEC
 });
 
 exports.ingestConnectReading = onCall({ region: "europe-west2" }, async (request) => {
-  assertSignedIn(request);
+  // The equivalent client-side write (connect_device_readings' Firestore
+  // rule) requires connect.manageDevices — this Cloud Function bypasses
+  // Firestore rules via the Admin SDK, so it must enforce the same capability
+  // itself, or any signed-in user (any role) could inject fabricated
+  // cold-chain readings (e.g. a fake "in range" vaccine fridge temperature).
+  await assertConnectManager(request);
   const reading = request.data?.reading;
   if (!reading?.deviceId) {
     throw new HttpsError("invalid-argument", "reading.deviceId is required.");
@@ -305,8 +326,15 @@ exports.recordSensePresenceTap = onCall({ region: "europe-west2", timeoutSeconds
 });
 
 exports.createUserAccount = onCall({ region: "europe-west2" }, async (request) => {
-  await assertAdmin(request);
+  const callerRole = await assertAdmin(request);
   const { displayName, email, role } = request.data || {};
+  // admin.access (granted to Practice Manager, not just System Admin) is
+  // enough to add ordinary staff accounts, but minting another System Admin
+  // is a strictly higher-trust action reserved for an actual System Admin —
+  // otherwise admin.access alone becomes a path to self-escalate.
+  if (role === "System Admin" && callerRole !== "System Admin") {
+    throw new HttpsError("permission-denied", "Only a System Admin can create another System Admin account.");
+  }
   return createUserAccount({ displayName, email, role, creatorUid: request.auth.uid });
 });
 

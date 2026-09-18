@@ -78,12 +78,21 @@ service cloud.firestore {
       allow create: if isAdmin();
       allow delete: if isAdmin();
 
+      // request.auth.token.email must match the invited email — without this,
+      // any signed-in user who merely knows/guesses an invite's document id
+      // (the invites/get rule above is intentionally public, like a
+      // password-reset link) could mark someone ELSE's invite as used against
+      // their own uid. This narrows that; it doesn't fully close the deeper
+      // redemption race (see Register.jsx), which is why this whole legacy
+      // path — orphaned since Add User moved to the createUserAccount Cloud
+      // Function — should really just be removed rather than hardened further.
       allow update: if isAdmin()
         || (
           signedIn()
           && resource.data.used == false
           && request.resource.data.used == true
           && request.resource.data.usedByUid == request.auth.uid
+          && request.auth.token.email == resource.data.email
           && request.resource.data.email == resource.data.email
           && request.resource.data.role == resource.data.role
           && request.resource.data.displayName == resource.data.displayName

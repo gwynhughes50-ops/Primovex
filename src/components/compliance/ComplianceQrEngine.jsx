@@ -40,18 +40,31 @@ function assetTitle(asset) {
   return [asset.assetCode, asset.label].filter(Boolean).join(" • ") || "Compliance asset";
 }
 
+// Asset fields (label/location/assetCode) are free text staff enter when
+// adding a compliance asset — escape before interpolating into the print
+// window's HTML, or a label like `<img src=x onerror=...>` would execute as
+// script in that window the next time anyone prints labels for it.
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function printableLabelsHtml(assets) {
   const cards = assets
     .map((asset) => {
       const payload = buildComplianceQrPayload(asset);
       return `
         <section class="label">
-          <div class="topline">${getAssetTypeConfig(asset.assetType).icon} MEDTRAK+</div>
-          <img alt="QR" src="${getQrImageUrl(payload, 180)}" />
-          <div class="code">${asset.assetCode || asset.id}</div>
-          <div class="name">${asset.label || "Compliance asset"}</div>
-          <div class="loc">${asset.location || ""}</div>
-          <div class="small">${payload}</div>
+          <div class="topline">${escapeHtml(getAssetTypeConfig(asset.assetType).icon)} MEDTRAK+</div>
+          <img alt="QR" src="${escapeHtml(getQrImageUrl(payload, 180))}" />
+          <div class="code">${escapeHtml(asset.assetCode || asset.id)}</div>
+          <div class="name">${escapeHtml(asset.label || "Compliance asset")}</div>
+          <div class="loc">${escapeHtml(asset.location || "")}</div>
+          <div class="small">${escapeHtml(payload)}</div>
         </section>
       `;
     })
