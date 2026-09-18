@@ -19,7 +19,7 @@ export const GOVERNANCE_DOCUMENTS = [
     id: "data-sharing-map",
     requirementId: "waspi",
     title: "Data-Sharing Map (WASPI / ISP input)",
-    description: "Every external body Concerns correspondence flows to (BCUHB, Llais, MDDUS, GMPI, solicitors, coroner, police, Welsh Risk Pool) and current protocol status, for review against existing WASPI Information Sharing Protocols. Also lists technical third parties such as the QR label image service.",
+    description: "Every external body Concerns correspondence flows to (BCUHB, Llais, MDDUS, GMPI, solicitors, coroner, police, Welsh Risk Pool) and current protocol status, for review against existing WASPI Information Sharing Protocols. Also records technical third parties, such as the QR label image service (now removed).",
     status: "draft",
     addedAt: "2026-09-18",
     viewPath: "/governance/data-sharing-map.html",

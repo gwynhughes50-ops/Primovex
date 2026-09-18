@@ -26,10 +26,10 @@ export function buildAssetQrPayload(collectionName, assetId) {
   });
 }
 
-export function getQrImageUrl(payload, size = 220) {
-  const encoded = encodeURIComponent(payload);
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=12&data=${encoded}`;
-}
+import { getQrImageUrl } from "@/lib/qrCode";
+
+export { getQrImageUrl };
+
 
 export function daysUntil(dateValue) {
   if (!dateValue) return null;

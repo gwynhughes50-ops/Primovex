@@ -348,7 +348,4 @@ export async function createCompliancePulseEvent(asset, check, result) {
   });
 }
 
-export function getQrImageUrl(payload, size = 220) {
-  const data = encodeURIComponent(payload || "");
-  return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=10&data=${data}`;
-}
+export { getQrImageUrl } from "@/lib/qrCode";

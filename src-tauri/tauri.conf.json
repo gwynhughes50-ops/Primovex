@@ -24,7 +24,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://api.qrserver.com; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://europe-west2-medtrak-b1cad.cloudfunctions.net https://api.qrserver.com; object-src 'none'; base-uri 'self'; form-action 'self';"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://*.googleapis.com https://europe-west2-medtrak-b1cad.cloudfunctions.net; object-src 'none'; base-uri 'self'; form-action 'self';"
     }
   },
   "bundle": {

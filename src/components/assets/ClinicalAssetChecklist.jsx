@@ -25,6 +25,7 @@ import {
   daysUntil,
   formatLastChecked,
   getMedTrakAssetId,
+  getQrImageUrl,
   openAssetLabelPrintWindow,
 } from "@/services/assets/assetLabelService";
 
@@ -705,7 +706,7 @@ export default function ClinicalAssetChecklist({
               <img
                 className="mx-auto h-36 w-36 rounded-xl border border-[color:var(--medtrak-border)] bg-white p-2"
                 alt={`QR code for ${medtrakAssetId}`}
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=10&data=${encodeURIComponent(qrPayload)}`}
+                src={getQrImageUrl(qrPayload, 180)}
               />
               <div className="mt-3 font-mono text-sm font-semibold text-[color:var(--medtrak-text)]">{medtrakAssetId}</div>
               <div className="mt-1 text-xs text-[color:var(--medtrak-muted)]">{selected?.location || "No location set"}</div>
