@@ -2,7 +2,7 @@
 import { Fingerprint, KeyRound, LockKeyhole, LogOut, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSession } from "@/contexts/SessionContext";
-import { digest } from "@/lib/localPin";
+import { createPinDigest, verifyPinDigest } from "@/lib/localPin";
 
 const PIN_KEY = "primovex.mobile.pin";
 const UNLOCK_KEY = "primovex.mobile.unlocked";
@@ -172,14 +172,16 @@ export default function MobileSessionShell({ children, showSplash = false }) {
     if (!/^\d{6}$/.test(pin)) return setMessage("Enter your six-digit PIN.");
     const stored = localStorage.getItem(pinKey);
     if (!stored) return setMode("set-pin");
-    if ((await digest(pin)) !== stored) return setMessage("That PIN is incorrect.");
+    const { valid, upgraded } = await verifyPinDigest(pin, stored);
+    if (!valid) return setMessage("That PIN is incorrect.");
+    if (upgraded) localStorage.setItem(pinKey, upgraded);
     unlock();
   };
 
   const savePin = async () => {
     if (!/^\d{6}$/.test(pin)) return setMessage("Choose a six-digit PIN.");
     if (pin !== confirmPin) return setMessage("The PINs do not match.");
-    localStorage.setItem(pinKey, await digest(pin));
+    localStorage.setItem(pinKey, await createPinDigest(pin));
     unlock();
   };
 
