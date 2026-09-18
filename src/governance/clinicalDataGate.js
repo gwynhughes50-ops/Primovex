@@ -1,3 +1,10 @@
+import { findGovernanceDocument } from "@/config/governanceDocuments";
+
+// This mode name and the "locked" language below describe ClinFlow
+// specifically (see assertSyntheticClinFlowMode) — it is the one module
+// actually enforced, client-side and in firestore.rules, to synthetic data
+// only. Concerns, SARs, Inventory and Temperature have no such gate and are
+// live today; see getClinicalGovernanceReadiness()'s statement.
 export const CLINICAL_DATA_MODE = "synthetic_locked";
 
 export const ASSURANCE_PROFILES = {
@@ -44,21 +51,35 @@ export const CLINICAL_GOVERNANCE_REQUIREMENTS = [
   { id: "accessibility", label: "Accessibility and usability assessment completed", owner: "Product Owner", jurisdictions: ["wales", "england"] },
 ];
 
+// A requirement counts as "documented" once a matching draft/approved
+// document exists (see src/config/governanceDocuments.js) — distinct from
+// "approved", which needs an actual sign-off, not just paperwork existing.
+function withDocumentStatus(item) {
+  const doc = findGovernanceDocument(item.id);
+  return { ...item, documentStatus: doc ? doc.status : "not_started", document: doc };
+}
+
 export function getAssuranceProfile(profileId) {
   const profile = ASSURANCE_PROFILES[profileId] || ASSURANCE_PROFILES.wales;
-  const requirements = CLINICAL_GOVERNANCE_REQUIREMENTS.filter((item) => item.jurisdictions.includes(profile.id));
-  return { ...profile, approved: 0, total: requirements.length, requirements };
+  const requirements = CLINICAL_GOVERNANCE_REQUIREMENTS.filter((item) => item.jurisdictions.includes(profile.id)).map(withDocumentStatus);
+  const approved = requirements.filter((r) => r.documentStatus === "approved").length;
+  const documented = requirements.filter((r) => r.documentStatus === "draft" || r.documentStatus === "approved").length;
+  return { ...profile, approved, documented, total: requirements.length, requirements };
 }
 
 export function getClinicalGovernanceReadiness() {
+  const requirements = CLINICAL_GOVERNANCE_REQUIREMENTS.map(withDocumentStatus);
+  const approved = requirements.filter((r) => r.documentStatus === "approved").length;
+  const documented = requirements.filter((r) => r.documentStatus === "draft" || r.documentStatus === "approved").length;
   return {
     mode: CLINICAL_DATA_MODE,
     liveClinicalDataAllowed: false,
-    approved: 0,
+    approved,
+    documented,
     total: CLINICAL_GOVERNANCE_REQUIREMENTS.length,
-    blockers: CLINICAL_GOVERNANCE_REQUIREMENTS,
+    blockers: requirements,
     profiles: Object.keys(ASSURANCE_PROFILES).map(getAssuranceProfile),
-    statement: "Real patient data is technically locked until the applicable NHS Wales deployment gates and the adopted NHS England assurance overlay have recorded approval.",
+    statement: "ClinFlow's clinical-coding workflow is technically locked to synthetic data pending full NHS assurance sign-off across the checklist below. Concerns, SARs, Inventory and Temperature carry no such lock and are in live, active use under the practice's existing governance ahead of that full sign-off — see the governance documents below for what's drafted so far.",
   };
 }
 

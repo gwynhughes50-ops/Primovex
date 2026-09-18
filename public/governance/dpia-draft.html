@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Primovex DPIA Draft</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#f6f5f1; --paper:#ffffff; --paper-2:#faf9f6; --line:#dcd8cd; --line-strong:#bfb9a8;
+    --ink:#20211d; --ink-muted:#5b5b52; --ink-faint:#8a8a7d;
+    --accent:#8a1f2d; --accent-soft:#f6e9e9;
+    --low:#3d6b4f; --low-soft:#e7f0e9;
+    --med:#96631a; --med-soft:#f7ecd9;
+    --high:#8a1f2d; --high-soft:#f6e6e6;
+    --blank:#f0efe9;
+    --shadow:0 1px 2px rgba(32,33,29,.05), 0 6px 20px -10px rgba(32,33,29,.12);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#16150f; --paper:#1e1d17; --paper-2:#242319; --line:#3a3928; --line-strong:#4d4b35;
+      --ink:#ece9dd; --ink-muted:#b3ae9c; --ink-faint:#847f6c;
+      --accent:#d97b84; --accent-soft:#3a2020;
+      --low:#7fbd97; --low-soft:#1e2f22;
+      --med:#e0b25c; --med-soft:#332818;
+      --high:#d97b84; --high-soft:#3a2020;
+      --blank:#2a2919;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#16150f; --paper:#1e1d17; --paper-2:#242319; --line:#3a3928; --line-strong:#4d4b35;
+    --ink:#ece9dd; --ink-muted:#b3ae9c; --ink-faint:#847f6c;
+    --accent:#d97b84; --accent-soft:#3a2020;
+    --low:#7fbd97; --low-soft:#1e2f22;
+    --med:#e0b25c; --med-soft:#332818;
+    --high:#d97b84; --high-soft:#3a2020;
+    --blank:#2a2919;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px -12px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--ink); font-family:"IBM Plex Sans",-apple-system,"Segoe UI",sans-serif; padding-inline:18px; padding-block:32px 80px;}
+  .sheet{max-width:880px; margin:0 auto; background:var(--paper); border:1px solid var(--line); border-radius:4px; box-shadow:var(--shadow); padding:44px clamp(20px,5vw,64px) 56px;}
+  h1,h2,h3{font-family:"Source Serif 4",Georgia,serif; text-wrap:balance; margin:0;}
+  .mono{font-family:"IBM Plex Mono",monospace;}
+
+  .doc-head{border-bottom:3px double var(--line-strong); padding-bottom:20px; margin-bottom:28px;}
+  .doc-kicker{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); font-weight:600;}
+  .doc-head h1{font-size:clamp(24px,3.2vw,32px); font-weight:700; margin-top:8px; line-height:1.2;}
+  .doc-sub{color:var(--ink-muted); font-size:14px; margin-top:8px; max-width:64ch; line-height:1.6;}
+
+  .field-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:1px; background:var(--line); border:1px solid var(--line); margin-top:20px; border-radius:3px; overflow:hidden;}
+  .field{background:var(--paper-2); padding:10px 14px;}
+  .field .k{font-family:"IBM Plex Mono",monospace; font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-faint);}
+  .field .v{margin-top:3px; font-size:13.5px; font-weight:500;}
+  .field .v.blank{color:var(--ink-faint); font-style:italic; font-weight:400;}
+
+  section{margin-top:36px;}
+  .step-label{display:flex; align-items:baseline; gap:10px; margin-bottom:14px; border-bottom:1px solid var(--line); padding-bottom:8px;}
+  .step-num{font-family:"IBM Plex Mono",monospace; font-size:12px; font-weight:700; color:var(--accent); background:var(--accent-soft); padding:2px 8px; border-radius:3px; letter-spacing:.03em;}
+  .step-label h2{font-size:19px; font-weight:600;}
+
+  .sub h3{font-size:14.5px; font-weight:600; margin:18px 0 6px; font-family:"IBM Plex Sans",sans-serif;}
+  p{font-size:13.8px; line-height:1.7; color:var(--ink); margin:0 0 10px;}
+  p.muted{color:var(--ink-muted);}
+  ul{margin:6px 0 12px; padding-left:20px;}
+  li{font-size:13.8px; line-height:1.7; margin-bottom:4px;}
+  code{font-family:"IBM Plex Mono",monospace; font-size:12.5px; background:var(--paper-2); padding:1px 5px; border-radius:3px; border:1px solid var(--line);}
+
+  .todo{background:var(--blank); border:1px dashed var(--line-strong); border-radius:4px; padding:12px 16px; margin:10px 0; font-size:13px; color:var(--ink-muted);}
+  .todo b{color:var(--ink); font-family:"IBM Plex Mono",monospace; font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; display:block; margin-bottom:4px;}
+
+  table{border-collapse:separate; border-spacing:0; width:100%; margin:14px 0 8px; border:1px solid var(--line); border-radius:4px; overflow:hidden; font-size:12.8px;}
+  th{background:var(--paper-2); text-align:left; padding:9px 12px; font-weight:600; border-bottom:1px solid var(--line-strong); font-size:11.5px; text-transform:uppercase; letter-spacing:.03em; color:var(--ink-muted);}
+  td{padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; line-height:1.55;}
+  tr:last-child td{border-bottom:none;}
+  .pill{display:inline-block; font-size:11px; font-weight:600; padding:2px 9px; border-radius:20px; white-space:nowrap;}
+  .pill.low{background:var(--low-soft); color:var(--low);}
+  .pill.med{background:var(--med-soft); color:var(--med);}
+  .pill.high{background:var(--high-soft); color:var(--high);}
+  .signrow td{padding:16px 12px;}
+  .sign-line{border-bottom:1px solid var(--ink-faint); min-height:22px; display:block;}
+
+  footer{margin-top:44px; padding-top:16px; border-top:1px solid var(--line); font-size:11.5px; color:var(--ink-faint); line-height:1.6;}
+</style>
+</head>
+<body>
+
+<div class="sheet">
+  <div class="doc-head">
+    <div class="doc-kicker">Data Protection Impact Assessment &middot; Draft for review</div>
+    <h1>Primovex practice management system</h1>
+    <p class="doc-sub">Prepared as a working draft to support formal DPIA sign-off under Article 35 UK GDPR. Compiled from direct technical review of the system on 2026-09-18; fields marked <em>to be completed</em> require input from the practice's Data Protection Officer / Caldicott Guardian and are not something a technical review can supply.</p>
+    <div class="field-grid">
+      <div class="field"><div class="k">Controller</div><div class="v blank">[Practice name]</div></div>
+      <div class="field"><div class="k">DPO / Caldicott Guardian</div><div class="v blank">[Name]</div></div>
+      <div class="field"><div class="k">System</div><div class="v">Primovex v0.15.41</div></div>
+      <div class="field"><div class="k">Draft date</div><div class="v">18 September 2026</div></div>
+      <div class="field"><div class="k">Reviewed by</div><div class="v blank">[Name(s)]</div></div>
+      <div class="field"><div class="k">Status</div><div class="v blank">Draft — not yet approved</div></div>
+    </div>
+  </div>
+
+  <section>
+    <div class="step-label"><span class="step-num">STEP 1</span><h2>Identify the need for a DPIA</h2></div>
+    <p>Primovex is a practice management system used for stock/medicines inventory, cold-chain temperature monitoring, compliance recording, and governance case management — specifically Patient Safety Concerns (following the NHS Wales "Listening to People" pathway) and Subject Access Requests. It is a new system, introduced alongside the practice's core national systems (EMIS, Docman), not a replacement for them.</p>
+    <p>At least one ICO screening trigger applies, which is sufficient on its own to require a DPIA:</p>
+    <ul>
+      <li><strong>Special category data.</strong> Concerns and SARs both relate to patient care and, even pseudonymised, fall within Article 9 health data by association.</li>
+      <li><strong>New technology / novel processing for this practice.</strong> This data flow (governance case management in a dedicated tool) has not previously been assessed.</li>
+      <li><strong>Systematic, practice-wide processing</strong> used continuously by multiple staff roles.</li>
+    </ul>
+    <p class="muted">Conclusion: a DPIA is required before Primovex's governance modules (Concerns, SARs) are relied upon as the practice's primary record for these processes.</p>
+  </section>
+
+  <section>
+    <div class="step-label"><span class="step-num">STEP 2</span><h2>Describe the processing</h2></div>
+
+    <div class="sub"><h3>Nature</h3></div>
+    <p><strong>Collection:</strong> manually entered by practice staff via desktop or mobile forms at the point a concern, SAR, stock movement, or temperature reading occurs.</p>
+    <p><strong>Use:</strong> case tracking against statutory/pathway deadlines, correspondence logging, stock and cold-chain safety monitoring, staff-facing reporting (including annual category/outcome breakdowns for external returns such as the Welsh Risk Pool).</p>
+    <p><strong>Storage:</strong> Google Cloud Firestore, EU multi-region (<code>eur3</code>); application server logic (Cloud Functions) runs in <code>europe-west2</code> (London, UK).</p>
+    <p><strong>Deletion:</strong> governance timeline, correspondence, and stock-movement entries are immutable audit records (cannot be edited or deleted by design). Stock items are soft-deleted (archived, recoverable). Concern cases and user accounts can be hard-deleted, restricted to System Admin only, behind an explicit confirmation step.</p>
+    <p><strong>Sharing:</strong> Concerns correspondence is logged with named external bodies as part of the normal governance process — see the accompanying data-sharing map for the full list and current protocol status.</p>
+    <p><strong>Special category data:</strong> yes, by association — patient identifiers (EMIS number, or initials + date of birth) and, for the person raising a concern when that differs from the patient, initials and a contact method. No patient name, address, or full date-of-birth-plus-name combination is stored; that identifying detail is deliberately kept in the paper file, cross-referenced only by the Primovex case reference.</p>
+
+    <div class="sub"><h3>Scope</h3></div>
+    <table>
+      <tr><th style="width:26%">Dimension</th><th>Detail</th></tr>
+      <tr><td>Data subjects</td><td>Patients (via pseudonymised reference only — Primovex has no direct patient-facing interface); practice staff (direct personal data — name, email, role)</td></tr>
+      <tr><td>Volume</td><td class="todo-cell"><span class="todo"><b>To be completed</b>Approximate registered list size and typical annual Concerns/SARs volume — practice to confirm.</span></td></tr>
+      <tr><td>Geographic scope</td><td>Single GP practice, North Wales (BCUHB area)</td></tr>
+      <tr><td>Duration</td><td>Ongoing operational use; no defined end date</td></tr>
+      <tr><td>Frequency</td><td>Continuous — multiple staff, daily use</td></tr>
+    </table>
+
+    <div class="sub"><h3>Context</h3></div>
+    <p>Patients do not interact with Primovex directly and have no visibility into it as a distinct system — their expectation is that a concern they raise, or a SAR they submit, is handled by "the practice," not that it necessarily reaches a specific piece of software. Patients raising a Concern shortly after a clinical incident may be a vulnerable cohort at the point data is recorded, which is a reason for the deliberate identifier minimisation already built in, not a reason to avoid recording the case. No prior complaints or concerns about this specific processing have been identified, and the underlying technology (a cloud-hosted practice management tool) is a standard, unexceptional category of system.</p>
+
+    <div class="sub"><h3>Purposes</h3></div>
+    <p>To record and manage patient safety concerns and SARs within their statutory/pathway timescales; to maintain an auditable correspondence trail; to support medicines cold-chain safety through temperature monitoring; to maintain accurate stock levels, reducing clinical risk from unavailable medicines or equipment. The intended effect on individuals is faster, more consistent handling of their concern or request, and a lower risk of a cold-chain failure affecting medicines administered to them.</p>
+  </section>
+
+  <section>
+    <div class="step-label"><span class="step-num">STEP 3</span><h2>Consultation process</h2></div>
+    <div class="todo">
+      <b>To be completed by the practice</b>
+      This draft was produced from technical review, not staff or patient consultation. Before sign-off, consider recording:
+      <ul style="margin-top:8px;">
+        <li>Consultation with the staff who will use Concerns/SARs day-to-day (reception, secretarial, clinical) on whether the recorded fields and workflow match how they actually handle a case.</li>
+        <li>Consultation with BCUHB's Information Governance team, given the data-sharing implications described in Step 4 and the accompanying data-sharing map.</li>
+        <li>Whether patient/PPG (Patient Participation Group) input is appropriate or practical for a system patients don't interact with directly — a judgement call for the DPO, not something this review can settle.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <div class="step-label"><span class="step-num">STEP 4</span><h2>Assess necessity and proportionality</h2></div>
+    <table>
+      <tr><th style="width:26%">Measure</th><th>Position</th></tr>
+      <tr><td>Lawful basis</td><td>Likely Article 6(1)(e) (public task) with Article 9(2)(h) (health/social care purposes) for the special-category element, consistent with the practice's existing basis for clinical systems. <span class="todo" style="display:inline-block;margin:4px 0 0;"><b>To be completed</b>DPO to confirm this extends cleanly to Primovex's governance-handling function specifically.</span></td></tr>
+      <tr><td>Data minimisation</td><td>Patient identity is EMIS number, or initials + DOB — never a name. The person raising a concern, when not the patient, is recorded by initials and a contact method only; their full name and address stay in the paper file, referenced by the case number.</td></tr>
+      <tr><td>Function creep</td><td>Access is capability-based (a named permission per action, e.g. "manage SARs," "manage Concerns"), not an all-or-nothing account type, and is enforced at both the application and database layer as of this review.</td></tr>
+      <tr><td>Individual rights</td><td>Patients exercise access/rectification/erasure rights through the practice's existing EMIS/SAR process; Primovex has no direct patient-facing interface through which a right would be exercised against it specifically.</td></tr>
+      <tr><td>Processor arrangements</td><td>Google Cloud (Firebase) is a processor under a standard Data Processing Addendum. <span class="todo" style="display:inline-block;margin:4px 0 0;"><b>To be completed</b>Confirm the DPA has been formally reviewed and is on file.</span></td></tr>
+      <tr><td>International transfers</td><td>Data resides in the EU (<code>eur3</code>); application logic runs in the UK (<code>europe-west2</code>). No transfer outside the EU/UK identified in the current configuration.</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <div class="step-label"><span class="step-num">STEP 5</span><h2>Identify and assess risks</h2></div>
+    <table>
+      <tr><th style="width:30%">Risk</th><th style="width:14%">Likelihood</th><th style="width:14%">Severity</th><th style="width:14%">Overall</th></tr>
+      <tr><td>Unauthorised access to Concerns/SARs data via a compromised or over-privileged account</td><td>Possible</td><td>Significant</td><td><span class="pill med">Medium</span></td></tr>
+      <tr><td>Session left unattended on a shared device, accessed by someone else</td><td>Possible</td><td>Significant</td><td><span class="pill med">Medium</span></td></tr>
+      <tr><td>Accidental data loss or corruption (mistaken deletion, bulk edit error)</td><td>Remote</td><td>Significant</td><td><span class="pill low">Low</span></td></tr>
+      <tr><td>Data shared with an external body (health board, indemnity, solicitor, police, coroner) without a documented sharing agreement</td><td>Probable — several such flows already exist informally</td><td>Significant</td><td><span class="pill high">High</span></td></tr>
+      <tr><td>Re-identification of a patient by combining Primovex's pseudonymised reference with other information</td><td>Remote, given current access controls</td><td>Significant</td><td><span class="pill low">Low</span></td></tr>
+      <tr><td>Vulnerability in the system undetected due to no independent security testing</td><td>Unassessed</td><td>Potentially severe</td><td><span class="pill med">Medium</span></td></tr>
+      <tr><td>Data residency outside the practice's preferred jurisdiction (EU rather than UK-only)</td><td>Certain (current state)</td><td>Minimal (legally permitted) / policy risk</td><td><span class="pill low">Low</span></td></tr>
+      <tr><td>Loss of mobile device (if staff use personal devices)</td><td class="todo-cell"><span class="todo"><b>To be completed</b>Depends on whether devices are practice-owned or BYOD — practice to confirm.</span></td><td>Significant</td><td>—</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <div class="step-label"><span class="step-num">STEP 6</span><h2>Measures to reduce risk</h2></div>
+    <table>
+      <tr><th style="width:26%">Risk</th><th style="width:32%">Mitigation</th><th style="width:14%">Effect</th><th style="width:14%">Residual</th><th style="width:14%">Approved</th></tr>
+      <tr><td>Unauthorised access via a compromised/over-privileged account</td><td>Capability-based access control at both application and database (Firestore rules) layers; a defined "Concerns team" / "Manage SARs" capability rather than broad role access</td><td>Reduced</td><td><span class="pill low">Low</span></td><td class="v blank">☐</td></tr>
+      <tr><td>Unattended session</td><td>15-minute inactivity lock on both desktop and mobile, requiring a PIN (or biometric on mobile) to resume; automatic 12-hour absolute session expiry regardless of activity</td><td>Reduced</td><td><span class="pill low">Low</span></td><td class="v blank">☐</td></tr>
+      <tr><td>Accidental data loss/corruption</td><td>Firestore delete protection enabled (database cannot be deleted outright); 7-day point-in-time recovery enabled</td><td>Reduced</td><td><span class="pill low">Low</span></td><td class="v blank">☐</td></tr>
+      <tr><td>Undocumented external data sharing</td><td>Data-sharing map produced (see accompanying document) identifying every external body Primovex correspondence currently flows to, for review against existing WASPI Information Sharing Protocols</td><td>To be reduced once ISPs confirmed/established</td><td><span class="pill med">Medium, pending ISP review</span></td><td class="v blank">☐</td></tr>
+      <tr><td>Re-identification risk</td><td>Identifier minimisation (EMIS number / initials + DOB only); capability-gated read access; immutable audit logging of all access-relevant changes</td><td>Reduced</td><td><span class="pill low">Low</span></td><td class="v blank">☐</td></tr>
+      <tr><td>Undetected vulnerabilities</td><td class="todo-cell"><span class="todo"><b>To be completed</b>Recommend commissioning an independent security review/penetration test; not yet arranged.</span></td><td>—</td><td><span class="pill med">Medium</span></td><td class="v blank">☐</td></tr>
+      <tr><td>Data residency (EU vs UK-only)</td><td class="todo-cell"><span class="todo"><b>To be completed</b>DPO/IG to confirm whether UK-only hosting is required by policy; if so this needs a data migration, not a settings change.</span></td><td>—</td><td><span class="pill low">Low</span></td><td class="v blank">☐</td></tr>
+    </table>
+  </section>
+
+  <section>
+    <div class="step-label"><span class="step-num">STEP 7</span><h2>Sign-off and record of outcomes</h2></div>
+    <table>
+      <tr><th style="width:30%">Item</th><th style="width:35%">Name / position</th><th style="width:20%">Date</th><th>Notes</th></tr>
+      <tr class="signrow"><td>Measures approved by</td><td><span class="sign-line"></span></td><td><span class="sign-line"></span></td><td><span class="sign-line"></span></td></tr>
+      <tr class="signrow"><td>Residual risks approved by</td><td><span class="sign-line"></span></td><td><span class="sign-line"></span></td><td><span class="sign-line"></span></td></tr>
+      <tr class="signrow"><td>DPO / Caldicott advice provided</td><td><span class="sign-line"></span></td><td><span class="sign-line"></span></td><td><span class="sign-line"></span></td></tr>
+      <tr class="signrow"><td>DPO advice accepted / overruled by</td><td><span class="sign-line"></span></td><td><span class="sign-line"></span></td><td><span class="sign-line"></span></td></tr>
+      <tr class="signrow"><td>This DPIA kept under review by</td><td><span class="sign-line"></span></td><td>Review due: <span class="sign-line"></span></td><td><span class="sign-line"></span></td></tr>
+    </table>
+  </section>
+
+  <footer>
+    Compiled from direct technical review of Primovex's Firestore security rules, Firebase project configuration, and application capability model on 18 September 2026. This document is a working draft intended to give the Data Protection Officer / Caldicott Guardian a complete technical starting point — it is not itself an approved DPIA until Step 7 is completed and signed.
+  </footer>
+</div>
+</body>
+</html>

@@ -156,7 +156,7 @@ export const demoScenarios = {
   "training-mode": {
     pulse: 99,
     focus: "Safe staff training and product walkthrough",
-    organisationName: "MedTrak Training Environment",
+    organisationName: "Primovex Training Environment",
     stats: [
       { title: "Training tasks", value: "5", note: "Guided examples" },
       { title: "Risks", value: "0", note: "No live data" },

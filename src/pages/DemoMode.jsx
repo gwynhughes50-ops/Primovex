@@ -84,11 +84,11 @@ export default function DemoMode() {
     <div className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-8">
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_15%_8%,rgba(45,212,191,0.16),transparent_28%),radial-gradient(circle_at_80%_0%,rgba(59,130,246,0.12),transparent_28%)]" />
       <div className="relative mx-auto max-w-7xl space-y-6">
-        <header className="overflow-hidden rounded-[2rem] border border-teal-400/20 bg-gradient-to-br from-slate-900 via-slate-900 to-teal-950/40 p-6 shadow-2xl shadow-teal-950/20 md:p-8">
+        <header className="overflow-hidden rounded-[2rem] border border-teal-400/20 bg-slate-900/90 p-6 shadow-2xl shadow-teal-950/20 md:p-8">
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-teal-400/25 bg-teal-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-teal-100">
-                <Icons.security className="h-3.5 w-3.5" /> Experience MedTrak+
+                <Icons.security className="h-3.5 w-3.5" /> Experience Primovex
               </div>
               <h1 className="mt-4 text-4xl font-black tracking-tight sm:text-5xl">{scenario.organisationName || DEMO_ORGANISATION.name}</h1>
               <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">{DEMO_ORGANISATION.subtitle}. This environment is deliberately synthetic, anonymised and safe for demonstrations or staff training.</p>
