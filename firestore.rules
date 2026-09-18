@@ -453,19 +453,107 @@ match /subject_access_requests/{requestId} {
     // Sprint 22: capability-aware access. Existing System Admin users continue
     // to work while we migrate user profiles to granular permissions maps.
     //
-    // users/{uid}.permissions is actually a flat array of "domain.action"
-    // capability strings (see capabilities.js's ROLE_TEMPLATES and
-    // functions/index.js's own permission check), not a nested map — the
-    // indexed-lookup version of this function below was checking a shape that
-    // never existed, so it always fell through to isAdmin() alone. Fixed to
-    // match the real shape; this only ever grants MORE access than before
-    // (isAdmin() || <a check that used to always be false>), never less.
+    // A role's capabilities are computed client-side (see capabilities.js's
+    // getCapabilitiesForProfile) from ROLE_TEMPLATES for a built-in role name,
+    // or from the matching roles/{roleName} doc's `capabilities` array for an
+    // admin-created custom role (e.g. "IT", "Medical Secretary") — the app
+    // never writes a `permissions` array onto users/{uid} itself, so the
+    // earlier version of this function (checking only users/{uid}.permissions)
+    // denied every non-admin user regardless of role. builtInRoleCapabilities
+    // mirrors ROLE_TEMPLATES and must be kept in sync with it by hand.
+    function builtInRoleCapabilities(role) {
+      return
+        role == "System Admin" ? ["*"] :
+        role == "Practice Manager" ? [
+          "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
+          "dashboard.read", "operations.read", "operations.manage",
+          "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",
+          "purchasing.read", "purchasing.write", "purchasing.approve",
+          "suppliers.read", "suppliers.write",
+          "governance.read", "governance.write", "governance.manageSars", "governance.manageComplaints",
+          "governance.manageConcerns", "governance.concernsTeam",
+          "connect.view", "connect.manageDevices", "connect.acknowledgeAlerts",
+          "temperature.read", "temperature.write", "temperature.resolveIncident",
+          "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets",
+          "practiceAdmin.read", "practiceAdmin.write", "reports.read", "theme.lab",
+          "mobile.access", "mobile.biometricUnlock",
+          "admin.access", "admin.manageUsers", "admin.manageRoles", "admin.manageSettings",
+          "audit.read", "audit.write", "orb.learning.review", "security.read", "security.manage"
+        ] :
+        role == "User" ? [
+          "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
+          "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify",
+          "purchasing.read", "suppliers.read", "connect.view",
+          "temperature.read", "temperature.write",
+          "compliance.read", "compliance.recordChecks",
+          "mobile.access", "mobile.biometricUnlock"
+        ] :
+        role == "Nurse" ? [
+          "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
+          "inventory.read", "inventory.write", "inventory.verify", "connect.view",
+          "temperature.read", "temperature.write", "temperature.resolveIncident",
+          "compliance.read", "compliance.recordChecks",
+          "mobile.access", "mobile.biometricUnlock"
+        ] :
+        role == "HCA" ? [
+          "dashboard.read", "operations.read", "inventory.read", "inventory.write", "inventory.verify",
+          "connect.view", "temperature.read", "temperature.write",
+          "mobile.access", "mobile.biometricUnlock"
+        ] :
+        role == "Reception" ? [
+          "clinflow.read", "clinflow.capture", "clinflow.workflow",
+          "dashboard.read", "operations.read", "inventory.read", "purchasing.read",
+          "governance.read", "governance.write", "governance.manageConcerns", "governance.concernsTeam",
+          "connect.view", "mobile.access"
+        ] :
+        role == "Caretaker" ? [
+          "dashboard.read", "operations.read", "connect.view",
+          "temperature.read", "temperature.write",
+          "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets",
+          "mobile.access"
+        ] :
+        role == "Cleaner" ? [
+          "dashboard.read", "operations.read",
+          "compliance.read", "compliance.write", "compliance.recordChecks",
+          "mobile.access"
+        ] :
+        role == "Partner" ? [
+          "dashboard.read", "governance.read", "governance.partnerAccess", "mobile.access"
+        ] :
+        role == "ReadOnly" ? [
+          "clinflow.read", "dashboard.read", "operations.read", "inventory.read", "purchasing.read",
+          "suppliers.read", "governance.read", "connect.view", "temperature.read", "compliance.read",
+          "reports.read"
+        ] :
+        [];
+    }
+
+    function isBuiltInRole(role) {
+      return role in [
+        "System Admin", "Practice Manager", "User", "Nurse", "HCA",
+        "Reception", "Caretaker", "Cleaner", "Partner", "ReadOnly"
+      ];
+    }
+
+    // Admin-created roles (AdminDashboard's Add/Edit Role) are stored at
+    // roles/{roleName} — the doc id is the role name itself — with a
+    // `capabilities` array field.
+    function customRoleCapabilities(role) {
+      return exists(/databases/$(database)/documents/roles/$(role))
+        ? get(/databases/$(database)/documents/roles/$(role)).data.capabilities
+        : [];
+    }
+
+    function effectiveRoleCapabilities(role) {
+      return isBuiltInRole(role) ? builtInRoleCapabilities(role) : customRoleCapabilities(role);
+    }
+
     function hasPermission(domain, action) {
       return signedIn()
         && (
           isAdmin()
-          || (domain + "." + action) in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions
-          || "*" in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.permissions
+          || (domain + "." + action) in effectiveRoleCapabilities(userRole())
+          || "*" in effectiveRoleCapabilities(userRole())
         );
     }
 
