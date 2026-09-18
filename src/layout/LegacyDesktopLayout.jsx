@@ -84,16 +84,6 @@ export default function Layout() {
                     Sign in
                   </Button>
                 </NavLink>
-
-                <NavLink to="/register">
-                  <Button
-                    variant="default"
-                    className="gap-2 rounded-full bg-gradient-to-r from-[#2563EB] via-[#6D4DFF] to-[#00B8F0] px-3 py-1.5 text-white shadow-lg shadow-violet-500/25"
-                  >
-                    <Icons.userPlus className="h-4 w-4" />
-                    Register
-                  </Button>
-                </NavLink>
               </>
             ) : (
               <>

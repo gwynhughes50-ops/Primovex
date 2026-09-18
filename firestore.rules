@@ -68,38 +68,14 @@ service cloud.firestore {
     }
 
     // -------------------------
-    // INVITES
+    // INVITES (legacy — locked)
     // -------------------------
+    // The invite + /register self-signup flow was removed (accounts are now
+    // created only through the admin-only createUserAccount Cloud Function).
+    // Locked to admin rather than deleted, in case historical invite docs
+    // still exist.
     match /invites/{inviteId} {
-      allow get: if resource.data.used == false
-                 && resource.data.expiresAt > request.time;
-
-      allow list: if isAdmin();
-      allow create: if isAdmin();
-      allow delete: if isAdmin();
-
-      // request.auth.token.email must match the invited email — without this,
-      // any signed-in user who merely knows/guesses an invite's document id
-      // (the invites/get rule above is intentionally public, like a
-      // password-reset link) could mark someone ELSE's invite as used against
-      // their own uid. This narrows that; it doesn't fully close the deeper
-      // redemption race (see Register.jsx), which is why this whole legacy
-      // path — orphaned since Add User moved to the createUserAccount Cloud
-      // Function — should really just be removed rather than hardened further.
-      allow update: if isAdmin()
-        || (
-          signedIn()
-          && resource.data.used == false
-          && request.resource.data.used == true
-          && request.resource.data.usedByUid == request.auth.uid
-          && request.auth.token.email == resource.data.email
-          && request.resource.data.email == resource.data.email
-          && request.resource.data.role == resource.data.role
-          && request.resource.data.displayName == resource.data.displayName
-          && request.resource.data.createdBy == resource.data.createdBy
-          && request.resource.data.expiresAt == resource.data.expiresAt
-          && request.resource.data.createdAt == resource.data.createdAt
-        );
+      allow get, list, create, update, delete: if isAdmin();
     }
 
     // -------------------------
@@ -111,13 +87,12 @@ service cloud.firestore {
       // requirement rather than a general staff-directory widening.
       allow read: if signedIn() && (request.auth.uid == uid || isAdmin() || hasPermission("governance", "concernsTeam"));
 
-      // Self-created profiles (the invite/register flow) may only take the
-      // lowest-privilege roles. Anything higher must go through the
-      // admin-only createUserAccount Cloud Function, which writes via the
-      // Admin SDK and bypasses these rules entirely.
-      allow create: if signedIn()
-        && request.auth.uid == uid
-        && request.resource.data.role in ["User", "ReadOnly"];
+      // Profiles are created only by the admin-only createUserAccount Cloud
+      // Function (Admin SDK, bypasses these rules). There is deliberately no
+      // client self-create: Firebase Auth accounts can be created by anyone
+      // holding the public API key, so letting a fresh account write its own
+      // profile would let a stranger grant themselves a working role.
+      allow create: if isAdmin();
 
       // user can update own profile but cannot change role
       allow update: if signedIn()

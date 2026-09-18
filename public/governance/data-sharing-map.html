@@ -149,12 +149,26 @@
   </section>
 
   <section>
+    <div class="sec-head">
+      <h2>Technical third parties</h2>
+      <p class="sec-note">Distinct from the bodies above: these receive data automatically as a side effect of a feature working, not because a member of staff chose to share a case. Not a WASPI matter in themselves (no patient data is involved), but they belong on the record for the DPIA's third-party section.</p>
+    </div>
+
+    <div class="org-card">
+      <div class="row"><h3>QR code image service (api.qrserver.com)</h3><span class="status unknown">Assessment: to confirm</span></div>
+      <p>When staff print or view QR labels for compliance assets and clinical kit (fire points, water outlets, fridges, anaphylaxis boxes, emergency drug kits), Primovex loads the QR image from a public third-party API instead of generating it on the device. The code's content travels to that service in the request URL.</p>
+      <div class="meta"><span><b>Data shared:</b> the QR payload &mdash; an internal asset identifier only (e.g. MEDTRAK:COMPLIANCE:&lt;asset id&gt;, or asset collection + asset ID for clinical kit) &mdash; plus, unavoidably, the practice's IP address and the time of the request</span><span><b>Direction:</b> practice &rarr; third-party service</span><span><b>Not shared:</b> any patient, staff, case or SAR data</span></div>
+      <div class="todo"><b>To check</b>The operator, hosting location and logging/retention policy of this service haven't been assessed, and it isn't a supplier the practice has a contract with. Two options: (1) preferred &mdash; generate QR codes inside Primovex so nothing leaves the device, which removes this flow entirely and needs no assessment; or (2) keep it and record it as a third-party service in the DPIA with the IG lead's agreement, on the basis that the payload is internal asset IDs only. Either way the payload must stay free of patient- or staff-identifying data &mdash; that is the line that keeps this a low-risk flow.</div>
+    </div>
+  </section>
+
+  <section>
     <div class="sec-head"><h2>Recommended next step</h2></div>
-    <p style="font-size:13.5px;line-height:1.7;">For each body above marked "to confirm," ask your IG/WASPI contact (likely via BCUHB) whether an existing Information Sharing Protocol already covers "GP practice governance correspondence with [body]," or whether this specific flow needs its own ISP or Data Disclosure Agreement. Several of these (BCUHB itself, the health-board-mediated bodies) are likely already covered by standing NHS Wales arrangements; the ones most likely to need a fresh look are the less routine ones — coroner, police, and solicitor correspondence — since those tend to be handled case-by-case rather than under a standing agreement.</p>
+    <p style="font-size:13.5px;line-height:1.7;">For each body above marked "to confirm," ask your IG/WASPI contact (likely via BCUHB) whether an existing Information Sharing Protocol already covers "GP practice governance correspondence with [body]," or whether this specific flow needs its own ISP or Data Disclosure Agreement. Several of these (BCUHB itself, the health-board-mediated bodies) are likely already covered by standing NHS Wales arrangements; the ones most likely to need a fresh look are the less routine ones — coroner, police, and solicitor correspondence — since those tend to be handled case-by-case rather than under a standing agreement. The QR image service above isn't a WASPI question — raise it with your IG lead alongside the DPIA.</p>
   </section>
 
   <footer>
-    Compiled from Primovex's Concerns "Source" category list and correspondence-log data model, 18 September 2026. Protocol status for every body above is marked "to confirm" because verifying it requires access to the practice's actual WASPI/ISP records, which this technical review has no visibility into.
+    Compiled from Primovex's Concerns "Source" category list and correspondence-log data model, 18 September 2026; technical third-party section added following the same-day security review. Protocol status for every body above is marked "to confirm" because verifying it requires access to the practice's actual WASPI/ISP records, which this technical review has no visibility into.
   </footer>
 </div>
 </body>

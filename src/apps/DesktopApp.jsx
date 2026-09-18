@@ -28,7 +28,6 @@ import DeveloperMobilePreview from "@/developer/DeveloperMobilePreview";
 import LoadingPage from "@/pages/LoadingPage";
 import ClinFlowWorkspace from "@/modules/clinflow/ClinFlowWorkspace";
 import Login from "@/pages/Login";
-import Register from "@/pages/Register";
 import ForgotPassword from "@/pages/ForgotPassword";
 import RequireAuth from "@/routes/RequireAuth";
 import PermissionGate from "@/components/security/PermissionGate";
@@ -39,7 +38,6 @@ export default function DesktopApp() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/demo" element={<DemoMode />} />
       <Route path="/loading" element={<LoadingPage />} />

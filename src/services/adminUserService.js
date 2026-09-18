@@ -3,8 +3,8 @@ import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase";
 
 // Real users/{uid} profiles, live. Replaces the old scaffold/mock user list.
-// Deliberately no orderBy: pre-existing profiles (e.g. self-registered via
-// Register.jsx) may not have a createdAt field, and Firestore silently drops
+// Deliberately no orderBy: older profiles (from before accounts were created
+// through the createUserAccount Cloud Function) may not have a createdAt field, and Firestore silently drops
 // any doc missing an ordered field from the results — sorting client-side
 // avoids quietly hiding real accounts from the admin.
 export function subscribeUsers(onData, onError) {
