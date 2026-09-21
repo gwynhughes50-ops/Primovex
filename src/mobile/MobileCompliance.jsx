@@ -78,7 +78,7 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
   // this component entirely.
   useEffect(() => {
     if (!pendingNfcScan) return;
-    handleScan(pendingNfcScan, "nfc");
+    handleScan(pendingNfcScan.value, pendingNfcScan.method);
     setNfcActive(false);
     onConsumeNfcScan?.();
   }, [pendingNfcScan]);

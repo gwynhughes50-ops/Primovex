@@ -114,9 +114,26 @@ export default function MobileLayout({ initialTab = "home" }) {
   };
 
 
+  // Compliance labels (fire points, water outlets, fridges...) are scanned
+  // with whichever camera button the person happens to press — Stock, Room, or
+  // the Compliance tab's own — so every global scanner hands them to the
+  // Compliance tab rather than trying to match them as a product barcode or a
+  // Space. Returns true when the code was a compliance label.
+  const routeComplianceScan = (code, method) => {
+    if (!parseComplianceQrPayload(code)) return false;
+    setSpaceScanError("");
+    setScanError("");
+    setUnknownBarcode("");
+    setScannedItem(null);
+    setActiveTab("compliance");
+    setPendingComplianceScan({ value: code, method });
+    return true;
+  };
+
   const handleSpaceCodeScan = async (rawCode) => {
     const code = String(rawCode || "").trim();
     if (!code) return;
+    if (routeComplianceScan(code, "qr")) return;
     setSpaceScanError("");
 
     let entityType = "space";
@@ -187,11 +204,7 @@ export default function MobileLayout({ initialTab = "home" }) {
     function handleNativeNfc(event) {
       if (event.detail?.type !== "scanned" || !event.detail?.value) return;
       const value = event.detail.value;
-      if (parseComplianceQrPayload(value)) {
-        setActiveTab("compliance");
-        setPendingComplianceScan(value);
-        return;
-      }
+      if (routeComplianceScan(value, "nfc")) return;
       handleSpaceCodeScan(value);
     }
     window.addEventListener("primovex-native-nfc", handleNativeNfc);
@@ -309,6 +322,7 @@ export default function MobileLayout({ initialTab = "home" }) {
   const handleMobileScan = async (code) => {
     const scannedCode = String(code || "").trim();
     if (!scannedCode) return;
+    if (routeComplianceScan(scannedCode, "qr")) return;
 
     setScanError("");
     setSpaceScanError("");
