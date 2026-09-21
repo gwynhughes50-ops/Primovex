@@ -316,7 +316,26 @@ match /governance_sars/{sarId} {
     || resource.data.createdByUid == request.auth.uid
   );
   allow create, update: if isSarsTeam();
-  allow delete: if isAdmin();
+  // The SAR team can remove a SAR (a wrong or duplicate entry); deleteSar()
+  // leaves a "deleted" activity entry and a governed audit event behind, since
+  // governance_sar_activity is append-only and outlives the record.
+  allow delete: if isSarsTeam();
+}
+
+// Year "folders" on the SAR register. A folder also appears on its own once a
+// SAR is received in that year; this collection holds the ones the team has
+// added by hand (e.g. next year's, before the first SAR arrives), so they're
+// shared across everyone and every device. Doc id is the year itself.
+match /governance_sar_years/{yearId} {
+  allow get, list: if signedIn() && (isSarsTeam() || isGovernancePartner());
+  allow create: if isSarsTeam()
+    && yearId.matches("^20[0-9][0-9]$")
+    && request.resource.data.keys().hasOnly(["year", "createdByUid", "createdByName", "createdAt"])
+    && request.resource.data.year is int
+    && string(request.resource.data.year) == yearId
+    && request.resource.data.createdByUid == request.auth.uid;
+  allow update: if false;
+  allow delete: if isSarsTeam();
 }
 
 match /governance_sar_activity/{activityId} {

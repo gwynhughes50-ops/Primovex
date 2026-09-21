@@ -1,9 +1,12 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
+  getDoc,
   getDocs,
   limit,
+  onSnapshot,
   query,
   serverTimestamp,
   setDoc,
@@ -13,9 +16,11 @@ import {
 } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
+import { writeAuditEvent } from "@/core/identity/auditService";
 
 export const SAR_COLLECTION = "governance_sars";
 export const SAR_ACTIVITY_COLLECTION = "governance_sar_activity";
+export const SAR_YEARS_COLLECTION = "governance_sar_years";
 
 export const SAR_STATUSES = {
   new: "new",
@@ -168,13 +173,14 @@ export function getSarStatusBadge(status) {
   return "info";
 }
 
-export function buildSarPayload(form, actor = {}) {
+// The editable fields of a SAR, normalised the same way whether it's being
+// created or edited. Identity, status, checklist and created* stay out of
+// this so an edit can never overwrite them.
+export function buildSarFields(form) {
   const receivedDate = form.receivedDate ? new Date(form.receivedDate) : new Date();
   const dueDate = form.dueDate ? new Date(form.dueDate) : calculateDueDate(receivedDate);
-  const assignedToUid = form.assignedToUid || "";
 
   return {
-    reference: form.reference || createSarReference(new Date()),
     emisNumber: String(form.emisNumber || "").trim(),
     receivedDate: Timestamp.fromDate(receivedDate),
     dueDate: Timestamp.fromDate(dueDate),
@@ -190,13 +196,22 @@ export function buildSarPayload(form, actor = {}) {
     urgent: !!form.urgent,
     deliveryMethod: form.deliveryMethod || "email",
     emailAddress: String(form.emailAddress || "").trim(),
-    assignedToUid,
+    assignedToUid: form.assignedToUid || "",
     assignedToName: form.assignedToName || "Unassigned",
     managerUid: form.managerUid || "",
     managerName: form.managerName || "",
-    status: assignedToUid ? SAR_STATUSES.assigned : SAR_STATUSES.new,
     priority: form.urgent ? "high" : "routine",
     notes: String(form.notes || "").trim(),
+  };
+}
+
+export function buildSarPayload(form, actor = {}) {
+  const fields = buildSarFields(form);
+
+  return {
+    reference: form.reference || createSarReference(new Date()),
+    ...fields,
+    status: fields.assignedToUid ? SAR_STATUSES.assigned : SAR_STATUSES.new,
     checklist: SAR_CHECKLIST.reduce((acc, item) => ({ ...acc, [item.key]: false }), {}),
     createdByUid: actor.uid || null,
     createdByName: actor.displayName || actor.email || "Unknown",
@@ -268,6 +283,157 @@ export async function createSar(form, actor = {}) {
   }
 
   return ref.id;
+}
+
+// Year folders on the SAR register. A folder shows up by itself once a SAR is
+// received in that year; these are the ones the team adds by hand (e.g. next
+// year's) so they can exist before their first SAR does.
+export function isValidSarYear(year) {
+  return Number.isInteger(year) && year >= 2000 && year <= new Date().getFullYear() + 10;
+}
+
+export function subscribeSarYearFolders(callback, onError) {
+  return onSnapshot(
+    collection(db, SAR_YEARS_COLLECTION),
+    (snap) => callback(snap.docs.map((d) => Number(d.data().year)).filter(isValidSarYear)),
+    onError
+  );
+}
+
+export async function createSarYearFolder(year, actor = {}) {
+  if (!isValidSarYear(year)) throw new Error("Enter a four-digit year, e.g. 2027.");
+  const ref = doc(db, SAR_YEARS_COLLECTION, String(year));
+  if ((await getDoc(ref)).exists()) return; // already there — nothing to do
+  try {
+    await setDoc(ref, {
+      year,
+      createdByUid: actor.uid || null,
+      createdByName: actor.displayName || actor.email || "Unknown",
+      createdAt: serverTimestamp(),
+    });
+  } catch (err) {
+    // If the connection drops after the server has saved the folder, the
+    // client re-sends the write; that second copy lands on a folder that now
+    // exists and the rules (folders are never edited) refuse it, so a save that
+    // actually worked reports "permission denied". If the folder is there, it worked.
+    try {
+      if ((await getDoc(ref)).exists()) return;
+    } catch {
+      // fall through to the original error
+    }
+    throw err;
+  }
+}
+
+export async function deleteSarYearFolder(year) {
+  if (!isValidSarYear(year)) return;
+  await deleteDoc(doc(db, SAR_YEARS_COLLECTION, String(year)));
+}
+
+// Labels for the fields whose change is worth naming in the activity log.
+const SAR_EDIT_LABELS = [
+  ["emisNumber", "EMIS number"],
+  ["requestedBy", "requested by"],
+  ["requestedByOther", "requester name"],
+  ["receivedVia", "received via"],
+  ["solicitorReference", "solicitor reference"],
+  ["requestType", "request type"],
+  ["informationRequired", "information required"],
+  ["urgent", "urgent flag"],
+  ["deliveryMethod", "delivery method"],
+  ["emailAddress", "email address"],
+  ["assignedToUid", "assignee"],
+  ["managerUid", "manager"],
+  ["notes", "internal notes"],
+];
+
+function describeSarChanges(before, fields) {
+  const changed = SAR_EDIT_LABELS
+    .filter(([key]) => JSON.stringify(before?.[key] ?? "") !== JSON.stringify(fields[key] ?? ""))
+    .map(([, label]) => label);
+  const asDay = (value) => { const d = toDate(value); return d ? formatDateInput(d) : ""; };
+  if (asDay(before?.receivedDate) !== asDay(fields.receivedDate)) changed.push("date received");
+  if (asDay(before?.dueDate) !== asDay(fields.dueDate)) changed.push("due date");
+  if (JSON.stringify(before?.requestOptions || []) !== JSON.stringify(fields.requestOptions || [])) changed.push("request options");
+  return changed;
+}
+
+// `before` is the SAR as it was when the edit started, so the activity log
+// can say what actually changed. Reference, status progress, checklist and
+// created* are deliberately not editable here.
+export async function updateSarDetails(sarId, form, actor = {}, before = {}) {
+  if (!sarId) return;
+  const fields = buildSarFields(form);
+  const updates = { ...fields, updatedAt: serverTimestamp() };
+
+  // Assigning someone moves a brand-new SAR to "assigned" (and un-assigning
+  // returns it); a SAR that's already in progress or beyond keeps its status.
+  const status = before.status || SAR_STATUSES.new;
+  if (status === SAR_STATUSES.new && fields.assignedToUid) updates.status = SAR_STATUSES.assigned;
+  else if (status === SAR_STATUSES.assigned && !fields.assignedToUid) updates.status = SAR_STATUSES.new;
+
+  await updateDoc(doc(db, SAR_COLLECTION, sarId), updates);
+
+  const changed = describeSarChanges(before, fields);
+  await addSarActivity(sarId, {
+    type: "edited",
+    title: "SAR details updated",
+    message: changed.length ? `Changed: ${changed.join(", ")}.` : "Details were re-saved with no changes.",
+    actor,
+  });
+
+  if (fields.assignedToUid && fields.assignedToUid !== (before.assignedToUid || "")) {
+    try {
+      await createUserNotification(fields.assignedToUid, {
+        title: `SAR assigned to you: ${before.reference || ""}`.trim(),
+        message: `${fields.requestTypeLabel} request due ${formatDateInput(toDate(fields.dueDate))}.`,
+        module: "sar",
+        priority: fields.priority,
+        dueDate: fields.dueDate,
+        actionUrl: "/governance/sars",
+        createdByUid: actor.uid || null,
+        createdByName: actor.displayName || actor.email || "Primovex",
+      });
+    } catch (err) {
+      console.warn("Unable to create assignment notification. Check Firestore notification create rules.", err);
+    }
+  }
+}
+
+// Removes the SAR record. Its activity entries can't be deleted (Firestore
+// rules make governance_sar_activity append-only), so a final "deleted" entry
+// is written there and a governed audit event is recorded — the trail
+// outlives the record. Both are best-effort once the delete itself has
+// succeeded.
+export async function deleteSar(sar, actor = {}) {
+  if (!sar?.id) return;
+  await deleteDoc(doc(db, SAR_COLLECTION, sar.id));
+
+  try {
+    await addSarActivity(sar.id, {
+      type: "deleted",
+      title: "SAR deleted",
+      message: `${sar.reference || "SAR"} was deleted.`,
+      actor,
+    });
+  } catch (err) {
+    console.warn("SAR was deleted but the activity entry could not be written.", err);
+  }
+
+  try {
+    await writeAuditEvent({
+      actor,
+      action: "governance.sar.deleted",
+      module: "governance",
+      targetType: "sar",
+      targetId: sar.id,
+      summary: `SAR ${sar.reference || ""} deleted`.trim(),
+      classification: "governance",
+      metadata: { reference: sar.reference || "", status: sar.status || "" },
+    });
+  } catch (err) {
+    console.warn("SAR was deleted but the audit event could not be recorded.", err);
+  }
 }
 
 export async function updateSarStatus(sarId, status, actor = {}) {

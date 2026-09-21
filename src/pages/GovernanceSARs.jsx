@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
+import { FolderOpen, Folder, FolderPlus, Pencil, Trash2, X } from "lucide-react";
 
 import PageHeader from "@/components/common/PageHeader";
 import SectionCard from "@/components/common/SectionCard";
@@ -18,6 +19,9 @@ import {
   calculateDueDate,
   createSar,
   createSarReference,
+  createSarYearFolder,
+  deleteSar,
+  deleteSarYearFolder,
   daysUntilDate,
   formatDateInput,
   getRequestTypeLabel,
@@ -25,8 +29,11 @@ import {
   getSarDeadlineTone,
   getSarStatusBadge,
   getStatusLabel,
+  isValidSarYear,
+  subscribeSarYearFolders,
   toDate,
   updateSarChecklist,
+  updateSarDetails,
   updateSarStatus,
 } from "@/modules/governance/services/sarService";
 
@@ -54,13 +61,17 @@ function formatDisplayDate(value) {
   return d ? d.toLocaleDateString() : "—";
 }
 
-function getInitialForm() {
+// `year` is the folder the person is looking at: a SAR added from inside
+// another year's folder starts on 1 January of that year (change it as needed)
+// rather than silently landing in this year's folder.
+function getInitialForm(year) {
   const today = new Date();
+  const received = year && year !== today.getFullYear() ? new Date(Date.UTC(year, 0, 1)) : today;
   return {
     reference: createSarReference(today),
     emisNumber: "",
-    receivedDate: formatDateInput(today),
-    dueDate: formatDateInput(calculateDueDate(today)),
+    receivedDate: formatDateInput(received),
+    dueDate: formatDateInput(calculateDueDate(received)),
     requestedBy: "patient",
     requestedByOther: "",
     receivedVia: "email",
@@ -78,6 +89,39 @@ function getInitialForm() {
     managerName: "",
     notes: "",
   };
+}
+
+function getFormFromSar(sar) {
+  return {
+    ...getInitialForm(),
+    reference: sar.reference || "",
+    emisNumber: sar.emisNumber || "",
+    receivedDate: formatDateInput(toDate(sar.receivedDate)),
+    dueDate: formatDateInput(toDate(sar.dueDate)),
+    requestedBy: sar.requestedBy || "patient",
+    requestedByOther: sar.requestedByOther || "",
+    receivedVia: sar.receivedVia || "email",
+    solicitorReference: sar.solicitorReference || "",
+    requestType: sar.requestType || "summary",
+    requestOptions: sar.requestOptions || [],
+    informationRequired: sar.informationRequired || "",
+    consentToEmail: !!sar.consentToEmail,
+    urgent: !!sar.urgent,
+    deliveryMethod: sar.deliveryMethod || "email",
+    emailAddress: sar.emailAddress || "",
+    assignedToUid: sar.assignedToUid || "",
+    assignedToName: sar.assignedToName || "Unassigned",
+    managerUid: sar.managerUid || "",
+    managerName: sar.managerName || "",
+    notes: sar.notes || "",
+  };
+}
+
+// The "folder" a SAR lives in: the year it was received (falling back to when
+// it was entered, for the odd record with no received date).
+function sarYear(sar) {
+  const d = toDate(sar.receivedDate) || toDate(sar.createdAt);
+  return d ? d.getFullYear() : null;
 }
 
 function countMetrics(rows) {
@@ -117,13 +161,18 @@ function SarMetric({ label, value, tone = "slate" }) {
   );
 }
 
-function NewSarPanel({ open, onClose, users, actor, onCreated }) {
+function SarFormPanel({ open, onClose, users, actor, onSaved, sar, defaultYear = null }) {
+  const isEdit = !!sar;
   const [form, setForm] = useState(getInitialForm);
   const [busy, setBusy] = useState(false);
 
+  // Keyed on the SAR's id, not the object: live snapshots hand back a new
+  // object whenever anything on the register changes, which must not wipe
+  // what someone is halfway through typing.
   useEffect(() => {
-    if (open) setForm(getInitialForm());
-  }, [open]);
+    if (open) setForm(isEdit ? getFormFromSar(sar) : getInitialForm(defaultYear));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, sar?.id]);
 
   if (!open) return null;
 
@@ -151,8 +200,16 @@ function NewSarPanel({ open, onClose, users, actor, onCreated }) {
     update({ managerUid: uid, managerName: selected?.displayName || selected?.email || "" });
   };
 
+  // Changing the received date moves the due date with it — unless this is an
+  // edit and the due date has been set by hand (e.g. an agreed extension), in
+  // which case it's left alone.
   const changeReceivedDate = (value) => {
     const received = value ? new Date(value) : new Date();
+    const currentDefaultDue = formatDateInput(calculateDueDate(form.receivedDate ? new Date(form.receivedDate) : new Date()));
+    if (isEdit && form.dueDate !== currentDefaultDue) {
+      update({ receivedDate: value });
+      return;
+    }
     update({ receivedDate: value, dueDate: formatDateInput(calculateDueDate(received)) });
   };
 
@@ -169,12 +226,13 @@ function NewSarPanel({ open, onClose, users, actor, onCreated }) {
 
     try {
       setBusy(true);
-      await createSar(form, actor);
-      onCreated?.();
+      if (isEdit) await updateSarDetails(sar.id, form, actor, sar);
+      else await createSar(form, actor);
+      onSaved?.();
       onClose?.();
     } catch (err) {
       console.error(err);
-      alert(err?.message || "Failed to create SAR");
+      alert(err?.message || `Failed to ${isEdit ? "save" : "create"} SAR`);
     } finally {
       setBusy(false);
     }
@@ -188,7 +246,7 @@ function NewSarPanel({ open, onClose, users, actor, onCreated }) {
             <div className="inline-flex items-center gap-2 rounded-full border border-teal-400/30 bg-teal-400/10 px-3 py-1 text-xs font-semibold text-teal-200">
               <Icons.governance className="h-3.5 w-3.5" /> Governance
             </div>
-            <h2 className="mt-3 text-2xl font-black text-white">New Subject Access Request</h2>
+            <h2 className="mt-3 text-2xl font-black text-white">{isEdit ? `Edit ${sar.reference}` : "New Subject Access Request"}</h2>
             <p className="mt-1 text-sm text-slate-400">Only operational information is stored. Patient name and DOB stay out of Primovex.</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-full bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">
@@ -199,7 +257,7 @@ function NewSarPanel({ open, onClose, users, actor, onCreated }) {
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-slate-200">Reference</label>
-            <Input value={form.reference} onChange={(e) => update({ reference: e.target.value })} />
+            <Input value={form.reference} onChange={(e) => update({ reference: e.target.value })} disabled={isEdit} />
           </div>
 
           <div className="space-y-3">
@@ -343,7 +401,7 @@ function NewSarPanel({ open, onClose, users, actor, onCreated }) {
         <div className="sticky bottom-0 -mx-5 mt-5 flex flex-col gap-2 border-t border-slate-800 bg-slate-950/95 p-5 backdrop-blur sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" className="rounded-full border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800" onClick={onClose} disabled={busy}>Cancel</Button>
           <Button type="button" className="rounded-full bg-teal-400 px-5 font-bold text-slate-950 hover:bg-teal-300" onClick={submit} disabled={busy}>
-            {busy ? "Creating..." : "Create SAR"}
+            {busy ? (isEdit ? "Saving..." : "Creating...") : (isEdit ? "Save changes" : "Create SAR")}
           </Button>
         </div>
       </div>
@@ -351,7 +409,7 @@ function NewSarPanel({ open, onClose, users, actor, onCreated }) {
   );
 }
 
-function SarDetailPanel({ sar, actor, isTeam, onClose }) {
+function SarDetailPanel({ sar, actor, isTeam, canDelete, onEdit, onDelete, onClose }) {
   const [activity, setActivity] = useState([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -420,7 +478,19 @@ function SarDetailPanel({ sar, actor, isTeam, onClose }) {
             <h2 className="mt-3 text-2xl font-black text-white">{sar.reference}</h2>
             <p className="mt-1 text-sm text-slate-400">EMIS: {sar.emisNumber} · {sar.requestTypeLabel || getRequestTypeLabel(sar.requestType)}</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-full bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Close</button>
+          <div className="flex flex-wrap items-center gap-2">
+            {isTeam && (
+              <button type="button" onClick={() => onEdit?.(sar)} className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">
+                <Pencil className="h-4 w-4" /> Edit
+              </button>
+            )}
+            {canDelete && (
+              <button type="button" onClick={() => onDelete?.(sar)} title="Delete SAR" aria-label="Delete SAR" className="inline-flex items-center rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-rose-200 hover:bg-rose-500/20">
+                <Trash2 className="h-4 w-4" />
+              </button>
+            )}
+            <button type="button" onClick={onClose} className="rounded-full bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Close</button>
+          </div>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
@@ -508,10 +578,21 @@ export default function GovernanceSARs() {
   const [filter, setFilter] = useState("open");
   const [search, setSearch] = useState("");
   const [showNew, setShowNew] = useState(false);
-  const [selected, setSelected] = useState(null);
+  const [selectedId, setSelectedId] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  // Defaults to every year: an overdue SAR from last year must never be
+  // hidden inside another year's folder by default.
+  const [yearFilter, setYearFilter] = useState("all");
+  const [folderYears, setFolderYears] = useState([]);
+  const [addingYear, setAddingYear] = useState(false);
+  const [newYear, setNewYear] = useState("");
+  const [yearError, setYearError] = useState("");
+  const canDelete = isTeam;
 
   useEffect(() => {
-    const qSars = query(collection(db, SAR_COLLECTION), orderBy("createdAt", "desc"), limit(250));
+    const qSars = query(collection(db, SAR_COLLECTION), orderBy("createdAt", "desc"), limit(2000));
     const unsub = onSnapshot(
       qSars,
       (snap) => {
@@ -533,7 +614,65 @@ export default function GovernanceSARs() {
     return () => unsub();
   }, []);
 
+  useEffect(() => subscribeSarYearFolders(setFolderYears, (err) => console.error("SAR year folders", err)), []);
+
   const metrics = useMemo(() => countMetrics(rows), [rows]);
+  const selected = useMemo(() => rows.find((row) => row.id === selectedId) || null, [rows, selectedId]);
+
+  const yearOptions = useMemo(() => {
+    const counts = new Map();
+    rows.forEach((row) => {
+      const year = sarYear(row);
+      if (year) counts.set(year, (counts.get(year) || 0) + 1);
+    });
+    const thisYear = new Date().getFullYear();
+    if (!counts.has(thisYear)) counts.set(thisYear, 0);
+    folderYears.forEach((year) => { if (!counts.has(year)) counts.set(year, 0); });
+    return [...counts.entries()].sort((a, b) => b[0] - a[0]);
+  }, [rows, folderYears]);
+
+  const addYearFolder = async () => {
+    const year = Number(String(newYear).trim());
+    if (!isValidSarYear(year)) {
+      setYearError(`Enter a four-digit year between 2000 and ${new Date().getFullYear() + 10}.`);
+      return;
+    }
+    try {
+      await createSarYearFolder(year, actor);
+      setYearFilter(String(year));
+      setAddingYear(false);
+      setNewYear("");
+      setYearError("");
+    } catch (err) {
+      console.error(err);
+      setYearError(err?.message || "Couldn't add that year.");
+    }
+  };
+
+  const removeYearFolder = async (year) => {
+    try {
+      await deleteSarYearFolder(year);
+      if (yearFilter === String(year)) setYearFilter("all");
+    } catch (err) {
+      console.error(err);
+      alert(err?.message || "Couldn't remove that year.");
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      setDeleteBusy(true);
+      await deleteSar(deleteTarget, actor);
+      if (selectedId === deleteTarget.id) setSelectedId(null);
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error(err);
+      alert(err?.message || "Failed to delete SAR");
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -541,6 +680,7 @@ export default function GovernanceSARs() {
       const status = sar.status || SAR_STATUSES.new;
       const days = daysUntilDate(sar.dueDate);
       const completed = status === SAR_STATUSES.completed || status === SAR_STATUSES.archived;
+      if (yearFilter !== "all" && String(sarYear(sar)) !== yearFilter) return false;
       if (filter === "open" && completed) return false;
       if (filter === "completed" && !completed) return false;
       if (filter === "overdue" && !(days !== null && days < 0 && !completed)) return false;
@@ -550,7 +690,7 @@ export default function GovernanceSARs() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term));
     });
-  }, [rows, filter, search]);
+  }, [rows, filter, search, yearFilter]);
 
   return (
     <div className="space-y-6">
@@ -577,6 +717,56 @@ export default function GovernanceSARs() {
         description="Use structured request types for reporting, but keep a free-text detail field for unusual requests."
         actions={<Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search reference, EMIS, assigned user..." className="w-full sm:w-80" />}
       >
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Year</span>
+          <button
+            type="button"
+            onClick={() => setYearFilter("all")}
+            className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${yearFilter === "all" ? "bg-teal-400 text-slate-950" : "bg-slate-900 text-slate-300 hover:bg-slate-800"}`}
+          >
+            <FolderOpen className="h-4 w-4" /> All years <span className="opacity-70">{rows.length}</span>
+          </button>
+          {yearOptions.map(([year, count]) => {
+            const active = yearFilter === String(year);
+            const removable = isTeam && count === 0 && folderYears.includes(year) && year !== new Date().getFullYear();
+            return (
+              <span key={year} className={`inline-flex items-center rounded-full text-sm font-semibold transition ${active ? "bg-teal-400 text-slate-950" : "bg-slate-900 text-slate-300 hover:bg-slate-800"}`}>
+                <button type="button" onClick={() => setYearFilter(String(year))} className={`inline-flex items-center gap-2 py-2 pl-4 ${removable ? "pr-2" : "pr-4"}`}>
+                  <Folder className="h-4 w-4" /> {year} <span className="opacity-70">{count}</span>
+                </button>
+                {removable && (
+                  <button type="button" onClick={() => removeYearFolder(year)} title={`Remove the empty ${year} folder`} aria-label={`Remove the empty ${year} folder`} className="mr-2 rounded-full p-1 hover:bg-black/10">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </span>
+            );
+          })}
+          {isTeam && !addingYear && (
+            <button type="button" onClick={() => { setAddingYear(true); setYearError(""); }} className="inline-flex items-center gap-2 rounded-full border border-dashed border-slate-600 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800">
+              <FolderPlus className="h-4 w-4" /> Add year
+            </button>
+          )}
+          {isTeam && addingYear && (
+            <span className="inline-flex items-center gap-2">
+              <Input
+                autoFocus
+                inputMode="numeric"
+                maxLength={4}
+                value={newYear}
+                onChange={(e) => { setNewYear(e.target.value.replace(/\D/g, "")); setYearError(""); }}
+                onKeyDown={(e) => { if (e.key === "Enter") addYearFolder(); if (e.key === "Escape") { setAddingYear(false); setNewYear(""); } }}
+                placeholder={`e.g. ${new Date().getFullYear() + 1}`}
+                aria-label="Year for the new folder"
+                className="h-9 w-28"
+              />
+              <Button type="button" size="sm" onClick={addYearFolder} className="rounded-full bg-teal-400 font-bold text-slate-950 hover:bg-teal-300">Add</Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => { setAddingYear(false); setNewYear(""); setYearError(""); }} className="rounded-full">Cancel</Button>
+            </span>
+          )}
+          {yearError && <span className="text-xs text-rose-300">{yearError}</span>}
+        </div>
+
         <div className="mb-4 flex flex-wrap gap-2">
           {statusFilters.map((key) => (
             <button
@@ -621,7 +811,21 @@ export default function GovernanceSARs() {
                       <td className="py-3 pr-3">{formatDisplayDate(sar.dueDate)}</td>
                       <td className={`py-3 pr-3 font-semibold ${tone.className}`}>{tone.label}</td>
                       <td className="py-3 pr-3"><StatusBadge status={getSarStatusBadge(sar.status)}>{getStatusLabel(sar.status)}</StatusBadge></td>
-                      <td className="py-3 pr-3"><Button type="button" size="sm" variant="outline" onClick={() => setSelected(sar)} className="rounded-full border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800">Open</Button></td>
+                      <td className="py-3 pr-3">
+                        <div className="flex items-center gap-2">
+                          <Button type="button" size="sm" variant="outline" onClick={() => setSelectedId(sar.id)} className="rounded-full border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800">Open</Button>
+                          {isTeam && (
+                            <button type="button" onClick={() => setEditing(sar)} title="Edit SAR" aria-label={`Edit ${sar.reference}`} className="rounded-full border border-slate-700 bg-slate-950 p-2 text-slate-200 hover:bg-slate-800">
+                              <Pencil className="h-4 w-4" />
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button type="button" onClick={() => setDeleteTarget(sar)} title="Delete SAR" aria-label={`Delete ${sar.reference}`} className="rounded-full border border-rose-500/40 bg-rose-500/10 p-2 text-rose-200 hover:bg-rose-500/20">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -631,8 +835,24 @@ export default function GovernanceSARs() {
         )}
       </SectionCard>
 
-      <NewSarPanel open={showNew} onClose={() => setShowNew(false)} users={users} actor={actor} onCreated={() => setFilter("open")} />
-      <SarDetailPanel sar={selected} actor={actor} isTeam={isTeam} onClose={() => setSelected(null)} />
+      <SarFormPanel open={showNew} onClose={() => setShowNew(false)} users={users} actor={actor} defaultYear={yearFilter === "all" ? null : Number(yearFilter)} onSaved={() => { setFilter("open"); setYearFilter("all"); }} />
+      <SarFormPanel open={!!editing} sar={editing} onClose={() => setEditing(null)} users={users} actor={actor} />
+      <SarDetailPanel sar={selected} actor={actor} isTeam={isTeam} canDelete={canDelete} onEdit={setEditing} onDelete={setDeleteTarget} onClose={() => setSelectedId(null)} />
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4">
+          <div role="alertdialog" aria-modal="true" className="w-full max-w-md rounded-3xl border border-rose-500/30 bg-slate-950 p-5 shadow-2xl">
+            <h3 className="text-lg font-black text-rose-200">Delete {deleteTarget.reference}?</h3>
+            <p className="mt-2 text-sm text-slate-300">Are you sure you want to delete this SAR? It will be removed from the register and can't be brought back. A record that it was deleted, and by whom, is kept in the audit log.</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="ghost" className="rounded-full" disabled={deleteBusy} onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              <Button disabled={deleteBusy} onClick={confirmDelete} className="rounded-full bg-rose-500 text-white hover:bg-rose-600">
+                {deleteBusy ? "Deleting..." : "Yes, delete it"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
