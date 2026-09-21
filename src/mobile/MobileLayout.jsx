@@ -64,6 +64,10 @@ export default function MobileLayout({ initialTab = "home" }) {
   const [undoBusy, setUndoBusy] = useState(false);
   const [showStockMore, setShowStockMore] = useState(false);
   const [activeTab, setActiveTab] = useState(initialTab);
+  // Cleaner only: the room just finished (offers a note / issue), and a notice
+  // when a compliance tag is tapped that a Cleaner does not action.
+  const [finishedCleaning, setFinishedCleaning] = useState(null);
+  const [cleanerNotice, setCleanerNotice] = useState("");
   const [escalationSeed, setEscalationSeed] = useState(null);
   const [showNfcScanner, setShowNfcScanner] = useState(false);
   const [pendingComplianceScan, setPendingComplianceScan] = useState(null);
@@ -121,6 +125,12 @@ export default function MobileLayout({ initialTab = "home" }) {
   // Space. Returns true when the code was a compliance label.
   const routeComplianceScan = (code, method) => {
     if (!parseComplianceQrPayload(code)) return false;
+    if (role === "Cleaner") {
+      // Fire and water checks belong to the caretaker (and staff covering for
+      // them), not the cleaning role.
+      setCleanerNotice("That tag is for fire and water checks. Those are done by the caretaker. Only room tags are for you.");
+      return true;
+    }
     setSpaceScanError("");
     setScanError("");
     setUnknownBarcode("");
@@ -181,12 +191,15 @@ export default function MobileLayout({ initialTab = "home" }) {
       const roomId = space.spaceId || space.id;
       const actorName = displayName || user?.email || "Cleaner";
       const activeSession = getActiveCleaningSession(roomOperational, roomId);
+      setCleanerNotice("");
       if (activeSession) {
-        await completeCleaningSession(roomOperational, roomId, space.name, actorName);
+        const done = await completeCleaningSession(roomOperational, roomId, space.name, actorName, user?.uid || null);
         playBeep(2); // finished — move on to the next room
+        setFinishedCleaning({ logId: done.logId, roomId, roomName: space.name, durationSeconds: done.durationSeconds });
       } else {
         await startCleaningSession(roomId, space.name, actorName);
         playBeep(1); // started — cleaning session is now active
+        setFinishedCleaning(null);
       }
     }
   };
@@ -537,7 +550,13 @@ export default function MobileLayout({ initialTab = "home" }) {
   if (role === "Cleaner") {
     return (
       <MobileSessionShell>
-        <MobileCleanerHome onScanRoom={() => document.querySelector("[data-cleaner-scan-button]")?.click()} />
+        <MobileCleanerHome
+          onScanRoom={() => document.querySelector("[data-cleaner-scan-button]")?.click()}
+          finished={finishedCleaning}
+          onFinishedHandled={() => setFinishedCleaning(null)}
+          notice={cleanerNotice}
+          onNoticeHandled={() => setCleanerNotice("")}
+        />
         <MobileBarcodeScanner
           onScan={handleSpaceCodeScan}
           triggerAttribute="data-cleaner-scan-button"

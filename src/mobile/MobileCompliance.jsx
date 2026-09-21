@@ -2,14 +2,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import MobileBarcodeScanner from "@/components/ui/MobileBarcodeScanner";
 import {
   CheckCircle2,
-  XCircle,
+  Droplets,
+  Flame,
+  Keyboard,
   QrCode,
+  ShieldCheck,
   Sparkles,
   SmartphoneNfc,
-  Thermometer,
-  Keyboard,
-  ShieldCheck,
-  Flame,
+  XCircle,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { nativeNfcAvailable, writeNfcUrl } from "@/modules/sense/services/nfcService";
@@ -17,36 +17,44 @@ import {
   buildComplianceQrPayload,
   findComplianceAssetByScan,
   getAssetTypeConfig,
+  getCountdownSeconds,
   getNextFirePointToTest,
   isComplianceCheckDue,
   isFireAlarmTestDueThisWeek,
+  isFlushableAsset,
   recordComplianceCheck,
   subscribeComplianceAssets,
 } from "@/services/compliance/complianceQrService";
+import { PassFailSheet, TemperatureCheckSheet } from "@/mobile/compliance/CheckSheets";
 
 function assetLabel(asset) {
   return [asset?.assetCode, asset?.label].filter(Boolean).join(" • ") || "Compliance asset";
 }
 
-function resultText(result) {
-  if (!result) return null;
-  if (result.ok) return "Recorded";
-  return "Issue raised";
+function DueRow({ asset, onOpen }) {
+  return (
+    <button type="button" onClick={() => onOpen(asset)} className="w-full rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3 text-left">
+      <div className="font-semibold text-[var(--medtrak-text)]">{assetLabel(asset)}</div>
+      <div className="text-xs text-[var(--medtrak-muted)]">{asset.location || "No location"}</div>
+    </button>
+  );
 }
 
+// The caretaker's compliance screen. The job is "tap a tag": the tag says what
+// it is, the right check opens, and who did it and when are recorded by Primovex
+// without being asked. Everything else on the screen is a fallback.
 export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
   const SITE_ID = "main_branch";
-  const { isAdmin } = useAuth();
+  const { isAdmin, user, displayName } = useAuth();
   const [assets, setAssets] = useState([]);
   const [activeAsset, setActiveAsset] = useState(null);
+  const [sheetKey, setSheetKey] = useState(0);
   const [manualId, setManualId] = useState("");
-  const [tempC, setTempC] = useState("");
-  const [notes, setNotes] = useState("");
+  const [showManual, setShowManual] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
+  const [result, setResult] = useState(null);
   const [scanError, setScanError] = useState("");
   const [nfcActive, setNfcActive] = useState(false);
-  const [result, setResult] = useState(null);
   const [showAllAssets, setShowAllAssets] = useState(false);
   const [writingTagFor, setWritingTagFor] = useState(null);
   const [writeMessage, setWriteMessage] = useState("");
@@ -54,21 +62,28 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
   useEffect(() => subscribeComplianceAssets(setAssets, console.error, { siteId: SITE_ID }), []);
 
   const dueAssets = useMemo(() => assets.filter((asset) => isComplianceCheckDue(asset)), [assets]);
+  const dueWater = useMemo(() => dueAssets.filter((asset) => String(asset.assetType || "").startsWith("water_")), [dueAssets]);
+  const dueOther = useMemo(() => dueAssets.filter((asset) => !String(asset.assetType || "").startsWith("water_")), [dueAssets]);
+  const failing = useMemo(() => assets.filter((asset) => asset.lastCheckResult === "fail").length, [assets]);
   const fireTestDue = useMemo(() => isFireAlarmTestDueThisWeek(assets), [assets]);
   const nextFirePoint = useMemo(() => getNextFirePointToTest(assets), [assets]);
+
+  function openCheck(asset, identificationMethod, scanRaw) {
+    setResult(null);
+    setScanError("");
+    setActiveAsset({ ...asset, identificationMethod, scanRaw });
+    setSheetKey((k) => k + 1);
+  }
 
   async function handleScan(code, method = "qr") {
     setScanError("");
     setResult(null);
     try {
       const asset = await findComplianceAssetByScan(code, { siteId: SITE_ID });
-      setActiveAsset({ ...asset, identificationMethod: method, scanRaw: code });
-      setTempC("");
-      setNotes("");
-      setMessage(`${asset.assetCode || "Asset"} ready.`);
+      openCheck(asset, method, code);
     } catch (error) {
       console.error(error);
-      setScanError(error?.message || "Asset not found. Try manual ID.");
+      setScanError(error?.message || "Asset not found. Try entering the code.");
     }
   }
 
@@ -83,39 +98,30 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
     onConsumeNfcScan?.();
   }, [pendingNfcScan]);
 
-  // MainActivity.kt's NFC reader mode already runs continuously whenever the
-  // app is foregrounded (see onResume) — there's no explicit "start" call on
-  // the native path, tapping a tag anywhere just works. This just puts the UI
-  // into a waiting state; the actual result arrives via the pendingNfcScan
-  // prop above. Web NFC (NDEFReader) is kept only as a fallback for contexts
-  // without the native bridge (e.g. testing in a mobile browser) — it's
-  // deliberately unreliable in the installed Android app itself, see
-  // nfcService.js's nfcSupported().
+  // MainActivity.kt's NFC reader mode already runs whenever the app is in the
+  // foreground, so on the installed app a tap just works. This only puts the
+  // screen into a waiting state; Web NFC is a fallback for testing in a mobile
+  // browser.
   async function startNfcRead() {
     setScanError("");
     if (nativeNfcAvailable()) {
       setNfcActive(true);
-      setMessage("Hold the phone near the NFC tag…");
       return;
     }
-
     if (!("NDEFReader" in window)) {
-      setScanError("NFC is not supported in this browser. Use QR scan or manual ID.");
+      setScanError("NFC is not supported here. Use Scan QR or enter the code.");
       return;
     }
-
     try {
       setNfcActive(true);
       const reader = new window.NDEFReader();
       await reader.scan();
-      setMessage("Hold the phone near the NFC tag…");
       reader.onreading = async (event) => {
         const record = event.message.records[0];
         let text = event.serialNumber || "";
         try {
           if (record?.recordType === "text") {
-            const decoder = new TextDecoder(record.encoding || "utf-8");
-            text = decoder.decode(record.data);
+            text = new TextDecoder(record.encoding || "utf-8").decode(record.data);
           }
         } catch {
           // keep serial fallback
@@ -126,7 +132,7 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
     } catch (error) {
       console.error(error);
       setNfcActive(false);
-      setScanError(error?.message || "NFC read failed. Use QR scan instead.");
+      setScanError(error?.message || "NFC read failed. Use Scan QR instead.");
     }
   }
 
@@ -147,261 +153,148 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
     }
   }
 
-  async function submitCheck(status) {
+  async function submitCheck(fields) {
     if (!activeAsset) return;
     setBusy(true);
     setScanError("");
     try {
-      const payload = {
-        status,
-        tempC,
-        notes,
+      const check = await recordComplianceCheck(activeAsset, {
+        ...fields,
+        // The person's name as the practice knows them, not just their login email.
+        actor: { uid: user?.uid || null, email: user?.email || null, displayName: displayName || user?.displayName || user?.email || "Unknown user" },
         source: "mobile_compliance",
         identificationMethod: activeAsset.identificationMethod || "qr",
         scanRaw: activeAsset.scanRaw,
-      };
-      const check = await recordComplianceCheck(activeAsset, payload);
-      setResult({ ok: check.result === "pass", check });
-      const tempSuffix = check.checkMode === "temperature" && check.tempC !== null && check.tempC !== undefined ? ` (${check.tempC}°C)` : "";
-      setMessage(check.result === "pass" ? `All OK${tempSuffix}. Audit trail saved.` : `Issue detected${tempSuffix}. Pulse Event raised automatically.`);
+      });
+      const temp = check.checkMode === "temperature" && check.tempC !== null && check.tempC !== undefined ? ` (${check.tempC}°C)` : "";
+      setResult({ ok: check.result === "pass", label: assetLabel(activeAsset), temp });
       setActiveAsset(null);
-      setTempC("");
-      setNotes("");
     } catch (error) {
       console.error(error);
-      setScanError("Could not record check. Check permissions or connection.");
+      setScanError("Could not save the check. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
   }
 
-  const isTemperature = activeAsset?.checkMode === "temperature";
   const config = getAssetTypeConfig(activeAsset?.assetType);
+  const isTemperature = activeAsset?.checkMode === "temperature";
 
   return (
     <div className="pvx-mobile-page pvx-compliance-page">
       <div className="mx-auto max-w-md">
         <div className="pvx-compliance-hero">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.25em] text-[var(--medtrak-accent)]">Primovex Mobile</p>
-              <h1 className="mt-2 text-2xl font-bold">Compliance</h1>
-              <p className="mt-1 text-sm text-[var(--medtrak-muted)]">Scan the point, tap once, and Primovex records the rest.</p>
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[color-mix(in_srgb,var(--medtrak-accent)_12%,var(--medtrak-panel))] text-[var(--medtrak-accent)]">
-              <QrCode className="h-6 w-6" />
-            </div>
-          </div>
-
-          <div className="mt-5 grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-3">
-              <div className="text-xl font-bold">{assets.length}</div>
-              <div className="text-[10px] text-[var(--medtrak-muted)]">Assets</div>
-            </div>
-            <div className="rounded-2xl bg-amber-400/10 p-3 text-amber-100">
-              <div className="text-xl font-bold">{dueAssets.length}</div>
-              <div className="text-[10px] text-amber-200/80">Due</div>
-            </div>
-            <div className="rounded-2xl bg-rose-400/10 p-3 text-rose-100">
-              <div className="text-xl font-bold">{assets.filter((a) => a.lastCheckResult === "fail").length}</div>
-              <div className="text-[10px] text-rose-200/80">Issues</div>
-            </div>
-          </div>
+          <p className="text-xs font-bold uppercase tracking-[0.25em] text-[var(--medtrak-accent)]">Primovex Mobile</p>
+          <h1 className="mt-2 text-2xl font-bold">Compliance</h1>
+          <p className="mt-1 text-sm text-[var(--medtrak-muted)]">Tap a tag with your phone. Primovex records who and when.</p>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => document.querySelector("[data-compliance-scan-button]")?.click()}
-            className="rounded-[1.5rem] bg-[var(--medtrak-accent)] px-4 py-5 text-left font-bold text-white shadow-lg active:scale-[0.99]"
-          >
-            <QrCode className="mb-3 h-7 w-7" />
-            Scan QR
+        <button
+          type="button"
+          onClick={startNfcRead}
+          className="mt-4 flex w-full items-center gap-4 rounded-[1.5rem] bg-[var(--medtrak-accent)] px-5 py-6 text-left text-white shadow-lg active:scale-[0.99]"
+        >
+          <span className={`grid h-14 w-14 shrink-0 place-items-center rounded-2xl bg-white/20 ${nfcActive ? "animate-pulse" : ""}`}>
+            <SmartphoneNfc className="h-8 w-8" />
+          </span>
+          <span>
+            <span className="block text-xl font-bold">Tap a tag</span>
+            <span className="block text-sm text-white/85">{nfcActive ? "Hold the phone to the tag…" : "Hold the phone to a fire point or water outlet tag"}</span>
+          </span>
+        </button>
+
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <button type="button" onClick={() => document.querySelector("[data-compliance-scan-button]")?.click()} className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-4 py-3 font-semibold">
+            <QrCode className="h-5 w-5 text-[var(--medtrak-accent)]" /> Scan QR
           </button>
-          <button
-            type="button"
-            onClick={startNfcRead}
-            className="rounded-[1.5rem] border border-[color-mix(in_srgb,var(--medtrak-accent)_28%,var(--medtrak-border))] bg-[color-mix(in_srgb,var(--medtrak-accent)_8%,var(--medtrak-panel))] px-4 py-5 text-left font-bold text-[var(--medtrak-accent)] active:scale-[0.99]"
-          >
-            <SmartphoneNfc className="mb-3 h-7 w-7" />
-            {nfcActive ? "Ready…" : "Tap NFC"}
+          <button type="button" onClick={() => setShowManual((v) => !v)} className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-4 py-3 font-semibold">
+            <Keyboard className="h-5 w-5 text-[var(--medtrak-accent)]" /> Enter code
           </button>
         </div>
 
-        <div className="mt-4 rounded-[1.5rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4">
-          <label className="text-xs font-semibold uppercase tracking-wide text-[var(--medtrak-muted)]">Manual Asset ID</label>
-          <div className="mt-2 flex gap-2">
+        {showManual && (
+          <div className="mt-3 flex gap-2 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-3">
             <input
               value={manualId}
               onChange={(e) => setManualId(e.target.value)}
               placeholder="FP-007"
-              className="min-w-0 flex-1 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-4 py-3 text-[var(--medtrak-text)] outline-none"
+              aria-label="Asset code"
+              className="min-w-0 flex-1 rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-4 py-3 text-[var(--medtrak-text)] outline-none"
             />
-            <button
-              type="button"
-              onClick={() => manualId && handleScan(manualId, "manual")}
-              className="rounded-2xl bg-[color-mix(in_srgb,var(--medtrak-accent)_10%,var(--medtrak-panel))] px-4 py-3 text-[var(--medtrak-accent)]"
-            >
-              <Keyboard className="h-5 w-5" />
-            </button>
-          </div>
-        </div>
-
-        {activeAsset && (
-          <div className="fixed inset-0 z-[80] flex items-end bg-black/60 backdrop-blur-sm">
-            <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-[2rem] border border-teal-400/20 bg-slate-950 p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-2xl">
-              <div className="mx-auto max-w-md">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-wide text-[var(--medtrak-accent)]">Asset identified</p>
-                    <h2 className="mt-1 text-2xl font-bold text-white">{assetLabel(activeAsset)}</h2>
-                    <p className="mt-1 text-sm text-[var(--medtrak-muted)]">{activeAsset.location || "No location"} • {config.label}</p>
-                  </div>
-                  <button type="button" onClick={() => setActiveAsset(null)} aria-label="Close" className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-white/10 text-slate-300">
-                    <XCircle className="h-5 w-5" />
-                  </button>
-                </div>
-
-                {isTemperature ? (
-                  <div className="mt-5">
-                    <label className="text-xs font-semibold uppercase tracking-wide text-[var(--medtrak-muted)]">Temperature °C</label>
-                    <div className="mt-2 flex items-center gap-3 rounded-[1.5rem] border border-white/10 bg-slate-900 px-4 py-3">
-                      <Thermometer className="h-6 w-6 text-teal-200" />
-                      <input
-                        autoFocus
-                        type="number"
-                        step="0.1"
-                        value={tempC}
-                        onChange={(e) => setTempC(e.target.value)}
-                        placeholder="12.4"
-                        className="w-full bg-transparent text-3xl font-bold text-white outline-none"
-                      />
-                    </div>
-                    <p className="mt-2 text-xs text-slate-500">Range: {activeAsset.minTempC ?? "—"}°C to {activeAsset.maxTempC ?? "—"}°C</p>
-                    <button
-                      type="button"
-                      onClick={() => submitCheck("pass")}
-                      disabled={busy || tempC === ""}
-                      className="mt-4 w-full rounded-[1.5rem] bg-teal-400 px-4 py-4 text-lg font-bold text-slate-950 disabled:opacity-50"
-                    >
-                      Record temperature
-                    </button>
-                  </div>
-                ) : (
-                  <div className="mt-5 grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => submitCheck("pass")}
-                      disabled={busy}
-                      className="rounded-[1.5rem] bg-emerald-400 px-4 py-6 text-center text-lg font-bold text-slate-950 disabled:opacity-50"
-                    >
-                      <CheckCircle2 className="mx-auto mb-2 h-9 w-9" />
-                      All OK
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => submitCheck("fail")}
-                      disabled={busy}
-                      className="rounded-[1.5rem] bg-rose-500 px-4 py-6 text-center text-lg font-bold text-white disabled:opacity-50"
-                    >
-                      <XCircle className="mx-auto mb-2 h-9 w-9" />
-                      Not working
-                    </button>
-                  </div>
-                )}
-
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Optional note"
-                  rows={2}
-                  className="mt-4 w-full rounded-2xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-white outline-none"
-                />
-
-                <button
-                  type="button"
-                  onClick={() => setActiveAsset(null)}
-                  className="mt-3 w-full rounded-2xl bg-slate-800 px-4 py-3 text-slate-200"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
+            <button type="button" onClick={() => manualId && handleScan(manualId, "manual")} className="rounded-xl bg-[var(--medtrak-accent)] px-5 py-3 font-bold text-white">Go</button>
           </div>
         )}
 
-        {(message || result) && (
-          <div className={`mt-4 rounded-[1.5rem] border p-4 ${result?.ok === false ? "border-rose-400/30 bg-rose-400/10 text-rose-100" : "border-emerald-400/30 bg-emerald-400/10 text-emerald-100"}`}>
-            <div className="flex items-center gap-3">
-              {result?.ok === false ? <XCircle className="h-6 w-6" /> : <CheckCircle2 className="h-6 w-6" />}
-              <div>
-                <div className="font-bold">{resultText(result) || "Ready"}</div>
-                <div className="text-sm opacity-80">{message}</div>
-              </div>
+        {result && (
+          <div className={`mt-4 flex items-center gap-3 rounded-[1.5rem] border p-4 ${result.ok ? "border-emerald-500/40 bg-emerald-500/10" : "border-rose-500/40 bg-rose-500/10"}`} role="status">
+            {result.ok ? <CheckCircle2 className="h-7 w-7 text-emerald-600" /> : <XCircle className="h-7 w-7 text-rose-600" />}
+            <div>
+              <div className="font-bold">{result.ok ? "Saved: pass" : "Saved: fail"}{result.temp}</div>
+              <div className="text-sm text-[var(--medtrak-muted)]">{result.label}{result.ok ? "" : ". The caretaker has been alerted."}</div>
             </div>
           </div>
         )}
 
         {scanError && (
-          <div className="mt-4 rounded-[1.5rem] border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-100">
-            {scanError}
-          </div>
+          <div className="mt-4 rounded-[1.5rem] border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-700" role="alert">{scanError}</div>
         )}
 
         {nextFirePoint && (
-          <div className={`mt-5 rounded-[1.5rem] border p-4 ${fireTestDue ? "border-amber-400/30 bg-amber-400/10" : "border-[var(--medtrak-border)] bg-[var(--medtrak-panel)]"}`}>
-            <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-[var(--medtrak-text)]"><Flame className="h-4 w-4 text-amber-500" /> Weekly fire alarm test</div>
-            <p className="text-xs text-[var(--medtrak-muted)]">{fireTestDue ? "No call point has been tested this week." : "A call point was tested this week — all good."} Test one call point weekly, rotating through them all.</p>
-            <button
-              type="button"
-              onClick={() => setActiveAsset({ ...nextFirePoint, identificationMethod: "manual_fire_rotation" })}
-              className="mt-3 w-full rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3 text-left"
-            >
-              <div className="font-semibold text-[var(--medtrak-text)]">Next up: {assetLabel(nextFirePoint)}</div>
+          <div className={`mt-5 rounded-[1.5rem] border p-4 ${fireTestDue ? "border-amber-500/40 bg-amber-500/10" : "border-[var(--medtrak-border)] bg-[var(--medtrak-panel)]"}`}>
+            <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Flame className="h-4 w-4 text-amber-500" /> Weekly fire test</div>
+            <p className="text-xs text-[var(--medtrak-muted)]">{fireTestDue ? "No call point tested this week yet." : "A call point has been tested this week."}</p>
+            <button type="button" onClick={() => openCheck(nextFirePoint, "manual_fire_rotation")} className="mt-3 w-full rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3 text-left">
+              <div className="font-semibold">Next up: {assetLabel(nextFirePoint)}</div>
               <div className="text-xs text-[var(--medtrak-muted)]">{nextFirePoint.location || "No location"} · {nextFirePoint.lastCheckAt ? "Longest since last tested" : "Never tested yet"}</div>
             </button>
           </div>
         )}
 
-        <div className="mt-5 rounded-[1.5rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4">
-          <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--medtrak-text)]"><ShieldCheck className="h-4 w-4 text-teal-200" /> Due checks</div>
-          <div className="space-y-2">
-            {dueAssets.slice(0, 6).map((asset) => (
-              <button
-                key={asset.id}
-                type="button"
-                onClick={() => setActiveAsset({ ...asset, identificationMethod: "manual_due_list" })}
-                className="w-full rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3 text-left"
-              >
-                <div className="font-semibold text-[var(--medtrak-text)]">{assetLabel(asset)}</div>
-                <div className="text-xs text-[var(--medtrak-muted)]">{asset.location || "No location"}</div>
-              </button>
-            ))}
-            {dueAssets.length === 0 && <p className="text-sm text-[var(--medtrak-muted)]">No due checks. Compliance is calm.</p>}
+        {(dueWater.length > 0 || dueOther.length > 0 || failing > 0) && (
+          <div className="mt-5 rounded-[1.5rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4">
+            <div className="mb-3 flex items-center justify-between gap-2 text-sm font-semibold">
+              <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[var(--medtrak-accent)]" /> To do</span>
+              {failing > 0 && <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-xs font-bold text-rose-700">{failing} failing</span>}
+            </div>
+            {dueWater.length > 0 && (
+              <div className="mb-3">
+                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--medtrak-muted)]"><Droplets className="h-3.5 w-3.5" /> Water outlets</p>
+                <div className="space-y-2">{dueWater.slice(0, 8).map((asset) => <DueRow key={asset.id} asset={asset} onOpen={(a) => openCheck(a, "manual_due_list")} />)}</div>
+              </div>
+            )}
+            {dueOther.length > 0 && (
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--medtrak-muted)]">Other checks</p>
+                <div className="space-y-2">{dueOther.slice(0, 8).map((asset) => <DueRow key={asset.id} asset={asset} onOpen={(a) => openCheck(a, "manual_due_list")} />)}</div>
+              </div>
+            )}
           </div>
-        </div>
+        )}
+        {dueAssets.length === 0 && !nextFirePoint && assets.length > 0 && (
+          <p className="mt-5 text-center text-sm text-[var(--medtrak-muted)]">Nothing due. Compliance is up to date.</p>
+        )}
 
         {isAdmin && (
-          <div className="mt-4 rounded-[1.5rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4">
-            <button type="button" onClick={() => setShowAllAssets((v) => !v)} className="flex w-full items-center justify-between text-sm font-semibold text-[var(--medtrak-text)]">
-              <span className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-teal-200" /> All assets ({assets.length})</span>
+          <div className="mt-5 rounded-[1.5rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4">
+            <button type="button" onClick={() => setShowAllAssets((v) => !v)} className="flex w-full items-center justify-between text-sm font-semibold">
+              <span className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-[var(--medtrak-accent)]" /> Write tags ({assets.length})</span>
               <span className="text-xs text-[var(--medtrak-muted)]">{showAllAssets ? "Hide" : "Show"}</span>
             </button>
             {showAllAssets && (
               <div className="mt-3 space-y-2">
-                <p className="text-xs text-[var(--medtrak-muted)]">Create the asset on desktop first (Compliance → Create QR/NFC asset), then write its tag here — NFC writing needs the phone's native chip.</p>
+                <p className="text-xs text-[var(--medtrak-muted)]">Create the asset on desktop first (Compliance, Assets and tags), then write its tag here. Writing needs the phone's own NFC chip.</p>
                 {assets.map((asset) => (
                   <div key={asset.id} className="rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="truncate font-semibold text-[var(--medtrak-text)]">{assetLabel(asset)}</div>
+                        <div className="truncate font-semibold">{assetLabel(asset)}</div>
                         <div className="truncate text-xs text-[var(--medtrak-muted)]">{asset.location || "No location"} · {asset.frequency || "monthly"}</div>
                       </div>
                       <button
                         type="button"
                         onClick={() => writeAssetTag(asset)}
                         disabled={writingTagFor === asset.id || !nativeNfcAvailable()}
-                        className="shrink-0 rounded-full border border-[var(--medtrak-border)] px-3 py-2 text-xs font-bold text-[var(--medtrak-text)] disabled:opacity-50"
+                        className="shrink-0 rounded-xl bg-[var(--medtrak-accent)] px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
                       >
                         {writingTagFor === asset.id ? "Hold tag…" : "Write tag"}
                       </button>
@@ -416,6 +309,28 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
           </div>
         )}
       </div>
+
+      {activeAsset && isTemperature && (
+        <TemperatureCheckSheet
+          key={sheetKey}
+          asset={activeAsset}
+          seconds={getCountdownSeconds(activeAsset)}
+          showFlushed={isFlushableAsset(activeAsset)}
+          busy={busy}
+          onSubmit={submitCheck}
+          onCancel={() => setActiveAsset(null)}
+        />
+      )}
+      {activeAsset && !isTemperature && (
+        <PassFailSheet
+          key={sheetKey}
+          asset={activeAsset}
+          eyebrow={activeAsset.assetType === "fire_point" ? "Fire point test" : config.label}
+          busy={busy}
+          onSubmit={submitCheck}
+          onCancel={() => setActiveAsset(null)}
+        />
+      )}
 
       <MobileBarcodeScanner
         onScan={(code) => handleScan(code, "qr")}

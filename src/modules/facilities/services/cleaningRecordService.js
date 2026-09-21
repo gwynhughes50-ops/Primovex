@@ -1,4 +1,4 @@
-import { collection, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, serverTimestamp, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
 import { addDocResendSafe } from '@/lib/resendSafeWrites';
 import { db } from '@/lib/firebase';
 
@@ -71,7 +71,7 @@ export async function startCleaningSession(roomId, roomName, actor) {
   }, { merge: true });
 }
 
-export async function completeCleaningSession(roomOperationalMap, roomId, roomName, actor) {
+export async function completeCleaningSession(roomOperationalMap, roomId, roomName, actor, actorUid = null) {
   const session = getActiveCleaningSession(roomOperationalMap, roomId);
   const nowIso = new Date().toISOString();
   const durationSeconds = session ? Math.max(0, Math.round((new Date(nowIso) - new Date(session.startedAt)) / 1000)) : null;
@@ -83,16 +83,63 @@ export async function completeCleaningSession(roomOperationalMap, roomId, roomNa
     activeCleaningSession: null,
   }, { merge: true });
 
-  await addDocResendSafe(collection(db, CLEANING_LOGS_COLLECTION), {
+  const logRef = await addDocResendSafe(collection(db, CLEANING_LOGS_COLLECTION), {
     roomId,
     roomName: roomName || session?.roomName || roomId,
     cleanedAt: serverTimestamp(),
     cleanedBy: actor,
+    cleanedByUid: actorUid,
     method: 'nfc-session',
     startedAt: session?.startedAt || null,
     startedBy: session?.startedBy || actor,
     durationSeconds,
   });
 
-  return { durationSeconds };
+  return { durationSeconds, logId: logRef.id };
+}
+
+// The note a cleaner adds on the "finished" screen. The log itself is saved the
+// moment the second tag is tapped (so a walk-away never loses the record); the
+// note is added to it afterwards, once, by the same person.
+export async function addCleaningNote(logId, note, { issue = false } = {}) {
+  const text = String(note || '').trim().slice(0, 1000);
+  if (!logId || !text) return;
+  await updateDoc(doc(db, CLEANING_LOGS_COLLECTION, logId), {
+    notes: text,
+    issueReported: Boolean(issue),
+    notedAt: serverTimestamp(),
+  });
+}
+
+// A clean that wasn't recorded with the tags (no phone, a missed tap). Saved in
+// the same log, but marked as entered by hand: who says it was cleaned, who
+// entered it, and why. cleanedByUid is left empty so the "note" route for the
+// person who tapped can't apply to it.
+export async function addManualCleaningLog({ roomId, roomName, cleanedBy, performedAt, note, reason, enteredBy, enteredByUid = null, currentLastCleanedAt = null }) {
+  const when = performedAt instanceof Date && !Number.isNaN(performedAt.getTime()) ? performedAt : new Date();
+  const text = String(note || '').trim().slice(0, 1000);
+  const ref = await addDocResendSafe(collection(db, CLEANING_LOGS_COLLECTION), {
+    roomId,
+    roomName: roomName || roomId,
+    cleanedAt: Timestamp.fromDate(when),
+    cleanedBy: String(cleanedBy || '').trim() || enteredBy,
+    cleanedByUid: null,
+    method: 'manual-desktop',
+    manualEntry: true,
+    manualReason: String(reason || '').trim(),
+    enteredBy,
+    enteredByUid,
+    enteredAt: serverTimestamp(),
+    ...(text ? { notes: text, issueReported: false } : {}),
+  });
+  // Only move the room's "last cleaned" forward, never back over a newer clean.
+  const current = toMillis(currentLastCleanedAt);
+  if (!current || when.getTime() >= current) {
+    await setDoc(doc(db, ROOM_OPERATIONAL_COLLECTION, roomId), {
+      lastCleanedAt: Timestamp.fromDate(when),
+      lastCleanedBy: String(cleanedBy || '').trim() || enteredBy,
+      operationalStatus: 'ready',
+    }, { merge: true });
+  }
+  return ref.id;
 }

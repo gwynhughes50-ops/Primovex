@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   AlertTriangle, Building2, CalendarClock, CheckCircle2, ChevronRight, ClipboardCheck,
   Filter, History, MapPin, PackageCheck, PackageSearch, Plus, RotateCcw, Search, Sparkles, UserRound,
@@ -195,7 +196,7 @@ export default function Facilities() {
     });
   }
 
-  const tabs = ['overview', 'spaces', 'cleaning', 'equipment', 'maintenance'];
+  const tabs = ['overview', 'spaces', 'equipment'];
 
   return (
     <div className={`space-y-5 ${text}`}>
@@ -222,6 +223,7 @@ export default function Facilities() {
 
       <div className="flex flex-wrap gap-2">
         {tabs.map((item) => <button key={item} onClick={() => setTab(item)} className={`rounded-full px-4 py-2 text-sm capitalize ${tab === item ? 'bg-[color:var(--medtrak-accent)] text-white' : 'border border-[color:var(--medtrak-border)] hover:bg-white/5'}`}>{item}</button>)}
+        <Link to="/compliance" className={`ml-auto self-center text-xs underline ${muted}`}>Cleaning history and maintenance are now under Compliance</Link>
       </div>
 
       {tab === 'spaces' && (
@@ -246,19 +248,8 @@ export default function Facilities() {
         </section>
       )}
 
-      {tab === 'cleaning' && (
-        <section className={`${panel} p-4 sm:p-5`}>
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"><div><h2 className="text-lg font-semibold">Cleaning history</h2><p className={`text-sm ${muted}`}>Timestamped audit trail of room cleaning confirmations.</p></div><div className="flex flex-col gap-2 sm:flex-row"><label className="text-xs"><span className={`mb-1 block ${muted}`}>Room</span><select value={historyRoom} onChange={(e)=>setHistoryRoom(e.target.value)} className="rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] px-3 py-2 text-sm"><option value="all">All rooms</option>{state.rooms.map((room)=><option key={room.id} value={room.id}>{room.name}</option>)}</select></label><label className="text-xs"><span className={`mb-1 block ${muted}`}>Cleaner</span><select value={historyPerson} onChange={(e)=>setHistoryPerson(e.target.value)} className="rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] px-3 py-2 text-sm"><option value="all">All staff</option>{cleaners.map((person)=><option key={person} value={person}>{person}</option>)}</select></label></div></div>
-          <div className="mt-5 space-y-2">{filteredLogs.length === 0 && <p className={muted}>No cleaning records match these filters.</p>}{filteredLogs.map((log)=><div key={log.id} className="grid gap-2 rounded-xl border border-[color:var(--medtrak-border)] p-4 sm:grid-cols-[1fr_auto_auto_auto] sm:items-center"><div><div className="font-medium">{log.roomName}</div><div className={`text-xs ${muted}`}>{log.roomId}</div></div><div className="flex items-center gap-2 text-sm"><UserRound className="h-4 w-4 text-[color:var(--medtrak-accent)]" /> {log.cleanedBy}</div><div className={`text-sm ${muted}`}>{formatDate(log.cleanedAt)}</div><div className={`text-xs ${muted}`}>{Number.isFinite(log.durationSeconds) ? `Took ${Math.round(log.durationSeconds / 60)} min · NFC session` : log.method === 'one-tap-confirmation' ? 'One-tap confirmation' : log.method}</div></div>)}</div>
-        </section>
-      )}
-
       {tab === 'equipment' && (
         <section className={`${panel} p-5`}><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="text-lg font-semibold">Unified Equipment Registry</h2><p className={`text-sm ${muted}`}>One equipment passport shared with Sense, PAT, Connected Practice, Temperature and Orb.</p></div><button onClick={()=>setShowEquipmentWizard(true)} className={`${button} flex items-center justify-center gap-2 bg-[color:var(--medtrak-accent)] font-semibold text-white`}><Plus className="h-4 w-4" /> Register equipment</button></div><div className="mt-4 grid gap-3 lg:grid-cols-2">{state.equipment.map((item) => { const room=state.rooms.find(r=>r.id===item.roomId); const assignment=item.assignment || {}; const assignedLabel=assignment.type==='loan' ? `On loan to ${assignment.assignedToName || 'staff member'}` : assignment.type==='permanent' ? assignment.assignedToName || 'Permanently assigned' : 'Unassigned'; return <button onClick={()=>setSelectedEquipmentId(item.id)} key={item.id} className="rounded-xl border border-[color:var(--medtrak-border)] p-4 text-left transition hover:bg-white/5"><div className="flex items-start justify-between gap-3"><div><p className={`text-[11px] font-semibold ${muted}`}>{item.id}</p><div className="mt-1 font-medium">{item.name}</div><div className={`text-sm ${muted}`}>{item.category}</div></div><StatusPill status={item.status === 'in-service' ? 'ready' : 'attention'} /></div><div className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><span className={`block text-xs ${muted}`}>Last known room</span><span className="font-medium">{room?.name || 'Unknown'}</span></div><div><span className={`block text-xs ${muted}`}>Assigned to</span><span className="font-medium">{assignedLabel}</span>{assignment.type==='loan' && assignment.loanDueDate && <span className={`block text-xs ${muted}`}>Return {formatShort(assignment.loanDueDate)}</span>}</div><div><span className={`block text-xs ${muted}`}>Identity</span><span className="font-medium">{item.identity?.nfcTagId ? 'NFC' : item.identity?.barcode ? 'Barcode' : 'QR ready'}</span></div><div><span className={`block text-xs ${muted}`}>Connection</span><span>{item.connected?.enabled ? item.connected.provider : 'Not connected'}</span></div><div><span className={`block text-xs ${muted}`}>PAT due</span><span>{item.compliance?.patRequired ? formatShort(item.patDue) : 'Not required'}</span></div></div></button>})}</div></section>
-      )}
-
-      {tab === 'maintenance' && (
-        <section className={`${panel} p-5`}><div><h2 className="text-lg font-semibold">Maintenance</h2><p className={`text-sm ${muted}`}>Issues reported from digital room cards and assigned to the caretaker.</p></div><div className="mt-4 space-y-3">{state.maintenance.length === 0 && <p className={muted}>No maintenance issues.</p>}{state.maintenance.map((item) => { const room=state.rooms.find(r=>r.id===item.roomId); return <div key={item.id} className="flex flex-col gap-3 rounded-xl border border-[color:var(--medtrak-border)] p-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="flex flex-wrap items-center gap-2"><span className="font-medium">{item.title}</span><StatusPill status={item.status} /><span className={`rounded-full px-2 py-1 text-[11px] capitalize ${item.priority === 'high' ? 'bg-rose-500/15 text-rose-300' : item.priority === 'medium' ? 'bg-amber-500/15 text-amber-300' : soft}`}>{item.priority}</span></div><div className={`mt-1 text-sm ${muted}`}>{room?.name || 'Unknown room'} • Assigned to {item.assignedTo || 'Caretaker'} • {formatDate(item.reportedAt)}</div></div>{item.status === 'closed' ? <span className="text-sm text-emerald-300">Completed by {item.closedBy}</span> : <button onClick={()=>closeIssue(item.id)} className={button}>Mark complete</button>}</div>})}</div></section>
       )}
 
       {selectedRoom && <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-6" onClick={()=>setSelectedRoomId(null)}><div className={`${panel} max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-b-none p-5 sm:rounded-2xl`} onClick={(e)=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wider text-[color:var(--medtrak-accent)]">Digital room • {selectedRoom.id}</p><h2 className="mt-1 text-2xl font-semibold">{selectedRoom.name}</h2><p className={`mt-1 text-sm ${muted}`}>{selectedRoom.site} • {selectedRoom.floor} • {selectedRoom.zone}</p></div><button onClick={()=>setSelectedRoomId(null)} className="rounded-full p-2 hover:bg-white/5"><X className="h-5 w-5"/></button></div>

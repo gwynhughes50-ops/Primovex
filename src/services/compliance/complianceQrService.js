@@ -7,6 +7,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  Timestamp,
   updateDoc,
   where,
   limit,
@@ -21,8 +22,8 @@ export const PULSE_EVENTS_COLLECTION = "pulse_events";
 export const COMPLIANCE_ASSET_TYPES = [
   { key: "fire_point", label: "Fire Point", icon: "🔥", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "FP" },
   { key: "fire_door", label: "Fire Door", icon: "🚪", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "FD" },
-  { key: "water_hot", label: "Hot Water Outlet", icon: "💧", checkMode: "temperature", defaultFrequency: "monthly", minTempC: 50, maxTempC: 65, codePrefix: "WH" },
-  { key: "water_cold", label: "Cold Water Outlet", icon: "💧", checkMode: "temperature", defaultFrequency: "monthly", minTempC: 0, maxTempC: 20, codePrefix: "WC" },
+  { key: "water_hot", label: "Hot Water Outlet", icon: "💧", checkMode: "temperature", defaultFrequency: "monthly", minTempC: 50, maxTempC: 65, codePrefix: "WH", countdownSeconds: 30, flushable: true },
+  { key: "water_cold", label: "Cold Water Outlet", icon: "💧", checkMode: "temperature", defaultFrequency: "monthly", minTempC: 0, maxTempC: 20, codePrefix: "WC", countdownSeconds: 30, flushable: true },
   { key: "fridge", label: "Fridge", icon: "🌡️", checkMode: "temperature", defaultFrequency: "daily", minTempC: 2, maxTempC: 8, codePrefix: "FR" },
   { key: "freezer", label: "Freezer", icon: "❄️", checkMode: "temperature", defaultFrequency: "daily", minTempC: -45, maxTempC: -35, codePrefix: "FZ" },
   { key: "aed", label: "AED", icon: "❤️", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "AED" },
@@ -32,6 +33,22 @@ export const COMPLIANCE_ASSET_TYPES = [
 
 export function getAssetTypeConfig(type) {
   return COMPLIANCE_ASSET_TYPES.find((row) => row.key === type) || COMPLIANCE_ASSET_TYPES.at(-1);
+}
+
+// Water outlets are checked after the water has been running for a set time:
+// the phone counts that down and keeps the temperature box locked until it
+// ends. 30 seconds by default; an outlet can carry its own time
+// (asset.countdownSeconds). 0 means no countdown.
+export const DEFAULT_WATER_COUNTDOWN_SECONDS = 30;
+export function getCountdownSeconds(asset) {
+  const config = getAssetTypeConfig(asset?.assetType);
+  if (!config.countdownSeconds) return 0;
+  const own = Number(asset?.countdownSeconds);
+  if (Number.isFinite(own) && own >= 0) return Math.min(600, Math.round(own));
+  return config.countdownSeconds;
+}
+export function isFlushableAsset(asset) {
+  return Boolean(getAssetTypeConfig(asset?.assetType).flushable);
 }
 
 const FREQUENCY_MS = {
@@ -261,6 +278,10 @@ export async function createComplianceAsset(form = {}) {
     frequency: form.frequency || config.defaultFrequency || "monthly",
     minTempC: form.minTempC === "" || form.minTempC === undefined ? config.minTempC ?? null : Number(form.minTempC),
     maxTempC: form.maxTempC === "" || form.maxTempC === undefined ? config.maxTempC ?? null : Number(form.maxTempC),
+    countdownSeconds: config.countdownSeconds
+      ? (form.countdownSeconds === "" || form.countdownSeconds === undefined ? config.countdownSeconds : Math.max(0, Math.min(600, Math.round(Number(form.countdownSeconds) || 0))))
+      : null,
+    legacyId: form.legacyId || null,
     active: true,
     identificationMethods: {
       qr: true,
@@ -278,10 +299,70 @@ export async function createComplianceAsset(form = {}) {
   return { id: ref.id, ...payload, qrPayload: `MEDTRAK:COMPLIANCE:${ref.id}` };
 }
 
+// One-off bridge from the old Fire Checks and Water Temperatures lists to the
+// tag-based assets. Each old call point / water outlet that hasn't been brought
+// across yet becomes an asset (with its own code, ready for a tag), and is
+// remembered by its old id so running this again never makes duplicates.
+// The old records themselves are not touched.
+export async function importLegacyComplianceAssets(existingAssets = [], { siteId = "main_branch" } = {}) {
+  const [pointsSnap, outletsSnap] = await Promise.all([
+    getDocs(collection(db, "fire_call_points")),
+    getDocs(collection(db, "water_outlets")),
+  ]);
+  const already = new Set(existingAssets.map((a) => a.legacyId).filter(Boolean));
+  const pool = [...existingAssets];
+  const wanted = [];
+
+  const isSite = (row) => String(row.siteId ?? row.site ?? "").trim() === siteId && row.active !== false;
+  pointsSnap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter(isSite)
+    .sort((a, b) => String(a.pointNumber || "").localeCompare(String(b.pointNumber || ""), undefined, { numeric: true }))
+    .forEach((row) => {
+      wanted.push({
+        legacyId: "fire_call_points/" + row.id,
+        assetType: "fire_point",
+        label: String(row.displayName || row.label || "Call point").trim(),
+        location: String(row.label || "").trim(),
+        frequency: "weekly",
+      });
+    });
+  outletsSnap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter(isSite)
+    .sort((a, b) => (Number(a.order) || 9999) - (Number(b.order) || 9999))
+    .forEach((row) => {
+      const type = String(row.type || "").toLowerCase();
+      wanted.push({
+        legacyId: "water_outlets/" + row.id,
+        assetType: type.includes("cold") ? "water_cold" : "water_hot",
+        label: String(row.name || "Outlet").trim(),
+        location: String(row.location || "").trim(),
+        frequency: FREQUENCY_MS[row.frequency] ? row.frequency : "monthly",
+      });
+    });
+
+  let created = 0;
+  for (const item of wanted) {
+    if (already.has(item.legacyId)) continue;
+    const assetCode = generateNextAssetCode(item.assetType, pool);
+    const made = await createComplianceAsset({ ...item, assetCode, siteId });
+    pool.push({ assetCode: made.assetCode, assetType: item.assetType });
+    created += 1;
+  }
+  return { created, alreadyImported: wanted.length - created, total: wanted.length };
+}
+
 export async function recordComplianceCheck(asset, payload = {}) {
   if (!asset?.id) throw new Error("Compliance asset is required.");
   const actor = payload.actor || getCurrentActor();
   const result = evaluateComplianceResult(asset, payload);
+  // Phone checks are stamped by the server as they are saved. A record typed in
+  // afterwards on the desktop (someone forgot to tap, no phone to hand) carries
+  // the date and time the check really happened, plus why it was entered by
+  // hand. createdAt still shows when it was entered, so the two are never confused.
+  const performedDate = payload.performedAt instanceof Date && !Number.isNaN(payload.performedAt.getTime()) ? payload.performedAt : null;
+  const isManual = payload.source === "manual_desktop";
 
   const check = {
     siteId: asset.siteId || "main_branch",
@@ -299,6 +380,17 @@ export async function recordComplianceCheck(asset, payload = {}) {
     minTempC: result.minTempC ?? asset.minTempC ?? null,
     maxTempC: result.maxTempC ?? asset.maxTempC ?? null,
     notes: String(payload.notes || "").trim(),
+    flushed: typeof payload.flushed === "boolean" ? payload.flushed : null,
+    countdown: payload.countdown
+      ? {
+          seconds: Number(payload.countdown.seconds) || 0,
+          startedAt: payload.countdown.startedAt || null,
+          completedAt: payload.countdown.completedAt || null,
+        }
+      : null,
+    performedAt: performedDate ? Timestamp.fromDate(performedDate) : serverTimestamp(),
+    manualEntry: isManual,
+    manualReason: isManual ? String(payload.manualReason || "").trim() : null,
     source: payload.source || "mobile_qr",
     identificationMethod: payload.identificationMethod || "qr",
     scanRaw: payload.scanRaw || asset.scanRaw || null,
@@ -312,13 +404,19 @@ export async function recordComplianceCheck(asset, payload = {}) {
   };
 
   const ref = await addDocResendSafe(collection(db, COMPLIANCE_CHECKS_COLLECTION), check);
-  await updateDoc(doc(db, COMPLIANCE_ASSETS_COLLECTION, asset.id), {
-    lastCheckAt: serverTimestamp(),
-    lastCheckResult: result.status,
-    lastCheckedByUid: actor.uid || null,
-    lastCheckedByName: actor.displayName || null,
-    updatedAt: serverTimestamp(),
-  });
+  // A back-dated manual record must not push the asset's "last checked" earlier
+  // than a check that has already been recorded since.
+  const lastKnown = toDateValue(asset.lastCheckAt);
+  const supersedes = !performedDate || !lastKnown || performedDate.getTime() >= lastKnown.getTime();
+  if (supersedes) {
+    await updateDoc(doc(db, COMPLIANCE_ASSETS_COLLECTION, asset.id), {
+      lastCheckAt: performedDate ? Timestamp.fromDate(performedDate) : serverTimestamp(),
+      lastCheckResult: result.status,
+      lastCheckedByUid: actor.uid || null,
+      lastCheckedByName: actor.displayName || null,
+      updatedAt: serverTimestamp(),
+    });
+  }
 
   if (result.status === "fail") {
     await createCompliancePulseEvent(asset, check, result);

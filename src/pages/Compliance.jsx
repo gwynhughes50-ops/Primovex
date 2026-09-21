@@ -20,6 +20,10 @@ import {
   X,
   Mail,
   QrCode,
+  LayoutDashboard,
+  History,
+  SprayCan,
+  Wrench,
 } from "lucide-react";
 import { db } from "../lib/firebase";
 import {
@@ -35,6 +39,13 @@ import {
 import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import ComplianceQrEngine from "@/components/compliance/ComplianceQrEngine";
+import ComplianceOverview from "@/components/compliance/ComplianceOverview";
+import ChecksHistory from "@/components/compliance/ChecksHistory";
+import CleaningPanel from "@/modules/facilities/components/CleaningPanel";
+import MaintenancePanel from "@/modules/facilities/components/MaintenancePanel";
+import { checkPerson, checkTime, localDateInput } from "@/components/compliance/complianceView";
+import { subscribeRecentComplianceChecks } from "@/services/compliance/complianceQrService";
+import { subscribeCleaningLogs } from "@/modules/facilities/services/cleaningRecordService";
 import { listEquipment, upsertEquipment } from "@/modules/equipment/services/equipmentRegistry";
 
 // ---------- UI helpers ----------
@@ -187,7 +198,7 @@ function isValidEmail(email) {
 // ---------- Page ----------
 export default function Compliance() {
   const SITE_ID = "main_branch";
-  const [tab, setTab] = useState("qr"); // qr | fire | water | pat
+  const [tab, setTab] = useState("overview"); // overview | history | cleaning | maintenance | assets | pat
 
   // For printing we keep our own “recent” datasets at page level
   const [printFireChecks, setPrintFireChecks] = useState([]);
@@ -208,8 +219,15 @@ export default function Compliance() {
     fire: true,
     water: true,
     pat: true,
+    cleaning: true,
     includeRegisters: true, // include call points/outlets/assets lists
   });
+
+  // tag-based checks and cleaning logs, for the printed report
+  const [printChecks, setPrintChecks] = useState([]);
+  const [printCleaning, setPrintCleaning] = useState([]);
+  useEffect(() => subscribeRecentComplianceChecks(setPrintChecks, console.error, { siteId: SITE_ID, max: 500 }), []);
+  useEffect(() => subscribeCleaningLogs(setPrintCleaning, console.error), []);
 
   // subscriptions for printing
   useEffect(() => {
@@ -315,6 +333,15 @@ export default function Compliance() {
       (from || to ? ` • Date filter: ${from || "…"} to ${to || "…"} ` : "");
 
     const sections = [];
+    const dayOf = (d) => (d ? localDateInput(d) : "");
+    const timeOf = (d) => (d ? d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "");
+    const dateOf = (d) => (d ? d.toLocaleDateString("en-GB") : "");
+    const recordedCell = (r) => (r.manualEntry ? "By hand" + (r.manualReason ? ": " + r.manualReason : "") : "Phone");
+    const tagChecks = (prefix) =>
+      printChecks
+        .filter((c) => String(c.assetType || "").startsWith(prefix) && inDateRange(dayOf(checkTime(c)), from, to))
+        .sort((a, b) => (checkTime(b)?.getTime() || 0) - (checkTime(a)?.getTime() || 0))
+        .slice(0, 300);
 
     if (printSel.fire) {
       const rows = printFireChecks.filter((r) => inDateRange(r.dateKey, from, to)).slice(0, 200);
@@ -336,10 +363,22 @@ export default function Compliance() {
         `;
       }
 
+      const tagFire = tagChecks("fire_");
+      const tagFireHtml = `
+        <div class="small muted">Tag checks (${tagFire.length})</div>
+        <table>
+          <thead><tr><th>Date</th><th>Time</th><th>By</th><th>Point</th><th>Result</th><th>Notes / issues</th><th>Recorded</th></tr></thead>
+          <tbody>
+            ${tagFire.length ? tagFire.map((c) => `<tr><td>${escapeHtml(dateOf(checkTime(c)))}</td><td>${escapeHtml(timeOf(checkTime(c)))}</td><td>${escapeHtml(checkPerson(c))}</td><td>${escapeHtml([c.assetCode, c.assetLabel].filter(Boolean).join(" "))}</td><td>${escapeHtml(String(c.result || "").toUpperCase())}</td><td>${escapeHtml(c.notes || "")}</td><td>${escapeHtml(recordedCell(c))}</td></tr>`).join("") : `<tr><td colspan="7" class="muted">No tag checks in range.</td></tr>`}
+          </tbody>
+        </table>
+      `;
+
       sections.push(`
         <h2>Fire Checks</h2>
         ${regHtml}
-        <div class="small muted">Recent fire checks (${rows.length})</div>
+        ${tagFireHtml}
+        <div class="small muted">Earlier fire checks, typed in before tag checks (${rows.length})</div>
         <table>
           <thead>
             <tr>
@@ -447,10 +486,22 @@ export default function Compliance() {
             .join("")
         : `<div class="muted small">No water rounds in range.</div>`;
 
+      const tagWater = tagChecks("water_");
+      const tagWaterHtml = `
+        <div class="small muted">Tag checks (${tagWater.length})</div>
+        <table>
+          <thead><tr><th>Date</th><th>Time</th><th>By</th><th>Outlet</th><th>Location</th><th>Temp °C</th><th>Result</th><th>Flushed</th><th>Run time (s)</th><th>Notes / issues</th><th>Recorded</th></tr></thead>
+          <tbody>
+            ${tagWater.length ? tagWater.map((c) => `<tr><td>${escapeHtml(dateOf(checkTime(c)))}</td><td>${escapeHtml(timeOf(checkTime(c)))}</td><td>${escapeHtml(checkPerson(c))}</td><td>${escapeHtml([c.assetCode, c.assetLabel].filter(Boolean).join(" "))}</td><td>${escapeHtml(c.location || "")}</td><td>${c.tempC ?? ""}</td><td>${escapeHtml(String(c.result || "").toUpperCase())}</td><td>${c.flushed === true ? "Yes" : c.flushed === false ? "No" : ""}</td><td>${c.countdown?.seconds ?? ""}</td><td>${escapeHtml(c.notes || "")}</td><td>${escapeHtml(recordedCell(c))}</td></tr>`).join("") : `<tr><td colspan="11" class="muted">No tag checks in range.</td></tr>`}
+          </tbody>
+        </table>
+      `;
+
       sections.push(`
         <h2>Water Temperatures</h2>
         ${regHtml}
-        <div class="small muted">Recent rounds (${rows.length})</div>
+        ${tagWaterHtml}
+        <div class="small muted">Earlier rounds, typed in before tag checks (${rows.length})</div>
         ${roundsHtml}
       `);
     }
@@ -543,6 +594,22 @@ export default function Compliance() {
       `);
     }
 
+    if (printSel.cleaning) {
+      const cleanRows = printCleaning
+        .filter((r) => inDateRange(dayOf(r.cleanedAt?.toDate ? r.cleanedAt.toDate() : null), from, to))
+        .slice(0, 300);
+      sections.push(`
+        <h2>Cleaning</h2>
+        <div class="small muted">Cleaning records (${cleanRows.length})</div>
+        <table>
+          <thead><tr><th>Date</th><th>Time</th><th>Room</th><th>Cleaned by</th><th>Took</th><th>Notes / issues</th><th>Recorded</th></tr></thead>
+          <tbody>
+            ${cleanRows.length ? cleanRows.map((r) => { const d = r.cleanedAt?.toDate ? r.cleanedAt.toDate() : null; return `<tr><td>${escapeHtml(dateOf(d))}</td><td>${escapeHtml(timeOf(d))}</td><td>${escapeHtml(r.roomName || "")}</td><td>${escapeHtml(r.cleanedBy || "")}</td><td>${Number.isFinite(r.durationSeconds) ? Math.max(1, Math.round(r.durationSeconds / 60)) + " min" : ""}</td><td>${escapeHtml((r.issueReported ? "Issue: " : "") + (r.notes || ""))}</td><td>${escapeHtml(r.manualEntry ? "By hand" + (r.manualReason ? ": " + r.manualReason : "") : "Room tag")}</td></tr>`; }).join("") : `<tr><td colspan="7" class="muted">No cleaning records in range.</td></tr>`}
+          </tbody>
+        </table>
+      `);
+    }
+
     const bodyHtml = `
       <h1>Aurora Compliance Report</h1>
       <div class="meta">${escapeHtml(meta)}</div>
@@ -559,7 +626,7 @@ export default function Compliance() {
   };
 
   const sendReportEmail = async () => {
-    if (!printSel.fire && !printSel.water && !printSel.pat) {
+    if (!printSel.fire && !printSel.water && !printSel.pat && !printSel.cleaning) {
       alert("Please choose at least one section to include.");
       return;
     }
@@ -601,7 +668,7 @@ export default function Compliance() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-100">Compliance</h1>
-          <p className="text-sm text-slate-400">QR/NFC Rounds • Water Temps • Fire Checks • PAT</p>
+          <p className="text-sm text-slate-400">Fire • Water • Cleaning • Maintenance • PAT</p>
         </div>
 
         <Button
@@ -616,16 +683,20 @@ export default function Compliance() {
 
       <Card className="border border-white/10 bg-slate-900/70 backdrop-blur p-2 shadow-lg">
         <div className="flex flex-wrap gap-2">
-          <TabButton active={tab === "qr"} onClick={() => setTab("qr")} icon={QrCode} label="QR/NFC Rounds" />
-          <TabButton active={tab === "fire"} onClick={() => setTab("fire")} icon={Flame} label="Fire Checks" />
-          <TabButton active={tab === "water"} onClick={() => setTab("water")} icon={Droplets} label="Water Temps" />
+          <TabButton active={tab === "overview"} onClick={() => setTab("overview")} icon={LayoutDashboard} label="Overview" />
+          <TabButton active={tab === "history"} onClick={() => setTab("history")} icon={History} label="Checks history" />
+          <TabButton active={tab === "cleaning"} onClick={() => setTab("cleaning")} icon={SprayCan} label="Cleaning" />
+          <TabButton active={tab === "maintenance"} onClick={() => setTab("maintenance")} icon={Wrench} label="Maintenance" />
+          <TabButton active={tab === "assets"} onClick={() => setTab("assets")} icon={QrCode} label="Assets and tags" />
           <TabButton active={tab === "pat"} onClick={() => setTab("pat")} icon={PlugZap} label="PAT Testing" />
         </div>
       </Card>
 
-      {tab === "qr" && <ComplianceQrEngine />}
-      {tab === "fire" && <FireChecksTab />}
-      {tab === "water" && <WaterTempsTab />}
+      {tab === "overview" && <ComplianceOverview />}
+      {tab === "history" && <ChecksHistory legacyFire={printFireChecks} legacyWater={printWaterRounds} />}
+      {tab === "cleaning" && <CleaningPanel />}
+      {tab === "maintenance" && <MaintenancePanel />}
+      {tab === "assets" && <ComplianceQrEngine />}
       {tab === "pat" && <PatTestingTab />}
 
       {/* PRINT MODAL */}
@@ -697,6 +768,15 @@ export default function Compliance() {
               </label>
 
               <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2">
+                <span className="text-sm text-slate-100">Include Cleaning</span>
+                <input
+                  type="checkbox"
+                  checked={!!printSel.cleaning}
+                  onChange={(e) => setPrintSel((p) => ({ ...p, cleaning: e.target.checked }))}
+                />
+              </label>
+
+              <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2">
                 <span className="text-sm text-slate-100">Include PAT Testing</span>
                 <input
                   type="checkbox"
@@ -738,7 +818,7 @@ export default function Compliance() {
               <Button
                 className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 text-xs"
                 onClick={() => {
-                  if (!printSel.fire && !printSel.water && !printSel.pat) {
+                  if (!printSel.fire && !printSel.water && !printSel.pat && !printSel.cleaning) {
                     alert("Please choose at least one section to include.");
                     return;
                   }
@@ -747,966 +827,6 @@ export default function Compliance() {
                 }}
               >
                 Generate PDF / Print
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------- Fire Checks Tab (unchanged logic) ----------
-function FireChecksTab() {
-  const SITE_ID = "main_branch";
-
-  const [callPoints, setCallPoints] = useState([]);
-  const [callPointId, setCallPointId] = useState("");
-  const [cpModalOpen, setCpModalOpen] = useState(false);
-  const [cpErr, setCpErr] = useState("");
-  const [cpForm, setCpForm] = useState({ label: "", pointNumber: "" });
-
-  const [initials, setInitials] = useState("");
-  const [dateKey, setDateKey] = useState(todayKey());
-  const [time, setTime] = useState(nowHHmm());
-  const [notes, setNotes] = useState("");
-  const [firePanelChecked, setFirePanelChecked] = useState(true);
-
-  const [checks, setChecks] = useState(() =>
-    FIRE_CHECKS.reduce((acc, c) => {
-      acc[c.key] = true;
-      return acc;
-    }, {})
-  );
-
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState("");
-  const [recent, setRecent] = useState([]);
-
-  // Load call points
-  useEffect(() => {
-    const qy = query(collection(db, "fire_call_points"));
-    return onSnapshot(
-      qy,
-      (snap) => {
-        const rows = snap.docs.map((d) => {
-          const data = d.data() || {};
-          const siteId = String(data.siteId ?? data.site ?? "").trim();
-          const label = String(data.label || "").trim();
-          const pointNumber = String(data.pointNumber || "").trim();
-          const displayName = String(data.displayName || makeDisplayName(label, pointNumber)).trim();
-          const active = data.active !== false;
-          return { id: d.id, siteId, label, pointNumber, displayName, active };
-        });
-
-        const filtered = rows
-          .filter((r) => r.active && r.siteId === SITE_ID)
-          .sort((a, b) => a.displayName.localeCompare(b.displayName));
-
-        setCallPoints(filtered);
-        setCallPointId((prev) => (prev && filtered.some((c) => c.id === prev) ? prev : filtered[0]?.id || ""));
-      },
-      (err) => console.error("fire_call_points subscribe error:", err)
-    );
-  }, []);
-
-  // Load recent checks (no index needed)
-  useEffect(() => {
-    const qy = query(collection(db, "fire_weekly_checks"), orderBy("createdAt", "desc"), limit(50));
-    return onSnapshot(
-      qy,
-      (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const filtered = rows.filter((r) => String(r.siteId || "").trim() === SITE_ID).slice(0, 25);
-        setRecent(filtered);
-      },
-      (err) => console.error("fire_weekly_checks subscribe error:", err)
-    );
-  }, []);
-
-  const status = useMemo(() => {
-    const allChecklistTrue = FIRE_CHECKS.every((c) => checks[c.key] === true);
-    return allChecklistTrue && firePanelChecked === true ? "pass" : "fail";
-  }, [checks, firePanelChecked]);
-
-  const toggle = (key) => setChecks((p) => ({ ...p, [key]: !p[key] }));
-
-  const resetForm = () => {
-    setInitials("");
-    setNotes("");
-    setDateKey(todayKey());
-    setTime(nowHHmm());
-    setFirePanelChecked(true);
-    setChecks(FIRE_CHECKS.reduce((acc, c) => ((acc[c.key] = true), acc), {}));
-    setMsg("");
-  };
-
-  const getCallPointDisplayForRow = (r) => {
-    const snapName = typeof r.callPointNameSnapshot === "string" ? r.callPointNameSnapshot.trim() : "";
-    if (snapName) return snapName;
-    const fromLookup = callPoints.find((cp) => cp.id === r.callPointId)?.displayName;
-    if (fromLookup) return fromLookup;
-    if (r.callPointId) return "Call point";
-    return "";
-  };
-
-  const saveCheck = async () => {
-    setMsg("");
-    if (!initials.trim()) return setMsg("Please enter initials.");
-    if (!callPointId) return setMsg("Please select the call point tested.");
-
-    const cp = callPoints.find((c) => c.id === callPointId);
-    const callPointNameSnapshot = (cp?.displayName && String(cp.displayName).trim()) || "Call point";
-
-    setSaving(true);
-    try {
-      await addDocResendSafe(collection(db, "fire_weekly_checks"), {
-        siteId: SITE_ID,
-        dateKey,
-        time,
-        initials: initials.trim().toUpperCase(),
-        callPointId,
-        callPointNameSnapshot,
-        firePanelChecked: !!firePanelChecked,
-        checks: { ...checks },
-        notes: notes.trim(),
-        status,
-        createdAt: serverTimestamp(),
-      });
-      setMsg(status === "pass" ? "Saved (PASS)." : "Saved (FAIL).");
-      resetForm();
-    } catch (e) {
-      console.error("Save fire check error:", e);
-      setMsg("Failed to save. Check Firestore rules/permissions.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const addCallPoint = async () => {
-    setCpErr("");
-    const label = cpForm.label.trim();
-    const pointNumber = cpForm.pointNumber.trim();
-    if (!label) return setCpErr("Floor/area label is required (e.g. Top floor).");
-    if (!pointNumber) return setCpErr("Point number is required (e.g. 1).");
-    const displayName = makeDisplayName(label, pointNumber);
-
-    try {
-      const docRef = await addDocResendSafe(collection(db, "fire_call_points"), {
-        siteId: SITE_ID,
-        label,
-        pointNumber,
-        displayName,
-        active: true,
-        createdAt: serverTimestamp(),
-      });
-      setCpForm({ label: "", pointNumber: "" });
-      setCallPointId(docRef.id);
-    } catch (e) {
-      console.error("Add call point error:", e);
-      setCpErr("Failed to add call point.");
-    }
-  };
-
-  const deleteCallPoint = async (id, name) => {
-    if (!window.confirm(`Delete call point "${name}"?`)) return;
-    try {
-      await deleteDoc(doc(db, "fire_call_points", id));
-    } catch (e) {
-      console.error("Delete call point error:", e);
-      alert("Could not delete call point.");
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <Card className="border border-white/10 bg-slate-900/60 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-slate-100 font-semibold">Weekly Fire Alarm Test & Checks</div>
-            <div className="text-xs text-slate-400 mt-1">
-              Select call point tested, confirm panel, complete checklist.
-            </div>
-          </div>
-
-          <div
-            className={
-              status === "pass"
-                ? "inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200"
-                : "inline-flex items-center gap-2 rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1 text-xs text-rose-200"
-            }
-          >
-            {status === "pass" ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
-            {status === "pass" ? "PASS" : "FAIL"}
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-4">
-          <div>
-            <label className="text-xs text-slate-300 inline-flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-slate-400" /> Date
-            </label>
-            <Input type="date" value={dateKey} onChange={(e) => setDateKey(e.target.value)} />
-          </div>
-
-          <div>
-            <label className="text-xs text-slate-300 inline-flex items-center gap-2">
-              <Clock className="h-4 w-4 text-slate-400" /> Time
-            </label>
-            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-          </div>
-
-          <div>
-            <label className="text-xs text-slate-300">Initials</label>
-            <Input value={initials} onChange={(e) => setInitials(e.target.value)} placeholder="e.g. GC" />
-          </div>
-
-          <div className="flex items-end justify-end">
-            <Button
-              variant="outline"
-              className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
-              onClick={() => setCpModalOpen(true)}
-            >
-              <Settings2 className="mr-1.5 h-4 w-4" />
-              Manage call points
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className="text-xs text-slate-300">Call point tested</label>
-            <div className="mt-1 rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2">
-              <select className={SELECT_CLASS} value={callPointId} onChange={(e) => setCallPointId(e.target.value)}>
-                {callPoints.length === 0 ? (
-                  <option value="">No call points found — add one</option>
-                ) : (
-                  callPoints.map((cp) => (
-                    <option key={cp.id} value={cp.id}>
-                      {cp.displayName}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-slate-300">Main fire panel/board</label>
-            <label className="mt-1 flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2">
-              <span className="text-sm text-slate-100">Fire panel active & operational</span>
-              <input type="checkbox" checked={!!firePanelChecked} onChange={(e) => setFirePanelChecked(e.target.checked)} />
-            </label>
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-2">
-          {FIRE_CHECKS.map((c) => (
-            <label key={c.key} className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2">
-              <span className="text-sm text-slate-100">{c.label}</span>
-              <input type="checkbox" checked={!!checks[c.key]} onChange={() => toggle(c.key)} />
-            </label>
-          ))}
-        </div>
-
-        <div className="mt-4">
-          <label className="text-xs text-slate-300">Notes (optional)</label>
-          <textarea
-            className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-            rows={3}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="If faults/issues, record here."
-          />
-        </div>
-
-        {msg && (
-          <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2 text-xs text-slate-200">
-            {msg}
-          </div>
-        )}
-
-        <div className="mt-4 flex justify-end gap-2">
-          <Button
-            variant="outline"
-            className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
-            onClick={resetForm}
-            disabled={saving}
-          >
-            Reset
-          </Button>
-          <Button
-            className="rounded-full bg-gradient-to-r from-rose-400 to-amber-300 text-slate-950 text-xs"
-            onClick={saveCheck}
-            disabled={saving}
-          >
-            {saving ? "Saving..." : "Save weekly check"}
-          </Button>
-        </div>
-      </Card>
-
-      <Card className="border border-white/10 bg-slate-900/60">
-        <div className="border-b border-white/10 px-4 py-3">
-          <div className="text-slate-100 font-semibold">Recent checks</div>
-          <div className="text-xs text-slate-400 mt-1">Last 25 entries for Main Branch.</div>
-        </div>
-
-        <div className="divide-y divide-white/10">
-          {recent.length === 0 ? (
-            <div className="px-4 py-10 text-center text-xs text-slate-400">No fire checks recorded yet.</div>
-          ) : (
-            recent.map((r) => {
-              const cpName = getCallPointDisplayForRow(r);
-              return (
-                <div key={r.id} className="px-4 py-3 flex items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-medium text-slate-100">
-                      {r.dateKey} {r.time} • {r.initials || "—"}
-                      {cpName ? <span className="text-slate-400"> • {cpName}</span> : null}
-                    </div>
-                    <div className="text-xs text-slate-400 mt-0.5">{r.notes ? r.notes : "No notes"}</div>
-                  </div>
-
-                  <div
-                    className={
-                      r.status === "pass"
-                        ? "rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-200"
-                        : "rounded-full border border-rose-500/20 bg-rose-500/10 px-3 py-1 text-xs text-rose-200"
-                    }
-                  >
-                    {String(r.status || "pass").toUpperCase()}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </Card>
-
-      {cpModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur">
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl">
-            <div className="flex items-start justify-between">
-              <h3 className="text-sm font-semibold text-slate-100">Manage call points</h3>
-              <button className="text-slate-400 hover:text-slate-200" onClick={() => { setCpErr(""); setCpModalOpen(false); }}>
-                ✕
-              </button>
-            </div>
-
-            {cpErr && (
-              <div className="mt-3 rounded-xl bg-rose-500/10 border border-rose-500/20 px-3 py-2 text-xs text-rose-200">
-                {cpErr}
-              </div>
-            )}
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <div className="sm:col-span-1">
-                <label className="text-xs text-slate-300">Floor/area</label>
-                <Input value={cpForm.label} onChange={(e) => setCpForm((p) => ({ ...p, label: e.target.value }))} placeholder="Top floor" />
-              </div>
-              <div className="sm:col-span-1">
-                <label className="text-xs text-slate-300">Point #</label>
-                <Input value={cpForm.pointNumber} onChange={(e) => setCpForm((p) => ({ ...p, pointNumber: e.target.value }))} placeholder="1" />
-              </div>
-              <div className="sm:col-span-1 flex items-end">
-                <Button className="w-full rounded-full bg-emerald-400 text-slate-950 hover:bg-emerald-300 text-xs" onClick={addCallPoint}>
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  Add
-                </Button>
-              </div>
-            </div>
-
-            <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/30">
-              <div className="border-b border-white/10 px-4 py-2 text-xs text-slate-300">Existing call points</div>
-              <div className="divide-y divide-white/10">
-                {callPoints.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-xs text-slate-400">No call points yet.</div>
-                ) : (
-                  callPoints.map((cp) => (
-                    <div key={cp.id} className="px-4 py-3 flex items-center justify-between">
-                      <div className="text-sm text-slate-100">{cp.displayName}</div>
-                      <Button
-                        variant="outline"
-                        className="rounded-full border-white/10 bg-slate-900/40 text-xs text-rose-300 hover:bg-slate-900/60"
-                        onClick={() => deleteCallPoint(cp.id, cp.displayName)}
-                      >
-                        <Trash2 className="mr-1.5 h-4 w-4" />
-                        Delete
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div className="mt-5 flex justify-end">
-              <Button
-                variant="outline"
-                className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
-                onClick={() => { setCpErr(""); setCpModalOpen(false); }}
-              >
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------- WATER TEMPS TAB (moved into Compliance, uses siteId) ----------
-function WaterTempsTab() {
-  const SITE_ID = "main_branch";
-
-  const [outlets, setOutlets] = useState([]);
-  const [include, setInclude] = useState({});
-  const [results, setResults] = useState({});
-
-  const [initials, setInitials] = useState("");
-  const [dateKey, setDateKey] = useState(todayKey());
-  const [time, setTime] = useState(nowHHmm());
-  const [notes, setNotes] = useState("");
-
-  const [freqFilter, setFreqFilter] = useState("all");
-
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState("");
-
-  const [recent, setRecent] = useState([]);
-
-  // manage outlets modal
-  const [modalOpen, setModalOpen] = useState(false);
-  const [oErr, setOErr] = useState("");
-  const [oForm, setOForm] = useState({
-    name: "",
-    location: "",
-    type: "hot",
-    frequency: "weekly",
-    order: "",
-  });
-
-  // load outlets (siteId only)
-  useEffect(() => {
-    const qy = query(collection(db, "water_outlets"));
-    return onSnapshot(
-      qy,
-      (snap) => {
-        const rows = snap.docs.map((d) => {
-          const data = d.data() || {};
-          const siteId = String(data.siteId || "").trim(); // ✅ siteId only
-          const active = data.active !== false;
-
-          return {
-            id: d.id,
-            siteId,
-            active,
-            name: String(data.name || "").trim(),
-            location: String(data.location || "").trim(),
-            type: String(data.type || "").trim(), // hot/cold
-            frequency: String(data.frequency || "").trim(),
-            order: typeof data.order === "number" ? data.order : null,
-          };
-        });
-
-        const filtered = rows
-          .filter((r) => r.active && r.siteId === SITE_ID)
-          .sort((a, b) => {
-            const ao = a.order ?? 9999;
-            const bo = b.order ?? 9999;
-            if (ao !== bo) return ao - bo;
-            return outletDisplay(a).localeCompare(outletDisplay(b));
-          });
-
-        setOutlets(filtered);
-
-        // defaults
-        setInclude((prev) => {
-          const next = { ...prev };
-          for (const o of filtered) {
-            if (typeof next[o.id] !== "boolean") next[o.id] = true;
-          }
-          return next;
-        });
-
-        setResults((prev) => {
-          const next = { ...prev };
-          for (const o of filtered) {
-            if (!next[o.id]) {
-              next[o.id] = { tempC: "", secondsToStable: "", flushed: false, notes: "" };
-            }
-          }
-          return next;
-        });
-      },
-      (e) => console.error("water_outlets subscribe error:", e)
-    );
-  }, []);
-
-  // load recent rounds
-  useEffect(() => {
-    const qy = query(collection(db, "water_temp_rounds"), orderBy("createdAt", "desc"), limit(25));
-    return onSnapshot(
-      qy,
-      (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        // allow old "site" rounds too just in case
-        const filtered = rows.filter((r) => String(r.siteId || r.site || "").trim() === SITE_ID);
-        setRecent(filtered);
-      },
-      (e) => console.error("water_temp_rounds subscribe error:", e)
-    );
-  }, []);
-
-  const visibleOutlets = useMemo(() => {
-    if (freqFilter === "all") return outlets;
-    return outlets.filter((o) => String(o.frequency || "").toLowerCase() === freqFilter);
-  }, [outlets, freqFilter]);
-
-  const includeAllVisible = () => {
-    setInclude((prev) => {
-      const next = { ...prev };
-      for (const o of visibleOutlets) next[o.id] = true;
-      return next;
-    });
-  };
-
-  const includeNoneVisible = () => {
-    setInclude((prev) => {
-      const next = { ...prev };
-      for (const o of visibleOutlets) next[o.id] = false;
-      return next;
-    });
-  };
-
-  const setOutletResult = (outletId, patch) => {
-    setResults((prev) => ({
-      ...prev,
-      [outletId]: { ...(prev[outletId] || {}), ...patch },
-    }));
-  };
-
-  const resetRound = () => {
-    setInitials("");
-    setDateKey(todayKey());
-    setTime(nowHHmm());
-    setNotes("");
-    setMsg("");
-    setResults((prev) => {
-      const next = { ...prev };
-      for (const o of outlets) {
-        next[o.id] = { tempC: "", secondsToStable: "", flushed: false, notes: "" };
-      }
-      return next;
-    });
-  };
-
-  const saveRound = async () => {
-    setMsg("");
-
-    if (!initials.trim()) return setMsg("Please enter initials.");
-
-    const chosen = visibleOutlets.filter((o) => include[o.id] === true);
-    if (chosen.length === 0) return setMsg("No outlets included. Tick at least one.");
-
-    const entries = chosen.map((o) => {
-      const r = results[o.id] || {};
-      return {
-        outletId: o.id,
-        outletNameSnapshot: o.name,
-        outletLocationSnapshot: o.location,
-        frequencySnapshot: o.frequency,
-        type: o.type,
-        tempC: r.tempC === "" ? null : Number(r.tempC),
-        secondsToStable: r.secondsToStable === "" ? null : Number(r.secondsToStable),
-        flushed: !!r.flushed,
-        notes: String(r.notes || "").trim(),
-      };
-    });
-
-    setSaving(true);
-    try {
-      await addDocResendSafe(collection(db, "water_temp_rounds"), {
-        siteId: SITE_ID,
-        dateKey,
-        time,
-        initials: initials.trim().toUpperCase(),
-        status: "completed",
-        roundNotes: String(notes || "").trim(),
-        entries,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-
-      setMsg(`Saved water temp round (${entries.length} outlet${entries.length === 1 ? "" : "s"}).`);
-      resetRound();
-    } catch (e) {
-      console.error("Save water round error:", e);
-      setMsg("Failed to save. Check Firestore rules/permissions.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // outlets management
-  const addOutlet = async () => {
-    setOErr("");
-    const name = oForm.name.trim();
-    const location = oForm.location.trim();
-    const type = String(oForm.type || "").trim();
-    const frequency = String(oForm.frequency || "").trim();
-    const order = oForm.order === "" ? null : Number(oForm.order);
-
-    if (!name) return setOErr("Name is required (e.g. Sentinel Hot - furthest outlet).");
-    if (!location) return setOErr("Location is required (e.g. Ground Floor).");
-    if (!type) return setOErr("Type is required (hot/cold).");
-    if (!frequency) return setOErr("Frequency is required.");
-
-    try {
-      await addDocResendSafe(collection(db, "water_outlets"), {
-        siteId: SITE_ID, // ✅ siteId now
-        name,
-        location,
-        type,
-        frequency,
-        order: Number.isFinite(order) ? order : null,
-        active: true,
-        createdAt: serverTimestamp(),
-      });
-      setOForm({ name: "", location: "", type: "hot", frequency: "weekly", order: "" });
-    } catch (e) {
-      console.error("Add outlet error:", e);
-      setOErr("Failed to add outlet.");
-    }
-  };
-
-  const deleteOutlet = async (id, name) => {
-    if (!window.confirm(`Delete outlet "${name}"?`)) return;
-    try {
-      await deleteDoc(doc(db, "water_outlets", id));
-    } catch (e) {
-      console.error("Delete outlet error:", e);
-      alert("Could not delete outlet.");
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <Card className="border border-white/10 bg-slate-900/60 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-slate-100 font-semibold">Water Temperature Log</div>
-            <div className="text-xs text-slate-400 mt-1">
-              Tick which outlets were checked today (doesn’t have to be all). Save as a “round”.
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
-            onClick={() => setModalOpen(true)}
-          >
-            <Settings2 className="mr-1.5 h-4 w-4" />
-            Manage outlets
-          </Button>
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-5">
-          <div className="sm:col-span-2">
-            <label className="text-xs text-slate-300 inline-flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-slate-400" /> Date
-            </label>
-            <Input type="date" value={dateKey} onChange={(e) => setDateKey(e.target.value)} />
-          </div>
-          <div className="sm:col-span-1">
-            <label className="text-xs text-slate-300 inline-flex items-center gap-2">
-              <Clock className="h-4 w-4 text-slate-400" /> Time
-            </label>
-            <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-          </div>
-          <div className="sm:col-span-2">
-            <label className="text-xs text-slate-300">Initials</label>
-            <Input value={initials} onChange={(e) => setInitials(e.target.value)} placeholder="e.g. GC" />
-          </div>
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-          <div>
-            <label className="text-xs text-slate-300">Frequency filter</label>
-            <div className="mt-1 rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2">
-              <select className={SELECT_CLASS} value={freqFilter} onChange={(e) => setFreqFilter(e.target.value)}>
-                <option value="all">All</option>
-                {WATER_FREQUENCIES.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="mt-1 text-[0.7rem] text-slate-500">Filter helps when only some outlets are due.</div>
-          </div>
-
-          <div className="sm:col-span-2 flex items-end justify-end gap-2">
-            <Button
-              variant="outline"
-              className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
-              onClick={includeAllVisible}
-            >
-              Include all (shown)
-            </Button>
-            <Button
-              variant="outline"
-              className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
-              onClick={includeNoneVisible}
-            >
-              Include none (shown)
-            </Button>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/30 overflow-hidden">
-          <div className="border-b border-white/10 px-4 py-2 text-xs text-slate-300">Outlets ({visibleOutlets.length})</div>
-
-          {visibleOutlets.length === 0 ? (
-            <div className="px-4 py-10 text-center text-xs text-slate-400">
-              No outlets found for this frequency. Add outlets in “Manage outlets”.
-            </div>
-          ) : (
-            <div className="divide-y divide-white/10">
-              {visibleOutlets.map((o) => {
-                const r = results[o.id] || {};
-                const isIncluded = include[o.id] === true;
-
-                return (
-                  <div key={o.id} className="px-4 py-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <label className="flex items-center gap-2 text-xs text-slate-200">
-                          <input
-                            type="checkbox"
-                            checked={isIncluded}
-                            onChange={(e) => setInclude((p) => ({ ...p, [o.id]: e.target.checked }))}
-                          />
-                          Include
-                        </label>
-
-                        <div>
-                          <div className={`text-sm font-medium ${isIncluded ? "text-slate-100" : "text-slate-500"}`}>
-                            {o.name || "Outlet"}
-                          </div>
-                          <div className={`text-xs mt-0.5 ${isIncluded ? "text-slate-400" : "text-slate-600"}`}>
-                            {o.location || "—"} • {o.type || "—"} • {o.frequency || "—"}
-                          </div>
-                        </div>
-                      </div>
-
-                      <label
-                        className={`flex items-center gap-2 text-xs ${isIncluded ? "text-slate-200" : "text-slate-600"} ${
-                          isIncluded ? "" : "opacity-40 pointer-events-none"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!!r.flushed}
-                          onChange={(e) => setOutletResult(o.id, { flushed: e.target.checked })}
-                        />
-                        Flushed
-                      </label>
-                    </div>
-
-                    <div className={`mt-3 grid gap-3 sm:grid-cols-4 ${isIncluded ? "" : "opacity-40 pointer-events-none"}`}>
-                      <div>
-                        <label className="text-xs text-slate-300">Temp (°C)</label>
-                        <Input
-                          value={r.tempC ?? ""}
-                          onChange={(e) => setOutletResult(o.id, { tempC: e.target.value })}
-                          placeholder="e.g. 52"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-xs text-slate-300">Seconds to stable</label>
-                        <Input
-                          value={r.secondsToStable ?? ""}
-                          onChange={(e) => setOutletResult(o.id, { secondsToStable: e.target.value })}
-                          placeholder="e.g. 30"
-                        />
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <label className="text-xs text-slate-300">Notes (optional)</label>
-                        <Input
-                          value={r.notes ?? ""}
-                          onChange={(e) => setOutletResult(o.id, { notes: e.target.value })}
-                          placeholder="Any issues (slow to heat, etc.)"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="mt-4">
-          <label className="text-xs text-slate-300">Round notes (optional)</label>
-          <textarea
-            className="mt-1 w-full rounded-2xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
-            rows={2}
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Anything about today’s checks"
-          />
-        </div>
-
-        {msg && (
-          <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2 text-xs text-slate-200">
-            {msg}
-          </div>
-        )}
-
-        <div className="mt-4 flex justify-end gap-2">
-          <Button
-            variant="outline"
-            className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
-            onClick={resetRound}
-            disabled={saving}
-          >
-            Reset
-          </Button>
-
-          <Button
-            className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 text-xs"
-            onClick={saveRound}
-            disabled={saving}
-          >
-            {saving ? "Saving..." : "Save water temp round"}
-          </Button>
-        </div>
-      </Card>
-
-      <Card className="border border-white/10 bg-slate-900/60">
-        <div className="border-b border-white/10 px-4 py-3">
-          <div className="text-slate-100 font-semibold">Recent rounds</div>
-          <div className="text-xs text-slate-400 mt-1">Latest saved rounds (Main Branch).</div>
-        </div>
-
-        <div className="divide-y divide-white/10">
-          {recent.length === 0 ? (
-            <div className="px-4 py-10 text-center text-xs text-slate-400">No water rounds saved yet.</div>
-          ) : (
-            recent.map((r) => (
-              <div key={r.id} className="px-4 py-3 flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-medium text-slate-100">
-                    {r.dateKey || "—"} {r.time || ""} • {r.initials || "—"}
-                  </div>
-                  <div className="text-xs text-slate-400 mt-0.5">
-                    Outlets: {Array.isArray(r.entries) ? r.entries.length : 0}
-                    {r.roundNotes ? ` • ${r.roundNotes}` : ""}
-                  </div>
-                </div>
-                <div className="rounded-full border border-white/10 bg-slate-950/30 px-3 py-1 text-xs text-slate-200">Water</div>
-              </div>
-            ))
-          )}
-        </div>
-      </Card>
-
-      {/* Manage outlets modal */}
-      {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur">
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl">
-            <div className="flex items-start justify-between">
-              <h3 className="text-sm font-semibold text-slate-100">Manage outlets</h3>
-              <button className="text-slate-400 hover:text-slate-200" onClick={() => { setOErr(""); setModalOpen(false); }}>
-                ✕
-              </button>
-            </div>
-
-            {oErr && (
-              <div className="mt-3 rounded-xl bg-rose-500/10 border border-rose-500/20 px-3 py-2 text-xs text-rose-200">
-                {oErr}
-              </div>
-            )}
-
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <label className="text-xs text-slate-300">Name</label>
-                <Input value={oForm.name} onChange={(e) => setOForm((p) => ({ ...p, name: e.target.value }))} placeholder="Sentinel Hot - furthest outlet" />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="text-xs text-slate-300">Location</label>
-                <Input value={oForm.location} onChange={(e) => setOForm((p) => ({ ...p, location: e.target.value }))} placeholder="Ground Floor" />
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-300">Type</label>
-                <div className="mt-1 rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2">
-                  <select className={SELECT_CLASS} value={oForm.type} onChange={(e) => setOForm((p) => ({ ...p, type: e.target.value }))}>
-                    <option value="hot">hot</option>
-                    <option value="cold">cold</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-300">Frequency</label>
-                <div className="mt-1 rounded-2xl border border-white/10 bg-slate-950/30 px-3 py-2">
-                  <select className={SELECT_CLASS} value={oForm.frequency} onChange={(e) => setOForm((p) => ({ ...p, frequency: e.target.value }))}>
-                    {WATER_FREQUENCIES.map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs text-slate-300">Order (optional)</label>
-                <Input value={oForm.order} onChange={(e) => setOForm((p) => ({ ...p, order: e.target.value }))} placeholder="e.g. 1" />
-              </div>
-
-              <div className="flex items-end">
-                <Button className="w-full rounded-full bg-emerald-400 text-slate-950 hover:bg-emerald-300 text-xs" onClick={addOutlet}>
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  Add outlet
-                </Button>
-              </div>
-            </div>
-
-            <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/30">
-              <div className="border-b border-white/10 px-4 py-2 text-xs text-slate-300">Existing outlets ({outlets.length})</div>
-              <div className="divide-y divide-white/10">
-                {outlets.length === 0 ? (
-                  <div className="px-4 py-8 text-center text-xs text-slate-400">No outlets yet.</div>
-                ) : (
-                  outlets.map((o) => (
-                    <div key={o.id} className="px-4 py-3 flex items-center justify-between gap-3">
-                      <div className="text-sm text-slate-100">{outletDisplay(o)}</div>
-                      <Button
-                        variant="outline"
-                        className="rounded-full border-white/10 bg-slate-900/40 text-xs text-rose-300 hover:bg-slate-900/60"
-                        onClick={() => deleteOutlet(o.id, o.name || "Outlet")}
-                      >
-                        <Trash2 className="mr-1.5 h-4 w-4" />
-                        Delete
-                      </Button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
-            <div className="mt-5 flex justify-end">
-              <Button
-                variant="outline"
-                className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
-                onClick={() => { setOErr(""); setModalOpen(false); }}
-              >
-                Close
               </Button>
             </div>
           </div>

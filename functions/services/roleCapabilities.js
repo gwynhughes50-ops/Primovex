@@ -56,7 +56,6 @@ const BUILT_IN_ROLE_CAPABILITIES = {
   ],
   Cleaner: [
     "dashboard.read", "operations.read",
-    "compliance.read", "compliance.write", "compliance.recordChecks",
     "mobile.access",
   ],
   Partner: [

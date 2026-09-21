@@ -13,6 +13,6 @@ Run it after **every** change to `firestore.rules`.
    The suite expects Firestore on `127.0.0.1:8080`.
 4. Run: `npm test`
 
-A healthy run ends with `63 passed, 0 failed`. A failure means the rules now
+A healthy run ends with `0 failed` (81 checks passed when the compliance checks and cleaning notes were added). A failure means the rules now
 allow something that should be refused (or refuse something a legitimate role
 needs).

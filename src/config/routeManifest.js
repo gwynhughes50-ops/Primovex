@@ -12,8 +12,8 @@ export const ROUTE_MANIFEST = [
   { path: "/reorder-centre", label: "Reorder Centre", section: "operations", iconKey: "reorder", capability: "purchasing.read", children: ["Pending", "Approved", "Ordered", "Rejected"] },
   { path: "/purchasing", label: "Purchasing", section: "operations", iconKey: "purchasing", capability: "purchasing.read", children: ["Basket", "Purchase Orders", "Deliveries", "Supplier Performance"] },
   { path: "/suppliers", label: "Suppliers", section: "operations", iconKey: "suppliers", capability: "suppliers.read" },
-  { path: "/facilities", label: "Facilities", section: "operations", iconKey: "facilities", children: ["Overview", "Spaces", "Cleaning", "Equipment", "Maintenance"] },
-  { path: "/compliance", label: "Compliance", section: "operations", iconKey: "compliance", capability: "compliance.read", children: ["QR / NFC Rounds", "Fire Checks", "Water Temperatures", "PAT Testing"] },
+  { path: "/facilities", label: "Facilities", section: "operations", iconKey: "facilities", children: ["Overview", "Spaces", "Equipment"] },
+  { path: "/compliance", label: "Compliance", section: "operations", iconKey: "compliance", capability: "compliance.read", children: ["Overview", "Checks history", "Cleaning", "Maintenance", "Assets and tags", "PAT Testing"] },
 
   { path: "/clinflow", label: "ClinFlow", section: "intelligence", iconKey: "clinflow", capability: "clinflow.read", children: ["Workflow", "NFWF", "QAIF", "Coding"] },
   { path: "/reports", label: "Reports", section: "intelligence", iconKey: "reports", capability: "reports.read", children: ["Stock Levels", "Expiry Report", "Transactions", "Temperature", "Concerns", "SARs"] },

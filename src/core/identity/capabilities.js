@@ -285,9 +285,6 @@ export const ROLE_TEMPLATES = {
   "Cleaner": [
     "dashboard.read",
     "operations.read",
-    "compliance.read",
-    "compliance.write",
-    "compliance.recordChecks",
     "mobile.access",
   ],
   // Practice partners: read-only visibility across every governance record

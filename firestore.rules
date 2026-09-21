@@ -530,7 +530,6 @@ match /subject_access_requests/{requestId} {
         ] :
         role == "Cleaner" ? [
           "dashboard.read", "operations.read",
-          "compliance.read", "compliance.write", "compliance.recordChecks",
           "mobile.access"
         ] :
         role == "Partner" ? [
@@ -662,7 +661,16 @@ match /subject_access_requests/{requestId} {
 
     match /cleaning_logs/{logId} {
       allow get, list, create: if signedIn();
-      allow update, delete: if isAdmin();
+      // The cleaner who made a log can add one note to it (the "finished" screen)
+      // and nothing else; no one else can change it except an admin.
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && resource.data.cleanedByUid == request.auth.uid
+          && !("notes" in resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["notes", "issueReported", "notedAt"])
+        );
+      allow delete: if isAdmin();
     }
 
     // Internal QA bug reports (mobile bug button + Developer Centre). No PII,
@@ -788,13 +796,26 @@ match /subject_access_requests/{requestId} {
     // -------------------------
     match /compliance_assets/{assetId} {
       allow get, list: if signedIn() && (hasPermission("compliance", "read") || isCaretaker() || isAdmin());
-      allow create, update: if signedIn() && (hasPermission("compliance", "manageAssets") || isCaretaker() || isAdmin());
+      allow create: if signedIn() && (hasPermission("compliance", "manageAssets") || isCaretaker() || isAdmin());
+      // Managing assets can change anything; a member of staff who can record
+      // checks (the caretaker's cover) can only stamp the "last checked" fields
+      // that saving a check updates - never edit the asset itself.
+      allow update: if signedIn() && (
+        hasPermission("compliance", "manageAssets") || isCaretaker() || isAdmin()
+        || (
+          hasPermission("compliance", "recordChecks")
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lastCheckAt", "lastCheckResult", "lastCheckedByUid", "lastCheckedByName", "updatedAt"])
+        )
+      );
       allow delete: if isAdmin();
     }
 
     match /compliance_checks/{checkId} {
       allow get, list: if signedIn() && (hasPermission("compliance", "read") || isCaretaker() || isAdmin());
-      allow create: if signedIn() && (hasPermission("compliance", "recordChecks") || hasPermission("compliance", "read") || isCaretaker() || isAdmin());
+      // Only people whose job includes checks can record one, and only as themselves.
+      allow create: if signedIn()
+        && (hasPermission("compliance", "recordChecks") || isCaretaker() || isAdmin())
+        && request.resource.data.actor.uid == request.auth.uid;
       allow update, delete: if false; // compliance checks are immutable audit records
     }
 

@@ -79,6 +79,15 @@ async function main() {
       dataMode: "synthetic", practiceId: "site-b", siteId: "SITE-B",
     });
     await setDoc(doc(db, "users", "sitea-uid"), { role: "User", practiceId: "site-a" });
+    // compliance checks / cleaning notes
+    await setDoc(doc(db, "users", "caretaker-uid"), { role: "Caretaker", displayName: "Caretaker" });
+    await setDoc(doc(db, "users", "nurse-uid"), { role: "Nurse", displayName: "Nurse" });
+    await setDoc(doc(db, "users", "cleaner-uid"), { role: "Cleaner", displayName: "Cleaner" });
+    await setDoc(doc(db, "users", "cleaner2-uid"), { role: "Cleaner", displayName: "Cleaner Two" });
+    await setDoc(doc(db, "compliance_assets", "asset-wh1"), { assetCode: "WH-001", label: "Hot tap", assetType: "water_hot", qrPayload: "MEDTRAK:COMPLIANCE:asset-wh1", siteId: "main_branch" });
+    for (const id of ["log-c1", "log-c2", "log-c3", "log-c4"]) {
+      await setDoc(doc(db, "cleaning_logs", id), { roomId: "room-1", roomName: "Room 1", cleanedBy: "Cleaner", cleanedByUid: "cleaner-uid", method: "nfc-session" });
+    }
   });
 
   const admin = testEnv.authenticatedContext("admin-uid").firestore();
@@ -89,6 +98,10 @@ async function main() {
   const reception = testEnv.authenticatedContext("reception-uid").firestore();
   const craig = testEnv.authenticatedContext("craig-uid").firestore();
   const sitea = testEnv.authenticatedContext("sitea-uid").firestore();
+  const caretaker = testEnv.authenticatedContext("caretaker-uid").firestore();
+  const nurse = testEnv.authenticatedContext("nurse-uid").firestore();
+  const cleaner = testEnv.authenticatedContext("cleaner-uid").firestore();
+  const cleaner2 = testEnv.authenticatedContext("cleaner2-uid").firestore();
   const anon = testEnv.unauthenticatedContext().firestore();
 
   console.log("\n=== 1. Today's fix: custom-role SAR access (Craig) ===");
@@ -237,6 +250,45 @@ async function main() {
 
   await check("Admin CAN still create a user profile", () =>
     assertSucceeds(setDoc(doc(admin, "users", "made-by-admin"), { role: "Nurse" })));
+
+  console.log("\n=== 9. Compliance checks (fire, water) and cleaning notes ===");
+  const aCheck = (uid, id) => ({ assetId: "asset-wh1", assetCode: "WH-001", result: "pass", actor: { uid, displayName: id }, notes: "" });
+  await check("Caretaker CAN record a check as themselves", () =>
+    assertSucceeds(setDoc(doc(caretaker, "compliance_checks", "chk-1"), aCheck("caretaker-uid", "Caretaker"))));
+  await check("Staff covering the caretaker (Nurse, can record checks) CAN record a check as themselves", () =>
+    assertSucceeds(setDoc(doc(nurse, "compliance_checks", "chk-2"), aCheck("nurse-uid", "Nurse"))));
+  await check("Caretaker CANNOT record a check in someone else's name", () =>
+    assertFails(setDoc(doc(caretaker, "compliance_checks", "chk-3"), aCheck("nurse-uid", "Nurse"))));
+  await check("Cleaner CANNOT record a fire or water check (cleaning only)", () =>
+    assertFails(setDoc(doc(cleaner, "compliance_checks", "chk-4"), aCheck("cleaner-uid", "Cleaner"))));
+  await check("ReadOnly (can view compliance, no check role) CANNOT record a check", () =>
+    assertFails(setDoc(doc(readonly, "compliance_checks", "chk-5"), aCheck("readonly-uid", "RO"))));
+  await check("Anonymous CANNOT record a check", () =>
+    assertFails(setDoc(doc(anon, "compliance_checks", "chk-6"), aCheck("x", "x"))));
+  await check("A recorded check cannot be edited afterwards (audit record)", () =>
+    assertFails(updateDoc(doc(caretaker, "compliance_checks", "chk-1"), { result: "fail" })));
+  await check("Staff who can record checks CAN stamp the asset's last-checked fields", () =>
+    assertSucceeds(updateDoc(doc(nurse, "compliance_assets", "asset-wh1"), { lastCheckAt: 1, lastCheckResult: "pass", lastCheckedByUid: "nurse-uid", lastCheckedByName: "Nurse", updatedAt: 1 })));
+  await check("...but CANNOT edit the asset itself (label, tag)", () =>
+    assertFails(updateDoc(doc(nurse, "compliance_assets", "asset-wh1"), { label: "Renamed", qrPayload: "MEDTRAK:COMPLIANCE:other" })));
+  await check("...and CANNOT mix a real edit in with the last-checked fields", () =>
+    assertFails(updateDoc(doc(nurse, "compliance_assets", "asset-wh1"), { lastCheckAt: 2, label: "Renamed" })));
+  await check("Cleaner CANNOT touch a compliance asset", () =>
+    assertFails(updateDoc(doc(cleaner, "compliance_assets", "asset-wh1"), { lastCheckAt: 3 })));
+  await check("Caretaker CAN edit a compliance asset", () =>
+    assertSucceeds(updateDoc(doc(caretaker, "compliance_assets", "asset-wh1"), { location: "Boiler room" })));
+  await check("Cleaner CAN add a note to their own cleaning log", () =>
+    assertSucceeds(updateDoc(doc(cleaner, "cleaning_logs", "log-c1"), { notes: "Sink blocked", issueReported: true, notedAt: 1 })));
+  await check("...but only once (a second note is refused)", () =>
+    assertFails(updateDoc(doc(cleaner, "cleaning_logs", "log-c1"), { notes: "Changed my mind", issueReported: false, notedAt: 2 })));
+  await check("Cleaner CANNOT change other parts of their log (who, when, room)", () =>
+    assertFails(updateDoc(doc(cleaner, "cleaning_logs", "log-c2"), { notes: "x", roomName: "Other room", cleanedBy: "Someone else" })));
+  await check("A different cleaner CANNOT add a note to someone else's log", () =>
+    assertFails(updateDoc(doc(cleaner2, "cleaning_logs", "log-c3"), { notes: "x", issueReported: false, notedAt: 1 })));
+  await check("Cleaner CANNOT delete a cleaning log", () =>
+    assertFails(deleteDoc(doc(cleaner, "cleaning_logs", "log-c4"))));
+  await check("Admin CAN still correct a cleaning log", () =>
+    assertSucceeds(updateDoc(doc(admin, "cleaning_logs", "log-c4"), { notes: "Admin correction" })));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();

@@ -24,7 +24,7 @@ import {
   getQrImageUrl,
   isComplianceCheckDue,
   isFireAlarmTestDueThisWeek,
-  recordComplianceCheck,
+  importLegacyComplianceAssets,
   subscribeComplianceAssets,
   subscribeRecentComplianceChecks,
 } from "@/services/compliance/complianceQrService";
@@ -102,7 +102,11 @@ export default function ComplianceQrEngine() {
     frequency: "weekly",
     minTempC: "",
     maxTempC: "",
+    countdownSeconds: "",
   });
+
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
 
   useEffect(() => subscribeComplianceAssets(setAssets, console.error, { siteId: SITE_ID }), []);
   useEffect(() => subscribeRecentComplianceChecks(setRecent, console.error, { siteId: SITE_ID, max: 20 }), []);
@@ -128,6 +132,7 @@ export default function ComplianceQrEngine() {
       frequency: config.defaultFrequency,
       minTempC: config.minTempC ?? "",
       maxTempC: config.maxTempC ?? "",
+      countdownSeconds: config.countdownSeconds ?? "",
     }));
   }
 
@@ -146,18 +151,17 @@ export default function ComplianceQrEngine() {
     }
   }
 
-  async function demoCheck(asset, status = "pass") {
+  async function importOld() {
+    setImportMsg("");
+    setImporting(true);
     try {
-      await recordComplianceCheck(asset, {
-        status,
-        source: "desktop_demo",
-        identificationMethod: "manual",
-        notes: status === "fail" ? "Desktop quick fail demo." : "Desktop quick pass demo.",
-      });
-      setMsg(status === "pass" ? "Demo check recorded." : "Fail recorded and Pulse Event raised.");
+      const r = await importLegacyComplianceAssets(assets, { siteId: SITE_ID });
+      setImportMsg(r.total === 0 ? "There are no call points or outlets in the old lists." : r.created === 0 ? "Everything in the old lists is already here." : `Brought across ${r.created} item${r.created === 1 ? "" : "s"}. Print their labels or write their tags to start using them.`);
     } catch (error) {
       console.error(error);
-      setMsg("Could not record demo check. Check Firestore permissions.");
+      setImportMsg("Could not bring the old lists across. Check your permissions.");
+    } finally {
+      setImporting(false);
     }
   }
 
@@ -175,11 +179,12 @@ export default function ComplianceQrEngine() {
             <div className="inline-flex items-center gap-2 rounded-full border border-teal-400/20 bg-teal-400/10 px-3 py-1 text-xs font-semibold text-teal-100">
               <QrCode className="h-4 w-4" /> QR / NFC Compliance Engine
             </div>
-            <h2 className="mt-3 text-2xl font-semibold text-slate-50">Scan → one action → done</h2>
+            <h2 className="mt-3 text-2xl font-semibold text-slate-50">Assets and tags</h2>
             <p className="mt-2 max-w-3xl text-sm text-slate-300">
               Give fire points, water outlets, fridges and emergency equipment a MedTrak QR/NFC identity. Staff scan the asset, complete one action, and MedTrak records the audit trail, time, user, location and Pulse impact in the background.
             </p>
           </div>
+          <div className="space-y-3">
           <div className="grid min-w-[300px] grid-cols-3 gap-2 text-center">
             <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
               <div className="text-2xl font-bold text-white">{qrReady}</div>
@@ -193,6 +198,13 @@ export default function ComplianceQrEngine() {
               <div className="text-2xl font-bold text-rose-100">{failedCount}</div>
               <div className="text-[11px] text-rose-200/80">Failed</div>
             </div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-xs text-slate-300">
+            <div className="font-semibold text-slate-100">Have call points or outlets in the old lists?</div>
+            <p className="mt-1 text-slate-400">Bring them across as assets, ready for a tag. The old records stay as they are.</p>
+            <button type="button" onClick={importOld} disabled={importing} className="mt-2 rounded-full border border-white/10 bg-slate-900/60 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800 disabled:opacity-50">{importing ? "Bringing across…" : "Bring across the old lists"}</button>
+            {importMsg && <p className="mt-2 text-teal-200" role="status">{importMsg}</p>}
+          </div>
           </div>
         </div>
       </Card>
@@ -283,6 +295,14 @@ export default function ComplianceQrEngine() {
               </select>
             </label>
 
+            {selectedType.countdownSeconds ? (
+              <label className="text-xs text-slate-300">
+                Run the water for (seconds)
+                <Input type="number" min="0" max="600" value={form.countdownSeconds} onChange={(e) => setForm((p) => ({ ...p, countdownSeconds: e.target.value }))} />
+                <span className="mt-1 block text-[11px] text-slate-500">The phone counts this down before the temperature can be entered. 30 unless this outlet needs longer.</span>
+              </label>
+            ) : null}
+
             {form.checkMode === "temperature" && (
               <>
                 <label className="text-xs text-slate-300">
@@ -342,12 +362,6 @@ export default function ComplianceQrEngine() {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        {asset.checkMode === "pass_fail" && (
-                          <>
-                            <button onClick={() => demoCheck(asset, "pass")} className="rounded-full bg-emerald-400 px-3 py-2 text-xs font-bold text-slate-950"><CheckCircle2 className="mr-1 inline h-4 w-4" /> Pass</button>
-                            <button onClick={() => demoCheck(asset, "fail")} className="rounded-full bg-rose-500 px-3 py-2 text-xs font-bold text-white"><XCircle className="mr-1 inline h-4 w-4" /> Fail</button>
-                          </>
-                        )}
                         <img alt="QR" src={getQrImageUrl(payload, 90)} className="h-16 w-16 rounded-lg bg-white p-1" />
                       </div>
                     </div>
