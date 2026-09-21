@@ -1,4 +1,5 @@
-import { addDoc, collection, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { addDocResendSafe } from '@/lib/resendSafeWrites';
 import { db } from '@/lib/firebase';
 
 const COLLECTION = 'orb_intent_learning';
@@ -52,7 +53,7 @@ class IntentLearningStore {
       reviewedBy: null,
       reviewNote: null,
     };
-    const ref = await addDoc(collection(db, COLLECTION), record);
+    const ref = await addDocResendSafe(collection(db, COLLECTION), record);
     return { id: ref.id, ...record };
   }
 

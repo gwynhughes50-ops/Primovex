@@ -1,4 +1,5 @@
-import { addDoc, collection, deleteDoc, doc, getDocs, onSnapshot, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, onSnapshot, updateDoc } from 'firebase/firestore';
+import { addDocResendSafe } from '@/lib/resendSafeWrites';
 import { db } from '@/lib/firebase';
 import { phraseSimilarity } from '@/ai/tools/languageEngine';
 
@@ -90,7 +91,7 @@ class OrbKnowledgeStore {
       updatedAt: new Date().toISOString(),
     };
     if (!record.question || !record.answer) throw new Error('A question and answer are both required.');
-    const ref = await addDoc(collection(db, COLLECTION), record);
+    const ref = await addDocResendSafe(collection(db, COLLECTION), record);
     return { id: ref.id, ...record };
   }
 

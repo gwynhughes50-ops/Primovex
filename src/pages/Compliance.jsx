@@ -23,7 +23,6 @@ import {
 } from "lucide-react";
 import { db } from "../lib/firebase";
 import {
-  addDoc,
   collection,
   deleteDoc,
   doc,
@@ -33,6 +32,7 @@ import {
   query,
   serverTimestamp,
 } from "firebase/firestore";
+import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import ComplianceQrEngine from "@/components/compliance/ComplianceQrEngine";
 import { listEquipment, upsertEquipment } from "@/modules/equipment/services/equipmentRegistry";
@@ -860,7 +860,7 @@ function FireChecksTab() {
 
     setSaving(true);
     try {
-      await addDoc(collection(db, "fire_weekly_checks"), {
+      await addDocResendSafe(collection(db, "fire_weekly_checks"), {
         siteId: SITE_ID,
         dateKey,
         time,
@@ -892,7 +892,7 @@ function FireChecksTab() {
     const displayName = makeDisplayName(label, pointNumber);
 
     try {
-      const docRef = await addDoc(collection(db, "fire_call_points"), {
+      const docRef = await addDocResendSafe(collection(db, "fire_call_points"), {
         siteId: SITE_ID,
         label,
         pointNumber,
@@ -1326,7 +1326,7 @@ function WaterTempsTab() {
 
     setSaving(true);
     try {
-      await addDoc(collection(db, "water_temp_rounds"), {
+      await addDocResendSafe(collection(db, "water_temp_rounds"), {
         siteId: SITE_ID,
         dateKey,
         time,
@@ -1363,7 +1363,7 @@ function WaterTempsTab() {
     if (!frequency) return setOErr("Frequency is required.");
 
     try {
-      await addDoc(collection(db, "water_outlets"), {
+      await addDocResendSafe(collection(db, "water_outlets"), {
         siteId: SITE_ID, // ✅ siteId now
         name,
         location,
@@ -1811,7 +1811,7 @@ function PatRegister({ SITE_ID }) {
 
     try {
       const equipmentId = `EQ-PAT-${Date.now().toString().slice(-7)}`;
-      const created = await addDoc(collection(db, "pat_assets"), {
+      const created = await addDocResendSafe(collection(db, "pat_assets"), {
         siteId: SITE_ID,
         equipmentId,
         tag,
@@ -2061,7 +2061,7 @@ function PatSession({ SITE_ID }) {
         };
       });
 
-      await addDoc(collection(db, "pat_test_sessions"), {
+      await addDocResendSafe(collection(db, "pat_test_sessions"), {
         siteId: SITE_ID,
         testDate: header.testDate,
         retestDate: header.retestDate.trim(),

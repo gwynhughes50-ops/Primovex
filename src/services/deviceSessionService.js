@@ -1,5 +1,4 @@
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
@@ -11,6 +10,7 @@ import {
   where,
   limit,
 } from "firebase/firestore";
+import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { db } from "@/lib/firebase";
 
 const DEVICE_ID_KEY = "primovex.device.id.v1";
@@ -64,7 +64,7 @@ export async function startOrResumeDeviceSession({ user, displayName }) {
 
   if (existing?.status === "active" && existing?.userId && existing.userId !== user.uid) {
     await closeActiveSenseSessionsForDevice(deviceId, "replaced_by_new_login");
-    await addDoc(collection(db, "device_session_events"), {
+    await addDocResendSafe(collection(db, "device_session_events"), {
       deviceId,
       previousUserId: existing.userId,
       previousUserDisplayName: existing.userDisplayName || "",

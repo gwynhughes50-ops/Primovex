@@ -1,5 +1,4 @@
 import {
-  addDoc,
   getDocs,
   collection,
   doc,
@@ -10,6 +9,7 @@ import {
   setDoc,
   updateDoc,
 } from "firebase/firestore";
+import { addDocResendSafe } from "@/lib/resendSafeWrites";
 
 import { db } from "@/lib/firebase";
 import { writeAuditEvent } from "@/core/identity/auditService";
@@ -95,7 +95,7 @@ export async function savePracticeConfig(payload, actor = null) {
 }
 
 export async function addPracticeSite(payload, actor = null) {
-  const result = await addDoc(collection(db, "practice_sites"), {
+  const result = await addDocResendSafe(collection(db, "practice_sites"), {
     ...payload,
     active: true,
     created_at: serverTimestamp(),
@@ -106,7 +106,7 @@ export async function addPracticeSite(payload, actor = null) {
 }
 
 export async function addDepartment(payload, actor = null) {
-  const result = await addDoc(collection(db, "practice_departments"), {
+  const result = await addDocResendSafe(collection(db, "practice_departments"), {
     ...payload,
     active: true,
     created_at: serverTimestamp(),
@@ -137,7 +137,7 @@ export async function updateDepartment(departmentId, payload, actor = null) {
 }
 
 export async function addPracticeRole(payload, actor = null) {
-  const result = await addDoc(collection(db, "practice_roles"), {
+  const result = await addDocResendSafe(collection(db, "practice_roles"), {
     ...payload,
     active: true,
     created_at: serverTimestamp(),

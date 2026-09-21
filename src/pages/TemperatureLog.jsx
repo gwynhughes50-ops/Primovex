@@ -16,7 +16,6 @@ import {
 
 import {
   collection,
-  addDoc,
   doc,
   onSnapshot,
   query,
@@ -27,6 +26,7 @@ import {
   where,
   getDocs,
 } from "firebase/firestore";
+import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { db } from "../lib/firebase";
 import { TemperatureMonitoring } from "@/pages/Connect";
 import { useAuth } from "@/contexts/AuthContext";
@@ -430,7 +430,7 @@ function TemperatureLogTab() {
     }
 
     try {
-      await addDoc(collection(db, TEMP_COLLECTION), {
+      await addDocResendSafe(collection(db, TEMP_COLLECTION), {
         created_at: serverTimestamp(),
         measured_at: measuredAt,
 
@@ -940,7 +940,7 @@ function TemperatureIncidentsTab() {
     }
 
     try {
-      await addDoc(collection(db, INCIDENTS_COLLECTION), {
+      await addDocResendSafe(collection(db, INCIDENTS_COLLECTION), {
         unitId: unit.id,
         unitName: unit.name,
         unitType: unit.type,

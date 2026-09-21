@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Bluetooth, CheckCircle2, Home, Sparkles, Thermometer, X } from 'lucide-react';
-import { addDoc, collection, limit, onSnapshot, orderBy, query, serverTimestamp, where } from 'firebase/firestore';
+import { collection, limit, onSnapshot, orderBy, query, serverTimestamp, where } from 'firebase/firestore';
+import { addDocResendSafe } from '@/lib/resendSafeWrites';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/contexts/AuthContext';
 import useStock from '@/hooks/useStock';
@@ -185,7 +186,7 @@ export default function MobileFridgeSheet({ asset, onClose }) {
     setIssueBusy(true);
     setIssueError('');
     try {
-      await addDoc(collection(db, 'temperature_incidents'), {
+      await addDocResendSafe(collection(db, 'temperature_incidents'), {
         unitId: unitId || asset.id,
         unitName: asset.name,
         unitType: 'fridge',

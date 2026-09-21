@@ -1,4 +1,5 @@
-import { addDoc, collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
+import { collection, deleteDoc, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
+import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 
@@ -79,7 +80,7 @@ export async function addQuickNote(input) {
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("You need to be signed in to add a note");
 
-  await addDoc(collection(db, COLLECTION), {
+  await addDocResendSafe(collection(db, COLLECTION), {
     text,
     dueAt: input?.dueAt || null,
     priority: input?.priority || "routine",

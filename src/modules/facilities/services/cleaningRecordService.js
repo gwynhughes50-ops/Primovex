@@ -1,4 +1,5 @@
-import { addDoc, collection, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { addDocResendSafe } from '@/lib/resendSafeWrites';
 import { db } from '@/lib/firebase';
 
 // Real, cross-device cleaning/stocking records. Previously this lived only in
@@ -47,7 +48,7 @@ export async function markRoomCleaned(roomId, roomName, actor, method = 'one-tap
     lastCleanedBy: actor,
     operationalStatus: 'ready',
   }, { merge: true });
-  await addDoc(collection(db, CLEANING_LOGS_COLLECTION), {
+  await addDocResendSafe(collection(db, CLEANING_LOGS_COLLECTION), {
     roomId,
     roomName: roomName || roomId,
     cleanedAt: serverTimestamp(),
@@ -82,7 +83,7 @@ export async function completeCleaningSession(roomOperationalMap, roomId, roomNa
     activeCleaningSession: null,
   }, { merge: true });
 
-  await addDoc(collection(db, CLEANING_LOGS_COLLECTION), {
+  await addDocResendSafe(collection(db, CLEANING_LOGS_COLLECTION), {
     roomId,
     roomName: roomName || session?.roomName || roomId,
     cleanedAt: serverTimestamp(),

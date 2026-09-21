@@ -187,6 +187,15 @@ export async function recordStockVerification({ item, actualQty, actor = null, r
   const actorSafe = normalizeActor(actor);
 
   return runTransaction(db, async (tx) => {
+    // Re-run of a verification whose first attempt already committed (the reply
+    // was lost): its record exists under this call's own id, so report that
+    // result instead of writing — and being refused — a second time.
+    const prior = await tx.get(verificationRef);
+    if (prior.exists()) {
+      const done = prior.data();
+      return { expected: done.expected_qty, actual: done.actual_qty, discrepancy: done.discrepancy };
+    }
+
     const snap = await tx.get(itemRef);
     if (!snap.exists()) throw new Error("Stock item not found.");
 

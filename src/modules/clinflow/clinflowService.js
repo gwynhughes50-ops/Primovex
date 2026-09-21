@@ -1,4 +1,5 @@
 import { collection, doc, onSnapshot, query, serverTimestamp, where, writeBatch } from "firebase/firestore";
+import { commitBatchResendSafe } from "@/lib/resendSafeWrites";
 import { db } from "@/lib/firebase";
 import { assertSyntheticClinFlowMode } from "@/governance/clinicalDataGate";
 
@@ -84,8 +85,9 @@ export async function saveSyntheticWorkflowQueue(items, context) {
     updatedAt: serverTimestamp(),
     updatedByUid: context.actorUid,
   }, { merge: true }));
-  batch.set(doc(collection(db, EVENTS)), eventPayload("queue", "clinflow.demo_queue_saved", "Synthetic workflow queue saved", { count: items.length }, context));
-  await batch.commit();
+  const eventRef = doc(collection(db, EVENTS));
+  batch.set(eventRef, eventPayload("queue", "clinflow.demo_queue_saved", "Synthetic workflow queue saved", { count: items.length }, context));
+  await commitBatchResendSafe(batch, eventRef);
 }
 
 // Writes exactly once per document per batch. A not-yet-persisted document's
@@ -122,14 +124,16 @@ export async function applyClinFlowAction(item, action, context) {
     triageReviewedAt: serverTimestamp(),
   });
   ensureWorkflowRecord(batch, item, context, changes);
-  batch.set(doc(collection(db, EVENTS)), eventPayload(item.id, `clinflow.${action.type}`, action.summary, action.metadata, context));
-  await batch.commit();
+  const eventRef = doc(collection(db, EVENTS));
+  batch.set(eventRef, eventPayload(item.id, `clinflow.${action.type}`, action.summary, action.metadata, context));
+  await commitBatchResendSafe(batch, eventRef);
 }
 
 export async function recordClinFlowNoteMarker(item, noteLength, context) {
   requireActor(context);
   const batch = writeBatch(db);
   ensureWorkflowRecord(batch, item, context, { updatedAt: serverTimestamp(), updatedByUid: context.actorUid });
-  batch.set(doc(collection(db, EVENTS)), eventPayload(item.id, "clinflow.note", "Workflow note marker recorded", { noteLength: Number(noteLength) || 0, contentStored: false }, context));
-  await batch.commit();
+  const eventRef = doc(collection(db, EVENTS));
+  batch.set(eventRef, eventPayload(item.id, "clinflow.note", "Workflow note marker recorded", { noteLength: Number(noteLength) || 0, contentStored: false }, context));
+  await commitBatchResendSafe(batch, eventRef);
 }

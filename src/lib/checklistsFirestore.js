@@ -4,13 +4,13 @@ import {
   getDoc,
   getDocs,
   setDoc,
-  addDoc,
   deleteDoc,
   query,
   orderBy,
   limit,
   serverTimestamp,
 } from "firebase/firestore";
+import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { db, auth } from "@/lib/firebase";
 
 /**
@@ -78,7 +78,7 @@ export async function getLatestCheck(parentCollection, parentId) {
 
 export async function createMonthlyCheck(parentCollection, parentId, payload) {
   const checksRef = collection(db, parentCollection, parentId, "checks");
-  return await addDoc(checksRef, {
+  return await addDocResendSafe(checksRef, {
     ...payload,
     createdAt: serverTimestamp(),
     createdBy: getUserStamp(),

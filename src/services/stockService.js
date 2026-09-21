@@ -1,6 +1,5 @@
 // src/services/stockService.js
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
@@ -14,6 +13,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { db } from "../lib/firebase";
 import { writeAuditEvent } from "@/core/identity/auditService";
 import { UNCATEGORISED_CATEGORY, UNCATEGORISED_SUBCATEGORY, isKnownCategory, resolveLegacyCategory, getSubcategories } from "@/data/stockCategories";
@@ -192,6 +192,17 @@ export function subscribeToStock(onData, onError, { includeArchived = false } = 
   );
 }
 
+// The Firestore client re-runs a transaction after an ambiguous failure, and if
+// the first attempt had actually committed (the reply was lost) the re-run finds
+// this call's own movement already there. The movement id is unique to the call,
+// so its existence means "this already went through": return without writing
+// again. Without this the re-run is refused, the person is told the save failed,
+// and saving again applies the change a second time.
+async function movementAlreadyRecorded(tx, movementRef) {
+  const snap = await tx.get(movementRef);
+  return snap.exists() ? snap.data() : null;
+}
+
 export async function createStockItem(data) {
   const payload = normalizeItemPatch({
     name: cleanString(data?.name),
@@ -226,6 +237,7 @@ export async function createStockItem(data) {
   const moveRef = doc(collection(db, MOVES_COL));
 
   await runTransaction(db, async (tx) => {
+    if (await movementAlreadyRecorded(tx, moveRef)) return;
     if (barcodeKey) {
       const barcodeRef = doc(db, BARCODE_COL, barcodeKey);
       const barcodeSnap = await tx.get(barcodeRef);
@@ -265,6 +277,7 @@ export async function updateStockItem(id, patch) {
   const moveRef = doc(collection(db, MOVES_COL));
 
   await runTransaction(db, async (tx) => {
+    if (await movementAlreadyRecorded(tx, moveRef)) return;
     const snap = await tx.get(itemRef);
     if (!snap.exists()) throw new Error("Item not found.");
 
@@ -327,6 +340,7 @@ export async function archiveStockItem(id, actor = null) {
   const actorSafe = normalizeActor(actor);
 
   await runTransaction(db, async (tx) => {
+    if (await movementAlreadyRecorded(tx, moveRef)) return;
     const snap = await tx.get(itemRef);
     if (!snap.exists()) throw new Error("Item not found.");
 
@@ -385,6 +399,7 @@ export async function restoreStockItem(id, actor = null, options = {}) {
   const actorSafe = normalizeActor(actor);
 
   await runTransaction(db, async (tx) => {
+    if (await movementAlreadyRecorded(tx, moveRef)) return;
     const snap = await tx.get(itemRef);
     if (!snap.exists()) throw new Error("Item not found.");
 
@@ -460,6 +475,8 @@ export async function applyStockMovement(itemId, movement) {
   const moveRef = doc(collection(db, MOVES_COL));
 
   const result = await runTransaction(db, async (tx) => {
+    const prior = await movementAlreadyRecorded(tx, moveRef);
+    if (prior) return { before: prior.qty_before, after: prior.qty_after, delta: prior.delta, movementId: moveRef.id };
     const snap = await tx.get(itemRef);
     if (!snap.exists()) throw new Error("Item not found");
 
@@ -601,6 +618,7 @@ export async function assignStockToLocation(itemId, { locationId, locationName, 
   const actorSafe = normalizeActor(actor);
 
   await runTransaction(db, async (tx) => {
+    if (await movementAlreadyRecorded(tx, moveRef)) return;
     const snap = await tx.get(itemRef);
     if (!snap.exists()) throw new Error("Item not found.");
     const item = snap.data() || {};
@@ -650,6 +668,7 @@ export async function unassignStockFromLocation(itemId, locationId, quantity, ac
   const actorSafe = normalizeActor(actor);
 
   await runTransaction(db, async (tx) => {
+    if (await movementAlreadyRecorded(tx, moveRef)) return;
     const snap = await tx.get(itemRef);
     if (!snap.exists()) throw new Error("Item not found.");
     const item = snap.data() || {};
@@ -692,6 +711,8 @@ export async function reverseStockUseMovement(itemId, movementId, reversal = {})
   const reversalRef = doc(collection(db, MOVES_COL));
 
   const result = await runTransaction(db, async (tx) => {
+    const prior = await movementAlreadyRecorded(tx, reversalRef);
+    if (prior) return { before: prior.qty_before, after: prior.qty_after, delta: prior.delta, movementId: reversalRef.id, reversesMovementId: movementId };
     const [itemSnap, originalSnap] = await Promise.all([tx.get(itemRef), tx.get(originalRef)]);
     if (!itemSnap.exists()) throw new Error("Item not found.");
     if (!originalSnap.exists()) throw new Error("Original movement not found.");
@@ -915,7 +936,7 @@ export async function useStockByBarcode({ barcode, qty, actor = null }) {
 export async function createReorderRequest(item, actor = null) {
   if (!item?.id) throw new Error("Item missing.");
 
-  return addDoc(collection(db, "reorder_requests"), {
+  return addDocResendSafe(collection(db, "reorder_requests"), {
     item_id: item.id,
     item_name: item.name || "Unnamed item",
     item_strength: item.strength || "",

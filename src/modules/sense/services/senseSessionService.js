@@ -1,5 +1,4 @@
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
@@ -10,6 +9,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { db } from "@/lib/firebase";
 
 export async function getActiveSenseSession({ userId, deviceId }) {
@@ -57,7 +57,7 @@ export async function activateSenseObject({
     await closeSenseSession(currentSession.id, "room_changed");
   }
 
-  const ref = await addDoc(collection(db, "sense_sessions"), {
+  const ref = await addDocResendSafe(collection(db, "sense_sessions"), {
     userId: user.uid,
     userDisplayName: displayName || user.displayName || user.email || "",
     deviceId,
@@ -72,7 +72,7 @@ export async function activateSenseObject({
     updatedAt: serverTimestamp(),
   });
 
-  await addDoc(collection(db, "sense_events"), {
+  await addDocResendSafe(collection(db, "sense_events"), {
     eventType: currentSession ? "sense_context_changed" : "sense_context_started",
     userId: user.uid,
     userDisplayName: displayName || user.displayName || user.email || "",

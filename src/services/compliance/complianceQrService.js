@@ -1,5 +1,4 @@
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
@@ -12,6 +11,7 @@ import {
   where,
   limit,
 } from "firebase/firestore";
+import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { auth, db } from "@/lib/firebase";
 
 export const COMPLIANCE_ASSETS_COLLECTION = "compliance_assets";
@@ -273,7 +273,7 @@ export async function createComplianceAsset(form = {}) {
     updatedAt: serverTimestamp(),
   };
 
-  const ref = await addDoc(collection(db, COMPLIANCE_ASSETS_COLLECTION), payload);
+  const ref = await addDocResendSafe(collection(db, COMPLIANCE_ASSETS_COLLECTION), payload);
   await updateDoc(ref, { qrPayload: `MEDTRAK:COMPLIANCE:${ref.id}`, docId: ref.id });
   return { id: ref.id, ...payload, qrPayload: `MEDTRAK:COMPLIANCE:${ref.id}` };
 }
@@ -311,7 +311,7 @@ export async function recordComplianceCheck(asset, payload = {}) {
     updatedAt: serverTimestamp(),
   };
 
-  const ref = await addDoc(collection(db, COMPLIANCE_CHECKS_COLLECTION), check);
+  const ref = await addDocResendSafe(collection(db, COMPLIANCE_CHECKS_COLLECTION), check);
   await updateDoc(doc(db, COMPLIANCE_ASSETS_COLLECTION, asset.id), {
     lastCheckAt: serverTimestamp(),
     lastCheckResult: result.status,
@@ -328,7 +328,7 @@ export async function recordComplianceCheck(asset, payload = {}) {
 }
 
 export async function createCompliancePulseEvent(asset, check, result) {
-  return addDoc(collection(db, PULSE_EVENTS_COLLECTION), {
+  return addDocResendSafe(collection(db, PULSE_EVENTS_COLLECTION), {
     siteId: asset.siteId || check.siteId || "main_branch",
     module: "compliance",
     source: "compliance_qr",

@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  addDoc,
   collection,
   doc,
   onSnapshot,
@@ -8,6 +7,7 @@ import {
   serverTimestamp,
   updateDoc,
 } from "firebase/firestore";
+import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { Building2, Globe2, Mail, Phone } from "lucide-react";
 
 import { db } from "@/lib/firebase";
@@ -94,7 +94,7 @@ export default function SupplierDirectory() {
     try {
       setSaving(true);
 
-      await addDoc(collection(db, "suppliers"), {
+      await addDocResendSafe(collection(db, "suppliers"), {
         name,
         contact_name: clean(form.contact_name),
         email: clean(form.email),

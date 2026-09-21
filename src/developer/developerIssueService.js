@@ -1,4 +1,5 @@
-import { addDoc, collection, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { addDocResendSafe } from '@/lib/resendSafeWrites';
 import { db } from '@/lib/firebase';
 import { getSpaceRegistryDiagnostics, exportSpaceRegistryBackup } from '@/modules/sense/services/sharedSpaceRegistry';
 
@@ -39,7 +40,7 @@ export async function createDeveloperIssue(input) {
     registry: getSpaceRegistryDiagnostics(),
     ...input,
   };
-  const ref = await addDoc(collection(db, COLLECTION), issue);
+  const ref = await addDocResendSafe(collection(db, COLLECTION), issue);
   return { id: ref.id, ...issue };
 }
 
