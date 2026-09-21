@@ -276,7 +276,11 @@ export async function createConcern(form, actor = {}) {
   const errors = validateConcernForm(form);
   if (errors.length) throw new Error(errors.join(" "));
   const payload = buildConcernPayload(form, actor);
-  const ref = await addDoc(collection(db, CONCERNS_COLLECTION), payload);
+  // Made-up-front id + setDoc rather than addDoc, so a client re-send after a
+  // dropped connection re-saves the same case instead of being refused as
+  // "already exists" (which reads as a failed save and invites a duplicate).
+  const ref = doc(collection(db, CONCERNS_COLLECTION));
+  await setDoc(ref, payload);
   await addConcernTimeline(ref.id, {
     type: "created",
     title: "Concern received",
@@ -429,7 +433,8 @@ export async function removeInvolvedUser(concernId, uid, actor = {}) {
 
 export async function addLearningAction(concernId, action = {}, actor = {}) {
   if (isSafeSyntheticMode()) return `demo-learning-${Date.now()}`;
-  const ref = await addDoc(collection(db, CONCERN_LEARNING_COLLECTION), {
+  const ref = doc(collection(db, CONCERN_LEARNING_COLLECTION));
+  await setDoc(ref, {
     concernId,
     title: action.title || "Learning action",
     description: action.description || "",
@@ -453,7 +458,8 @@ export async function addLearningAction(concernId, action = {}, actor = {}) {
 export async function addConcernCorrespondence(concernId, entry = {}, actor = {}) {
   if (isSafeSyntheticMode()) return `demo-correspondence-${Date.now()}`;
   const type = CORRESPONDENCE_TYPES.includes(entry.type) ? entry.type : "letter";
-  const ref = await addDoc(collection(db, CONCERN_CORRESPONDENCE_COLLECTION), {
+  const ref = doc(collection(db, CONCERN_CORRESPONDENCE_COLLECTION));
+  await setDoc(ref, {
     concernId,
     type,
     notes: String(entry.notes || "").trim(),

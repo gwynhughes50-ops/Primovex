@@ -222,15 +222,23 @@ export function buildSarPayload(form, actor = {}) {
 
 export async function addSarActivity(sarId, activity = {}) {
   if (!sarId) return;
-  await addDoc(collection(db, SAR_ACTIVITY_COLLECTION), {
-    sarId,
-    type: activity.type || "note",
-    title: activity.title || "Activity",
-    message: activity.message || "",
-    actorUid: activity.actor?.uid || null,
-    actorName: activity.actor?.displayName || activity.actor?.email || "Unknown",
-    createdAt: serverTimestamp(),
-  });
+  try {
+    await addDoc(collection(db, SAR_ACTIVITY_COLLECTION), {
+      sarId,
+      type: activity.type || "note",
+      title: activity.title || "Activity",
+      message: activity.message || "",
+      actorUid: activity.actor?.uid || null,
+      actorName: activity.actor?.displayName || activity.actor?.email || "Unknown",
+      createdAt: serverTimestamp(),
+    });
+  } catch (err) {
+    // Activity entries are append-only, and the id is made on this device, so
+    // "already exists" can only mean our own earlier send landed and the client
+    // re-sent it after a dropped connection — the entry is there, it worked.
+    if (err?.code === "already-exists") return;
+    throw err;
+  }
 }
 
 export async function createUserNotification(uid, notification = {}) {
@@ -256,7 +264,13 @@ export async function createUserNotification(uid, notification = {}) {
 
 export async function createSar(form, actor = {}) {
   const payload = buildSarPayload(form, actor);
-  const ref = await addDoc(collection(db, SAR_COLLECTION), payload);
+  // The id is made up front and the SAR written with setDoc (not addDoc): if
+  // the connection drops after the server has saved it, the client re-sends the
+  // write, and a create-only resend is refused as "already exists" even though
+  // the save worked — the person sees an error and saves again, making a
+  // duplicate. Re-sending a set just re-saves the same record.
+  const ref = doc(collection(db, SAR_COLLECTION));
+  await setDoc(ref, payload);
 
   await addSarActivity(ref.id, {
     type: "created",
