@@ -49,6 +49,8 @@ import {
   BrainCircuit,
   Ban,
   RotateCcw,
+  Link2,
+  Copy,
 } from "lucide-react";
 
 import AddUser from "./admin/AddUser";
@@ -63,7 +65,7 @@ import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, se
 import { db } from "../lib/firebase";
 import { CAPABILITY_CATALOG, ROLE_TEMPLATES } from "@/core/identity/capabilities";
 import { useAuth } from "@/contexts/AuthContext";
-import { subscribeUsers, updateUserRole, setUserActive, deleteUserAccount } from "@/services/adminUserService";
+import { subscribeUsers, updateUserRole, setUserActive, deleteUserAccount, createPasswordLink } from "@/services/adminUserService";
 
 // --------------------------
 // ✅ Route Guard (Admin only)
@@ -383,6 +385,45 @@ export default function AdminDashboard() {
     }
   };
 
+  // Password-set links from Add User expire after an hour (Firebase's fixed
+  // limit) — this issues a fresh one on demand. Nothing is generated until
+  // the admin confirms, since each one is an audited credential-setting link.
+  const [resetLinkTarget, setResetLinkTarget] = useState(null);
+  const [resetLinkBusy, setResetLinkBusy] = useState(false);
+  const [resetLinkError, setResetLinkError] = useState("");
+  const [resetLinkResult, setResetLinkResult] = useState(null);
+  const [resetLinkCopied, setResetLinkCopied] = useState(false);
+
+  const closeResetLink = () => {
+    setResetLinkTarget(null);
+    setResetLinkResult(null);
+    setResetLinkError("");
+    setResetLinkCopied(false);
+  };
+
+  const generateResetLink = async () => {
+    if (!resetLinkTarget) return;
+    setResetLinkBusy(true);
+    setResetLinkError("");
+    try {
+      setResetLinkResult(await createPasswordLink(resetLinkTarget.id));
+    } catch (error) {
+      setResetLinkError(error?.message || "Could not generate a password link.");
+    } finally {
+      setResetLinkBusy(false);
+    }
+  };
+
+  const copyResetLink = async () => {
+    try {
+      await navigator.clipboard.writeText(resetLinkResult.link);
+      setResetLinkCopied(true);
+      window.setTimeout(() => setResetLinkCopied(false), 2000);
+    } catch {
+      setResetLinkError("Could not copy the link — select and copy it manually.");
+    }
+  };
+
   const [addRoleError, setAddRoleError] = useState("");
   const [addRoleBusy, setAddRoleBusy] = useState(false);
 
@@ -642,6 +683,15 @@ export default function AdminDashboard() {
                                       onClick={() => openAssignRole(u.id, u.role)}
                                     >
                                       <KeyRound className="h-4 w-4 mr-2" /> Assign role
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60 disabled:opacity-40"
+                                      disabled={isInactive}
+                                      title={isInactive ? "Reactivate the account first" : "Generate a new password-set link"}
+                                      onClick={() => setResetLinkTarget(u)}
+                                    >
+                                      <Link2 className="h-4 w-4 mr-2" /> Reset password
                                     </Button>
                                     <Button
                                       variant="outline"
@@ -1050,6 +1100,60 @@ export default function AdminDashboard() {
               >
                 {assignRoleBusy ? "Saving…" : "Save"}
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Link */}
+      {resetLinkTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-800/70 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
+            <div className="flex items-center gap-2 text-lg font-semibold text-slate-50">
+              <Link2 className="h-5 w-5" /> Password link for {resetLinkTarget.displayName || resetLinkTarget.email}
+            </div>
+
+            {!resetLinkResult ? (
+              <div className="text-sm text-slate-300 mt-2">
+                This generates a fresh link that lets <strong className="text-slate-100">{resetLinkTarget.email}</strong> set a new password. It's recorded in the audit log. Their current password keeps working until they use the link.
+              </div>
+            ) : (
+              <div className="mt-3 space-y-3">
+                <div className="rounded-xl border border-slate-800/70 bg-slate-950/40 p-3">
+                  <div className="text-xs text-slate-400 mb-1">Password-set link for {resetLinkResult.email}</div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 truncate text-xs text-slate-200">{resetLinkResult.link}</code>
+                    <Button type="button" size="sm" variant="outline" className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60 shrink-0" onClick={copyResetLink}>
+                      <Copy className="h-3.5 w-3.5 mr-1.5" /> {resetLinkCopied ? "Copied" : "Copy"}
+                    </Button>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-100">
+                  This link expires in <strong>one hour</strong>, so send it to them directly and only when they're ready to use it. Anyone who has the link can set this account's password — don't post it in a shared channel.
+                </div>
+              </div>
+            )}
+
+            {resetLinkError && (
+              <div className="mt-3 rounded-xl border border-rose-500/25 bg-rose-500/10 p-3 text-xs text-rose-100">
+                {resetLinkError}
+              </div>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
+                disabled={resetLinkBusy}
+                onClick={closeResetLink}
+              >
+                {resetLinkResult ? "Done" : "Cancel"}
+              </Button>
+              {!resetLinkResult && (
+                <Button className="rounded-full bg-teal-500 text-slate-950 hover:bg-teal-400" disabled={resetLinkBusy} onClick={generateResetLink}>
+                  {resetLinkBusy ? "Generating…" : "Generate link"}
+                </Button>
+              )}
             </div>
           </div>
         </div>

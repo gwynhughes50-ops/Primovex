@@ -13,7 +13,7 @@ const { extractClinicalFacts } = require("./services/azureOpenAiExtractionServic
 const { appendGovernedAuditEvent } = require("./services/governedAuditService");
 const { reportRoomIssue } = require("./services/roomIssueService");
 const { recordSensePresenceTap } = require("./services/sensePresenceService");
-const { createUserAccount, setUserActive, deleteUserAccount } = require("./services/userAccountService");
+const { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink } = require("./services/userAccountService");
 const { getEffectiveCapabilities, hasCapability } = require("./services/roleCapabilities");
 
 initializeApp();
@@ -336,6 +336,36 @@ exports.createUserAccount = onCall({ region: "europe-west2" }, async (request) =
     throw new HttpsError("permission-denied", "Only a System Admin can create another System Admin account.");
   }
   return createUserAccount({ displayName, email, role, creatorUid: request.auth.uid });
+});
+
+exports.createPasswordLink = onCall({ region: "europe-west2" }, async (request) => {
+  const callerRole = await assertAdmin(request);
+  const { uid } = request.data || {};
+  const result = await createPasswordLink({ uid, callerRole });
+
+  // Issuing a credential-setting link is exactly the kind of action an audit
+  // trail exists for. Best-effort: a failed audit write must not leave an
+  // administrator unable to get someone back into the system.
+  try {
+    const callerProfile = await db.collection("users").doc(request.auth.uid).get();
+    await appendGovernedAuditEvent({
+      db,
+      auth: request.auth,
+      profile: callerProfile.data() || {},
+      data: {
+        action: "admin.user.password-link-created",
+        module: "administration",
+        targetType: "user",
+        targetId: result.uid,
+        summary: "Password reset link generated for a user account",
+        classification: "security",
+      },
+    });
+  } catch (error) {
+    console.error("Password-link audit event failed", { message: error?.message });
+  }
+
+  return result;
 });
 
 exports.setUserActive = onCall({ region: "europe-west2" }, async (request) => {

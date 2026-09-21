@@ -126,4 +126,40 @@ async function deleteUserAccount({ uid, actorUid }) {
   return { uid: cleanUid };
 }
 
-module.exports = { createUserAccount, setUserActive, deleteUserAccount, VALID_ROLES };
+// Firebase password-set links expire after one hour and that can't be
+// extended, so an account whose link wasn't used in time needs a fresh one —
+// this is the admin's way to issue it. Whoever holds the link can set that
+// account's password, so a System Admin account's link can only be issued by
+// another System Admin (otherwise admin.access alone would be a route to
+// taking over the highest-privilege account).
+async function createPasswordLink({ uid, callerRole }) {
+  const cleanUid = String(uid || "");
+  if (!cleanUid) throw new HttpsError("invalid-argument", "Missing user id.");
+
+  const db = getFirestore();
+  const profile = await db.collection("users").doc(cleanUid).get();
+  if (!profile.exists) throw new HttpsError("not-found", "That account has no Primovex profile.");
+  const data = profile.data() || {};
+
+  if (data.role === "System Admin" && callerRole !== "System Admin") {
+    throw new HttpsError("permission-denied", "Only a System Admin can reset a System Admin's password.");
+  }
+  if (data.active === false) {
+    throw new HttpsError("failed-precondition", "This account is deactivated — reactivate it before issuing a password link.");
+  }
+
+  let record;
+  try {
+    record = await getAuth().getUser(cleanUid);
+  } catch (error) {
+    if (error.code === "auth/user-not-found") throw new HttpsError("not-found", "That account no longer exists.");
+    throw new HttpsError("internal", error.message || "Could not look up the account.");
+  }
+  if (!record.email) throw new HttpsError("failed-precondition", "This account has no email address.");
+  if (record.disabled) throw new HttpsError("failed-precondition", "This account is disabled — reactivate it first.");
+
+  const link = await getAuth().generatePasswordResetLink(record.email);
+  return { uid: cleanUid, email: record.email, link };
+}
+
+module.exports = { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink, VALID_ROLES };

@@ -31,6 +31,15 @@ export async function updateUserRole(uid, role) {
   await updateDoc(doc(db, "users", uid), { role });
 }
 
+// Issues a fresh password-set link for an existing account (the one from Add
+// User expires after an hour). Returns { uid, email, link } — admin-only, and
+// only a System Admin can do it for another System Admin.
+export async function createPasswordLink(uid) {
+  const call = httpsCallable(functions, "createPasswordLink");
+  const response = await call({ uid });
+  return response.data;
+}
+
 // Disables/re-enables sign-in via the setUserActive Cloud Function — the
 // client SDK can't touch another user's Firebase Auth account directly, same
 // reason createUserAccount is a Cloud Function rather than a client write.
