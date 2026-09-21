@@ -33,6 +33,7 @@ import RequireAuth from "@/routes/RequireAuth";
 import PermissionGate from "@/components/security/PermissionGate";
 import FirstRunSetupGate from "@/setup/FirstRunSetupGate";
 import DesktopSessionShell from "@/desktop/DesktopSessionShell";
+import DesktopAlertsHost from "@/desktop/alerts/DesktopAlertsHost";
 
 export default function DesktopApp() {
   return (
@@ -62,6 +63,7 @@ export default function DesktopApp() {
             <FirstRunSetupGate>
               <DesktopSessionShell>
                 <Layout />
+                <DesktopAlertsHost />
               </DesktopSessionShell>
             </FirstRunSetupGate>
           </RequireAuth>

@@ -15,6 +15,8 @@ import { Icons } from "@/config/medtrakIcons";
 import useNotificationSettings from "@/hooks/useNotificationSettings";
 import useNotifications from "@/hooks/useNotifications";
 import { normalizeNotification } from "@/services/notificationCentreService";
+import { isTauriRuntime } from "@/release/updateService";
+import { isDesktopAlertsEnabled, setDesktopAlertsEnabled } from "@/desktop/alerts/alertRules";
 
 const tabs = [
   { key: "active", label: "Active" },
@@ -25,9 +27,12 @@ const tabs = [
 
 export default function Notifications() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const uid = user?.uid || null;
   const [activeTab, setActiveTab] = useState("active");
+  // The corner alert only exists in the desktop app, for the SAR and Concerns teams.
+  const showDesktopAlertsToggle = isTauriRuntime() && (can("governance.manageSars") || can("governance.concernsTeam"));
+  const [desktopAlertsOn, setDesktopAlertsOn] = useState(() => (uid ? isDesktopAlertsEnabled(uid) : true));
 
   const {
     settings,
@@ -162,6 +167,27 @@ export default function Notifications() {
               </div>
               <Checkbox checked={!!settings?.pushEnabled} onCheckedChange={(v) => setPushEnabled(!!v)} disabled={!canShow} />
             </div>
+
+            {showDesktopAlertsToggle && (
+              <div className="flex items-center justify-between rounded-xl border border-slate-800/70 bg-slate-950/40 p-4">
+                <div>
+                  <div className="font-semibold text-slate-50">Desktop alerts for overdue SARs and concerns</div>
+                  <div className="mt-0.5 text-xs text-slate-400">
+                    A small window in the bottom-right corner of this computer when a SAR or concern is overdue or due within 2 days.
+                    It shows for 15 seconds, then again every hour (weekdays, 8am to 6pm) until you snooze or dismiss it. It only ever shows counts.
+                    This setting applies to this computer.
+                  </div>
+                </div>
+                <Checkbox
+                  checked={desktopAlertsOn}
+                  onCheckedChange={(v) => {
+                    setDesktopAlertsOn(!!v);
+                    if (uid) setDesktopAlertsEnabled(uid, !!v);
+                  }}
+                  disabled={!canShow}
+                />
+              </div>
+            )}
           </div>
         </SectionCard>
       ) : (

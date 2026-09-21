@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Primovex alert</title>
+  </head>
+  <body>
+    <main class="card" id="card" role="alert" aria-live="assertive">
+      <header class="head">
+        <img class="mark" src="/branding/primovex-mark-only.png" alt="" draggable="false" />
+        <span class="brand">Primovex</span>
+        <span class="now">now</span>
+      </header>
+      <p class="title" id="title"></p>
+      <ul class="lines" id="lines"></ul>
+      <div class="actions" id="mainActions">
+        <button type="button" class="btn primary" id="openBtn">Open</button>
+        <button type="button" class="btn" id="snoozeBtn" aria-expanded="false">Snooze<span class="chev" aria-hidden="true"></span></button>
+        <button type="button" class="btn" id="dismissBtn">Dismiss</button>
+      </div>
+      <div class="actions hidden" id="snoozeActions">
+        <button type="button" class="btn" data-action="snooze_1h">1 hour</button>
+        <button type="button" class="btn" data-action="snooze_later">Later today</button>
+        <button type="button" class="btn" data-action="snooze_tomorrow">Tomorrow</button>
+        <button type="button" class="btn back" id="backBtn" aria-label="Back">&#8592;</button>
+      </div>
+      <div class="bar" aria-hidden="true"><span id="barFill"></span></div>
+    </main>
+    <script type="module" src="/src/alert/alert.js"></script>
+  </body>
+</html>

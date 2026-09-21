@@ -11,6 +11,16 @@ export default defineConfig({
     },
   },
 
+  // Two pages: the app, and the small corner alert window the desktop shell opens.
+  build: {
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        alert: fileURLToPath(new URL("./alert.html", import.meta.url)),
+      },
+    },
+  },
+
   server: {
     host: true,
     port: 5173,

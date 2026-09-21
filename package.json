@@ -24,7 +24,8 @@
     "test:orb-trust": "esbuild scripts/verify-orb-trust.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-trust.bundle.mjs && node work/verify-orb-trust.bundle.mjs",
     "test:orb-actions": "esbuild scripts/verify-orb-actions.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-actions.bundle.mjs && node work/verify-orb-actions.bundle.mjs",
     "test:clinflow-intelligence": "node scripts/verify-clinflow-intelligence.mjs",
-    "test:governed-audit": "node scripts/verify-governed-audit.mjs"
+    "test:governed-audit": "node scripts/verify-governed-audit.mjs",
+    "test:desktop-alerts": "esbuild scripts/verify-desktop-alerts.mjs --bundle --platform=node --format=esm --outfile=work/verify-desktop-alerts.bundle.mjs && node work/verify-desktop-alerts.bundle.mjs"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",
