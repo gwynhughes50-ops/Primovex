@@ -168,21 +168,35 @@ export function AuthProvider({ children }) {
   // touching per-role permissions. Read by every signed-in user (practice_config
   // already allows that), written only by admins — see PracticeAdministration's
   // Modules tab.
+  // Both this and the roles subscription below are keyed on WHO is signed in,
+  // not just the platform mode: the app starts listening the moment it loads,
+  // and if nobody is signed in yet Firestore refuses the read, ends the
+  // listener for good, and it never restarts after the person signs in — so
+  // custom roles silently vanished (and newly saved ones never appeared)
+  // until the app was fully restarted while already signed in.
+  const authUid = user?.uid || null;
+
   useEffect(() => {
-    if (isSafeSyntheticMode(platformMode)) { setModuleToggles(null); return undefined; }
+    if (isSafeSyntheticMode(platformMode) || !authUid) { setModuleToggles(null); return undefined; }
     return onSnapshot(doc(db, "practice_config", "main"), (snap) => {
       setModuleToggles(snap.exists() ? snap.data()?.moduleToggles || null : null);
-    }, () => setModuleToggles(null));
-  }, [platformMode]);
+    }, (err) => {
+      console.error("Module toggles subscription failed", err);
+      setModuleToggles(null);
+    });
+  }, [platformMode, authUid]);
 
   // Admin-created roles (see AdminDashboard's Add Role) — same live-subscription
   // shape as moduleToggles above, just a collection instead of a single doc.
   useEffect(() => {
-    if (isSafeSyntheticMode(platformMode)) { setCustomRoles([]); return undefined; }
+    if (isSafeSyntheticMode(platformMode) || !authUid) { setCustomRoles([]); return undefined; }
     return onSnapshot(collection(db, "roles"), (snap) => {
       setCustomRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((r) => r.active !== false));
-    }, () => setCustomRoles([]));
-  }, [platformMode]);
+    }, (err) => {
+      console.error("Custom roles subscription failed", err);
+      setCustomRoles([]);
+    });
+  }, [platformMode, authUid]);
 
   const customRoleCapabilities = useMemo(
     () => Object.fromEntries(customRoles.map((r) => [r.name, r.capabilities || []])),
