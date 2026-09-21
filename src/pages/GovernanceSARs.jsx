@@ -29,7 +29,11 @@ import {
   getSarDeadlineTone,
   getSarStatusBadge,
   getStatusLabel,
+  getRequestedByDisplay,
   isValidSarYear,
+  normaliseRequestedBy,
+  requestedBySearchText,
+  SAR_REQUESTED_BY_OPTIONS,
   subscribeSarYearFolders,
   toDate,
   updateSarChecklist,
@@ -37,7 +41,6 @@ import {
   updateSarStatus,
 } from "@/modules/governance/services/sarService";
 
-const requestedByOptions = ["patient", "parent", "solicitor", "executor", "court", "other"];
 const receivedViaOptions = ["email", "letter", "in_person", "telephone", "solicitor", "other"];
 const deliveryOptions = ["email", "collection", "other"];
 const statusFilters = ["all", "open", "due_week", "overdue", "completed"];
@@ -98,8 +101,7 @@ function getFormFromSar(sar) {
     emisNumber: sar.emisNumber || "",
     receivedDate: formatDateInput(toDate(sar.receivedDate)),
     dueDate: formatDateInput(toDate(sar.dueDate)),
-    requestedBy: sar.requestedBy || "patient",
-    requestedByOther: sar.requestedByOther || "",
+    ...normaliseRequestedBy(sar),
     receivedVia: sar.receivedVia || "email",
     solicitorReference: sar.solicitorReference || "",
     requestType: sar.requestType || "summary",
@@ -219,8 +221,8 @@ function SarFormPanel({ open, onClose, users, actor, onSaved, sar, defaultYear =
       return;
     }
 
-    if (form.requestedBy === "other" && !form.requestedByOther.trim()) {
-      alert("Enter who the request is from (a company, solicitor firm or organisation).");
+    if (form.requestedBy === "company" && !form.requestedByOther.trim()) {
+      alert("Enter the company name.");
       return;
     }
 
@@ -278,20 +280,20 @@ function SarFormPanel({ open, onClose, users, actor, onSaved, sar, defaultYear =
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-slate-200">Requested By</label>
             <select value={form.requestedBy} onChange={(e) => update({ requestedBy: e.target.value })} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-white">
-              {requestedByOptions.map((option) => <option key={option} value={option}>{friendly(option)}</option>)}
+              {SAR_REQUESTED_BY_OPTIONS.map((option) => <option key={option} value={option}>{friendly(option)}</option>)}
             </select>
           </div>
 
-          {form.requestedBy === "other" && (
+          {form.requestedBy === "company" && (
             <div className="space-y-3 lg:col-span-2">
-              <label className="block text-sm font-semibold text-slate-200">Who is the request from?</label>
+              <label className="block text-sm font-semibold text-slate-200">Company name</label>
               <Input
                 value={form.requestedByOther}
                 onChange={(e) => update({ requestedByOther: e.target.value })}
                 maxLength={120}
-                placeholder="e.g. company, solicitor firm or organisation name"
+                placeholder="e.g. Smith & Co Solicitors, Northern Insurance Ltd"
               />
-              <p className="text-xs text-slate-500">Use an organisation or firm name. Keep patient names out of Primovex.</p>
+              <p className="text-xs text-slate-500">Use the company or firm name only. Keep patient names out of Primovex.</p>
             </div>
           )}
 
@@ -498,7 +500,7 @@ function SarDetailPanel({ sar, actor, isTeam, canDelete, onEdit, onDelete, onClo
             <div className="grid gap-3 text-sm sm:grid-cols-2">
               <div><span className="text-slate-500">Received</span><div className="font-semibold text-white">{formatDisplayDate(sar.receivedDate)}</div></div>
               <div><span className="text-slate-500">Due</span><div className="font-semibold text-white">{formatDisplayDate(sar.dueDate)}</div></div>
-              <div><span className="text-slate-500">Requested by</span><div className="font-semibold text-white">{sar.requestedBy === "other" && sar.requestedByOther ? `${sar.requestedByOther} (other)` : friendly(sar.requestedBy)}</div></div>
+              <div><span className="text-slate-500">Requested by</span><div className="font-semibold text-white">{(() => { const r = getRequestedByDisplay(sar); return r.tag ? `${r.label} (${r.tag.toLowerCase()})` : r.label; })()}</div></div>
               <div><span className="text-slate-500">Received via</span><div className="font-semibold text-white">{friendly(sar.receivedVia)}</div></div>
               <div><span className="text-slate-500">Solicitor ref</span><div className="font-semibold text-white">{sar.solicitorReference || "—"}</div></div>
               <div><span className="text-slate-500">Assigned to</span><div className="font-semibold text-white">{sar.assignedToName || "Unassigned"}</div></div>
@@ -686,7 +688,7 @@ export default function GovernanceSARs() {
       if (filter === "overdue" && !(days !== null && days < 0 && !completed)) return false;
       if (filter === "due_week" && !(days !== null && days >= 0 && days <= 7 && !completed)) return false;
       if (!term) return true;
-      return [sar.reference, sar.emisNumber, sar.requestTypeLabel, sar.assignedToName, sar.informationRequired, sar.solicitorReference]
+      return [sar.reference, sar.emisNumber, sar.requestTypeLabel, requestedBySearchText(sar), sar.assignedToName, sar.informationRequired, sar.solicitorReference]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term));
     });
@@ -791,6 +793,7 @@ export default function GovernanceSARs() {
                 <tr className="border-b border-slate-800">
                   <th className="py-3 pr-3">Reference</th>
                   <th className="py-3 pr-3">EMIS</th>
+                  <th className="py-3 pr-3">Requested by</th>
                   <th className="py-3 pr-3">Type</th>
                   <th className="py-3 pr-3">Assigned</th>
                   <th className="py-3 pr-3">Due</th>
@@ -803,9 +806,20 @@ export default function GovernanceSARs() {
                 {filtered.map((sar) => {
                   const tone = getSarDeadlineTone(sar);
                   return (
-                    <tr key={sar.id} className="border-b border-slate-900 text-slate-200 hover:bg-slate-900/60">
+                    <tr key={sar.id} className="border-b border-slate-900 text-slate-200 hover:bg-[color-mix(in_srgb,var(--medtrak-accent)_9%,transparent)]">
                       <td className="py-3 pr-3 font-bold text-white">{sar.reference}</td>
                       <td className="py-3 pr-3">{sar.emisNumber}</td>
+                      <td className="py-3 pr-3">
+                        {(() => {
+                          // Just the name (or Patient / Parent / ...), one line, cut off with an ellipsis if long; the full text shows on hover.
+                          const requester = getRequestedByDisplay(sar);
+                          return (
+                            <div className={`max-w-[11rem] truncate ${requester.isCompany ? "font-semibold text-white" : ""}`} title={requester.label}>
+                              {requester.label}
+                            </div>
+                          );
+                        })()}
+                      </td>
                       <td className="py-3 pr-3">{sar.requestTypeLabel || getRequestTypeLabel(sar.requestType)}</td>
                       <td className="py-3 pr-3">{sar.assignedToName || "Unassigned"}</td>
                       <td className="py-3 pr-3">{formatDisplayDate(sar.dueDate)}</td>

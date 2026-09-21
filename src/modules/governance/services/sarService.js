@@ -31,6 +31,37 @@ export const SAR_STATUSES = {
   archived: "archived",
 };
 
+// Who a request came from. "company" carries a typed company name (stored in
+// requestedByOther). Older records may still say "solicitor" or "other" - those
+// are no longer offered, but are still read and shown correctly.
+export const SAR_REQUESTED_BY_OPTIONS = ["patient", "parent", "executor", "court", "company"];
+
+// The form only offers the current options, so a legacy record is edited as a
+// company: "other" already holds a company / firm name; "solicitor" had none.
+export function normaliseRequestedBy(sar = {}) {
+  const value = sar.requestedBy || "patient";
+  if (value === "other" || value === "solicitor") {
+    return { requestedBy: "company", requestedByOther: String(sar.requestedByOther || "").trim() };
+  }
+  return { requestedBy: value, requestedByOther: value === "company" ? String(sar.requestedByOther || "").trim() : "" };
+}
+
+// What the register and detail view show: a headline (the company name for a
+// company request, so a chaser can spot it at a glance) and a small tag.
+export function getRequestedByDisplay(sar = {}) {
+  const value = sar.requestedBy || "patient";
+  const name = String(sar.requestedByOther || "").trim();
+  if (value === "company" || value === "other") {
+    return { label: name || (value === "other" ? "Other" : "Company"), tag: name ? (value === "other" ? "Other" : "Company") : "", isCompany: true };
+  }
+  return { label: String(value).replaceAll("_", " ").replace(/(^| )[a-z]/g, (m) => m.toUpperCase()), tag: "", isCompany: false };
+}
+
+export function requestedBySearchText(sar = {}) {
+  const d = getRequestedByDisplay(sar);
+  return [d.label, d.tag].filter(Boolean).join(" ");
+}
+
 export const SAR_STATUS_LABELS = {
   new: "New",
   assigned: "Assigned",
@@ -185,7 +216,7 @@ export function buildSarFields(form) {
     receivedDate: Timestamp.fromDate(receivedDate),
     dueDate: Timestamp.fromDate(dueDate),
     requestedBy: form.requestedBy || "patient",
-    requestedByOther: form.requestedBy === "other" ? String(form.requestedByOther || "").trim().slice(0, 120) : "",
+    requestedByOther: form.requestedBy === "company" ? String(form.requestedByOther || "").trim().slice(0, 120) : "",
     receivedVia: form.receivedVia || "email",
     solicitorReference: String(form.solicitorReference || "").trim(),
     requestType: form.requestType || "summary",
@@ -348,7 +379,7 @@ export async function deleteSarYearFolder(year) {
 const SAR_EDIT_LABELS = [
   ["emisNumber", "EMIS number"],
   ["requestedBy", "requested by"],
-  ["requestedByOther", "requester name"],
+  ["requestedByOther", "company name"],
   ["receivedVia", "received via"],
   ["solicitorReference", "solicitor reference"],
   ["requestType", "request type"],
