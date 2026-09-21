@@ -1,0 +1,2950 @@
+<html>
+
+<head>
+<meta http-equiv=Content-Type content="text/html; charset=utf-8">
+<meta name=Generator content="Microsoft Word 15 (filtered)">
+<title>Primovex Security Review and Penetration Test Report</title>
+<style>
+<!--
+ /* Font Definitions */
+ @font-face
+	{font-family:"Cambria Math";
+	panose-1:2 4 5 3 5 4 6 3 2 4;}
+@font-face
+	{font-family:Calibri;
+	panose-1:2 15 5 2 2 2 4 3 2 4;}
+@font-face
+	{font-family:Consolas;
+	panose-1:2 11 6 9 2 2 4 3 2 4;}
+ /* Style Definitions */
+ p.MsoNormal, li.MsoNormal, div.MsoNormal
+	{margin:0cm;
+	font-size:10.5pt;
+	font-family:"Calibri",sans-serif;
+	color:#1F2933;}
+h1
+	{margin-top:18.0pt;
+	margin-right:0cm;
+	margin-bottom:7.0pt;
+	margin-left:0cm;
+	font-size:15.0pt;
+	font-family:"Calibri",sans-serif;
+	color:#12324F;}
+h2
+	{margin-top:12.0pt;
+	margin-right:0cm;
+	margin-bottom:5.0pt;
+	margin-left:0cm;
+	font-size:12.0pt;
+	font-family:"Calibri",sans-serif;
+	color:#12324F;}
+p.MsoListParagraph, li.MsoListParagraph, div.MsoListParagraph
+	{margin:0cm;
+	font-size:10.5pt;
+	font-family:"Calibri",sans-serif;
+	color:#1F2933;}
+.MsoChpDefault
+	{font-size:10.5pt;
+	font-family:"Calibri",sans-serif;
+	color:#1F2933;}
+ /* Page Definitions */
+ @page WordSection1
+	{size:595.3pt 841.9pt;
+	margin:2.0cm 2.0cm 2.0cm 2.0cm;}
+div.WordSection1
+	{page:WordSection1;}
+ /* List Definitions */
+ ol
+	{margin-bottom:0cm;}
+ul
+	{margin-bottom:0cm;}
+-->
+</style>
+
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  /* Reading layout for the web copy of the report (the Word file is the master). */
+  html { background: #eef1f4; }
+  body { max-width: 960px; margin: 24px auto; padding: 32px 40px; background: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.12); line-height: 1.5; }
+  table { max-width: 100%; border-collapse: collapse; }
+  @media (max-width: 700px) { body { margin: 0; padding: 16px; border-radius: 0; } }
+  @media print { html { background: #fff; } body { box-shadow: none; margin: 0; padding: 0; } }
+</style>
+</head>
+
+<body lang=EN-GB link="#0563C1" vlink="#954F72" style='word-wrap:break-word'>
+
+<div class=WordSection1>
+
+<p class=MsoNormal style='margin-bottom:3.0pt'><b><span style='font-size:10.0pt;
+color:#0E7A68;letter-spacing:2.0pt'>PRIMOVEX</span></b></p>
+
+<p class=MsoNormal style='margin-bottom:4.0pt'><b><span style='font-size:22.0pt;
+color:#12324F'>Security Review and Penetration Test Report</span></b></p>
+
+<div style='border:none;border-bottom:solid #0E7A68 1.0pt;padding:0cm 0cm 8.0pt 0cm'>
+
+<p class=MsoNormal style='margin-bottom:12.0pt;border:none;padding:0cm'><span
+style='font-size:12.0pt;color:#5B6772'>Supporting document for the Data
+Protection Impact Assessment (DPIA)</span></p>
+
+</div>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <tr style='page-break-inside:avoid'>
+  <td width=167 valign=top style='width:125.0pt;border:solid #C9D1D8 1.0pt;
+  background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:9.5pt;line-height:105%'>Document status</span></b></p>
+  </td>
+  <td width=476 valign=top style='width:356.9pt;border:solid #C9D1D8 1.0pt;
+  border-left:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.5pt;line-height:105%'>Draft for review by the practice's
+  DPO / Caldicott Guardian and IG team</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=167 valign=top style='width:125.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:9.5pt;line-height:105%'>Application</span></b></p>
+  </td>
+  <td width=476 valign=top style='width:356.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.5pt;line-height:105%'>Primovex v0.15.41 (Windows desktop
+  app and Android app), Firebase project medtrak-b1cad</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=167 valign=top style='width:125.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:9.5pt;line-height:105%'>Review dates</span></b></p>
+  </td>
+  <td width=476 valign=top style='width:356.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.5pt;line-height:105%'>Access-control audit 16-17 September
+  2026. Main security review and active test 18 September 2026. Attack suite
+  re-run against the current rules, and dependencies re-checked, on 21
+  September 2026.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=167 valign=top style='width:125.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:9.5pt;line-height:105%'>Code reference</span></b></p>
+  </td>
+  <td width=476 valign=top style='width:356.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.5pt;line-height:105%'>Repository commit 9a7a95cc (main),
+  21 September 2026. Fix commits are listed against each finding.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=167 valign=top style='width:125.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:9.5pt;line-height:105%'>Prepared by</span></b></p>
+  </td>
+  <td width=476 valign=top style='width:356.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.5pt;line-height:105%'>Claude (an AI assistant made by
+  Anthropic), working with the Primovex developer inside the Primovex codebase.
+  See section 1 for what that means for how far this report can be relied on.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=167 valign=top style='width:125.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:9.5pt;line-height:105%'>Companion documents</span></b></p>
+  </td>
+  <td width=476 valign=top style='width:356.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.5pt;line-height:105%'>Primovex DPIA Draft, Primovex DPIA
+  Technical Input, Primovex Data-Sharing Map, and the Access Control Audit.</span></p>
+  </td>
+ </tr>
+</table>
+
+<p class=MsoNormal style='margin-bottom:5.0pt'>&nbsp;</p>
+
+<h1 style='page-break-after:avoid'>1. Read this first: what this review is, and
+is not</h1>
+
+<p class=MsoNormal style='margin-bottom:6.0pt;line-height:120%'>This is an <b>internal,
+AI-assisted security review and penetration test</b>. It was carried out by an
+AI assistant working directly with the developer, using the source code and a
+local test copy of the database rules. It found real problems, most of which
+were fixed the same day, and it is useful evidence of the security work done.
+It is <b>not</b> an independent or accredited penetration test (for example
+CREST or CHECK), and it should not be presented as one.</p>
+
+<p class=MsoNormal style='margin-bottom:6.0pt;line-height:120%;page-break-after:
+avoid'>What that means in practice:</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>The
+active attack testing ran against a <b>local Firestore emulator loaded with the
+real access-rules file</b> (<span style='font-size:9.5pt;line-height:115%;
+font-family:Consolas'>firestore.rules</span>), using simulated user identities.
+No production data was touched, and no test traffic was sent to the live
+system.</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>It
+tests the <b>database access rules</b>, which are the main barrier between one
+user and another user's data. It does not test Google's infrastructure,
+Firebase Authentication itself, the network, or the devices the app runs on.</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>The
+Cloud Functions were reviewed by reading the source and the fixes were
+deployed. They were not attacked live.</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Not
+covered: network and infrastructure scanning, denial of service, social
+engineering, physical access, Windows or Android operating-system hardening,
+and any assessment of Google Cloud or the third-party services Primovex
+connects to.</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Severity
+ratings in this report are the reviewer's judgement, not a formal scoring
+scheme.</p>
+
+<p class=MsoNormal style='margin-bottom:6.0pt;line-height:120%'>If the
+practice's IG team or the health board requires independent assurance, the
+recommendation in section 8 is to commission an accredited test, scoped in
+proportion to the risk, alongside or after DPIA sign-off. This report should
+make that test quicker and cheaper by showing what has already been checked.</p>
+
+<h1 style='page-break-after:avoid'>2. Summary of results</h1>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <thead>
+  <tr style='page-break-inside:avoid'>
+   <td width=207 valign=top style='width:155.0pt;border:solid #C9D1D8 1.0pt;
+   background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Area</span></b></p>
+   </td>
+   <td width=436 valign=top style='width:326.9pt;border:solid #C9D1D8 1.0pt;
+   border-left:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Result</span></b></p>
+   </td>
+  </tr>
+ </thead>
+ <tr style='page-break-inside:avoid'>
+  <td width=207 valign=top style='width:155.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Access-control audit (16-17 Sep)</span></p>
+  </td>
+  <td width=436 valign=top style='width:326.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>14 gaps found between what each role
+  should be able to reach and what the app enforced: 5 critical, 7 high, 2
+  architecture debt. Route guards, database rules and mobile access were
+  brought into line (section 4). A small number of low-sensitivity items remain
+  (section 8).</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=207 valign=top style='width:155.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Security review (18 Sep)</span></p>
+  </td>
+  <td width=436 valign=top style='width:326.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>13 findings recorded: 6 rated High,
+  4 Medium, 2 Low and 1 informational. 11 are fully fixed and deployed or
+  shipped. One (dependencies) is fixed apart from a single advisory that needs
+  a larger upgrade. One informational item is accepted by design and should be
+  confirmed by the practice (section 5).</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=207 valign=top style='width:155.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Active attack testing</span></p>
+  </td>
+  <td width=436 valign=top style='width:326.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>25 attack scenarios on 18 Sep, all
+  passing after fixes. The suite has since grown as new features were added: <b>63
+  of 63 checks pass</b> against the current rules (re-run 21 Sep 2026).</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=207 valign=top style='width:155.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Dependency vulnerabilities</span></p>
+  </td>
+  <td width=436 valign=top style='width:326.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>10 known vulnerabilities fixed on 18
+  Sep (1 high, 9 moderate). Re-checked 21 Sep: the Cloud Functions have none;
+  the app has 2 moderate advisories, both the same </span><span
+  style='font-size:8.0pt;line-height:105%;font-family:Consolas'>react-router</span><span
+  style='font-size:9.0pt;line-height:105%'> issue, deferred to a tested upgrade
+  (section 8).</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=207 valign=top style='width:155.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Defence-in-depth added</span></p>
+  </td>
+  <td width=436 valign=top style='width:326.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Content-Security-Policy on the
+  desktop app, salted and slowed PIN storage, closed self-registration, QR
+  codes generated on the device (no third-party request), delete protection and
+  point-in-time recovery on the database.</span></p>
+  </td>
+ </tr>
+</table>
+
+<p class=MsoNormal style='margin-bottom:5.0pt'>&nbsp;</p>
+
+<h1 style='page-break-after:avoid'>3. Scope and method</h1>
+
+<h2 style='page-break-after:avoid'>3.1 Static review</h2>
+
+<p class=MsoNormal style='margin-bottom:6.0pt;line-height:120%;page-break-after:
+avoid'>The source code was read for weaknesses in these areas:</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Firestore
+security rules (who can read and write each collection).</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Cloud
+Functions (the server-side code that runs with administrator power and bypasses
+the rules).</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Client-side
+code: cross-site scripting (XSS) in printing and rendering, and secrets held in
+the app.</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Session
+and idle-lock handling, including how the lock PIN is stored.</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Desktop
+app hardening (Tauri configuration, Content-Security-Policy).</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Third-party
+dependencies (<span style='font-size:9.5pt;line-height:115%;font-family:Consolas'>npm
+audit</span> on the app and on the Cloud Functions).</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Role
+and capability enforcement across every page, tab and route (the access-control
+audit).</p>
+
+<h2 style='page-break-after:avoid'>3.2 Active penetration test of the access
+rules</h2>
+
+<p class=MsoNormal style='margin-bottom:6.0pt;line-height:120%'>A local
+Firebase emulator was started with the real <span style='font-size:9.5pt;
+line-height:120%;font-family:Consolas'>firestore.rules</span> file. Test
+identities were created for each kind of user: System Admin, Practice Manager,
+an ordinary User, ReadOnly, Partner, Reception, a custom role with SAR access,
+a custom IT role, an unauthenticated visitor, and a stranger with a fresh
+account. Each test then tried something the rules should refuse (or, equally
+important, something they should still allow). A check passes only when the
+rules behave as intended.</p>
+
+<p class=MsoNormal style='margin-bottom:6.0pt;line-height:120%'>The suite
+tries, among other things: giving yourself extra permissions, changing your own
+role, reading or editing records you have no relationship to, claiming someone
+else's invitation, creating a profile without being an administrator, reading
+data while signed out, crossing between sites, and using a custom role that
+holds an administrator-looking capability. The full list of 63 checks is in
+Appendix A.</p>
+
+<p class=MsoNormal style='margin-bottom:6.0pt;line-height:120%'>All identities
+and records were synthetic. Nothing in the tests contains real patient, staff
+or complainant data.</p>
+
+<h1 style='page-break-after:avoid'>4. Access-control audit and its remediation</h1>
+
+<p class=MsoNormal style='margin-bottom:6.0pt;line-height:120%'>On 16 September
+2026 every page, tab and route was compared with the role-and-capability model.
+The model itself was sound. The gap was that the router and many pages did not
+enforce it. The sidebar hid links, but a signed-in user could still open the address
+directly. The full audit is a separate document (Access Control Audit); this
+table records what was found and what was done.</p>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <thead>
+  <tr style='page-break-inside:avoid'>
+   <td width=200 valign=top style='width:150.0pt;border:solid #C9D1D8 1.0pt;
+   background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>What the audit found</span></b></p>
+   </td>
+   <td width=220 valign=top style='width:165.0pt;border:solid #C9D1D8 1.0pt;
+   border-left:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>What was done</span></b></p>
+   </td>
+   <td width=223 valign=top style='width:166.9pt;border:solid #C9D1D8 1.0pt;
+   border-left:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Position now</span></b></p>
+   </td>
+  </tr>
+ </thead>
+ <tr style='page-break-inside:avoid'>
+  <td width=200 valign=top style='width:150.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:9.0pt;line-height:105%'>Critical (5).</span></b><span
+  style='font-size:9.0pt;line-height:105%'> Sites and Locations editor writable
+  by any signed-in user; SAR records with no capability check; Roles and
+  Permissions tab open to all; Danger Zone (bulk delete) reachable by all; </span><span
+  style='font-size:8.0pt;line-height:105%;font-family:Consolas'>mobile.access</span><span
+  style='font-size:9.0pt;line-height:105%'> never enforced.</span></p>
+  </td>
+  <td width=220 valign=top style='width:165.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Admin section wrapped in an </span><span
+  style='font-size:8.0pt;line-height:105%;font-family:Consolas'>admin.access</span><span
+  style='font-size:9.0pt;line-height:105%'> route guard. SAR and Concerns
+  access moved into the database rules by capability. </span><span
+  style='font-size:8.0pt;line-height:105%;font-family:Consolas'>mobile.access</span><span
+  style='font-size:9.0pt;line-height:105%'> now checked at app entry.</span></p>
+  </td>
+  <td width=223 valign=top style='width:166.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Fixed and deployed. Verified by the
+  attack suite (sections 1 to 4 of Appendix A).</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=200 valign=top style='width:150.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:9.0pt;line-height:105%'>High (7).</span></b><span
+  style='font-size:9.0pt;line-height:105%'> Reports, Security Centre,
+  Purchasing / Suppliers / Reorder Centre, Compliance, Theme Lab, Concerns page
+  and three Admin tabs had no page-level gate.</span></p>
+  </td>
+  <td width=220 valign=top style='width:165.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Route guards added for Concerns,
+  SARs, Temperature, Compliance, Connect, Facilities, Spaces and the whole
+  Admin section (Reports and ClinFlow are also guarded today). <b>Writes</b> to
+  stock, purchasing, suppliers and temperature records now require the matching
+  capability in the database rules, not just a signed-in user.</span></p>
+  </td>
+  <td width=223 valign=top style='width:166.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#FCEFC7;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Mostly fixed. Purchasing, Suppliers,
+  Reorder Centre, Theme Lab and Security Centre can still be opened by any
+  signed-in user; changes to their data are blocked by the rules. See section
+  8.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=200 valign=top style='width:150.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:9.0pt;line-height:105%'>Architecture debt (2).</span></b><span
+  style='font-size:9.0pt;line-height:105%'> Alerts page runs its own sign-in
+  check with a hard-coded role name; a mobile screen guesses admin status from
+  the role label.</span></p>
+  </td>
+  <td width=220 valign=top style='width:165.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Not changed. Both are low risk and
+  cosmetic; neither grants access to data.</span></p>
+  </td>
+  <td width=223 valign=top style='width:166.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#FCEFC7;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Open, low. See section 8.</span></p>
+  </td>
+ </tr>
+</table>
+
+<p class=MsoNormal style='margin-bottom:5.0pt;line-height:120%'><b>Root cause.</b>
+The correct capability for each route was already recorded in a configuration
+file, but it was only used to decide whether to show a sidebar link. The
+remediation wired it into real guards. Database settings were also checked on
+18 September: <b>delete protection is on</b>, and <b>point-in-time recovery is
+on</b> (7-day rolling window).</p>
+
+<p class=MsoNormal style='margin-bottom:5.0pt'>&nbsp;</p>
+
+<h1 style='page-break-after:avoid'>5. Security review findings (18 September
+2026)</h1>
+
+<p class=MsoNormal style='margin-bottom:6.0pt;line-height:120%'>Severity is the
+reviewer's judgement. &quot;Fixed&quot; means the change is in the code,
+verified, and deployed or shipped in the desktop and Android builds. Commit
+references are to the Primovex repository.</p>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <thead>
+  <tr style='page-break-inside:avoid'>
+   <td width=47 valign=top style='width:35.0pt;border:solid #C9D1D8 1.0pt;
+   background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Ref</span></b></p>
+   </td>
+   <td width=233 valign=top style='width:175.0pt;border:solid #C9D1D8 1.0pt;
+   border-left:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Finding</span></b></p>
+   </td>
+   <td width=70 valign=top style='width:52.5pt;border:solid #C9D1D8 1.0pt;
+   border-left:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Severity</span></b></p>
+   </td>
+   <td width=83 valign=top style='width:62.5pt;border:solid #C9D1D8 1.0pt;
+   border-left:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Status</span></b></p>
+   </td>
+   <td width=209 valign=top style='width:156.9pt;border:solid #C9D1D8 1.0pt;
+   border-left:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>What was done</span></b></p>
+   </td>
+  </tr>
+ </thead>
+ <tr style='page-break-inside:avoid'>
+  <td width=47 valign=top style='width:35.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>SR-01</span></b></p>
+  </td>
+  <td width=233 valign=top style='width:175.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Users could grant themselves
+  permissions.</span></b><span style='font-size:8.5pt;line-height:105%'> The
+  rules read a </span><span style='font-size:7.5pt;line-height:105%;font-family:
+  Consolas'>permissions</span><span style='font-size:8.5pt;line-height:105%'>
+  field on the user's own profile, which the user could edit. Changing your own
+  role was blocked, but adding </span><span style='font-size:7.5pt;line-height:
+  105%;font-family:Consolas'>permissions: [&quot;*&quot;]</span><span
+  style='font-size:8.5pt;line-height:105%'> was not.</span></p>
+  </td>
+  <td width=70 valign=top style='width:52.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#F9DEDA;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>High</span></p>
+  </td>
+  <td width=83 valign=top style='width:62.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Fixed 18 Sep (c0537814)</span></p>
+  </td>
+  <td width=209 valign=top style='width:156.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Rules now work out capabilities from
+  the assigned role only. Active test: a self-written permissions field grants
+  nothing.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=47 valign=top style='width:35.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>SR-02</span></b></p>
+  </td>
+  <td width=233 valign=top style='width:175.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Cloud Functions checked the wrong
+  thing.</span></b><span style='font-size:8.5pt;line-height:105%'> Create user,
+  deactivate user, delete user, connect-provider sync and both ClinFlow
+  analysis functions checked for the literal role name &quot;System Admin&quot;
+  (or a field that does not exist), so they were inconsistent with the rules.</span></p>
+  </td>
+  <td width=70 valign=top style='width:52.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#FCEFC7;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Medium</span></p>
+  </td>
+  <td width=83 valign=top style='width:62.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Fixed (af153b47)</span></p>
+  </td>
+  <td width=209 valign=top style='width:156.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>New shared capability module in the
+  Cloud Functions mirrors the database rules.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=47 valign=top style='width:35.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>SR-03</span></b></p>
+  </td>
+  <td width=233 valign=top style='width:175.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Escalation risk created by the SR-02
+  fix.</span></b><span style='font-size:8.5pt;line-height:105%'> Once a
+  Practice Manager could create users, nothing stopped them creating a new
+  System Admin.</span></p>
+  </td>
+  <td width=70 valign=top style='width:52.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#F9DEDA;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>High (prevented before release)</span></p>
+  </td>
+  <td width=83 valign=top style='width:62.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Fixed (af153b47)</span></p>
+  </td>
+  <td width=209 valign=top style='width:156.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Only an existing System Admin can
+  create another System Admin. Caught during the review, before the change went
+  live.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=47 valign=top style='width:35.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>SR-04</span></b></p>
+  </td>
+  <td width=233 valign=top style='width:175.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Sensor-reading function had no
+  permission check.</span></b><span style='font-size:8.5pt;line-height:105%'>
+  Any signed-in user could inject fabricated cold-chain readings (for example a
+  fake in-range vaccine fridge temperature), because the function bypasses the
+  database rules.</span></p>
+  </td>
+  <td width=70 valign=top style='width:52.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#F9DEDA;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>High</span></p>
+  </td>
+  <td width=83 valign=top style='width:62.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Fixed (af153b47)</span></p>
+  </td>
+  <td width=209 valign=top style='width:156.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Function now requires the
+  device-management capability, matching the rules.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=47 valign=top style='width:35.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>SR-05</span></b></p>
+  </td>
+  <td width=233 valign=top style='width:175.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Stored XSS in QR label printing.</span></b><span
+  style='font-size:8.5pt;line-height:105%'> Asset name, location and code were
+  written unescaped into a print window, so a user who could edit assets could
+  plant script that ran when a colleague printed the label.</span></p>
+  </td>
+  <td width=70 valign=top style='width:52.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#FCEFC7;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Medium</span></p>
+  </td>
+  <td width=83 valign=top style='width:62.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Fixed (af153b47)</span></p>
+  </td>
+  <td width=209 valign=top style='width:156.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Output is escaped, matching the
+  other print builders. The later Concerns print summary was also tested with
+  hostile input (section 7).</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=47 valign=top style='width:35.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>SR-06</span></b></p>
+  </td>
+  <td width=233 valign=top style='width:175.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Invitation hijack.</span></b><span
+  style='font-size:8.5pt;line-height:105%'> A signed-in user could claim
+  someone else's pending invitation, because the claim did not check the email
+  address matched.</span></p>
+  </td>
+  <td width=70 valign=top style='width:52.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#F9DEDA;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>High</span></p>
+  </td>
+  <td width=83 valign=top style='width:62.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Fixed (af153b47), then removed
+  (SR-11)</span></p>
+  </td>
+  <td width=209 valign=top style='width:156.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Confirmed exploitable, fixed,
+  re-tested, and the whole flow later deleted.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=47 valign=top style='width:35.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>SR-07</span></b></p>
+  </td>
+  <td width=233 valign=top style='width:175.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Known vulnerabilities in
+  dependencies.</span></b><span style='font-size:8.5pt;line-height:105%'> 10
+  advisories: 1 high (</span><span style='font-size:7.5pt;line-height:105%;
+  font-family:Consolas'>nanoid</span><span style='font-size:8.5pt;line-height:
+  105%'>) and 9 moderate (</span><span style='font-size:7.5pt;line-height:105%;
+  font-family:Consolas'>dompurify</span><span style='font-size:8.5pt;
+  line-height:105%'>, </span><span style='font-size:7.5pt;line-height:105%;
+  font-family:Consolas'>react-router</span><span style='font-size:8.5pt;
+  line-height:105%'>, the </span><span style='font-size:7.5pt;line-height:105%;
+  font-family:Consolas'>firebase-admin</span><span style='font-size:8.5pt;
+  line-height:105%'> chain, </span><span style='font-size:7.5pt;line-height:
+  105%;font-family:Consolas'>uuid</span><span style='font-size:8.5pt;
+  line-height:105%'>).</span></p>
+  </td>
+  <td width=70 valign=top style='width:52.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#F9DEDA;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>High</span></p>
+  </td>
+  <td width=83 valign=top style='width:62.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#FCEFC7;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Fixed except one item</span></p>
+  </td>
+  <td width=209 valign=top style='width:156.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Resolved with </span><span
+  style='font-size:7.5pt;line-height:105%;font-family:Consolas'>npm audit fix</span><span
+  style='font-size:8.5pt;line-height:105%'> in the app and the Cloud Functions;
+  build verified. One </span><span style='font-size:7.5pt;line-height:105%;
+  font-family:Consolas'>react-router</span><span style='font-size:8.5pt;
+  line-height:105%'> advisory needs a major version upgrade and is deferred
+  (section 8).</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=47 valign=top style='width:35.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>SR-08</span></b></p>
+  </td>
+  <td width=233 valign=top style='width:175.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>No Content-Security-Policy on the
+  desktop app.</span></b><span style='font-size:8.5pt;line-height:105%'> The
+  configuration had CSP switched off, which removes the browser's main defence
+  if a script ever got injected.</span></p>
+  </td>
+  <td width=70 valign=top style='width:52.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#FCEFC7;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Medium</span></p>
+  </td>
+  <td width=83 valign=top style='width:62.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Fixed (31b87caa, 955fc818, 44fab1df)</span></p>
+  </td>
+  <td width=209 valign=top style='width:156.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Policy enabled and tested in the
+  built app. See section 6 for the policy.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=47 valign=top style='width:35.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>SR-09</span></b></p>
+  </td>
+  <td width=233 valign=top style='width:175.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Idle-lock PIN stored as an unsalted
+  SHA-256 hash.</span></b><span style='font-size:8.5pt;line-height:105%'> A
+  short PIN hashed this way can be recovered in well under a second by anyone
+  who can read it from local storage.</span></p>
+  </td>
+  <td width=70 valign=top style='width:52.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DDEBF8;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Low</span></p>
+  </td>
+  <td width=83 valign=top style='width:62.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Fixed (5ce578a1)</span></p>
+  </td>
+  <td width=209 valign=top style='width:156.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Now PBKDF2-SHA-256 with 200,000
+  iterations and a random 16-byte salt. Older PINs are upgraded silently the
+  next time they are entered correctly.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=47 valign=top style='width:35.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>SR-10</span></b></p>
+  </td>
+  <td width=233 valign=top style='width:175.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>QR codes made by a third-party
+  website.</span></b><span style='font-size:8.5pt;line-height:105%'> Printing a
+  label sent asset identifiers, the practice's IP address and timing to
+  api.qrserver.com, a service that had not been assessed.</span></p>
+  </td>
+  <td width=70 valign=top style='width:52.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DDEBF8;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Low</span></p>
+  </td>
+  <td width=83 valign=top style='width:62.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Fixed (f42e34cd)</span></p>
+  </td>
+  <td width=209 valign=top style='width:156.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>QR codes are now generated inside
+  the app. No request is made. The data-sharing map was updated to record the
+  change.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=47 valign=top style='width:35.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>SR-11</span></b></p>
+  </td>
+  <td width=233 valign=top style='width:175.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Dead self-registration and
+  invitation code.</span></b><span style='font-size:8.5pt;line-height:105%'>
+  The /register page and invitations collection were no longer used but
+  remained reachable.</span></p>
+  </td>
+  <td width=70 valign=top style='width:52.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#FCEFC7;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Medium</span></p>
+  </td>
+  <td width=83 valign=top style='width:62.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Fixed (e625f81d)</span></p>
+  </td>
+  <td width=209 valign=top style='width:156.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Page, route and code deleted. The
+  invitations collection is now administrator-only.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=47 valign=top style='width:35.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>SR-12</span></b></p>
+  </td>
+  <td width=233 valign=top style='width:175.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Anyone with a login could create
+  their own user profile.</span></b><span style='font-size:8.5pt;line-height:
+  105%'> A rule left over from self-registration let any account holder write
+  themselves a working &quot;User&quot; profile. Found while removing SR-11.</span></p>
+  </td>
+  <td width=70 valign=top style='width:52.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#F9DEDA;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>High</span></p>
+  </td>
+  <td width=83 valign=top style='width:62.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Fixed (e625f81d)</span></p>
+  </td>
+  <td width=209 valign=top style='width:156.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Rule removed. Profiles are now
+  created only by the administrator Cloud Function. Tested: a stranger with a
+  new account cannot create a profile.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=47 valign=top style='width:35.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>SR-13</span></b></p>
+  </td>
+  <td width=233 valign=top style='width:175.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Role-editing is administrator-only</span></b><span
+  style='font-size:8.5pt;line-height:105%'> although the Practice Manager role
+  lists a role-management capability, so that capability does nothing today.</span></p>
+  </td>
+  <td width=70 valign=top style='width:52.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#ECEFF1;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Info</span></p>
+  </td>
+  <td width=83 valign=top style='width:62.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#FCEFC7;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Accepted by design; confirm</span></p>
+  </td>
+  <td width=209 valign=top style='width:156.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>This stops a Practice Manager
+  raising their own privileges by editing roles. The practice should confirm
+  this is the intended policy.</span></p>
+  </td>
+ </tr>
+</table>
+
+<p class=MsoNormal style='margin-bottom:5.0pt'>&nbsp;</p>
+
+<h1 style='page-break-after:avoid'>6. Security controls in place at the date of
+this report</h1>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <thead>
+  <tr style='page-break-inside:avoid'>
+   <td width=153 valign=top style='width:115.0pt;border:solid #C9D1D8 1.0pt;
+   background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Control</span></b></p>
+   </td>
+   <td width=489 valign=top style='width:366.9pt;border:solid #C9D1D8 1.0pt;
+   border-left:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>How it is done</span></b></p>
+   </td>
+  </tr>
+ </thead>
+ <tr style='page-break-inside:avoid'>
+  <td width=153 valign=top style='width:115.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Who can sign in</span></p>
+  </td>
+  <td width=489 valign=top style='width:366.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Firebase Authentication. Accounts
+  are created only by an administrator through a server-side Cloud Function.
+  Self-registration is closed in the database rules (tested). If an
+  administrator needs to help someone back in, the app generates a one-time
+  password link through an administrator-only, audited Cloud Function.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=153 valign=top style='width:115.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Who can do what</span></p>
+  </td>
+  <td width=489 valign=top style='width:366.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Role-based, with each role holding a
+  list of capabilities. The same role-to-capability mapping is enforced in
+  three places that mirror each other: the app, the database rules, and the
+  Cloud Functions. Custom roles are supported and tested.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=153 valign=top style='width:115.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Sensitive records</span></p>
+  </td>
+  <td width=489 valign=top style='width:366.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>SARs and Concerns are visible only
+  to the relevant team, to people named on a case, and (read-only) to oversight
+  partners. Activity and timeline entries can be added but never edited or
+  deleted, and deleting a SAR is limited to the SAR team and recorded. These
+  rules are covered by the attack suite.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=153 valign=top style='width:115.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Where data is held</span></p>
+  </td>
+  <td width=489 valign=top style='width:366.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Firestore database in the EU
+  multi-region (eur3). Cloud Functions in europe-west2 (London).</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=153 valign=top style='width:115.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Recovery</span></p>
+  </td>
+  <td width=489 valign=top style='width:366.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Database delete protection on.
+  Point-in-time recovery on (7-day window).</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=153 valign=top style='width:115.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Sessions</span></p>
+  </td>
+  <td width=489 valign=top style='width:366.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Automatic lock after 15 minutes of
+  inactivity on both desktop and mobile, unlocked by a PIN. Absolute session
+  limit of 12 hours, after which the person is signed out. The PIN is a
+  convenience lock against someone walking up to an unattended device; it is
+  not encryption of data held on the device.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=153 valign=top style='width:115.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Desktop app hardening</span></p>
+  </td>
+  <td width=489 valign=top style='width:366.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Content-Security-Policy enabled: </span><span
+  style='font-size:8.0pt;line-height:105%;font-family:Consolas'>default-src
+  'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self'
+  data: blob:; font-src 'self' data:; connect-src 'self'
+  https://*.googleapis.com
+  https://europe-west2-medtrak-b1cad.cloudfunctions.net; object-src 'none';
+  base-uri 'self'; form-action 'self'</span><span style='font-size:9.0pt;
+  line-height:105%'>. Scripts may load only from the app itself. Inline styles
+  are still allowed, which is a known, lower-risk exception.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=153 valign=top style='width:115.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Output safety</span></p>
+  </td>
+  <td width=489 valign=top style='width:366.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Printed documents (QR labels,
+  Concerns case summary) escape all values before writing them into the page.</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=153 valign=top style='width:115.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Third parties</span></p>
+  </td>
+  <td width=489 valign=top style='width:366.9pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>QR codes are generated on the
+  device. No patient or staff data is sent to any third party by this feature.</span></p>
+  </td>
+ </tr>
+</table>
+
+<p class=MsoNormal style='margin-bottom:5.0pt'>&nbsp;</p>
+
+<h1 style='page-break-after:avoid'>7. Active test results and later checks</h1>
+
+<p class=MsoNormal style='margin-bottom:6.0pt;line-height:120%'>The attack
+suite was re-run on 21 September 2026 against the current <span
+style='font-size:9.5pt;line-height:120%;font-family:Consolas'>firestore.rules</span>
+(last changed in commit d02b78a1): <b>63 of 63 checks pass, none fail.</b> The
+suite began with 25 scenarios on 18 September. It grew to 26 after the
+invitation fix, and to 63 as SAR editing and deletion, SAR year folders and
+Concerns face-to-face meetings were added. Each new feature's permissions were
+added to the suite.</p>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <thead>
+  <tr style='page-break-inside:avoid'>
+   <td width=460 valign=top style='width:345.0pt;border:solid #C9D1D8 1.0pt;
+   background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Test group</span></b></p>
+   </td>
+   <td width=91 valign=top style='width:68.5pt;border:solid #C9D1D8 1.0pt;
+   border-left:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Checks</span></b></p>
+   </td>
+   <td width=91 valign=top style='width:68.4pt;border:solid #C9D1D8 1.0pt;
+   border-left:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Result</span></b></p>
+   </td>
+  </tr>
+ </thead>
+ <tr style='page-break-inside:avoid'>
+  <td width=460 valign=top style='width:345.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>custom-role SAR access (Craig)</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>4</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.4pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>All pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=460 valign=top style='width:345.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>SAR edit / delete permissions</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>11</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.4pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>All pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=460 valign=top style='width:345.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>SAR year folders</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>14</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.4pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>All pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=460 valign=top style='width:345.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Self privilege-escalation via
+  users/{uid}.permissions</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>4</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.4pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>All pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=460 valign=top style='width:345.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>IDOR on governance_concerns</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>5</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.4pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>All pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=460 valign=top style='width:345.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Concern face-to-face meetings</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>12</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.4pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>All pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=460 valign=top style='width:345.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Custom role 'admin.access' does NOT
+  grant roles/{} writes</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>1</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.4pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>All pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=460 valign=top style='width:345.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Unauthenticated access</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>3</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.4pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>All pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=460 valign=top style='width:345.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>ClinFlow tenant isolation ('primary'
+  wildcard)</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>2</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.4pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>All pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=460 valign=top style='width:345.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Admin-only user management</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>3</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.4pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>All pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=460 valign=top style='width:345.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>Invites (legacy self-registration)</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>4</span></p>
+  </td>
+  <td width=91 valign=top style='width:68.4pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:9.0pt;line-height:105%'>All pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=460 valign=top style='width:345.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:9.0pt;line-height:105%'>Total</span></b></p>
+  </td>
+  <td width=91 valign=top style='width:68.5pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:9.0pt;line-height:105%'>63</span></b></p>
+  </td>
+  <td width=91 valign=top style='width:68.4pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:9.0pt;line-height:105%'>63 pass</span></b></p>
+  </td>
+ </tr>
+</table>
+
+<p class=MsoNormal style='margin-bottom:5.0pt'>&nbsp;</p>
+
+<h2 style='page-break-after:avoid'>Other checks made between 18 and 21
+September</h2>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><b>Hostile
+input in printing.</b> The Concerns case-summary print was tested with values
+containing script and image-error tags. Nothing executed and nothing was
+created; the values printed as plain text.</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><b>Save-retry
+changes do not hide real refusals.</b> A change to stop duplicate records when
+a connection drops was tested against the real rules on records that cannot be
+edited after creation. A genuine &quot;permission denied&quot; (for example a
+user trying to write as someone else, or a Reception user creating a supplier)
+still fails as it should. Only a write that really did succeed is treated as
+saved.</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><b>Team-only
+queries.</b> The queries behind the new desktop corner alert (overdue SARs and
+concerns) were run against the rules for a SAR-team member, a Concerns-team
+member, an administrator, and people in neither team. Each team can read only
+its own records; people in neither team are refused. The alert itself shows
+counts only, with no reference numbers or case details, and the popup window
+holds no Firebase connection or app data.</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span><b>Local
+commands.</b> The command that receives the person's choice from the corner
+alert accepts only a fixed list of six actions (open, three snooze options,
+dismiss, timed out); anything else is rejected.</p>
+
+<h1 style='page-break-after:avoid'>8. Residual risks and recommendations</h1>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <thead>
+  <tr style='page-break-inside:avoid'>
+   <td width=43 valign=top style='width:32.5pt;border:solid #C9D1D8 1.0pt;
+   background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Ref</span></b></p>
+   </td>
+   <td width=273 valign=top style='width:205.0pt;border:solid #C9D1D8 1.0pt;
+   border-left:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Residual risk</span></b></p>
+   </td>
+   <td width=246 valign=top style='width:184.4pt;border:solid #C9D1D8 1.0pt;
+   border-left:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Recommendation</span></b></p>
+   </td>
+   <td width=80 valign=top style='width:60.0pt;border:solid #C9D1D8 1.0pt;
+   border-left:none;background:#E6ECF2;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+   <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+   style='font-size:9.0pt;line-height:105%;color:#12324F'>Rating</span></b></p>
+   </td>
+  </tr>
+ </thead>
+ <tr style='page-break-inside:avoid'>
+  <td width=43 valign=top style='width:32.5pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>R1</span></b></p>
+  </td>
+  <td width=273 valign=top style='width:205.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Not an independent test.</span></b><span
+  style='font-size:8.5pt;line-height:105%'> This review was internal and
+  AI-assisted.</span></p>
+  </td>
+  <td width=246 valign=top style='width:184.4pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Commission an accredited penetration
+  test, proportionate to the risk, if the IG team or health board requires it.
+  Give the tester this report and the attack suite.</span></p>
+  </td>
+  <td width=80 valign=top style='width:60.0pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#FCEFC7;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Medium</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=43 valign=top style='width:32.5pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>R2</span></b></p>
+  </td>
+  <td width=273 valign=top style='width:205.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>React Router advisories (2
+  moderate).</span></b><span style='font-size:8.5pt;line-height:105%'> The fix
+  needs a major version upgrade (v6 to v7). The advisory concerns server-side
+  page rendering, which this client-only app does not use, so practical
+  exposure is believed to be low.</span></p>
+  </td>
+  <td width=246 valign=top style='width:184.4pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Do the upgrade as its own tested
+  change, then re-run </span><span style='font-size:7.5pt;line-height:105%;
+  font-family:Consolas'>npm audit</span><span style='font-size:8.5pt;
+  line-height:105%'>.</span></p>
+  </td>
+  <td width=80 valign=top style='width:60.0pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DDEBF8;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Low</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=43 valign=top style='width:32.5pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>R3</span></b></p>
+  </td>
+  <td width=273 valign=top style='width:205.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Firebase sign-up setting not
+  verified.</span></b><span style='font-size:8.5pt;line-height:105%'> The
+  database rules stop a stranger with a new account from doing anything, but
+  the console setting that stops such accounts being created at all was not
+  checked by this review.</span></p>
+  </td>
+  <td width=246 valign=top style='width:184.4pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>In the Firebase console,
+  Authentication, Settings, turn off &quot;Enable create (sign-up)&quot; if it
+  is shown, and record that it was done.</span></p>
+  </td>
+  <td width=80 valign=top style='width:60.0pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DDEBF8;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Low</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=43 valign=top style='width:32.5pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>R4</span></b></p>
+  </td>
+  <td width=273 valign=top style='width:205.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Reads of operational data are open
+  to any signed-in user.</span></b><span style='font-size:8.5pt;line-height:
+  105%'> Stock, purchasing, supplier and temperature records can be read by
+  anyone signed in (writes need the right capability). By design, and none
+  holds patient-identifying data.</span></p>
+  </td>
+  <td width=246 valign=top style='width:184.4pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>IG team to confirm this is
+  acceptable. Tighten if any of those collections ever starts to hold personal
+  data.</span></p>
+  </td>
+  <td width=80 valign=top style='width:60.0pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DDEBF8;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Low</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=43 valign=top style='width:32.5pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>R5</span></b></p>
+  </td>
+  <td width=273 valign=top style='width:205.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>A few low-sensitivity pages have no
+  page-level guard</span></b><span style='font-size:8.5pt;line-height:105%'>
+  (Purchasing, Suppliers, Reorder Centre, Theme Lab, Security Centre). Changes
+  to their data are blocked by the rules.</span></p>
+  </td>
+  <td width=246 valign=top style='width:184.4pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Add guards for consistency when
+  convenient.</span></p>
+  </td>
+  <td width=80 valign=top style='width:60.0pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DDEBF8;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Low</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=43 valign=top style='width:32.5pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>R6</span></b></p>
+  </td>
+  <td width=273 valign=top style='width:205.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Cloud Functions were not attacked
+  live.</span></b><span style='font-size:8.5pt;line-height:105%'> They were
+  reviewed and fixed, but not exercised with hostile input.</span></p>
+  </td>
+  <td width=246 valign=top style='width:184.4pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Add function-level tests using the
+  emulator; include them in any independent test.</span></p>
+  </td>
+  <td width=80 valign=top style='width:60.0pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#FCEFC7;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Medium</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=43 valign=top style='width:32.5pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>R7</span></b></p>
+  </td>
+  <td width=273 valign=top style='width:205.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Android enforcement of the
+  Content-Security-Policy</span></b><span style='font-size:8.5pt;line-height:
+  105%'> was verified in a desktop browser and the desktop installer, not
+  independently on a phone.</span></p>
+  </td>
+  <td width=246 valign=top style='width:184.4pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Record the testers' confirmation
+  that sign-in, inventory, QR viewing and scanning, and Sense/NFC work on
+  Android.</span></p>
+  </td>
+  <td width=80 valign=top style='width:60.0pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DDEBF8;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Low</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=43 valign=top style='width:32.5pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>R8</span></b></p>
+  </td>
+  <td width=273 valign=top style='width:205.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Inline styles still allowed</span></b><span
+  style='font-size:8.5pt;line-height:105%'> by the Content-Security-Policy.
+  Scripts are strictly limited.</span></p>
+  </td>
+  <td width=246 valign=top style='width:184.4pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Remove the exception if the styling
+  approach can be changed without breaking the app.</span></p>
+  </td>
+  <td width=80 valign=top style='width:60.0pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DDEBF8;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Low</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=43 valign=top style='width:32.5pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>R9</span></b></p>
+  </td>
+  <td width=273 valign=top style='width:205.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Data on the device.</span></b><span
+  style='font-size:8.5pt;line-height:105%'> The PIN lock is not encryption.
+  Protection of data held on a PC or phone depends on the device: Windows
+  sign-in, disk encryption (BitLocker) and phone screen lock.</span></p>
+  </td>
+  <td width=246 valign=top style='width:184.4pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Practice policy: enable disk
+  encryption and screen lock on every device that runs Primovex.</span></p>
+  </td>
+  <td width=80 valign=top style='width:60.0pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#FCEFC7;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Medium</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=43 valign=top style='width:32.5pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>R10</span></b></p>
+  </td>
+  <td width=273 valign=top style='width:205.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Two minor items from the
+  access-control audit</span></b><span style='font-size:8.5pt;line-height:105%'>
+  (hard-coded role name on the Alerts page; role-label guess on a mobile
+  screen) were not changed.</span></p>
+  </td>
+  <td width=246 valign=top style='width:184.4pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Tidy up; neither grants access to
+  data.</span></p>
+  </td>
+  <td width=80 valign=top style='width:60.0pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DDEBF8;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Low</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=43 valign=top style='width:32.5pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>R11</span></b></p>
+  </td>
+  <td width=273 valign=top style='width:205.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Role-editing capability is
+  decorative (SR-13).</span></b></p>
+  </td>
+  <td width=246 valign=top style='width:184.4pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Confirm the intended policy, or
+  grant Practice Manager role editing deliberately.</span></p>
+  </td>
+  <td width=80 valign=top style='width:60.0pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#ECEFF1;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Info</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=43 valign=top style='width:32.5pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>R12</span></b></p>
+  </td>
+  <td width=273 valign=top style='width:205.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>The suite only helps if it is
+  re-run.</span></b><span style='font-size:8.5pt;line-height:105%'> It is now
+  stored in the code repository (docs/security/attack-suite), but nothing
+  forces it to run after a rules change.</span></p>
+  </td>
+  <td width=246 valign=top style='width:184.4pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Re-run it after every change to the
+  database rules, and consider running it automatically before each release.</span></p>
+  </td>
+  <td width=80 valign=top style='width:60.0pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#FCEFC7;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Medium</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=43 valign=top style='width:32.5pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>R13</span></b></p>
+  </td>
+  <td width=273 valign=top style='width:205.0pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><b><span
+  style='font-size:8.5pt;line-height:105%'>Point-in-time review.</span></b><span
+  style='font-size:8.5pt;line-height:105%'> This describes the position at 21
+  September 2026.</span></p>
+  </td>
+  <td width=246 valign=top style='width:184.4pt;border-top:none;border-left:
+  none;border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Repeat after material changes, and
+  at least annually.</span></p>
+  </td>
+  <td width=80 valign=top style='width:60.0pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DDEBF8;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Low</span></p>
+  </td>
+ </tr>
+</table>
+
+<p class=MsoNormal style='margin-bottom:5.0pt'>&nbsp;</p>
+
+<p class=MsoNormal style='margin-bottom:6.0pt;line-height:120%'><b>Sign-off.</b>
+This document is technical evidence to support the DPIA. It does not replace a
+DPIA, and it is not a sign-off. Formal sign-off rests with the practice's DPO
+and Caldicott Guardian, and, if applicable, the health board's IG team.</p>
+
+<span style='font-size:10.5pt;font-family:"Calibri",sans-serif'><br clear=all
+style='page-break-before:always'>
+</span>
+
+<p class=MsoNormal>&nbsp;</p>
+
+<h1 style='page-break-after:avoid'>Appendix A. The 63 attack-suite checks</h1>
+
+<p class=MsoNormal style='margin-bottom:6.0pt;line-height:120%'>Each line is
+one check. A check passes when the rules behave as intended: a refusal where
+access should be refused, and success where a legitimate user must still be
+able to work. Results are from the run on 21 September 2026.</p>
+
+<h2 style='page-break-after:avoid'>custom-role SAR access (Craig)</h2>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Craig (Medical Secretary, has
+  governance.manageSars) CAN create a SAR</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border:solid #C9D1D8 1.0pt;
+  border-left:none;background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>ReadOnly (no governance.manageSars)
+  CANNOT create a SAR</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>User with no relationship to sar-1
+  CANNOT read it</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Craig (assignedToUid on sar-1) CAN
+  read sar-1</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+</table>
+
+<h2 style='page-break-after:avoid'>SAR edit / delete permissions</h2>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>SAR team member (Craig) CAN edit a
+  SAR incl. the new requester-name field</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border:solid #C9D1D8 1.0pt;
+  border-left:none;background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>ReadOnly user CANNOT edit a SAR</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Partner (read-only oversight) CANNOT
+  edit a SAR</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>ReadOnly user CANNOT delete a SAR</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Partner CANNOT delete a SAR</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Plain User (no manageSars) CANNOT
+  delete a SAR</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Anonymous CANNOT delete a SAR</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>SAR team member (Craig) CAN delete a
+  SAR</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Craig can then write the trailing
+  deleted-activity entry</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>...and activity entries stay
+  append-only (cannot be deleted)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Admin CAN still delete a SAR</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+</table>
+
+<h2 style='page-break-after:avoid'>SAR year folders</h2>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>SAR team member (Craig) CAN create a
+  year folder</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border:solid #C9D1D8 1.0pt;
+  border-left:none;background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>ReadOnly user CANNOT create a year
+  folder</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Partner (read-only oversight) CANNOT
+  create a year folder</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Anonymous CANNOT create a year
+  folder</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Year folder must be created as
+  yourself (createdByUid spoof refused)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Year folder id must be a real year
+  (&quot;abcd&quot; refused)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Year folder id and year field must
+  agree (id 2030, year 2031 refused)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Year folder cannot carry extra
+  fields</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Year folders are never edited
+  (update refused, even for the SAR team)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>SAR team can READ year folders</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Partner can READ year folders
+  (oversight)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>ReadOnly user CANNOT read year
+  folders</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>ReadOnly user CANNOT delete a year
+  folder</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>SAR team member CAN delete a year
+  folder</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+</table>
+
+<h2 style='page-break-after:avoid'>Self privilege-escalation via
+users/{uid}.permissions</h2>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Partner (no inventory.write) is
+  denied a stock_items write BEFORE self-escalation attempt</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border:solid #C9D1D8 1.0pt;
+  border-left:none;background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Partner CAN set permissions:['*'] on
+  their OWN profile (role unchanged)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>...but that self-set permissions
+  field grants NOTHING (stock_items write still denied)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Partner CANNOT change their own role
+  field</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+</table>
+
+<h2 style='page-break-after:avoid'>IDOR on governance_concerns</h2>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Uninvolved ReadOnly user CANNOT read
+  concern-1</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border:solid #C9D1D8 1.0pt;
+  border-left:none;background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Involved user (in involvedUserIds)
+  CAN read concern-1</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Involved user CANNOT update
+  concern-1 directly (not concerns team)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Reception (concernsTeam capability)
+  CAN update concern-1</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Partner (partnerAccess, read-only)
+  CANNOT update concern-1</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+</table>
+
+<h2 style='page-break-after:avoid'>Concern face-to-face meetings</h2>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Concerns team (Reception) CAN create
+  a meeting</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border:solid #C9D1D8 1.0pt;
+  border-left:none;background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Concerns team CAN update a meeting
+  (record the outcome)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Person involved in the case CAN read
+  its meetings</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Person involved in the case CANNOT
+  create a meeting</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Person involved in the case CANNOT
+  edit a meeting</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Partner (oversight) CAN read
+  meetings</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Partner CANNOT create or edit a
+  meeting</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Uninvolved ReadOnly user CANNOT read
+  a meeting</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Uninvolved ReadOnly user CANNOT
+  create a meeting</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Anonymous CANNOT read a meeting</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Concerns team CANNOT delete a
+  meeting (admin only)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Admin CAN delete a meeting</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+</table>
+
+<h2 style='page-break-after:avoid'>Custom role 'admin.access' does NOT grant
+roles/{} writes</h2>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>IT custom role (has admin.access) is
+  DENIED writing to roles/{} (System Admin only, by design)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border:solid #C9D1D8 1.0pt;
+  border-left:none;background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+</table>
+
+<h2 style='page-break-after:avoid'>Unauthenticated access</h2>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Anonymous user CANNOT read
+  stock_items</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border:solid #C9D1D8 1.0pt;
+  border-left:none;background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Anonymous user CANNOT read
+  governance_sars</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Anonymous user CANNOT list roles</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+</table>
+
+<h2 style='page-break-after:avoid'>ClinFlow tenant isolation ('primary'
+wildcard)</h2>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>User at site-a CAN read a record
+  tagged practiceId:'primary' (documented wildcard)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border:solid #C9D1D8 1.0pt;
+  border-left:none;background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>User at site-a CANNOT read a record
+  tagged practiceId:'site-b' (real tenant isolation holds)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+</table>
+
+<h2 style='page-break-after:avoid'>Admin-only user management</h2>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Non-admin (User role) CANNOT delete
+  another user's profile</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border:solid #C9D1D8 1.0pt;
+  border-left:none;background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Non-admin CANNOT self-register with
+  role Practice Manager</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Stranger with a fresh Auth account
+  CANNOT self-create a User profile (self-signup closed)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+</table>
+
+<h2 style='page-break-after:avoid'>Invites (legacy self-registration)</h2>
+
+<table class=MsoNormalTable border=1 cellspacing=0 cellpadding=0 width=643
+ style='width:481.9pt;border-collapse:collapse;border:none'>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Unauthenticated user CANNOT read an
+  invite (legacy flow locked)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border:solid #C9D1D8 1.0pt;
+  border-left:none;background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Signed-in user with a different
+  email CANNOT claim an invite</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Even the matching-email invitee
+  CANNOT redeem an invite (legacy flow removed)</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+ <tr style='page-break-inside:avoid'>
+  <td width=600 valign=top style='width:450.0pt;border:solid #C9D1D8 1.0pt;
+  border-top:none;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Admin CAN still create a user
+  profile</span></p>
+  </td>
+  <td width=43 valign=top style='width:31.9pt;border-top:none;border-left:none;
+  border-bottom:solid #C9D1D8 1.0pt;border-right:solid #C9D1D8 1.0pt;
+  background:#DFF1E6;padding:3.0pt 5.0pt 3.0pt 5.0pt'>
+  <p class=MsoNormal style='margin-bottom:2.0pt;line-height:105%'><span
+  style='font-size:8.5pt;line-height:105%'>Pass</span></p>
+  </td>
+ </tr>
+</table>
+
+<h1 style='page-break-after:avoid'>Appendix B. How to reproduce the test</h1>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>The
+suite is stored in the Primovex repository at <span style='font-size:9.5pt;
+line-height:115%;font-family:Consolas'>docs/security/attack-suite</span> (with
+a short README), and a copy is supplied with this report.</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Install
+Java and the Firebase CLI. In that folder run <span style='font-size:9.5pt;
+line-height:115%;font-family:Consolas'>npm install</span>, which installs <span
+style='font-size:9.5pt;line-height:115%;font-family:Consolas'>@firebase/rules-unit-testing</span>
+and the <span style='font-size:9.5pt;line-height:115%;font-family:Consolas'>firebase</span>
+library.</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Start
+the emulators (authentication and Firestore only): <span style='font-size:9.5pt;
+line-height:115%;font-family:Consolas'>firebase emulators:start --only
+auth,firestore</span>. The suite expects Firestore on 127.0.0.1, port 8080.</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>Run
+the suite: <span style='font-size:9.5pt;line-height:115%;font-family:Consolas'>npm
+test</span>. It loads <span style='font-size:9.5pt;line-height:115%;font-family:
+Consolas'>firestore.rules</span> from the repository, empties the emulator,
+creates its own synthetic users and records, and prints one line per check. It
+can be run repeatedly against the same emulator (checked with three consecutive
+runs on 21 September 2026).</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>A
+healthy run ends with <span style='font-size:9.5pt;line-height:115%;font-family:
+Consolas'>63 passed, 0 failed</span>. Any failure means a rules change has
+opened access that should be closed, or has closed access that a legitimate
+role needs.</p>
+
+<p class=MsoListParagraph style='margin-top:0cm;margin-right:0cm;margin-bottom:
+3.5pt;margin-left:27.0pt;text-indent:-13.5pt;line-height:115%'>•<span
+style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; </span>The
+suite uses only synthetic data and needs no credentials. It never contacts the
+live database.</p>
+
+</div>
+
+</body>
+
+</html>

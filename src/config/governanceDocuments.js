@@ -25,6 +25,18 @@ export const GOVERNANCE_DOCUMENTS = [
     viewPath: "/governance/data-sharing-map.html",
     downloadPath: "/governance/data-sharing-map.docx",
   },
+  {
+    id: "security-review-and-penetration-test",
+    // Deliberately not mapped to the "independent security testing" checklist item:
+    // this is an internal, AI-assisted review, not an independent or accredited test.
+    requirementId: null,
+    title: "Security Review and Penetration Test Report",
+    description: "Access-control audit, the 13 findings from the 18 September 2026 security review and how each was fixed, the 63-check attack test of the real database rules in a local test copy (all passing), and the residual risks. An internal, AI-assisted review, not an independent or accredited penetration test. Supports the DPIA.",
+    status: "draft",
+    addedAt: "2026-09-21",
+    viewPath: "/governance/security-review-and-penetration-test.html",
+    downloadPath: "/governance/security-review-and-penetration-test.docx",
+  },
 ];
 
 export function findGovernanceDocument(requirementId) {
