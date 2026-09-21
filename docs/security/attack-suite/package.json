@@ -1,0 +1,14 @@
+{
+  "name": "primovex-rules-attack-suite",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Active test of Primovex's Firestore security rules against the Firebase emulator, using synthetic identities.",
+  "type": "module",
+  "scripts": {
+    "test": "node attack.mjs"
+  },
+  "dependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase": "^12.19.0"
+  }
+}
