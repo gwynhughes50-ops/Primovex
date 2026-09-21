@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Printer } from "lucide-react";
 
 import PageHeader from "@/components/common/PageHeader";
 import SectionCard from "@/components/common/SectionCard";
@@ -8,6 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Icons } from "@/config/medtrakIcons";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeUsers } from "@/services/adminUserService";
+import ConcernMeetings from "@/modules/governance/components/ConcernMeetings";
+import { printConcernSummary } from "@/modules/governance/services/concernPrint";
 import {
   CONCERN_CATEGORIES,
   CONCERN_OUTCOME_LABELS,
@@ -325,6 +328,19 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
   const [outcomeEdit, setOutcomeEdit] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [printBusy, setPrintBusy] = useState(false);
+
+  const printSummary = async () => {
+    setPrintBusy(true);
+    try {
+      await printConcernSummary(concern, actor);
+    } catch (err) {
+      console.error(err);
+      alert(err?.message || "Couldn't prepare the summary to print.");
+    } finally {
+      setPrintBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!concern?.id) return undefined;
@@ -454,14 +470,19 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
             )}
           </div>
           <div className="flex flex-col items-end gap-3">
-            {isTeam && (
-              <div className="flex gap-2">
-                <Button onClick={() => onEdit?.(concern)} variant="outline" className="rounded-full border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800">Edit</Button>
-                {isAdmin && (
-                  <Button onClick={() => setConfirmDelete(true)} variant="outline" className="rounded-full border-rose-500/40 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20">Delete</Button>
-                )}
-              </div>
-            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button onClick={printSummary} disabled={printBusy} variant="outline" className="rounded-full border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800">
+                <Printer className="mr-2 h-4 w-4" />{printBusy ? "Preparing…" : "Print summary"}
+              </Button>
+              {isTeam && (
+                <>
+                  <Button onClick={() => onEdit?.(concern)} variant="outline" className="rounded-full border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800">Edit</Button>
+                  {isAdmin && (
+                    <Button onClick={() => setConfirmDelete(true)} variant="outline" className="rounded-full border-rose-500/40 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20">Delete</Button>
+                  )}
+                </>
+              )}
+            </div>
             <div className="rounded-3xl border border-teal-400/30 bg-teal-500/10 p-4 text-center text-teal-100">
               <p className="text-xs font-semibold uppercase tracking-wide text-teal-200/80">Case Health</p>
               <p className="text-4xl font-black">{health}%</p>
@@ -613,6 +634,10 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
         </div>
       </SectionCard>
 
+      <SectionCard title="Face-to-face meetings" description="When a meeting was requested and booked, who attends, the brief outcome, and whether the patient or their representative has asked for a second meeting, a follow-up or a summary. A case can have more than one.">
+        <ConcernMeetings concern={concern} actor={actor} isTeam={isTeam} variant="desktop" />
+      </SectionCard>
+
       <SectionCard title="Case timeline" description="Chronological audit trail of key concern activity.">
         {!isPartner && (
           <div className="mb-4 flex gap-2">
@@ -663,6 +688,19 @@ export default function GovernanceConcerns() {
   const [error, setError] = useState("");
   const [openCreate, setOpenCreate] = useState(false);
   const [editingConcern, setEditingConcern] = useState(null);
+  const [printingId, setPrintingId] = useState(null);
+
+  const printFromRegister = async (concern) => {
+    setPrintingId(concern.id);
+    try {
+      await printConcernSummary(concern, actor);
+    } catch (err) {
+      console.error(err);
+      alert(err?.message || "Couldn't prepare the summary to print.");
+    } finally {
+      setPrintingId(null);
+    }
+  };
   const [selectedId, setSelectedId] = useState("");
   const [filter, setFilter] = useState("open");
 
@@ -737,7 +775,8 @@ export default function GovernanceConcerns() {
                 const deadline = getDeadlineTone(concern);
                 const active = concern.id === selected?.id;
                 return (
-                  <button key={concern.id} type="button" onClick={() => setSelectedId(concern.id)} className={`w-full rounded-2xl border p-4 text-left transition ${active ? "border-teal-400/40 bg-teal-500/10" : "border-slate-800 bg-slate-950/50 hover:bg-slate-900"}`}>
+                  <div key={concern.id} className="relative">
+                  <button type="button" onClick={() => setSelectedId(concern.id)} className={`w-full rounded-2xl border p-4 text-left transition ${active ? "border-teal-400/40 bg-teal-500/10" : "border-slate-800 bg-slate-950/50 hover:bg-slate-900"}`}>
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-bold text-slate-100">{concern.reference}</p>
@@ -751,6 +790,17 @@ export default function GovernanceConcerns() {
                       <StatusBadge status={deadline.status}>{deadline.label}</StatusBadge>
                     </div>
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => printFromRegister(concern)}
+                    disabled={printingId === concern.id}
+                    title="Print a summary of this case"
+                    aria-label={`Print summary of ${concern.reference}`}
+                    className="absolute bottom-3 right-3 rounded-full border border-slate-700 bg-slate-900 p-2 text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    <Printer className="h-4 w-4" />
+                  </button>
+                  </div>
                 );
               })}
             </div>

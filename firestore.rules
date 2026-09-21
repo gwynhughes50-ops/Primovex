@@ -305,6 +305,19 @@ match /governance_concern_correspondence/{entryId} {
   allow delete: if isAdmin();
 }
 
+// Face-to-face meetings on a concern (requested / booked / attendees / outcome
+// / what the patient or representative asked for next). Same access shape as
+// the correspondence log: the Concerns team writes, oversight and anyone
+// involved in the case can read, only an admin can delete.
+match /governance_concern_meetings/{meetingId} {
+  allow get, list: if signedIn() && (
+    isConcernsTeam() || isGovernancePartner()
+    || isInvolvedInConcern(get(/databases/$(database)/documents/governance_concerns/$(resource.data.concernId)).data)
+  );
+  allow create, update: if isConcernsTeam();
+  allow delete: if isAdmin();
+}
+
 // -------------------------
 // SAR GOVERNANCE COLLECTIONS (new module names)
 // -------------------------

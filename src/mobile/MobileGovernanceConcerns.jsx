@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Plus, ShieldAlert, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { subscribeUsers } from '@/services/adminUserService';
+import ConcernMeetings from '@/modules/governance/components/ConcernMeetings';
 import {
   CONCERN_OUTCOME_LABELS,
   CONCERN_RAISED_BY_CONTACT_METHODS,
@@ -523,6 +524,10 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, isAdmi
               );
             })}
           </div>
+        </div>
+
+        <div className="mt-5">
+          <ConcernMeetings concern={concern} actor={actor} isTeam={isTeam} variant="mobile" />
         </div>
 
         <div className="mt-5 pb-4">

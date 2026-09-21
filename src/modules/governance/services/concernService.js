@@ -9,6 +9,7 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   Timestamp,
   updateDoc,
   where,
@@ -22,6 +23,7 @@ export const CONCERNS_COLLECTION = "governance_concerns";
 export const CONCERN_TIMELINE_COLLECTION = "governance_concern_timeline";
 export const CONCERN_LEARNING_COLLECTION = "governance_concern_learning_actions";
 export const CONCERN_CORRESPONDENCE_COLLECTION = "governance_concern_correspondence";
+export const CONCERN_MEETINGS_COLLECTION = "governance_concern_meetings";
 export const CORRESPONDENCE_TYPES = ["letter", "meeting", "phone", "email", "other"];
 
 export const CONCERN_PRIORITIES = {
@@ -245,16 +247,24 @@ export function validateConcernForm(form) {
 export async function addConcernTimeline(concernId, event = {}) {
   if (isSafeSyntheticMode()) return `demo-timeline-${Date.now()}`;
   if (!concernId) return null;
-  const ref = await addDoc(collection(db, CONCERN_TIMELINE_COLLECTION), {
-    concernId,
-    type: event.type || "note",
-    title: event.title || "Timeline event",
-    message: event.message || "",
-    actorUid: event.actor?.uid || null,
-    actorName: event.actor?.displayName || event.actor?.email || "Unknown",
-    createdAt: serverTimestamp(),
-  });
-  return ref.id;
+  try {
+    const ref = await addDoc(collection(db, CONCERN_TIMELINE_COLLECTION), {
+      concernId,
+      type: event.type || "note",
+      title: event.title || "Timeline event",
+      message: event.message || "",
+      actorUid: event.actor?.uid || null,
+      actorName: event.actor?.displayName || event.actor?.email || "Unknown",
+      createdAt: serverTimestamp(),
+    });
+    return ref.id;
+  } catch (err) {
+    // The id is generated on this device, so "already exists" can only mean
+    // our own earlier send landed and the client re-sent it after a dropped
+    // connection — the entry is there, so the write worked.
+    if (err?.code === "already-exists") return null;
+    throw err;
+  }
 }
 
 export async function createConcern(form, actor = {}) {
@@ -454,6 +464,156 @@ export async function addConcernCorrespondence(concernId, entry = {}, actor = {}
   });
   await addConcernTimeline(concernId, { type: "correspondence", title: `${friendly(type)} logged`, message: entry.notes || "", actor });
   return ref.id;
+}
+
+// ---------------------------------------------------------------------------
+// Face-to-face meetings. One record per meeting (so a second meeting is just
+// another record): when it was requested and by whom, when it's booked, who
+// attends, a brief outcome, and whether the patient or their representative
+// then asked for a second meeting, a follow-up, or a summary of the meeting.
+// Dates are kept as plain yyyy-mm-dd / HH:mm text — a meeting time is a
+// wall-clock time at the practice, not an instant, so there's no timezone to
+// get wrong.
+// ---------------------------------------------------------------------------
+export const MEETING_FURTHER_REQUESTS = [
+  { key: "second_meeting", label: "A second meeting" },
+  { key: "follow_up", label: "A follow-up of the meeting" },
+  { key: "summary", label: "A summary of the meeting" },
+];
+const MEETING_REQUEST_KEYS = MEETING_FURTHER_REQUESTS.map((item) => item.key);
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_PATTERN = /^\d{2}:\d{2}$/;
+
+export function formatMeetingDate(value) {
+  if (!DATE_PATTERN.test(String(value || ""))) return "";
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+// A blank form (optionally seeded), or one filled in from an existing meeting.
+export function getMeetingForm(meeting = null, seed = {}) {
+  return {
+    requestedDate: meeting?.requestedDate ?? formatDateInput(new Date()),
+    requestedBy: meeting?.requestedBy ?? "",
+    bookedDate: meeting?.bookedDate ?? "",
+    bookedTime: meeting?.bookedTime ?? "",
+    attendees: meeting?.attendees ?? "",
+    outcome: meeting?.outcome ?? "",
+    furtherRequests: Array.isArray(meeting?.furtherRequests) ? [...meeting.furtherRequests] : [],
+    ...(meeting ? {} : seed),
+  };
+}
+
+export function buildMeetingFields(form = {}) {
+  return {
+    requestedDate: String(form.requestedDate || "").trim(),
+    requestedBy: String(form.requestedBy || "").trim().slice(0, 160),
+    bookedDate: String(form.bookedDate || "").trim(),
+    bookedTime: form.bookedDate ? String(form.bookedTime || "").trim() : "",
+    attendees: String(form.attendees || "").trim().slice(0, 400),
+    outcome: String(form.outcome || "").trim().slice(0, 2000),
+    furtherRequests: (form.furtherRequests || []).filter((key) => MEETING_REQUEST_KEYS.includes(key)),
+  };
+}
+
+// Returns a message for the first problem, or "" when the form is fine.
+export function validateMeetingForm(form = {}) {
+  const fields = buildMeetingFields(form);
+  if (!DATE_PATTERN.test(fields.requestedDate)) return "Enter the date the meeting was requested.";
+  if (!fields.requestedBy) return "Enter who requested the meeting.";
+  if (fields.bookedDate && !DATE_PATTERN.test(fields.bookedDate)) return "Enter the date the meeting is booked for.";
+  if (String(form.bookedTime || "").trim() && !fields.bookedDate) return "Add the date booked as well as the time.";
+  if (fields.bookedTime && !TIME_PATTERN.test(fields.bookedTime)) return "Enter the time as hours and minutes, e.g. 14:30.";
+  return "";
+}
+
+// Where the meeting has got to, worked out from what's been filled in.
+export function getMeetingStatus(meeting = {}, now = new Date()) {
+  if (String(meeting.outcome || "").trim()) return { key: "held", label: "Outcome recorded", tone: "success" };
+  if (meeting.bookedDate) {
+    const when = new Date(`${meeting.bookedDate}T${meeting.bookedTime || "23:59"}`);
+    if (!Number.isNaN(when.getTime()) && when < now) return { key: "awaiting_outcome", label: "Awaiting outcome", tone: "warning" };
+    return { key: "booked", label: "Booked", tone: "info" };
+  }
+  return { key: "requested", label: "Requested, not yet booked", tone: "warning" };
+}
+
+function describeMeetingChanges(before = {}, after) {
+  const changes = [];
+  if (before.requestedDate !== after.requestedDate || before.requestedBy !== after.requestedBy) changes.push("request details updated");
+  if ((before.bookedDate || "") !== after.bookedDate || (before.bookedTime || "") !== after.bookedTime) {
+    changes.push(after.bookedDate ? `booked for ${formatMeetingDate(after.bookedDate)}${after.bookedTime ? ` at ${after.bookedTime}` : ""}` : "booking removed");
+  }
+  if ((before.attendees || "") !== after.attendees) changes.push("attendees updated");
+  if ((before.outcome || "") !== after.outcome) changes.push(before.outcome ? "outcome updated" : "outcome recorded");
+  if (JSON.stringify(before.furtherRequests || []) !== JSON.stringify(after.furtherRequests)) {
+    const labels = MEETING_FURTHER_REQUESTS.filter((item) => after.furtherRequests.includes(item.key)).map((item) => item.label.toLowerCase());
+    changes.push(labels.length ? `patient or representative has requested ${labels.join(", ")}` : "further requests cleared");
+  }
+  return changes;
+}
+
+export async function addConcernMeeting(concernId, form, actor = {}) {
+  if (isSafeSyntheticMode()) return `demo-meeting-${Date.now()}`;
+  const problem = validateMeetingForm(form);
+  if (problem) throw new Error(problem);
+  const fields = buildMeetingFields(form);
+  // The id is made up front and the record written with setDoc (not addDoc):
+  // if the connection drops after the server has saved it, the client re-sends
+  // the write, and a create-only resend is refused as "already exists" even
+  // though the save worked. Re-sending a set just re-saves the same record.
+  const ref = doc(collection(db, CONCERN_MEETINGS_COLLECTION));
+  await setDoc(ref, {
+    concernId,
+    ...fields,
+    createdByUid: actor.uid || null,
+    createdByName: actor.displayName || actor.email || "Unknown",
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  const booked = fields.bookedDate ? ` Booked for ${formatMeetingDate(fields.bookedDate)}${fields.bookedTime ? ` at ${fields.bookedTime}` : ""}.` : "";
+  await addConcernTimeline(concernId, {
+    type: "meeting",
+    title: "Face-to-face meeting requested",
+    message: `Requested on ${formatMeetingDate(fields.requestedDate)}.${booked}`,
+    actor,
+  });
+  return ref.id;
+}
+
+// `meeting` is the record as it was when the edit started, so the case
+// timeline can say what actually changed.
+export async function updateConcernMeeting(meeting, form, actor = {}) {
+  if (isSafeSyntheticMode() || !meeting?.id) return;
+  const problem = validateMeetingForm(form);
+  if (problem) throw new Error(problem);
+  const fields = buildMeetingFields(form);
+  const changes = describeMeetingChanges(meeting, fields);
+  if (!changes.length) return;
+  await updateDoc(doc(db, CONCERN_MEETINGS_COLLECTION, meeting.id), { ...fields, updatedAt: serverTimestamp() });
+  const sentence = changes.join("; ");
+  await addConcernTimeline(meeting.concernId, {
+    type: "meeting",
+    title: "Face-to-face meeting updated",
+    message: sentence.charAt(0).toUpperCase() + sentence.slice(1) + ".",
+    actor,
+  });
+}
+
+// Filtered by concern only (no orderBy) so it needs no composite index; the
+// newest request goes first.
+export function subscribeConcernMeetings(concernId, callback, onError) {
+  if (isSafeSyntheticMode()) {
+    const timer = setTimeout(() => callback([]), 50);
+    return () => clearTimeout(timer);
+  }
+  if (!concernId) return () => {};
+  const q = query(collection(db, CONCERN_MEETINGS_COLLECTION), where("concernId", "==", concernId));
+  return onSnapshot(q, (snapshot) => {
+    const rows = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+    rows.sort((a, b) => String(b.requestedDate || "").localeCompare(String(a.requestedDate || "")) || (toDate(b.createdAt)?.getTime() || 0) - (toDate(a.createdAt)?.getTime() || 0));
+    callback(rows);
+  }, onError);
 }
 
 // Concerns-team/Partner callers get every case (unconstrained query - allowed
