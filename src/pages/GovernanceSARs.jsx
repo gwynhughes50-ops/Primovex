@@ -62,6 +62,7 @@ function getInitialForm() {
     receivedDate: formatDateInput(today),
     dueDate: formatDateInput(calculateDueDate(today)),
     requestedBy: "patient",
+    requestedByOther: "",
     receivedVia: "email",
     solicitorReference: "",
     requestType: "summary",
@@ -161,6 +162,11 @@ function NewSarPanel({ open, onClose, users, actor, onCreated }) {
       return;
     }
 
+    if (form.requestedBy === "other" && !form.requestedByOther.trim()) {
+      alert("Enter who the request is from (a company, solicitor firm or organisation).");
+      return;
+    }
+
     try {
       setBusy(true);
       await createSar(form, actor);
@@ -183,7 +189,7 @@ function NewSarPanel({ open, onClose, users, actor, onCreated }) {
               <Icons.governance className="h-3.5 w-3.5" /> Governance
             </div>
             <h2 className="mt-3 text-2xl font-black text-white">New Subject Access Request</h2>
-            <p className="mt-1 text-sm text-slate-400">Only operational information is stored. Patient name and DOB stay out of MedTrak+.</p>
+            <p className="mt-1 text-sm text-slate-400">Only operational information is stored. Patient name and DOB stay out of Primovex.</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-full bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">
             Close
@@ -217,6 +223,19 @@ function NewSarPanel({ open, onClose, users, actor, onCreated }) {
               {requestedByOptions.map((option) => <option key={option} value={option}>{friendly(option)}</option>)}
             </select>
           </div>
+
+          {form.requestedBy === "other" && (
+            <div className="space-y-3 lg:col-span-2">
+              <label className="block text-sm font-semibold text-slate-200">Who is the request from?</label>
+              <Input
+                value={form.requestedByOther}
+                onChange={(e) => update({ requestedByOther: e.target.value })}
+                maxLength={120}
+                placeholder="e.g. company, solicitor firm or organisation name"
+              />
+              <p className="text-xs text-slate-500">Use an organisation or firm name. Keep patient names out of Primovex.</p>
+            </div>
+          )}
 
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-slate-200">Received Via</label>
@@ -409,7 +428,7 @@ function SarDetailPanel({ sar, actor, isTeam, onClose }) {
             <div className="grid gap-3 text-sm sm:grid-cols-2">
               <div><span className="text-slate-500">Received</span><div className="font-semibold text-white">{formatDisplayDate(sar.receivedDate)}</div></div>
               <div><span className="text-slate-500">Due</span><div className="font-semibold text-white">{formatDisplayDate(sar.dueDate)}</div></div>
-              <div><span className="text-slate-500">Requested by</span><div className="font-semibold text-white">{friendly(sar.requestedBy)}</div></div>
+              <div><span className="text-slate-500">Requested by</span><div className="font-semibold text-white">{sar.requestedBy === "other" && sar.requestedByOther ? `${sar.requestedByOther} (other)` : friendly(sar.requestedBy)}</div></div>
               <div><span className="text-slate-500">Received via</span><div className="font-semibold text-white">{friendly(sar.receivedVia)}</div></div>
               <div><span className="text-slate-500">Solicitor ref</span><div className="font-semibold text-white">{sar.solicitorReference || "—"}</div></div>
               <div><span className="text-slate-500">Assigned to</span><div className="font-semibold text-white">{sar.assignedToName || "Unassigned"}</div></div>

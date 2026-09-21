@@ -179,6 +179,7 @@ export function buildSarPayload(form, actor = {}) {
     receivedDate: Timestamp.fromDate(receivedDate),
     dueDate: Timestamp.fromDate(dueDate),
     requestedBy: form.requestedBy || "patient",
+    requestedByOther: form.requestedBy === "other" ? String(form.requestedByOther || "").trim().slice(0, 120) : "",
     receivedVia: form.receivedVia || "email",
     solicitorReference: String(form.solicitorReference || "").trim(),
     requestType: form.requestType || "summary",
