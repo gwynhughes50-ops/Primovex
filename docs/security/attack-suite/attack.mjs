@@ -12,8 +12,18 @@ import {
 import {
   doc, getDoc, setDoc, updateDoc, addDoc, collection, deleteDoc,
 } from "firebase/firestore";
+import { ref, uploadBytes, getBytes, deleteObject } from "firebase/storage";
 
 const RULES_PATH = fileURLToPath(new URL("../../../firestore.rules", import.meta.url));
+const STORAGE_RULES_PATH = fileURLToPath(new URL("../../../storage.rules", import.meta.url));
+
+// Storage Security Rules' firestore.get()/exists() cross-service calls are
+// bound by the local emulator to whichever project the emulator suite was
+// actually started under (the repo's default, from .firebaserc) - NOT
+// whatever arbitrary project id a test declares. Using anything else here
+// makes every storage.rules check fail with a "Null value error" that has
+// nothing to do with the rules themselves; see section 10 below.
+const PROJECT_ID = "medtrak-b1cad";
 
 let testEnv;
 let pass = 0;
@@ -42,8 +52,9 @@ async function seed(fn) {
 
 async function main() {
   testEnv = await initializeTestEnvironment({
-    projectId: "primovex-pentest",
+    projectId: PROJECT_ID,
     firestore: { rules: readFileSync(RULES_PATH, "utf8"), host: "127.0.0.1", port: 8080 },
+    storage: { rules: readFileSync(STORAGE_RULES_PATH, "utf8"), host: "127.0.0.1", port: 9199 },
   });
   // Start from an empty database so the suite can be re-run against the same
   // emulator (some checks write fixed-id, append-only records).
@@ -293,6 +304,40 @@ async function main() {
     assertSucceeds(updateDoc(doc(admin, "cleaning_logs", "log-c4"), { notes: "Admin correction" })));
   await check("Admin CAN delete a cleaning log", () =>
     assertSucceeds(deleteDoc(doc(admin, "cleaning_logs", "log-c4"))));
+
+  console.log("\n=== 10. Storage: stock item photos (storage.rules) ===");
+  // storage.rules ports firestore.rules' capability check directly, so this
+  // proves that port actually works against the real Storage emulator - a
+  // syntax slip there wouldn't show up in any Firestore check above.
+  const adminStorage = testEnv.authenticatedContext("admin-uid").storage();
+  const nurseStorage = testEnv.authenticatedContext("nurse-uid").storage();
+  const readonlyStorage = testEnv.authenticatedContext("readonly-uid").storage();
+  const anonStorage = testEnv.unauthenticatedContext().storage();
+  const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0]);
+  const tooBig = new Uint8Array(9 * 1024 * 1024);
+
+  await check("Nurse (inventory.write) CAN upload a stock photo", () =>
+    assertSucceeds(uploadBytes(ref(nurseStorage, "stock_photos/item-1/a.jpg"), jpeg, { contentType: "image/jpeg" })));
+  await check("Admin CAN upload a stock photo", () =>
+    assertSucceeds(uploadBytes(ref(adminStorage, "stock_photos/item-2/a.jpg"), jpeg, { contentType: "image/jpeg" })));
+  await check("ReadOnly (no inventory.write) CANNOT upload a stock photo", () =>
+    assertFails(uploadBytes(ref(readonlyStorage, "stock_photos/item-3/a.jpg"), jpeg, { contentType: "image/jpeg" })));
+  await check("Anonymous CANNOT upload a stock photo", () =>
+    assertFails(uploadBytes(ref(anonStorage, "stock_photos/item-4/a.jpg"), jpeg, { contentType: "image/jpeg" })));
+  await check("Upload over the 8MB cap is refused, even for an allowed role", () =>
+    assertFails(uploadBytes(ref(nurseStorage, "stock_photos/item-5/a.jpg"), tooBig, { contentType: "image/jpeg" })));
+  await check("A non-image file is refused, even for an allowed role", () =>
+    assertFails(uploadBytes(ref(nurseStorage, "stock_photos/item-6/a.txt"), new TextEncoder().encode("not a photo"), { contentType: "text/plain" })));
+  await check("ReadOnly CAN read a stock photo that already exists", () =>
+    assertSucceeds(getBytes(ref(readonlyStorage, "stock_photos/item-1/a.jpg"))));
+  await check("Anonymous CANNOT read a stock photo", () =>
+    assertFails(getBytes(ref(anonStorage, "stock_photos/item-1/a.jpg"))));
+  await check("ReadOnly CANNOT delete a stock photo", () =>
+    assertFails(deleteObject(ref(readonlyStorage, "stock_photos/item-1/a.jpg"))));
+  await check("Nurse CAN delete (replace) a stock photo", () =>
+    assertSucceeds(deleteObject(ref(nurseStorage, "stock_photos/item-1/a.jpg"))));
+  await check("Everywhere outside stock_photos/ is closed, even to an admin", () =>
+    assertFails(uploadBytes(ref(adminStorage, "some_other_path/a.jpg"), jpeg, { contentType: "image/jpeg" })));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();

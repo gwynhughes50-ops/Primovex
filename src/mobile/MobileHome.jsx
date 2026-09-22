@@ -7,7 +7,7 @@ import useRoomOperationalContext from "@/operations/hooks/useRoomOperationalCont
 import usePracticeManagerOverview from "./usePracticeManagerOverview";
 import { getOperationalEscalations } from "@/operations/escalations/operationalEscalationService";
 import ReleaseUpdateCard from "@/release/ReleaseUpdateCard";
-import { normalizeStockItemCategory } from "@/services/stockService";
+import { normalizeStockItemCategory, summariseExpiry, getExpiryStatus, daysUntilExpiry } from "@/services/stockService";
 import { STOCK_CATEGORIES, categoryLabel } from "@/data/stockCategories";
 
 const FACILITY_KEY = "primovex.facilities.v2";
@@ -18,6 +18,15 @@ export default function MobileHome({ mode="home", onNavigate, onScan, onSearch, 
   const { displayName, role, capabilities=[] } = useAuth();
   const { allItems=[], loading } = useStock({ includeArchived:false });
   const low = useMemo(() => allItems.filter(i => Number(i.current_stock||0) <= Number(i.min_stock||0)), [allItems]);
+  // Was previously a hardcoded 0 — nothing on mobile ever flagged expiring
+  // stock, even when it genuinely should have.
+  const expiry = useMemo(() => summariseExpiry(allItems), [allItems]);
+  const expiringItems = useMemo(
+    () => allItems
+      .filter((item) => getExpiryStatus(item) != null)
+      .sort((a, b) => (daysUntilExpiry(a) ?? 0) - (daysUntilExpiry(b) ?? 0)),
+    [allItems]
+  );
   const [stockCategoryFilter, setStockCategoryFilter] = useState(null);
   const stockCategoryCounts = useMemo(() => {
     const counts = {};
@@ -32,7 +41,7 @@ export default function MobileHome({ mode="home", onNavigate, onScan, onSearch, 
     return allItems.filter((item) => normalizeStockItemCategory(item).category === stockCategoryFilter);
   }, [allItems, stockCategoryFilter]);
   const roomOperationalContext = useRoomOperationalContext();
-  const context = useMemo(() => ({ inventory:{ totalItems:allItems.length, lowStockItems:low.length, expiringSoon:0, loading }, temperature:{ loading:false, hasReading:false }, recentMoves:[], rooms: roomOperationalContext }), [allItems.length, low.length, loading, roomOperationalContext]);
+  const context = useMemo(() => ({ inventory:{ totalItems:allItems.length, lowStockItems:low.length, expiringSoon: expiry.total, loading }, temperature:{ loading:false, hasReading:false }, recentMoves:[], rooms: roomOperationalContext }), [allItems.length, low.length, expiry.total, loading, roomOperationalContext]);
   const summary = useOperationsSummary(context);
   const governance = usePracticeManagerOverview();
   const facility = facilitiesData();
@@ -72,12 +81,19 @@ export default function MobileHome({ mode="home", onNavigate, onScan, onSearch, 
 
       {stockCategoryFilter ? (
         <Section title={`${categoryLabel(stockCategoryFilter)} (${stockCategoryItems.length})`}>
-          {stockCategoryItems.length ? stockCategoryItems.slice(0,25).map(item => <button key={item.id} onClick={() => onSelectItem?.(item)} className="flex w-full items-center justify-between border-b border-[var(--medtrak-border)] py-3 text-left last:border-0"><span><b>{item.name}</b><small className="block text-[var(--medtrak-muted)]">Minimum {item.min_stock||0}</small></span><b className={Number(item.current_stock||0) <= Number(item.min_stock||0) ? "text-red-600" : ""}>{item.current_stock||0}</b></button>) : <Empty text="No items in this category yet" />}
+          {stockCategoryItems.length ? stockCategoryItems.slice(0,25).map(item => <StockRow key={item.id} item={item} onClick={() => onSelectItem?.(item)} />) : <Empty text="No items in this category yet" />}
         </Section>
       ) : (
-        <Section title="Needs attention">
-          {low.length ? low.slice(0,8).map(item => <button key={item.id} onClick={() => onSelectItem?.(item)} className="flex w-full items-center justify-between border-b border-[var(--medtrak-border)] py-3 text-left last:border-0"><span><b>{item.name}</b><small className="block text-[var(--medtrak-muted)]">Minimum {item.min_stock||0}</small></span><b className="text-red-600">{item.current_stock||0}</b></button>) : <Empty text="Stock levels look healthy" />}
-        </Section>
+        <>
+          <Section title="Needs attention">
+            {low.length ? low.slice(0,8).map(item => <StockRow key={item.id} item={item} onClick={() => onSelectItem?.(item)} />) : <Empty text="Stock levels look healthy" />}
+          </Section>
+          {expiringItems.length > 0 && (
+            <Section title="Expiring soon">
+              {expiringItems.slice(0,8).map(item => <StockRow key={item.id} item={item} onClick={() => onSelectItem?.(item)} />)}
+            </Section>
+          )}
+        </>
       )}
     </Page>
   );
@@ -176,7 +192,7 @@ export default function MobileHome({ mode="home", onNavigate, onScan, onSearch, 
 
   const domains = [
     { label:"Governance", icon:FileWarning, value: executiveCount + managementCount, helper: executiveCount ? `${executiveCount} executive oversight` : `${operationalCount} operational`, tone: executiveCount ? "critical" : managementCount ? "warning" : "healthy" },
-    { label:"Inventory", icon:Package, value:low.length, helper: low.length ? "below minimum" : "stable", tone:low.length ? "warning" : "healthy", action:()=>onNavigate?.("stock") },
+    { label:"Inventory", icon:Package, value: low.length + expiry.total, helper: (low.length + expiry.total) ? `${low.length} low, ${expiry.total} expiring` : "stable", tone: (low.length + expiry.total) ? "warning" : "healthy", action:()=>onNavigate?.("stock") },
     { label:"Facilities", icon:Building2, value:maintenance.length, helper: maintenance.length ? "open issues" : "operating normally", tone:maintenance.length ? "warning" : "healthy", action:()=>onNavigate?.("facilities") },
     { label:"Escalations", icon:UsersRound, value:openEscalations.length, helper: openEscalations.length ? "awaiting team action" : "none open", tone:openEscalations.length ? "info" : "healthy" },
   ];
@@ -288,3 +304,25 @@ function Stat({label,value,warn}) {
   return <Card><p className="text-xs text-[var(--medtrak-muted)]">{label}</p><p className="mt-1 text-2xl font-bold" style={warn ? { color: "var(--medtrak-warning-text, #92400e)" } : undefined}>{value}</p></Card>;
 }
 function Empty({text}) { return <div className="flex items-center gap-2 py-3 text-sm text-[var(--medtrak-muted)]"><CheckCircle2 className="h-4 w-4 text-emerald-600"/>{text}</div> }
+function StockRow({ item, onClick }) {
+  const low = Number(item.current_stock || 0) <= Number(item.min_stock || 0);
+  const expiryStatus = getExpiryStatus(item);
+  const days = daysUntilExpiry(item);
+  const expiryText = expiryStatus === "expired"
+    ? `Expired ${Math.abs(days)}d ago`
+    : expiryStatus === "soon"
+      ? `Expires in ${days}d`
+      : null;
+  return (
+    <button onClick={onClick} className="flex w-full items-center justify-between gap-3 border-b border-[var(--medtrak-border)] py-3 text-left last:border-0">
+      <span className="min-w-0">
+        <b className="block truncate">{item.name}</b>
+        <small className="block text-[var(--medtrak-muted)]">
+          Minimum {item.min_stock || 0}
+          {expiryText && <span className={expiryStatus === "expired" ? "ml-2 font-bold text-red-600" : "ml-2 font-bold text-amber-500"}> · {expiryText}</span>}
+        </small>
+      </span>
+      <b className={`shrink-0 ${low ? "text-red-600" : ""}`}>{item.current_stock || 0}</b>
+    </button>
+  );
+}

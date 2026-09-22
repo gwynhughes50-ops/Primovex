@@ -1,62 +1,15 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import { Button } from "./button";
 import { Camera, X, Check } from "lucide-react";
+import useCameraCapture from "@/hooks/useCameraCapture";
 
 export default function PhotoCapture({ onCapture, buttonLabel = "Take photo", disabled = false }) {
   const [open, setOpen] = useState(false);
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return;
-
-    let cancelled = false;
-
-    async function start() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-          audio: false,
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-      } catch (err) {
-        console.error("Camera error", err);
-      }
-    }
-
-    start();
-
-    return () => {
-      cancelled = true;
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-      }
-    };
-  }, [open]);
+  const { videoRef, error, captureFrame } = useCameraCapture(open);
 
   const handleCapture = () => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    const canvas = document.createElement("canvas");
-    const width = video.videoWidth || 640;
-    const height = video.videoHeight || 480;
-    canvas.width = width;
-    canvas.height = height;
-
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video, 0, 0, width, height);
-
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+    const dataUrl = captureFrame();
+    if (!dataUrl) return;
     if (onCapture) onCapture(dataUrl);
     setOpen(false);
   };
@@ -90,12 +43,19 @@ export default function PhotoCapture({ onCapture, buttonLabel = "Take photo", di
               </button>
             </div>
 
-            <video
-              ref={videoRef}
-              autoPlay
-              playsInline
-              className="w-full rounded-xl border border-slate-700 bg-black"
-            />
+            {error ? (
+              <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-300" role="alert">
+                {error}
+              </div>
+            ) : (
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full rounded-xl border border-slate-700 bg-black"
+              />
+            )}
 
             <div className="flex justify-end gap-2 mt-4">
               <Button
@@ -110,6 +70,7 @@ export default function PhotoCapture({ onCapture, buttonLabel = "Take photo", di
                 type="button"
                 className="text-xs px-3 py-1.5 flex items-center gap-1"
                 onClick={handleCapture}
+                disabled={!!error}
               >
                 <Check className="h-4 w-4" />
                 Capture

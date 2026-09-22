@@ -37,6 +37,49 @@ function normalizeBarcode(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+// Parses a plain "YYYY-MM-DD" date input as a local-midnight Date, the same
+// way useSmartHomeData.js already does — new Date("YYYY-MM-DD") parses as
+// UTC and can land on the wrong day once compared against a local "now".
+export function parseExpiryDate(value) {
+  if (!value || typeof value !== "string") return null;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+// The one place "how many days until an item expires" is decided, so the
+// register, the mobile item sheet and the mobile dashboard's summary can't
+// quietly drift into disagreeing with each other about what "soon" means.
+const EXPIRY_SOON_DAYS = 14;
+
+export function daysUntilExpiry(item, now = new Date()) {
+  const date = parseExpiryDate(item?.expiry_date);
+  if (!date) return null;
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((date.getTime() - start.getTime()) / 86400000);
+}
+
+// "expired" | "soon" (within EXPIRY_SOON_DAYS) | null (no date, or not due yet).
+export function getExpiryStatus(item, now = new Date()) {
+  const days = daysUntilExpiry(item, now);
+  if (days === null) return null;
+  if (days < 0) return "expired";
+  if (days <= EXPIRY_SOON_DAYS) return "soon";
+  return null;
+}
+
+export function summariseExpiry(items = [], now = new Date()) {
+  let expired = 0;
+  let soon = 0;
+  for (const item of items) {
+    const status = getExpiryStatus(item, now);
+    if (status === "expired") expired += 1;
+    else if (status === "soon") soon += 1;
+  }
+  return { expired, soon, total: expired + soon };
+}
+
 function normalizeItemPatch(patch = {}) {
   const out = { ...patch, updated_at: serverTimestamp() };
 
@@ -56,6 +99,7 @@ function normalizeItemPatch(patch = {}) {
   if ("brand" in out) out.brand = cleanString(out.brand);
   if ("batch_number" in out) out.batch_number = cleanString(out.batch_number);
   if ("photo_url" in out) out.photo_url = cleanString(out.photo_url);
+  if ("photo_path" in out) out.photo_path = cleanString(out.photo_path);
   if ("unit" in out) out.unit = cleanString(out.unit);
   if ("expiry_date" in out) out.expiry_date = cleanString(out.expiry_date);
 

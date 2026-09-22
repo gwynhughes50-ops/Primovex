@@ -31,7 +31,7 @@ import { parseComplianceQrPayload } from "@/services/compliance/complianceQrServ
 import { completeCleaningSession, getActiveCleaningSession, startCleaningSession, subscribeRoomOperational } from "@/modules/facilities/services/cleaningRecordService";
 import { playBeep } from "@/utils/beep";
 import { getOpenQuickNotes, subscribeQuickNotes } from "@/services/quickNotesService";
-import { Camera, BellRing, Eye, Sparkles } from "lucide-react";
+import { AlertTriangle, BellRing, Camera, CheckCircle2, Eye, Minus, Plus, Sparkles } from "lucide-react";
 import ActiveSenseBanner from "@/modules/sense/components/ActiveSenseBanner";
 import { useSenseSession } from "@/contexts/SenseSessionContext";
 import MobileDeveloperIssueRecorder from "@/developer/MobileDeveloperIssueRecorder";
@@ -89,6 +89,18 @@ export default function MobileLayout({ initialTab = "home" }) {
   const [showReorderForm, setShowReorderForm] = useState(false);
   const [reorderQty, setReorderQty] = useState(1);
   const [reorderNote, setReorderNote] = useState("");
+  const [receiveQty, setReceiveQty] = useState(1);
+
+  // A quiet, in-context replacement for the native alert() dialog that used
+  // to interrupt every receive/reorder result - errors and confirmations now
+  // show the same way scan errors already do, rather than a blocking popup.
+  const [toast, setToast] = useState(null);
+  const showToast = (tone, message) => setToast({ tone, message });
+  useEffect(() => {
+    if (!toast) return undefined;
+    const timer = window.setTimeout(() => setToast(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   const { allItems = [] } = useStock({ includeArchived: false });
   const location = useLocation();
@@ -450,23 +462,23 @@ export default function MobileLayout({ initialTab = "home" }) {
     }
   };
 
-  const handleReceiveStock = async () => {
+  const handleReceiveStock = async (qtyInput) => {
     if (!scannedItem) return;
 
-    const qty = Number(useQty);
+    const qty = Number(qtyInput);
 
     if (!Number.isFinite(qty) || qty <= 0) {
-      alert("Please enter a valid quantity");
+      showToast("error", "Enter a valid quantity.");
       return;
     }
 
     if (!can("inventory.write")) {
-      alert("Your role cannot record stock receipts.");
+      showToast("error", "Your role cannot record stock receipts.");
       return;
     }
 
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
-      alert("You are offline. Nothing was changed. Reconnect and try again.");
+      showToast("error", "You are offline. Nothing was changed. Reconnect and try again.");
       return;
     }
 
@@ -485,12 +497,13 @@ export default function MobileLayout({ initialTab = "home" }) {
         actor: { uid: user?.uid, displayName, email: user?.email, role },
       });
 
-      alert(`Received ${qty} item(s)`);
+      showToast("success", `Received ${qty} item${qty === 1 ? "" : "s"}.`);
+      setShowStockMore(false);
       setScannedItem(null);
-      setUseQty(1);
+      setReceiveQty(1);
     } catch (err) {
       console.error(err);
-      alert("Failed to update stock");
+      showToast("error", "Failed to update stock.");
     } finally {
       setUseBusy(false);
     }
@@ -501,7 +514,7 @@ export default function MobileLayout({ initialTab = "home" }) {
     if (!item) return;
 
     if (!can("inventory.write")) {
-      alert("Your role cannot request a reorder.");
+      showToast("error", "Your role cannot request a reorder.");
       return;
     }
 
@@ -514,7 +527,7 @@ export default function MobileLayout({ initialTab = "home" }) {
         note: reorderNote || "",
       });
 
-      alert("Reorder request created");
+      showToast("success", "Reorder request created.");
 
       setShowReorderForm(false);
       setReorderItem(null);
@@ -522,7 +535,7 @@ export default function MobileLayout({ initialTab = "home" }) {
       setReorderNote("");
     } catch (err) {
       console.error(err);
-      alert("Failed to create reorder request");
+      showToast("error", "Failed to create reorder request.");
     } finally {
       setReorderBusy(false);
     }
@@ -670,19 +683,39 @@ export default function MobileLayout({ initialTab = "home" }) {
         outcome={movementOutcome}
         onUse={handleUseStock}
         onClose={() => { setScannedItem(null); setUseError(""); setMovementOutcome(null); }}
-        onMore={() => setShowStockMore(true)}
+        onMore={() => { setReceiveQty(1); setShowStockMore(true); }}
+        onItemChange={(patch) => setScannedItem((prev) => (prev ? { ...prev, ...patch } : prev))}
       />
 
       {showStockMore && scannedItem && (
         <div className="fixed inset-x-0 top-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-[90] flex items-end bg-black/55">
           <div className="w-full rounded-t-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4 text-[var(--medtrak-text)]">
             <h2 className="text-lg font-bold">More inventory options</h2>
+
+            {can("inventory.write") && (
+              <div className="mt-3 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3">
+                <p className="text-sm font-bold">Receive stock</p>
+                <div className="mt-2 grid grid-cols-[3.25rem_1fr_3.25rem] gap-2">
+                  <button type="button" onClick={() => setReceiveQty((v) => Math.max(1, Number(v || 1) - 1))} className="grid place-items-center rounded-xl border border-[var(--medtrak-border)]" aria-label="Decrease quantity"><Minus className="h-5 w-5" /></button>
+                  <input type="number" inputMode="numeric" min="1" value={receiveQty} onChange={(e) => setReceiveQty(e.target.value)} className="w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-3 text-center text-lg font-bold" />
+                  <button type="button" onClick={() => setReceiveQty((v) => Number(v || 0) + 1)} className="grid place-items-center rounded-xl border border-[var(--medtrak-border)]" aria-label="Increase quantity"><Plus className="h-5 w-5" /></button>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleReceiveStock(receiveQty)}
+                  disabled={useBusy || !Number.isFinite(Number(receiveQty)) || Number(receiveQty) <= 0}
+                  className="mt-2 w-full rounded-xl bg-[var(--medtrak-accent)] px-3 py-3 font-bold text-white disabled:opacity-40"
+                >
+                  {useBusy ? "Recording…" : `Receive ${Number.isFinite(Number(receiveQty)) ? receiveQty : 0}`}
+                </button>
+              </div>
+            )}
+
             <div className="mt-3 grid grid-cols-2 gap-2">
-              <button type="button" onClick={handleReceiveStock} disabled={!can("inventory.write") || useBusy} className="rounded-2xl border border-[var(--medtrak-border)] p-3 font-bold disabled:opacity-40">Receive 1</button>
               <button type="button" disabled={!can("inventory.write")} onClick={() => { setReorderQty(1); setReorderNote(""); setShowStockMore(false); setShowReorderForm(true); }} className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] p-3 font-bold disabled:opacity-40"><BellRing className="h-5 w-5" />Reorder</button>
               <button type="button" onClick={() => { setShowStockMore(false); setScannedItem(null); setActiveTab("stock"); }} className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] p-3 font-bold"><Eye className="h-5 w-5" />Details</button>
-              <button type="button" onClick={() => { setShowStockMore(false); askAboutScannedItem(); }} className="flex items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] p-3 font-bold"><Sparkles className="h-5 w-5" />Ask Orb</button>
             </div>
+            <button type="button" onClick={() => { setShowStockMore(false); askAboutScannedItem(); }} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] p-3 font-bold"><Sparkles className="h-5 w-5" />Ask Orb</button>
             <button type="button" onClick={() => setShowStockMore(false)} className="mt-3 w-full rounded-xl px-3 py-2 text-sm font-semibold text-[var(--medtrak-muted)]">Back</button>
           </div>
         </div>
@@ -710,6 +743,20 @@ export default function MobileLayout({ initialTab = "home" }) {
       {scanError && (
         <div className="fixed inset-x-4 bottom-24 z-[70] rounded-2xl border border-[color-mix(in_srgb,var(--medtrak-danger,#b42318)_30%,transparent)] bg-[var(--medtrak-panel)] p-4 text-sm text-[var(--medtrak-danger,#b42318)]">
           {scanError}
+        </div>
+      )}
+
+      {toast && (
+        <div
+          role="status"
+          className={`fixed inset-x-4 bottom-24 z-[96] flex items-center gap-2 rounded-2xl border p-4 text-sm font-semibold shadow-xl ${
+            toast.tone === "error"
+              ? "border-[color-mix(in_srgb,var(--medtrak-danger,#b42318)_30%,transparent)] bg-[var(--medtrak-panel)] text-[var(--medtrak-danger,#b42318)]"
+              : "border-[color-mix(in_srgb,var(--medtrak-success,#12b76a)_30%,transparent)] bg-[var(--medtrak-panel)] text-[var(--medtrak-success,#12b76a)]"
+          }`}
+        >
+          {toast.tone === "error" ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}
+          {toast.message}
         </div>
       )}
 

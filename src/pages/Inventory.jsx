@@ -23,9 +23,10 @@ import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry"
 import { listEquipment } from "@/modules/equipment/services/equipmentRegistry";
 import AssignLocationModal from "@/components/stock/AssignLocationModal";
 import { STOCK_CATEGORIES, getSubcategories, categoryLabel, subcategoryLabel, UNCATEGORISED_CATEGORY } from "@/data/stockCategories";
-import { normalizeStockItemCategory, migrateStockItemCategoryIfNeeded, createReorderRequest } from "@/services/stockService";
+import { normalizeStockItemCategory, migrateStockItemCategoryIfNeeded, createReorderRequest, getExpiryStatus, daysUntilExpiry } from "@/services/stockService";
+import { uploadStockItemPhoto, removeStockItemPhoto } from "@/services/stockPhotoService";
 
-import { Search, Package, Pencil, History, Trash2, Archive, RotateCcw, MapPin, BellRing } from "lucide-react";
+import { Search, Package, Pencil, History, Trash2, Archive, RotateCcw, MapPin, BellRing, ImageOff } from "lucide-react";
 
 /* helpers */
 const getStockBadge = (qty, min) => {
@@ -149,6 +150,35 @@ export default function Inventory() {
     setLocationsItem(item);
     setLocationsOpen(true);
   };
+
+  const [photoBusyId, setPhotoBusyId] = useState(null);
+  const [photoError, setPhotoError] = useState({});
+
+  async function handlePhotoCapture(item, dataUrl) {
+    setPhotoBusyId(item.id);
+    setPhotoError((prev) => ({ ...prev, [item.id]: "" }));
+    try {
+      await uploadStockItemPhoto(item, dataUrl);
+    } catch (error) {
+      console.error(error);
+      setPhotoError((prev) => ({ ...prev, [item.id]: error?.message || "Could not save the photo. Try again." }));
+    } finally {
+      setPhotoBusyId(null);
+    }
+  }
+
+  async function handleRemovePhoto(item) {
+    setPhotoBusyId(item.id);
+    setPhotoError((prev) => ({ ...prev, [item.id]: "" }));
+    try {
+      await removeStockItemPhoto(item);
+    } catch (error) {
+      console.error(error);
+      setPhotoError((prev) => ({ ...prev, [item.id]: error?.message || "Could not remove the photo." }));
+    } finally {
+      setPhotoBusyId(null);
+    }
+  }
 
   const [reorderOpen, setReorderOpen] = useState(false);
   const [reorderItem, setReorderItem] = useState(null);
@@ -566,7 +596,15 @@ const handleBarcodeScan = (code) => {
                   }`}
                 >
                   <div className="flex justify-between gap-3">
-                    <div className="min-w-0">
+                    {item.photo_url ? (
+                      <img src={item.photo_url} alt="" className="h-14 w-14 shrink-0 rounded-xl border border-slate-700 object-cover" />
+                    ) : (
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-dashed border-slate-700 text-slate-600">
+                        <ImageOff className="h-5 w-5" />
+                      </div>
+                    )}
+
+                    <div className="min-w-0 flex-1">
                       <p className="font-semibold truncate">{item.name}</p>
 
                       {productSubtitle(item) && (
@@ -601,6 +639,20 @@ const handleBarcodeScan = (code) => {
                           {item.supplier_sku ? ` - SKU: ${item.supplier_sku}` : ""}
                         </p>
                       )}
+
+                      {item.expiry_date && (() => {
+                        const status = getExpiryStatus(item);
+                        const days = daysUntilExpiry(item);
+                        return (
+                          <p className={`mt-1 text-[11px] font-semibold truncate ${status === "expired" ? "text-rose-400" : status === "soon" ? "text-amber-300" : "text-slate-500"}`}>
+                            {status === "expired"
+                              ? `Expired ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago`
+                              : status === "soon"
+                                ? `Expires in ${days} day${days === 1 ? "" : "s"} (${item.expiry_date})`
+                                : `Expires ${item.expiry_date}`}
+                          </p>
+                        );
+                      })()}
                     </div>
 
                     <span
@@ -647,11 +699,24 @@ const handleBarcodeScan = (code) => {
                   )}
 
                   <div className="mt-3 flex justify-between items-center">
-                    <PhotoCapture
-                      buttonLabel="Photo"
-                      onCapture={(img) => updateItem(item.id, { photo_url: img }, { actor: actorUser })}
-                      disabled={!canWriteInventory}
-                    />
+                    <div className="flex items-center gap-2">
+                      <PhotoCapture
+                        buttonLabel={item.photo_url ? "Replace" : "Photo"}
+                        onCapture={(img) => handlePhotoCapture(item, img)}
+                        disabled={!canWriteInventory || photoBusyId === item.id}
+                      />
+                      {item.photo_url && (
+                        <Button
+                          variant="ghost"
+                          className="text-xs px-3 py-2 text-rose-300 hover:text-rose-200"
+                          onClick={() => handleRemovePhoto(item)}
+                          disabled={!canWriteInventory || photoBusyId === item.id}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                      {photoBusyId === item.id && <span className="text-xs text-slate-400">Saving…</span>}
+                    </div>
 
                     <div className="flex gap-1">
                       <Button size="icon" variant="ghost" onClick={() => openHistory(item)} title="History">
@@ -699,6 +764,8 @@ const handleBarcodeScan = (code) => {
                       )}
                     </div>
                   </div>
+
+                  {photoError[item.id] && <p className="mt-2 text-xs text-rose-400">{photoError[item.id]}</p>}
 
                   {archived && <div className="mt-3 text-xs text-slate-500">Archived</div>}
                 </Card>

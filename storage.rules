@@ -1,0 +1,140 @@
+rules_version = '2';
+
+// Firebase Storage holds practice-owned photos only (currently: stock item
+// photos). Nothing here is patient data. The capability check below is a
+// direct copy of firestore.rules' hasPermission()/effectiveRoleCapabilities()
+// — Storage Security Rules use the same rules language as Firestore's and can
+// read Firestore documents the same way, so this is kept identical on purpose
+// rather than re-deriving a simplified version that could quietly drift out
+// of step with what Firestore itself allows. If the role/capability model in
+// firestore.rules changes, mirror the change here too.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn()
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == "System Admin";
+    }
+
+    function userRole() {
+      return signedIn()
+        ? firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role
+        : null;
+    }
+
+    function isBuiltInRole(role) {
+      return role in [
+        "System Admin", "Practice Manager", "User", "Nurse", "HCA",
+        "Reception", "Caretaker", "Cleaner", "Partner", "ReadOnly"
+      ];
+    }
+
+    function builtInRoleCapabilities(role) {
+      return
+        role == "System Admin" ? ["*"] :
+        role == "Practice Manager" ? [
+          "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
+          "dashboard.read", "operations.read", "operations.manage",
+          "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",
+          "purchasing.read", "purchasing.write", "purchasing.approve",
+          "suppliers.read", "suppliers.write",
+          "governance.read", "governance.write", "governance.manageSars", "governance.manageComplaints",
+          "governance.manageConcerns", "governance.concernsTeam",
+          "connect.view", "connect.manageDevices", "connect.acknowledgeAlerts",
+          "temperature.read", "temperature.write", "temperature.resolveIncident",
+          "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets",
+          "practiceAdmin.read", "practiceAdmin.write", "reports.read", "theme.lab",
+          "mobile.access", "mobile.biometricUnlock",
+          "admin.access", "admin.manageUsers", "admin.manageRoles", "admin.manageSettings",
+          "audit.read", "audit.write", "orb.learning.review", "security.read", "security.manage"
+        ] :
+        role == "User" ? [
+          "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
+          "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify",
+          "purchasing.read", "suppliers.read", "connect.view",
+          "temperature.read", "temperature.write",
+          "compliance.read", "compliance.recordChecks",
+          "mobile.access", "mobile.biometricUnlock"
+        ] :
+        role == "Nurse" ? [
+          "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
+          "inventory.read", "inventory.write", "inventory.verify", "connect.view",
+          "temperature.read", "temperature.write", "temperature.resolveIncident",
+          "compliance.read", "compliance.recordChecks",
+          "mobile.access", "mobile.biometricUnlock"
+        ] :
+        role == "HCA" ? [
+          "dashboard.read", "operations.read", "inventory.read", "inventory.write", "inventory.verify",
+          "connect.view", "temperature.read", "temperature.write",
+          "mobile.access", "mobile.biometricUnlock"
+        ] :
+        role == "Reception" ? [
+          "clinflow.read", "clinflow.capture", "clinflow.workflow",
+          "dashboard.read", "operations.read", "inventory.read", "purchasing.read",
+          "governance.read", "governance.write", "governance.manageConcerns", "governance.concernsTeam",
+          "connect.view", "mobile.access"
+        ] :
+        role == "Caretaker" ? [
+          "dashboard.read", "operations.read", "connect.view",
+          "temperature.read", "temperature.write",
+          "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets",
+          "mobile.access"
+        ] :
+        role == "Cleaner" ? [
+          "dashboard.read", "operations.read",
+          "mobile.access"
+        ] :
+        role == "Partner" ? [
+          "dashboard.read", "governance.read", "governance.partnerAccess", "mobile.access"
+        ] :
+        role == "ReadOnly" ? [
+          "clinflow.read", "dashboard.read", "operations.read", "inventory.read", "purchasing.read",
+          "suppliers.read", "governance.read", "connect.view", "temperature.read", "compliance.read",
+          "reports.read"
+        ] :
+        [];
+    }
+
+    function customRoleCapabilities(role) {
+      return firestore.exists(/databases/(default)/documents/roles/$(role))
+        ? firestore.get(/databases/(default)/documents/roles/$(role)).data.capabilities
+        : [];
+    }
+
+    function effectiveRoleCapabilities(role) {
+      return isBuiltInRole(role) ? builtInRoleCapabilities(role) : customRoleCapabilities(role);
+    }
+
+    function hasPermission(domain, action) {
+      return signedIn()
+        && (
+          isAdmin()
+          || (domain + "." + action) in effectiveRoleCapabilities(userRole())
+          || "*" in effectiveRoleCapabilities(userRole())
+        );
+    }
+
+    // Stock item photos, one folder per item: stock_photos/{itemId}/{fileName}.
+    // Read matches stock_items' own read rule (any signed-in user); write
+    // matches stock_items' own write rule (inventory.write or admin) — the
+    // same person who can edit the item can attach or replace its photo.
+    // Capped at 8MB uploaded (the client resizes to well under 1MB before
+    // sending; this is a hard backstop, not the normal case) and images only.
+    match /stock_photos/{itemId}/{fileName} {
+      allow read: if signedIn();
+      allow write: if (hasPermission("inventory", "write") || isAdmin())
+        && request.resource.size < 8 * 1024 * 1024
+        && request.resource.contentType.matches("image/.*");
+      allow delete: if hasPermission("inventory", "write") || isAdmin();
+    }
+
+    // Everything else is closed by default.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
