@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ClipboardPen, UserRound, X } from "lucide-react";
+import { ClipboardPen, Trash2, UserRound, X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/contexts/AuthContext";
 import { loadFacilitiesState } from "@/modules/facilities/services/facilitiesStore";
-import { addManualCleaningLog, subscribeCleaningLogs, subscribeRoomOperational } from "@/modules/facilities/services/cleaningRecordService";
+import { addManualCleaningLog, deleteCleaningLog, subscribeCleaningLogs, subscribeRoomOperational } from "@/modules/facilities/services/cleaningRecordService";
 import { formatWhen, localDateInput, localTimeInput } from "@/components/compliance/complianceView";
 
 const TH = "py-2 pr-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500";
@@ -108,13 +108,29 @@ function ManualCleanDialog({ rooms, roomOperational, onClose }) {
 // Cleaning history (moved here from Facilities): who cleaned which room, when,
 // how long it took, and any note or issue they added on the phone.
 export default function CleaningPanel() {
-  const { can } = useAuth();
+  const { can, isAdmin, user, displayName } = useAuth();
   const [logs, setLogs] = useState([]);
   const [roomOperational, setRoomOperational] = useState({});
   const [rooms, setRooms] = useState(() => loadFacilitiesState().rooms);
   const [roomFilter, setRoomFilter] = useState("all");
   const [personFilter, setPersonFilter] = useState("all");
   const [manualOpen, setManualOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    try {
+      await deleteCleaningLog(deleteTarget, { uid: user?.uid || null, displayName: displayName || user?.email || "Unknown user" });
+      setDeleteTarget(null);
+    } catch (err) {
+      console.error(err);
+      alert("Could not delete this record. Check your connection and try again.");
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
 
   useEffect(() => subscribeCleaningLogs(setLogs), []);
   useEffect(() => subscribeRoomOperational(setRoomOperational), []);
@@ -165,7 +181,7 @@ export default function CleaningPanel() {
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[720px]">
           <thead>
-            <tr className="border-b border-white/10"><th className={TH}>Room</th><th className={TH}>Cleaned by</th><th className={TH}>When</th><th className={TH}>Took</th><th className={TH}>Notes / issues</th><th className={TH}>Recorded</th></tr>
+            <tr className="border-b border-white/10"><th className={TH}>Room</th><th className={TH}>Cleaned by</th><th className={TH}>When</th><th className={TH}>Took</th><th className={TH}>Notes / issues</th><th className={TH}>Recorded</th>{isAdmin && <th className={TH}>Action</th>}</tr>
           </thead>
           <tbody>
             {rows.map((log) => (
@@ -180,14 +196,44 @@ export default function CleaningPanel() {
                     ? <span title={log.manualReason || ""} className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">By hand{log.enteredBy ? ` (${log.enteredBy})` : ""}</span>
                     : <span className="text-xs text-slate-500">{log.method === "nfc-session" ? "Room tag" : log.method === "one-tap-confirmation" ? "One tap" : log.method || "—"}</span>}
                 </td>
+                {isAdmin && (
+                  <td className={TD}>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(log)}
+                      title="Delete this cleaning record"
+                      aria-label={`Delete cleaning record for ${log.roomName}`}
+                      className="rounded-full border border-rose-500/40 bg-rose-500/10 p-2 text-rose-200 hover:bg-rose-500/20"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
-            {rows.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-sm text-slate-500">No cleaning records match these filters.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={isAdmin ? 7 : 6} className="py-6 text-center text-sm text-slate-500">No cleaning records match these filters.</td></tr>}
           </tbody>
         </table>
       </div>
 
       {manualOpen && <ManualCleanDialog rooms={rooms} roomOperational={roomOperational} onClose={() => setManualOpen(false)} />}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4">
+          <div role="alertdialog" aria-modal="true" className="w-full max-w-md rounded-3xl border border-rose-500/30 bg-slate-950 p-5 shadow-2xl">
+            <h3 className="text-lg font-black text-rose-200">Delete this cleaning record?</h3>
+            <p className="mt-2 text-sm text-slate-300">
+              {deleteTarget.roomName}, cleaned by {deleteTarget.cleanedBy}, {formatWhen(deleteTarget.cleanedAt)}. It will be removed from the cleaning history and can't be brought back. A record that it was deleted, and by whom, is kept in the audit log.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="ghost" className="rounded-full" disabled={deleteBusy} onClick={() => setDeleteTarget(null)}>Cancel</Button>
+              <Button disabled={deleteBusy} onClick={confirmDelete} className="rounded-full bg-rose-500 text-white hover:bg-rose-600">
+                {deleteBusy ? "Deleting..." : "Yes, delete it"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

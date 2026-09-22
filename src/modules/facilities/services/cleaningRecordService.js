@@ -1,6 +1,7 @@
-import { collection, doc, onSnapshot, serverTimestamp, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDocs, onSnapshot, query, serverTimestamp, setDoc, Timestamp, updateDoc, where } from 'firebase/firestore';
 import { addDocResendSafe } from '@/lib/resendSafeWrites';
 import { db } from '@/lib/firebase';
+import { writeAuditEvent } from '@/core/identity/auditService';
 
 // Real, cross-device cleaning/stocking records. Previously this lived only in
 // localStorage (per-device, never synced) which is why a Cleaner's phone and
@@ -142,4 +143,42 @@ export async function addManualCleaningLog({ roomId, roomName, cleanedBy, perfor
     }, { merge: true });
   }
   return ref.id;
+}
+
+// System Admin only (enforced by the Firestore rules, not just the UI). If the
+// deleted record was a room's most recently known clean, its "last cleaned"
+// summary is recomputed from whatever's left, or cleared if nothing is - a
+// stale/duplicate entry never leaves a wrong "last cleaned" showing behind it.
+export async function deleteCleaningLog(log, actor = {}) {
+  if (!log?.id) return;
+  await deleteDoc(doc(db, CLEANING_LOGS_COLLECTION, log.id));
+
+  if (log.roomId) {
+    try {
+      const remaining = (await getDocs(query(collection(db, CLEANING_LOGS_COLLECTION), where('roomId', '==', log.roomId))))
+        .docs.map((row) => row.data())
+        .sort((a, b) => toMillis(b.cleanedAt) - toMillis(a.cleanedAt));
+      const latest = remaining[0] || null;
+      await setDoc(doc(db, ROOM_OPERATIONAL_COLLECTION, log.roomId), {
+        lastCleanedAt: latest?.cleanedAt || null,
+        lastCleanedBy: latest?.cleanedBy || null,
+      }, { merge: true });
+    } catch (err) {
+      console.warn("Cleaning record deleted, but the room's last-cleaned summary could not be refreshed.", err);
+    }
+  }
+
+  try {
+    await writeAuditEvent({
+      actor,
+      action: 'facilities.cleaning.deleted',
+      module: 'facilities',
+      targetType: 'cleaning_log',
+      targetId: log.id,
+      summary: `Cleaning record for ${log.roomName || log.roomId || 'a room'} deleted`,
+      metadata: { roomId: log.roomId || '', roomName: log.roomName || '', cleanedBy: log.cleanedBy || '' },
+    });
+  } catch (err) {
+    console.warn('Cleaning record was deleted but the audit event could not be recorded.', err);
+  }
 }

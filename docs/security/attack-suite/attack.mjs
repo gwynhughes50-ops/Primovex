@@ -287,8 +287,12 @@ async function main() {
     assertFails(updateDoc(doc(cleaner2, "cleaning_logs", "log-c3"), { notes: "x", issueReported: false, notedAt: 1 })));
   await check("Cleaner CANNOT delete a cleaning log", () =>
     assertFails(deleteDoc(doc(cleaner, "cleaning_logs", "log-c4"))));
+  await check("Caretaker (not admin) CANNOT delete a cleaning log", () =>
+    assertFails(deleteDoc(doc(caretaker, "cleaning_logs", "log-c4"))));
   await check("Admin CAN still correct a cleaning log", () =>
     assertSucceeds(updateDoc(doc(admin, "cleaning_logs", "log-c4"), { notes: "Admin correction" })));
+  await check("Admin CAN delete a cleaning log", () =>
+    assertSucceeds(deleteDoc(doc(admin, "cleaning_logs", "log-c4"))));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
