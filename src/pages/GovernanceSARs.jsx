@@ -259,7 +259,7 @@ function SarFormPanel({ open, onClose, users, actor, onSaved, sar, defaultYear =
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-slate-200">Reference</label>
-            <Input value={form.reference} onChange={(e) => update({ reference: e.target.value })} disabled={isEdit} />
+            <Input value={form.reference} disabled title="Assigned automatically, for the audit trail." />
           </div>
 
           <div className="space-y-3">
