@@ -92,18 +92,24 @@ export default function ComplianceQrEngine() {
   const [recent, setRecent] = useState([]);
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
+  // Only what actually varies per asset: type, location, and a name that Primovex
+  // suggests from the two (editable). Check mode is fixed by type, so it's never
+  // asked. The asset id is assigned by Primovex, not typed in, so the audit trail
+  // can't get a duplicate or made-up code. Frequency defaults from the type too -
+  // "how often" is tucked behind an optional link, since the type's standard is
+  // right for almost every asset.
   const [form, setForm] = useState({
     assetType: "fire_point",
-    assetCode: "",
     label: "",
+    labelTouched: false,
     location: "",
-    department: "",
-    checkMode: "pass_fail",
-    frequency: "weekly",
     minTempC: "",
     maxTempC: "",
     countdownSeconds: "",
+    frequency: "weekly",
+    frequencyTouched: false,
   });
+  const [showFrequency, setShowFrequency] = useState(false);
 
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
@@ -111,38 +117,69 @@ export default function ComplianceQrEngine() {
   useEffect(() => subscribeComplianceAssets(setAssets, console.error, { siteId: SITE_ID }), []);
   useEffect(() => subscribeRecentComplianceChecks(setRecent, console.error, { siteId: SITE_ID, max: 20 }), []);
 
-  // Suggests the next code for the default type once assets have actually
-  // loaded — applyTypeDefaults below only fires on a user-driven type
-  // change, so the very first code (for the form's initial default type)
-  // needs its own trigger. Only fills it in while the field is still blank,
-  // so it never clobbers something the user's already typed.
-  useEffect(() => {
-    setForm((prev) => (prev.assetCode ? prev : { ...prev, assetCode: generateNextAssetCode(prev.assetType, assets) }));
-  }, [assets]);
-
   const selectedType = useMemo(() => getAssetTypeConfig(form.assetType), [form.assetType]);
+
+  // What Primovex will assign the new asset - shown, never typed. Recomputed
+  // live so it's still right if someone else creates an asset of the same
+  // type in another tab while this form is open.
+  const nextAssetCode = useMemo(() => generateNextAssetCode(form.assetType, assets), [form.assetType, assets]);
+
+  // A name the person hasn't typed over yet tracks the type and location, so
+  // "Reception" + Fire Point becomes "Reception Fire Point" without being asked.
+  // Once they edit it directly, it's theirs and stops following.
+  useEffect(() => {
+    if (form.labelTouched) return;
+    const suggested = [form.location.trim(), selectedType.label].filter(Boolean).join(" ");
+    setForm((prev) => (prev.labelTouched ? prev : { ...prev, label: suggested }));
+  }, [form.location, selectedType, form.labelTouched]);
 
   function applyTypeDefaults(type) {
     const config = getAssetTypeConfig(type);
     setForm((prev) => ({
       ...prev,
       assetType: type,
-      assetCode: generateNextAssetCode(type, assets),
-      checkMode: config.checkMode,
-      frequency: config.defaultFrequency,
       minTempC: config.minTempC ?? "",
       maxTempC: config.maxTempC ?? "",
       countdownSeconds: config.countdownSeconds ?? "",
+      frequency: prev.frequencyTouched ? prev.frequency : config.defaultFrequency,
     }));
+    setShowFrequency(false);
   }
 
   async function handleCreateAsset() {
     setMsg("");
+    if (!form.location.trim()) {
+      setMsg("Enter the location.");
+      return;
+    }
     try {
       setSaving(true);
-      await createComplianceAsset({ ...form, siteId: SITE_ID });
-      setMsg("Asset created. QR/NFC payload ready.");
-      setForm((prev) => ({ ...prev, assetCode: "", label: "", location: "", department: "" }));
+      const assetCode = generateNextAssetCode(form.assetType, assets);
+      await createComplianceAsset({
+        assetType: form.assetType,
+        assetCode,
+        label: form.label.trim() || selectedType.label,
+        location: form.location.trim(),
+        checkMode: selectedType.checkMode,
+        frequency: form.frequency || selectedType.defaultFrequency,
+        minTempC: form.minTempC,
+        maxTempC: form.maxTempC,
+        countdownSeconds: form.countdownSeconds,
+        siteId: SITE_ID,
+      });
+      setMsg(`${assetCode} created. QR/NFC payload ready.`);
+      setForm({
+        assetType: form.assetType,
+        label: "",
+        labelTouched: false,
+        location: "",
+        minTempC: selectedType.minTempC ?? "",
+        maxTempC: selectedType.maxTempC ?? "",
+        countdownSeconds: selectedType.countdownSeconds ?? "",
+        frequency: selectedType.defaultFrequency,
+        frequencyTouched: false,
+      });
+      setShowFrequency(false);
     } catch (error) {
       console.error(error);
       setMsg(error?.message || "Could not create asset.");
@@ -253,47 +290,47 @@ export default function ComplianceQrEngine() {
             </label>
 
             <label className="text-xs text-slate-300">
-              Asset ID
-              <Input value={form.assetCode} onChange={(e) => setForm((p) => ({ ...p, assetCode: e.target.value }))} placeholder="e.g. FP-007" />
-            </label>
-
-            <label className="text-xs text-slate-300 sm:col-span-2">
-              Name / label
-              <Input value={form.label} onChange={(e) => setForm((p) => ({ ...p, label: e.target.value }))} placeholder="Reception fire call point" />
-            </label>
-
-            <label className="text-xs text-slate-300">
               Location
               <Input value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))} placeholder="Reception" />
             </label>
 
             <label className="text-xs text-slate-300">
-              Department / owner
-              <Input value={form.department} onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))} placeholder="Caretaker" />
+              Asset ID
+              <div className="mt-1 flex h-9 items-center rounded-xl border border-white/10 bg-slate-950/30 px-3 text-sm text-slate-300">
+                {nextAssetCode}
+              </div>
+              <span className="mt-1 block text-[11px] text-slate-500">Assigned automatically, for the audit trail.</span>
             </label>
 
-            <label className="text-xs text-slate-300">
-              Check mode
-              <select
-                value={form.checkMode}
-                onChange={(e) => setForm((p) => ({ ...p, checkMode: e.target.value }))}
-                className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-sm text-slate-100"
-              >
-                <option className="bg-slate-950" value="pass_fail">Pass / Fail</option>
-                <option className="bg-slate-950" value="temperature">Temperature</option>
-              </select>
+            <label className="text-xs text-slate-300 sm:col-span-2">
+              Name / label
+              <Input
+                value={form.label}
+                onChange={(e) => setForm((p) => ({ ...p, label: e.target.value, labelTouched: true }))}
+                placeholder="Reception fire call point"
+              />
             </label>
 
-            <label className="text-xs text-slate-300">
-              Frequency
-              <select
-                value={form.frequency}
-                onChange={(e) => setForm((p) => ({ ...p, frequency: e.target.value }))}
-                className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-sm text-slate-100"
-              >
-                {['daily','weekly','monthly','quarterly','annually'].map((f) => <option key={f} className="bg-slate-950" value={f}>{f}</option>)}
-              </select>
-            </label>
+            {selectedType.key !== "fire_point" && (
+              <div className="text-xs text-slate-300 sm:col-span-2">
+                {showFrequency ? (
+                  <label className="block">
+                    How often should this be checked?
+                    <select
+                      value={form.frequency}
+                      onChange={(e) => setForm((p) => ({ ...p, frequency: e.target.value, frequencyTouched: true }))}
+                      className="mt-1 w-full max-w-[220px] rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-sm text-slate-100"
+                    >
+                      {['daily','weekly','monthly','quarterly','annually'].map((f) => <option key={f} className="bg-slate-950" value={f}>{f}</option>)}
+                    </select>
+                  </label>
+                ) : (
+                  <button type="button" onClick={() => setShowFrequency(true)} className="text-teal-300 underline underline-offset-2 hover:text-teal-200">
+                    This one needs checking more or less often than usual ({selectedType.defaultFrequency})
+                  </button>
+                )}
+              </div>
+            )}
 
             {selectedType.countdownSeconds ? (
               <label className="text-xs text-slate-300">
@@ -303,7 +340,7 @@ export default function ComplianceQrEngine() {
               </label>
             ) : null}
 
-            {form.checkMode === "temperature" && (
+            {selectedType.checkMode === "temperature" && (
               <>
                 <label className="text-xs text-slate-300">
                   Minimum °C
@@ -318,7 +355,7 @@ export default function ComplianceQrEngine() {
           </div>
 
           <div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-xs text-slate-300">
-            Suggested workflow: <span className="text-teal-100">{selectedType.icon} {selectedType.label}</span> uses <span className="text-white">{form.checkMode}</span> checks and can be identified by QR, NFC, barcode or manual ID.
+            <span className="text-teal-100">{selectedType.icon} {selectedType.label}</span> uses <span className="text-white">{selectedType.checkMode === "temperature" ? "temperature" : "pass / fail"}</span> checks, checked <span className="text-white">{form.frequency}</span>, and can be identified by QR, NFC, barcode or manual ID.
           </div>
 
           {msg && <div className="mt-3 rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-sm text-slate-200">{msg}</div>}
@@ -357,7 +394,7 @@ export default function ComplianceQrEngine() {
                         </div>
                         <div>
                           <div className="font-semibold text-slate-50">{assetTitle(asset)}</div>
-                          <div className="text-xs text-slate-400">{asset.location || "No location"} • {asset.frequency || "monthly"} • {asset.checkMode || "pass_fail"}</div>
+                          <div className="text-xs text-slate-400">{asset.location || "No location"}</div>
                           <div className="mt-1 break-all text-[11px] text-slate-500">{payload}</div>
                         </div>
                       </div>
