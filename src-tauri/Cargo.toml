@@ -35,6 +35,10 @@ tauri-plugin-updater = "2"
 # fetch_local_device_reading in lib.rs. Desktop-only: this is meant to run
 # from a PC sitting on the same network as the hardware, not from a phone.
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+# Tiny local HTTP server so a battery-powered Shelly sensor (e.g. H&T Gen3)
+# can call the desktop app the moment it wakes, rather than the app polling a
+# device that's asleep almost all the time — see start_shelly_wake_listener.
+tiny_http = "0.12"
 
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
 tauri-plugin-barcode-scanner = "2.4.2"

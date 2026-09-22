@@ -75,6 +75,21 @@ async fn fetch_local_device_reading(url: String) -> Result<String, String> {
   response.text().await.map_err(|e| e.to_string())
 }
 
+// The address to show someone setting up a battery Shelly's wake webhook (see
+// start_shelly_wake_listener below) - the practice IP this PC is reachable on
+// from the rest of the local network. A UDP "connect" never actually sends a
+// packet; it only asks the OS which local interface/address it would use to
+// reach that destination, which is exactly the address other devices on the
+// same network reach this PC on.
+#[cfg(desktop)]
+#[tauri::command]
+fn local_lan_ip() -> Result<String, String> {
+  use std::net::UdpSocket;
+  let socket = UdpSocket::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
+  socket.connect("8.8.8.8:80").map_err(|e| e.to_string())?;
+  socket.local_addr().map(|addr| addr.ip().to_string()).map_err(|e| e.to_string())
+}
+
 // ---------------------------------------------------------------------------
 // Desktop corner alert (overdue SARs / concerns)
 //
@@ -174,6 +189,48 @@ fn show_alert(app: &tauri::AppHandle, payload: serde_json::Value) -> Result<(), 
   Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Shelly battery-sensor wake listener (e.g. Shelly H&T Gen3)
+//
+// A battery Shelly sleeps almost all the time to save power, waking briefly
+// on its own schedule to take a reading - unlike a mains-powered one, polling
+// its IP on a timer would mostly find it asleep. Instead the device is set up
+// (in the Shelly app, under that device's Actions/Webhooks) to call this
+// listener the instant it wakes. The call itself carries no reading - it's
+// just a "read me now, while I'm awake" trigger; the actual value is then
+// pulled from the device's own local API the same way a mains-powered
+// thermometer already is (see readShellyStatus in shellyLocalPoller.js nb.
+// Nothing here ever leaves the practice's own network, and this never
+// accepts a request that isn't a bare wake ping.
+#[cfg(desktop)]
+const SHELLY_WAKE_PORT: u16 = 47281;
+
+#[cfg(desktop)]
+fn start_shelly_wake_listener(app: tauri::AppHandle) {
+  std::thread::spawn(move || {
+    let server = match tiny_http::Server::http(format!("0.0.0.0:{SHELLY_WAKE_PORT}")) {
+      Ok(server) => server,
+      Err(err) => {
+        log::warn!("Could not start the Shelly wake listener on port {SHELLY_WAKE_PORT}: {err}");
+        return;
+      }
+    };
+    for request in server.incoming_requests() {
+      let remote_ip = request.remote_addr().map(|addr| addr.ip().to_string());
+      let is_wake_ping = request.url().starts_with("/shelly-wake");
+      // Always answer immediately - the device is only awake briefly and
+      // shouldn't be left waiting on a response it doesn't need.
+      let _ = request.respond(tiny_http::Response::from_string("ok"));
+      if is_wake_ping {
+        if let Some(ip) = remote_ip {
+          log::info!("Shelly wake ping from {ip}");
+          let _ = app.emit("shelly-device-woke", ip);
+        }
+      }
+    }
+  });
+}
+
 // async so the window is created off the main thread (creating a window from a
 // synchronous command can deadlock on Windows).
 #[cfg(desktop)]
@@ -228,6 +285,8 @@ pub fn run() {
       #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
       fetch_local_device_reading,
       #[cfg(desktop)]
+      local_lan_ip,
+      #[cfg(desktop)]
       show_alert_popup,
       #[cfg(desktop)]
       alert_payload,
@@ -252,6 +311,9 @@ pub fn run() {
             .build(),
         )?;
       }
+
+      #[cfg(desktop)]
+      start_shelly_wake_listener(app.handle().clone());
 
       Ok(())
     })

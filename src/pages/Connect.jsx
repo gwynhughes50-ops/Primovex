@@ -5,7 +5,9 @@ import {
   CheckCircle2,
   Cloud,
   Code2,
+  Copy,
   Database,
+  Droplets,
   KeyRound,
   LockKeyhole,
   RadioTower,
@@ -30,7 +32,7 @@ import { buildDeviceHistory, getDeviceStatus, listProviders } from "@/services/c
 import { buildTuyaBackendContract } from "@/services/connect/providers/TuyaProvider";
 import { getConnectCloudHealth, syncConnectProvider, buildConnectCloudDeploymentNotes } from "@/services/connect/connectCloudClient";
 import DeviceAssignmentSheet from "@/components/temperature/DeviceAssignmentSheet";
-import { addShellyLocalThermometer, pollShellyLocalThermometerOnce, removeShellyLocalThermometer, subscribeShellyLocalThermometers } from "@/services/connect/shellyLocalPoller";
+import { addShellyLocalThermometer, getShellyWakeWebhookUrl, pollShellyLocalThermometerOnce, removeShellyLocalThermometer, subscribeShellyLocalThermometers } from "@/services/connect/shellyLocalPoller";
 
 function ConnectBadge({ device }) {
   const status = getDeviceStatus(device);
@@ -316,14 +318,65 @@ function ProviderManager({ activeProvider, providerSettings, setActiveProvider, 
   );
 }
 
+// Shown wherever someone needs to point a battery sensor's webhook at this
+// PC: fetches the address once, offers a copy button, and says plainly why
+// it's needed. Kept as its own component since it's used both in the "Add"
+// form (wakeOnly ticked) and on each already-added battery device's row.
+function ShellyWakeWebhookUrl() {
+  const [url, setUrl] = useState(null);
+  const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getShellyWakeWebhookUrl()
+      .then((value) => { if (!cancelled) setUrl(value); })
+      .catch((err) => { if (!cancelled) setError(err?.message || "Could not work out this PC's network address."); });
+    return () => { cancelled = true; };
+  }, []);
+
+  async function copy() {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard permission denied or unavailable — the URL is still shown to copy by hand.
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-amber-400/20 bg-amber-400/5 p-3 text-xs text-slate-300">
+      <p className="font-semibold text-amber-200">Set this as the device's webhook</p>
+      <p className="mt-1">
+        In the Shelly app, open this sensor's settings, then Actions/Webhooks, and add a call to this address for "Report" (or the temperature/humidity change events) —
+        it tells Primovex to read the sensor the moment it wakes, rather than waiting to be asked.
+      </p>
+      {error && <p className="mt-2 text-rose-300">{error}</p>}
+      {url && (
+        <div className="mt-2 flex items-center gap-2">
+          <code className="min-w-0 flex-1 truncate rounded-lg bg-slate-950/60 px-2 py-1.5 text-slate-100">{url}</code>
+          <button type="button" onClick={copy} className="shrink-0 rounded-lg border border-white/10 p-1.5 text-slate-300 hover:bg-white/5" aria-label="Copy webhook URL">
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+          {copied && <span className="shrink-0 text-teal-300">Copied</span>}
+        </div>
+      )}
+      <p className="mt-2 text-slate-500">Windows may ask once to allow Primovex through the firewall — choose Private networks, then Allow.</p>
+    </div>
+  );
+}
+
 function LocalThermometerManager({ canManageDevices }) {
   const [thermometers, setThermometers] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ name: "", room: "", ip: "", min: "2", max: "8" });
+  const [form, setForm] = useState({ name: "", room: "", ip: "", min: "2", max: "8", wakeOnly: false });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [checkingId, setCheckingId] = useState(null);
   const [checkMessages, setCheckMessages] = useState({});
+  const [showWebhookFor, setShowWebhookFor] = useState(null);
 
   useEffect(() => subscribeShellyLocalThermometers(setThermometers), []);
 
@@ -333,7 +386,7 @@ function LocalThermometerManager({ canManageDevices }) {
     setMessage("");
     try {
       await addShellyLocalThermometer(form);
-      setForm({ name: "", room: "", ip: "", min: "2", max: "8" });
+      setForm({ name: "", room: "", ip: "", min: "2", max: "8", wakeOnly: false });
       setShowAdd(false);
     } catch (error) {
       setMessage(error?.message || "Could not add this thermometer.");
@@ -358,7 +411,8 @@ function LocalThermometerManager({ canManageDevices }) {
       const value = await pollShellyLocalThermometerOnce(item);
       setCheckMessages((c) => ({ ...c, [item.id]: `${value.toFixed(1)}°C — reachable` }));
     } catch (error) {
-      setCheckMessages((c) => ({ ...c, [item.id]: error?.message || "Could not reach this thermometer." }));
+      const hint = item.wakeOnly ? " This is normal for a battery sensor between wake-ups — it updates on its own each time it reports." : "";
+      setCheckMessages((c) => ({ ...c, [item.id]: (error?.message || "Could not reach this thermometer.") + hint }));
     } finally {
       setCheckingId(null);
     }
@@ -372,7 +426,7 @@ function LocalThermometerManager({ canManageDevices }) {
             <Thermometer className="h-5 w-5 text-teal-200" />
             <h2 className="text-lg font-bold text-white">Local Thermometers</h2>
           </div>
-          <p className="mt-1 text-sm text-slate-400">Mains-powered WiFi thermometers read directly on the practice's own network by the desktop app — no cloud account required. Readings only update while a Primovex desktop app on the same network is running.</p>
+          <p className="mt-1 text-sm text-slate-400">WiFi thermometers read directly on the practice's own network by the desktop app — no cloud account required. Readings only update while a Primovex desktop app on the same network is running.</p>
         </div>
         {canManageDevices && (
           <Button type="button" variant="outline" onClick={() => setShowAdd((v) => !v)} className="rounded-full border-white/10 bg-slate-950/40 text-slate-200">
@@ -404,6 +458,11 @@ function LocalThermometerManager({ canManageDevices }) {
             Max °C
             <Input type="number" step="0.1" value={form.max} onChange={(e) => setForm((c) => ({ ...c, max: e.target.value }))} className="mt-1" />
           </label>
+          <label className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2.5 text-sm text-slate-200 sm:col-span-2">
+            <input type="checkbox" checked={form.wakeOnly} onChange={(e) => setForm((c) => ({ ...c, wakeOnly: e.target.checked }))} />
+            Battery sensor (e.g. Shelly H&T) — sleeps between readings and wakes briefly to report, rather than staying on all the time
+          </label>
+          {form.wakeOnly && <div className="sm:col-span-2"><ShellyWakeWebhookUrl /></div>}
           {message && <p className="text-sm text-rose-300 sm:col-span-2">{message}</p>}
           <div className="sm:col-span-2">
             <Button type="submit" disabled={busy} className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 font-semibold text-slate-950">
@@ -416,20 +475,33 @@ function LocalThermometerManager({ canManageDevices }) {
       <div className="mt-4 space-y-2">
         {thermometers.length === 0 && <p className="text-sm text-slate-500">No local thermometers configured yet.</p>}
         {thermometers.map((item) => (
-          <div key={item.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/40 p-3">
-            <div>
-              <p className="font-semibold text-white">{item.name}</p>
-              <p className="text-xs text-slate-400">{item.room} • {item.ip} • Safe range {item.min}-{item.max}°C</p>
-              {checkMessages[item.id] && <p className="mt-1 text-xs text-teal-300">{checkMessages[item.id]}</p>}
+          <div key={item.id} className="rounded-2xl border border-white/10 bg-slate-950/40 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="flex flex-wrap items-center gap-2 font-semibold text-white">
+                  {item.name}
+                  {item.wakeOnly && <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">Battery — reports on wake</span>}
+                </p>
+                <p className="text-xs text-slate-400">{item.room} • {item.ip} • Safe range {item.min}-{item.max}°C</p>
+                {checkMessages[item.id] && <p className="mt-1 text-xs text-teal-300">{checkMessages[item.id]}</p>}
+              </div>
+              {canManageDevices && (
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button type="button" variant="outline" size="sm" disabled={checkingId === item.id} onClick={() => checkNow(item)} className="rounded-full border-white/10 bg-slate-950/40 text-xs text-slate-200">
+                    {checkingId === item.id ? "Checking…" : "Check now"}
+                  </Button>
+                  <button type="button" disabled={busy} onClick={() => remove(item.id)} aria-label={`Remove ${item.name}`} className="rounded-lg p-2 text-slate-400 transition hover:bg-red-500/10 hover:text-red-400">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
             </div>
-            {canManageDevices && (
-              <div className="flex items-center gap-1">
-                <Button type="button" variant="outline" size="sm" disabled={checkingId === item.id} onClick={() => checkNow(item)} className="rounded-full border-white/10 bg-slate-950/40 text-xs text-slate-200">
-                  {checkingId === item.id ? "Checking…" : "Check now"}
-                </Button>
-                <button type="button" disabled={busy} onClick={() => remove(item.id)} aria-label={`Remove ${item.name}`} className="rounded-lg p-2 text-slate-400 transition hover:bg-red-500/10 hover:text-red-400">
-                  <Trash2 className="h-4 w-4" />
+            {item.wakeOnly && canManageDevices && (
+              <div className="mt-2">
+                <button type="button" onClick={() => setShowWebhookFor((v) => (v === item.id ? null : item.id))} className="text-[11px] font-semibold text-teal-300 underline underline-offset-2">
+                  {showWebhookFor === item.id ? "Hide webhook URL" : "Show webhook URL to set in the Shelly app"}
                 </button>
+                {showWebhookFor === item.id && <div className="mt-2"><ShellyWakeWebhookUrl /></div>}
               </div>
             )}
           </div>
