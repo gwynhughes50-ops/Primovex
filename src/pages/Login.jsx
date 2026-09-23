@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Icons } from "@/config/medtrakIcons";
 import PrimovexLogo from "@/components/brand/PrimovexLogo";
 import { useMedTrakTheme } from "@/components/theme/MedTrakThemeProvider";
+import DesktopLoginReminderHost from "@/desktop/alerts/DesktopLoginReminderHost";
 
 // This page is styled from the active theme's colour variables rather than
 // fixed slate/white utilities: the light theme's compatibility layer flips
@@ -109,6 +110,7 @@ export default function Login() {
 
   return (
     <div className={`min-h-screen overflow-hidden bg-[color:var(--medtrak-bg)] ${INK}`}>
+      <DesktopLoginReminderHost />
       <div className="pointer-events-none fixed inset-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_10%,rgba(37,99,235,0.22),transparent_31%),radial-gradient(circle_at_80%_20%,rgba(109,77,255,0.18),transparent_28%),radial-gradient(circle_at_60%_92%,rgba(139,92,246,0.13),transparent_34%)]" />
         <div className="absolute left-[12%] top-[18%] h-72 w-72 rounded-full bg-blue-500/10 blur-3xl" />

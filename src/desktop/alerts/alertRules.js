@@ -227,3 +227,60 @@ export function setDesktopAlertsEnabled(uid, enabled, storage = globalThis.local
     // ignore
   }
 }
+
+// ---- Login reminder (desktop, signed-out screen) ---------------------------
+// Same corner popup as the SAR/concerns alert above (see DesktopAlertsHost),
+// used for the opposite moment: nobody is signed in, so there is no uid to
+// scope Firestore reads or state by. State lives under one fixed key rather
+// than per-person; "dismiss" is deliberately not remembered forever the way
+// it is for SAR/concern items (there is no new item to bring it back), so it
+// simply falls back to the normal hourly repeat - see DesktopLoginReminderHost.
+
+export const LOGIN_REMINDER_ID = "login-reminder";
+export const LOGIN_REMINDER_GRACE_MS = 90 * 1000; // let the login screen settle before the first nudge
+export const LOGIN_REMINDER_STALE_DAYS = 2; // "it's been a while" wording kicks in
+// Always "due" while the login screen is showing - shouldShowAlert/afterShown
+// handle all the pacing (grace aside, which the host applies itself).
+export const LOGIN_REMINDER_SUMMARY = { total: 1, keys: [LOGIN_REMINDER_ID] };
+
+const LAST_LOGIN_AT_KEY = "primovex.lastLoginAt";
+
+// Called once, right after a real sign-in succeeds (see AuthContext). Never
+// called for demo/synthetic sessions - there is nothing to remind them of.
+export function recordLoginTimestamp(whenMs = Date.now(), storage = globalThis.localStorage) {
+  try {
+    storage?.setItem(LAST_LOGIN_AT_KEY, String(whenMs));
+  } catch {
+    // Storage unavailable: the reminder still works, it just won't know how long it's been.
+  }
+}
+
+export function readLastLoginAt(storage = globalThis.localStorage) {
+  try {
+    const raw = storage?.getItem(LAST_LOGIN_AT_KEY);
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+// Whole days since the last recorded sign-in on this PC, or null if unknown
+// (e.g. a fresh install, or storage was cleared).
+export function daysSinceLogin(lastLoginAtMs, nowMs = Date.now()) {
+  if (!lastLoginAtMs) return null;
+  return Math.max(0, Math.floor((nowMs - lastLoginAtMs) / 86400000));
+}
+
+export function buildLoginReminderPayload({ days }) {
+  if (days !== null && days >= LOGIN_REMINDER_STALE_DAYS) {
+    return {
+      title: "It's been a while",
+      lines: [{ tone: "warning", text: `${days} days since anyone signed in on this PC` }],
+    };
+  }
+  return {
+    title: "Still there?",
+    lines: [{ tone: "warning", text: "Sign in to Primovex when you're ready" }],
+  };
+}

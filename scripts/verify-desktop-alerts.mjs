@@ -170,4 +170,42 @@ t("state storage: round trip, per person, corrupt data safe, on/off switch", () 
   R.setDesktopAlertsEnabled("u1", true, storage);
   assert.equal(R.isDesktopAlertsEnabled("u1", storage), true);
 });
+// ---- login reminder (signed-out screen) ------------------------------------
+t("daysSinceLogin: null when never recorded", () => assert.equal(R.daysSinceLogin(null, NOW), null));
+t("daysSinceLogin: 0 for today, whole days otherwise", () => {
+  assert.equal(R.daysSinceLogin(NOW - 3 * 3600 * 1000, NOW), 0);
+  assert.equal(R.daysSinceLogin(NOW - 2 * 86400000, NOW), 2);
+  assert.equal(R.daysSinceLogin(NOW - 2.9 * 86400000, NOW), 2);
+});
+t("buildLoginReminderPayload: generic wording under the staleness threshold", () => {
+  const p0 = R.buildLoginReminderPayload({ days: null });
+  assert.equal(p0.title, "Still there?");
+  const p1 = R.buildLoginReminderPayload({ days: 1 });
+  assert.equal(p1.title, "Still there?");
+});
+t("buildLoginReminderPayload: names the day count once stale", () => {
+  const p = R.buildLoginReminderPayload({ days: 5 });
+  assert.equal(p.title, "It's been a while");
+  assert.deepEqual(p.lines, [{ tone: "warning", text: "5 days since anyone signed in on this PC" }]);
+});
+t("recordLoginTimestamp / readLastLoginAt: round trip, corrupt/missing data safe", () => {
+  const store = new Map();
+  const storage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) };
+  assert.equal(R.readLastLoginAt(storage), null);
+  R.recordLoginTimestamp(NOW, storage);
+  assert.equal(R.readLastLoginAt(storage), NOW);
+  store.set("primovex.lastLoginAt", "not-a-number");
+  assert.equal(R.readLastLoginAt(storage), null);
+});
+t("login reminder shares the same show/repeat/snooze engine as SAR/concern alerts", () => {
+  const summary = R.LOGIN_REMINDER_SUMMARY;
+  assert.equal(R.shouldShowAlert({ summary, state: E, now: NOW }), true);
+  const shown = R.afterShown(E, summary, NOW);
+  assert.equal(R.shouldShowAlert({ summary, state: shown, now: NOW + 59 * 60000 }), false);
+  assert.equal(R.shouldShowAlert({ summary, state: shown, now: NOW + H }), true);
+  const snoozed = R.afterSnooze(shown, "snooze_1h", NOW);
+  assert.equal(R.shouldShowAlert({ summary, state: snoozed, now: NOW + 30 * 60000 }), false);
+  assert.equal(R.shouldShowAlert({ summary, state: snoozed, now: NOW + H + 1 }), true);
+});
+
 console.log(`\n${n} passed`);

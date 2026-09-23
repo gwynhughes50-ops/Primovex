@@ -9,6 +9,7 @@ import { getActiveDemoProfile } from "@/config/demoMode";
 import { writeAuditEvent } from "@/core/identity/auditService";
 import { getDeviceId } from "@/services/deviceSessionService";
 import { startShellyLocalPolling } from "@/services/connect/shellyLocalPoller";
+import { recordLoginTimestamp } from "@/desktop/alerts/alertRules";
 
 const AuthContext = createContext(null);
 
@@ -76,6 +77,14 @@ export function AuthProvider({ children }) {
     const unsubscribeAuth = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       setError("");
+      // Powers the desktop "please sign in" corner reminder (see
+      // DesktopLoginReminderHost) - it has no uid to key off while signed
+      // out, so this is the one moment it can learn when someone last
+      // actually signed in on this PC.
+      if (u) {
+        const lastSignIn = u.metadata?.lastSignInTime ? new Date(u.metadata.lastSignInTime).getTime() : Date.now();
+        recordLoginTimestamp(Number.isFinite(lastSignIn) ? lastSignIn : Date.now());
+      }
 
       if (unsubscribeProfile) {
         unsubscribeProfile();
