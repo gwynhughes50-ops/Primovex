@@ -18,6 +18,7 @@
     "indexes": "firestore.indexes.json"
   },
   "storage": {
+    "bucket": "medtrak-b1cad.firebasestorage.app",
     "rules": "storage.rules"
   },
   "hosting": {
