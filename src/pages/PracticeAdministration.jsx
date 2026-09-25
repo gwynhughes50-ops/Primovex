@@ -13,7 +13,7 @@ import SpaceBuilder from "@/modules/sense/components/SpaceBuilder";
 import OrgChart from "@/components/admin/OrgChart";
 import { loadSenseState, saveSenseState } from "@/modules/sense/services/senseStore";
 import { getPlatformModeConfig, getStoredPlatformMode } from "@/config/platformMode";
-import { updateUserOrgHighlight, updateUserReportsTo } from "@/services/adminUserService";
+import { subscribeUsers, updateUserOrgHighlight, updateUserReportsTo } from "@/services/adminUserService";
 import {
   addDepartment,
   addPracticeRole,
@@ -159,8 +159,14 @@ export default function PracticeAdministration() {
     const unsubSites = subscribeCollection("practice_sites", (snap) => setSites(docsFromSnapshot(snap)), (err) => setError(err?.message || String(err)));
     const unsubDepartments = subscribeCollection("practice_departments", (snap) => setDepartments(docsFromSnapshot(snap)), (err) => setError(err?.message || String(err)));
     const unsubRoles = subscribeCollection("practice_roles", (snap) => setRoles(docsFromSnapshot(snap)), (err) => setError(err?.message || String(err)));
+    // Not subscribeCollection("users", ...): that orders by created_at
+    // server-side, but user profiles are written with createdAt (camelCase,
+    // from the account-creation Cloud Function) - Firestore silently drops
+    // any document missing the exact field it's ordering by, so every real
+    // user vanished from this list. subscribeUsers already sorts client-side
+    // for exactly this reason (see its own comment in adminUserService.js).
     const unsubUsers = canListUsers
-      ? subscribeCollection("users", (snap) => setUsers(docsFromSnapshot(snap)), (err) => setError(err?.message || String(err)))
+      ? subscribeUsers((rows) => setUsers(rows), (err) => setError(err?.message || String(err)))
       : () => {};
 
     return () => {
