@@ -10,8 +10,10 @@ import AccessDenied from "@/components/security/AccessDenied";
 import { CAPABILITY_CATALOG } from "@/core/identity/capabilities";
 import PlatformModeControls from "@/components/platform/PlatformModeControls";
 import SpaceBuilder from "@/modules/sense/components/SpaceBuilder";
+import OrgChart from "@/components/admin/OrgChart";
 import { loadSenseState, saveSenseState } from "@/modules/sense/services/senseStore";
 import { getPlatformModeConfig, getStoredPlatformMode } from "@/config/platformMode";
+import { updateUserOrgHighlight, updateUserReportsTo } from "@/services/adminUserService";
 import {
   addDepartment,
   addPracticeRole,
@@ -411,6 +413,32 @@ export default function PracticeAdministration() {
     }
   };
 
+  const handleChangeManager = async (uid, managerUid) => {
+    beginAction();
+    try {
+      setBusy(true);
+      await updateUserReportsTo(uid, managerUid);
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || "Failed to update the organisation chart.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleToggleHighlight = async (uid, highlighted) => {
+    beginAction();
+    try {
+      setBusy(true);
+      await updateUserOrgHighlight(uid, highlighted);
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || "Failed to update the organisation chart.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const completionScore = useMemo(() => {
     let score = 0;
     if (practice?.name) score += 20;
@@ -676,6 +704,28 @@ export default function PracticeAdministration() {
                   </div>
                 ))}
               </div>
+            </Card>
+          )}
+
+          {activeTab === "departments" && (
+            <Card className="mt-4 rounded-2xl mt-card border p-4 mt-text-primary">
+              <SectionHeader title="Organisation chart" />
+              {canListUsers ? (
+                <>
+                  <p className="mb-4 text-sm mt-text-secondary">
+                    Who reports to whom. {canManage ? "Tick who each person reports to under their name - tick more than one if they genuinely report to several people (they'll appear once under each, clearly marked). Tick \"Highlight\" to pick someone out visually (e.g. a senior partner among several partners) without changing where they sit in the tree." : "Read-only: System Admin permission is required to change reporting lines."}
+                  </p>
+                  <OrgChart
+                    users={users}
+                    canManage={canManage}
+                    onChangeManager={handleChangeManager}
+                    onToggleHighlight={handleToggleHighlight}
+                    busy={busy}
+                  />
+                </>
+              ) : (
+                <p className="text-sm mt-text-secondary">Full staff directory access (admin.manageUsers) is required to view the organisation chart.</p>
+              )}
             </Card>
           )}
 

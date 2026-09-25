@@ -31,6 +31,24 @@ export async function updateUserRole(uid, role) {
   await updateDoc(doc(db, "users", uid), { role });
 }
 
+// Who this person reports to, for the organisation chart (Practice Admin >
+// Departments). A list, not a single value - some staff genuinely report to
+// more than one manager at once (e.g. a GP answering to both the Practice
+// Manager and a partner). Same reasoning as updateUserRole above - a plain
+// client write, no Cloud Function needed. An empty array puts them at the
+// top of the chart.
+export async function updateUserReportsTo(uid, managerUids) {
+  await updateDoc(doc(db, "users", uid), { reportsTo: Array.isArray(managerUids) ? managerUids : (managerUids ? [managerUids] : []) });
+}
+
+// A purely visual marker for the organisation chart - e.g. picking out a
+// senior partner among several partners who all sit at the same level (same
+// manager or none). Deliberately separate from reportsTo/role: it changes
+// how someone's box looks, never where it sits in the tree.
+export async function updateUserOrgHighlight(uid, highlighted) {
+  await updateDoc(doc(db, "users", uid), { orgHighlight: !!highlighted });
+}
+
 // Issues a fresh password-set link for an existing account (the one from Add
 // User expires after an hour). Returns { uid, email, link } — admin-only, and
 // only a System Admin can do it for another System Admin.

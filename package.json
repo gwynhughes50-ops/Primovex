@@ -26,7 +26,8 @@
     "test:clinflow-intelligence": "node scripts/verify-clinflow-intelligence.mjs",
     "test:governed-audit": "node scripts/verify-governed-audit.mjs",
     "test:desktop-alerts": "esbuild scripts/verify-desktop-alerts.mjs --bundle --platform=node --format=esm --outfile=work/verify-desktop-alerts.bundle.mjs && node work/verify-desktop-alerts.bundle.mjs",
-    "test:stock-expiry": "node scripts/verify-stock-expiry.mjs"
+    "test:stock-expiry": "node scripts/verify-stock-expiry.mjs",
+    "test:org-chart": "node scripts/verify-org-chart.mjs"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",

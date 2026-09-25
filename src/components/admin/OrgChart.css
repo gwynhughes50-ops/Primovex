@@ -1,0 +1,97 @@
+/* Pure-CSS organisation chart connectors, built on real nested <ul>/<li>:
+   <ul class="org-tree"><li><div class="org-node">...</div><ul>...children...</ul></li></ul>
+   This file only draws the lines between boxes; node content is plain
+   Tailwind-styled markup passed as children. */
+
+.org-tree,
+.org-tree ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+}
+
+.org-tree ul {
+  padding-top: 28px;
+  position: relative;
+}
+
+/* Vertical drop from a parent node down to the shared horizontal bar above its children */
+.org-tree ul::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: 14px;
+  border-left: 2px solid var(--org-line, #64748b);
+}
+
+.org-tree li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 14px 0 14px;
+}
+
+.org-tree > li {
+  padding-top: 0;
+}
+
+/* Horizontal half-bars meeting at each li's own centre, plus the short drop
+   from that bar down into the node box below it. */
+.org-tree li::before,
+.org-tree li::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  width: 50%;
+  height: 14px;
+  border-top: 2px solid var(--org-line, #64748b);
+}
+
+.org-tree li::before {
+  right: 50%;
+}
+
+.org-tree li::after {
+  left: 50%;
+  border-left: 2px solid var(--org-line, #64748b);
+}
+
+.org-tree > li::before,
+.org-tree > li::after {
+  display: none;
+}
+
+.org-tree li:only-child {
+  padding-top: 0;
+}
+
+.org-tree li:only-child::before,
+.org-tree li:only-child::after {
+  display: none;
+}
+
+.org-tree li:first-child::before {
+  border-top: none;
+}
+
+.org-tree li:last-child::after {
+  border-top: none;
+}
+
+.org-tree li:last-child::before {
+  border-right: 2px solid var(--org-line, #64748b);
+  border-radius: 0 6px 0 0;
+}
+
+.org-tree li:first-child::after {
+  border-radius: 6px 0 0 0;
+}
+
+.org-node {
+  display: inline-flex;
+}
