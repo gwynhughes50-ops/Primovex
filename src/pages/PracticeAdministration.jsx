@@ -88,6 +88,8 @@ export default function PracticeAdministration() {
   });
 
   const [siteName, setSiteName] = useState("");
+  const [editingSiteId, setEditingSiteId] = useState(null);
+  const [siteDetailsForm, setSiteDetailsForm] = useState({ address: "", postcode: "", telephone: "" });
   const [departmentName, setDepartmentName] = useState("");
   const [roleName, setRoleName] = useState("");
   const [roleDepartment, setRoleDepartment] = useState("");
@@ -254,6 +256,45 @@ export default function PracticeAdministration() {
     } catch (err) {
       console.error(err);
       setError(err?.message || "Failed to add site.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const startEditSite = (site) => {
+    beginAction();
+    setEditingSiteId(site.id);
+    setSiteDetailsForm({
+      address: site.address || "",
+      postcode: site.postcode || "",
+      telephone: site.telephone || "",
+    });
+  };
+
+  const cancelEditSite = () => {
+    setEditingSiteId(null);
+    setSiteDetailsForm({ address: "", postcode: "", telephone: "" });
+  };
+
+  const saveSiteDetails = async () => {
+    if (!requireManage() || !editingSiteId) return;
+    beginAction();
+    try {
+      setBusy(true);
+      await updatePracticeSite(
+        editingSiteId,
+        {
+          address: siteDetailsForm.address.trim(),
+          postcode: siteDetailsForm.postcode.trim().toUpperCase(),
+          telephone: siteDetailsForm.telephone.trim(),
+        },
+        actor
+      );
+      setSuccess("Site details saved.");
+      cancelEditSite();
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || "Failed to save site details.");
     } finally {
       setBusy(false);
     }
@@ -552,7 +593,46 @@ export default function PracticeAdministration() {
                   <div key={site.id} className="rounded-xl mt-card-strong border p-4">
                     <div className="font-bold mt-text-primary">{site.name}</div>
                     <div className="mt-1 text-xs mt-text-secondary">{site.type || "site"} · {site.active === false ? "Inactive" : "Active"}</div>
-                    {canManage && <Button className="mt-3" size="sm" variant="outline" onClick={() => toggleRecord("site", site)}>{site.active === false ? "Activate" : "Deactivate"}</Button>}
+                    {(site.address || site.postcode || site.telephone) && editingSiteId !== site.id && (
+                      <div className="mt-2 space-y-0.5 text-xs mt-text-secondary">
+                        {site.address && <div>{site.address}</div>}
+                        {site.postcode && <div>{site.postcode}</div>}
+                        {site.telephone && <div>{site.telephone}</div>}
+                      </div>
+                    )}
+
+                    {editingSiteId === site.id ? (
+                      <div className="mt-3 space-y-2">
+                        <Input
+                          value={siteDetailsForm.address}
+                          onChange={(e) => setSiteDetailsForm((f) => ({ ...f, address: e.target.value }))}
+                          placeholder="Address"
+                        />
+                        <Input
+                          value={siteDetailsForm.postcode}
+                          onChange={(e) => setSiteDetailsForm((f) => ({ ...f, postcode: e.target.value }))}
+                          placeholder="Postcode"
+                        />
+                        <Input
+                          value={siteDetailsForm.telephone}
+                          onChange={(e) => setSiteDetailsForm((f) => ({ ...f, telephone: e.target.value }))}
+                          placeholder="Telephone"
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={saveSiteDetails} disabled={busy}>Save</Button>
+                          <Button size="sm" variant="outline" onClick={cancelEditSite} disabled={busy}>Cancel</Button>
+                        </div>
+                      </div>
+                    ) : (
+                      canManage && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button size="sm" variant="outline" onClick={() => startEditSite(site)}>
+                            {site.address || site.postcode || site.telephone ? "Edit details" : "Add address"}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => toggleRecord("site", site)}>{site.active === false ? "Activate" : "Deactivate"}</Button>
+                        </div>
+                      )
+                    )}
                   </div>
                 ))}
               </div>
