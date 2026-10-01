@@ -633,6 +633,9 @@ export default function ClinicalAssetChecklist({
           parentCollection={collectionName}
           existingIds={existingIds}
           initialDoc={manageDoc}
+          title={title}
+          itemHasSection={enableSections}
+          stockItems={stockItems}
           onSaved={async (savedId) => {
             const list = await reloadEntities(false);
             setSelectedId(savedId || list[0]?.id || "");
@@ -926,6 +929,9 @@ export default function ClinicalAssetChecklist({
         parentCollection={collectionName}
         existingIds={existingIds}
         initialDoc={manageDoc}
+        title={title}
+        itemHasSection={enableSections}
+        stockItems={stockItems}
         onSaved={async (savedId) => {
           const list = await reloadEntities(false);
           setSelectedId(savedId || list[0]?.id || "");

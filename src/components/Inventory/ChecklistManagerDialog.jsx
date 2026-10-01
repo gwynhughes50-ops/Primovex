@@ -1,6 +1,71 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { upsertParentDoc, deleteParentDoc, listActiveSites } from "@/lib/checklistsFirestore";
 
+// A plain text input that doubles as a live search against the practice's
+// real stock items, by name or by barcode - typing shows matches below;
+// scanning a barcode (a hardware scanner "types" the code then Enter) or
+// pasting one that matches exactly selects it immediately. Used for both the
+// Item name and Stock barcode fields below, since either one can drive the
+// match - staff might know the name but not the barcode, or vice versa.
+// Picking a match fills both fields together; nothing stops typing a name
+// that isn't in stock at all (not every emergency drug is necessarily
+// tracked as general stock).
+function StockLookupInput({ value, placeholder, stockItems, onChange, onPick }) {
+  const [open, setOpen] = useState(false);
+
+  const query = String(value || "").trim().toLowerCase();
+  const matches = useMemo(() => {
+    if (!query) return [];
+    return stockItems
+      .filter((s) => String(s.name || "").toLowerCase().includes(query) || String(s.barcode || "").toLowerCase().includes(query))
+      .slice(0, 6);
+  }, [query, stockItems]);
+
+  const exactBarcodeMatch = useMemo(
+    () => stockItems.find((s) => String(s.barcode || "").trim().toLowerCase() === query && query),
+    [query, stockItems]
+  );
+
+  return (
+    <div className="relative">
+      <input
+        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setOpen(true)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && exactBarcodeMatch) {
+            e.preventDefault();
+            onPick(exactBarcodeMatch);
+            setOpen(false);
+          }
+        }}
+      />
+      {open && matches.length > 0 && (
+        <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 shadow-lg">
+          {matches.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onPick(s);
+                setOpen(false);
+              }}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
+            >
+              <span className="truncate">{s.name}</span>
+              <span className="shrink-0 font-mono text-slate-500">{s.barcode || "no barcode"}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ChecklistManagerDialog({
   open,
   onClose,
@@ -10,6 +75,7 @@ export default function ChecklistManagerDialog({
   initialDoc,
   title,
   itemHasSection,
+  stockItems = [],
 }) {
   const isEdit = Boolean(initialDoc?.id);
 
@@ -238,12 +304,13 @@ export default function ChecklistManagerDialog({
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <div className="text-[10px] text-slate-500 mb-1">Item name</div>
-                    <input
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
+                    <div className="text-[10px] text-slate-500 mb-1">Item name - type to search stock, or scan/type a barcode</div>
+                    <StockLookupInput
                       value={it.name}
-                      onChange={(e) => setItem(idx, { name: e.target.value })}
                       placeholder="Item name"
+                      stockItems={stockItems}
+                      onChange={(value) => setItem(idx, { name: value })}
+                      onPick={(stock) => setItem(idx, { name: stock.name, stock_barcode: stock.barcode || "" })}
                     />
                   </div>
                   <button
@@ -285,16 +352,17 @@ export default function ChecklistManagerDialog({
                     />
                   </div>
                   <div>
-                    <div className="text-[10px] text-slate-500 mb-1">Stock barcode (optional)</div>
-                    <input
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
+                    <div className="text-[10px] text-slate-500 mb-1">Stock barcode (optional) - scan or search</div>
+                    <StockLookupInput
                       value={it.stock_barcode}
-                      onChange={(e) => setItem(idx, { stock_barcode: e.target.value })}
-                      placeholder="Match stock item barcode"
+                      placeholder="Scan or type a barcode"
+                      stockItems={stockItems}
+                      onChange={(value) => setItem(idx, { stock_barcode: value })}
+                      onPick={(stock) => setItem(idx, { name: it.name || stock.name, stock_barcode: stock.barcode || "" })}
                     />
                   </div>
                 </div>
-                <p className="text-[11px] text-slate-500">Leave batch/expiry blank if this item doesn't need tracking (e.g. a spacer device) - staff can still enter them during a check if needed; they just won't be pre-filled.</p>
+                <p className="text-[11px] text-slate-500">Type a name or scan a barcode in either field above to match it to a real stock item - picking a match fills both. Leave batch/expiry blank if this item doesn't need tracking (e.g. a spacer device) - staff can still enter them during a check if needed; they just won't be pre-filled.</p>
               </div>
             ))}
           </div>
