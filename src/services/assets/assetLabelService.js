@@ -50,6 +50,7 @@ export function parseAssetQrPayload(raw) {
 }
 
 import { getQrImageUrl } from "@/lib/qrCode";
+import { printHtmlDocument } from "@/lib/printHtmlDocument";
 
 export { getQrImageUrl };
 
@@ -171,13 +172,8 @@ export function openAssetLabelPrintWindow({ asset, collectionName, title = "Clin
       <div class="foot">Scan with Primovex Mobile to open this asset and complete its checklist.</div>
     </section>
   </div>
-  <script>window.onload = () => setTimeout(() => window.print(), 250);</script>
 </body>
 </html>`;
 
-  const w = window.open("", "_blank");
-  if (!w) return alert("Popup blocked - please allow popups to print labels.");
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
+  printHtmlDocument(html);
 }

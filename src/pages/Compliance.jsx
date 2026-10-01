@@ -37,6 +37,7 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { addDocResendSafe } from "@/lib/resendSafeWrites";
+import { printHtmlDocument } from "@/lib/printHtmlDocument";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import ComplianceQrEngine from "@/components/compliance/ComplianceQrEngine";
 import ComplianceOverview from "@/components/compliance/ComplianceOverview";
@@ -128,21 +129,9 @@ function escapeHtml(s) {
     .replaceAll("'", "&#39;");
 }
 
-function openPrintWindow(html) {
-  const w = window.open("", "_blank", "noopener,noreferrer");
-  if (!w) {
-    alert("Pop-up blocked. Please allow pop-ups for printing.");
-    return;
-  }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  w.focus();
-  // Give browser a tick to render before print
-  setTimeout(() => {
-    w.print();
-  }, 250);
-}
+// See printHtmlDocument for why this isn't window.open() - that reliably
+// shows "Popup blocked" in the packaged desktop app.
+const openPrintWindow = printHtmlDocument;
 
 function basePrintHtml({ title, bodyHtml }) {
   const css = `

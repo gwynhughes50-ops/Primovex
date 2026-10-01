@@ -28,6 +28,7 @@ import {
   subscribeComplianceAssets,
   subscribeRecentComplianceChecks,
 } from "@/services/compliance/complianceQrService";
+import { printHtmlDocument } from "@/lib/printHtmlDocument";
 
 function typeIcon(type) {
   if (String(type || "").startsWith("fire")) return Flame;
@@ -59,7 +60,7 @@ function printableLabelsHtml(assets) {
       const payload = buildComplianceQrPayload(asset);
       return `
         <section class="label">
-          <div class="topline">${escapeHtml(getAssetTypeConfig(asset.assetType).icon)} MEDTRAK+</div>
+          <div class="topline">${escapeHtml(getAssetTypeConfig(asset.assetType).icon)} PRIMOVEX</div>
           <img alt="QR" src="${escapeHtml(getQrImageUrl(payload, 180))}" />
           <div class="code">${escapeHtml(asset.assetCode || asset.id)}</div>
           <div class="name">${escapeHtml(asset.label || "Compliance asset")}</div>
@@ -71,19 +72,16 @@ function printableLabelsHtml(assets) {
     .join("");
 
   return `<!doctype html>
-<html><head><meta charset="utf-8" /><title>MedTrak QR Labels</title>
+<html><head><meta charset="utf-8" /><title>Primovex QR Labels</title>
 <style>
 body{font-family:Arial,system-ui,sans-serif;margin:20px;color:#0f172a}.grid{display:grid;grid-template-columns:repeat(2, 88mm);gap:12mm}.label{border:1px solid #cbd5e1;border-radius:12px;padding:12px;text-align:center;break-inside:avoid}.topline{font-size:11px;font-weight:700;letter-spacing:.12em;color:#0f766e}.code{font-size:22px;font-weight:800;margin-top:4px}.name{font-size:13px;font-weight:700}.loc{font-size:12px;color:#475569;margin-top:2px}.small{font-size:8px;color:#94a3b8;margin-top:8px;word-break:break-all}img{width:42mm;height:42mm;margin:auto}@media print{body{margin:10mm}.no-print{display:none}.grid{gap:8mm}}
 </style></head><body><button class="no-print" onclick="window.print()">Print labels</button><div class="grid">${cards}</div></body></html>`;
 }
 
+// See printHtmlDocument for why this isn't window.open() - that reliably
+// shows "Popup blocked" in the packaged desktop app.
 function openPrintLabels(assets) {
-  const w = window.open("", "_blank", "noopener,noreferrer");
-  if (!w) return alert("Pop-up blocked. Please allow pop-ups for QR labels.");
-  w.document.open();
-  w.document.write(printableLabelsHtml(assets));
-  w.document.close();
-  setTimeout(() => w.print(), 300);
+  printHtmlDocument(printableLabelsHtml(assets));
 }
 
 export default function ComplianceQrEngine() {
@@ -218,7 +216,7 @@ export default function ComplianceQrEngine() {
             </div>
             <h2 className="mt-3 text-2xl font-semibold text-slate-50">Assets and tags</h2>
             <p className="mt-2 max-w-3xl text-sm text-slate-300">
-              Give fire points, water outlets, fridges and emergency equipment a MedTrak QR/NFC identity. Staff scan the asset, complete one action, and MedTrak records the audit trail, time, user, location and Pulse impact in the background.
+              Give fire points, water outlets, fridges and emergency equipment a Primovex QR/NFC identity. Staff scan the asset, complete one action, and Primovex records the audit trail, time, user, location and Pulse impact in the background.
             </p>
           </div>
           <div className="space-y-3">

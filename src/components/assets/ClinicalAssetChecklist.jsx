@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import ChecklistManagerDialog from "@/components/Inventory/ChecklistManagerDialog";
 import { listActiveSites } from "@/lib/checklistsFirestore";
+import { printHtmlDocument } from "@/lib/printHtmlDocument";
 import ClinicalChecklistItemRow from "@/components/assets/ClinicalChecklistItemRow";
 import useStock from "@/hooks/useStock";
 import { auth } from "@/lib/firebase";
@@ -42,13 +43,9 @@ function classNames(...classes) {
   return classes.filter(Boolean).join(" ");
 }
 
-function openPrintWindow(html) {
-  const w = window.open("", "_blank");
-  if (!w) return alert("Popup blocked - please allow popups for print/export.");
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-}
+// See printHtmlDocument for why this isn't window.open() - that reliably
+// shows "Popup blocked" in the packaged desktop app.
+const openPrintWindow = printHtmlDocument;
 
 function readinessCopy(status) {
   if (status === "critical") {
@@ -512,7 +509,6 @@ export default function ClinicalAssetChecklist({
     <tbody>${rows}</tbody>
   </table>
   <div class="meta">Overall notes: ${escapeHtml(form.notes || "")}<br/>Generated: ${new Date().toLocaleString()}</div>
-  <script>window.onload = () => setTimeout(() => window.print(), 200);</script>
 </body>
 </html>`;
     openPrintWindow(html);
@@ -573,7 +569,6 @@ export default function ClinicalAssetChecklist({
   <h1>${escapeHtml(checklistTitle)} - full contents list</h1>
   <p class="sub">${siteFilter ? `${escapeHtml(siteFilter)} &middot; ` : ""}${visibleOverview.length} ${escapeHtml(entityLabelPlural)} &middot; Generated ${new Date().toLocaleString()}</p>
   ${kitSections || `<p>No ${escapeHtml(entityLabelPlural)} to list.</p>`}
-  <script>window.onload = () => setTimeout(() => window.print(), 200);</script>
 </body>
 </html>`;
     openPrintWindow(html);
