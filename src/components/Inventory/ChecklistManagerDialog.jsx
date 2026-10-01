@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
 import { upsertParentDoc, deleteParentDoc, listActiveSites } from "@/lib/checklistsFirestore";
 
 // A plain text input that doubles as a live search against the practice's
@@ -211,20 +212,33 @@ export default function ChecklistManagerDialog({
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3">
       <div className="w-full max-w-3xl bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-          <div>
-            <div className="text-slate-100 font-semibold">{title}</div>
+        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-slate-100 font-semibold">{title}</div>
             <div className="text-xs text-slate-400">
               {isEdit ? "Edit existing set" : "Create a new set"} (admin only)
             </div>
           </div>
-          <button
-            type="button"
-            onClick={() => onClose?.()}
-            className="text-slate-300 hover:text-slate-100 text-sm"
-          >
-            Close
-          </button>
+          <div className="flex shrink-0 items-center gap-3">
+            {isEdit && (
+              <button
+                type="button"
+                onClick={doDelete}
+                disabled={saving}
+                title="Delete this whole box/trolley"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/40 px-3 py-1.5 text-sm text-rose-300 hover:bg-rose-500/10 disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" /> Delete set
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onClose?.()}
+              className="text-slate-300 hover:text-slate-100 text-sm"
+            >
+              Close
+            </button>
+          </div>
         </div>
 
         <div className="p-4 space-y-4">
@@ -316,10 +330,10 @@ export default function ChecklistManagerDialog({
                   <button
                     type="button"
                     onClick={() => removeItem(idx)}
-                    className="mt-5 shrink-0 text-xs text-rose-300 hover:text-rose-200"
-                    title="Remove item"
+                    className="mt-5 inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-rose-500/40 px-2.5 py-2 text-xs font-medium text-rose-300 hover:bg-rose-500/10"
+                    title="Remove this item from the kit"
                   >
-                    Remove
+                    <Trash2 className="h-3.5 w-3.5" /> Remove
                   </button>
                 </div>
 
@@ -369,20 +383,7 @@ export default function ChecklistManagerDialog({
 
           {err && <div className="text-sm text-rose-300">{err}</div>}
 
-          <div className="flex items-center justify-between">
-            <div>
-              {isEdit ? (
-                <button
-                  type="button"
-                  onClick={doDelete}
-                  disabled={saving}
-                  className="px-3 py-2 rounded-xl text-sm border border-rose-500/40 text-rose-200 hover:bg-rose-500/10 disabled:opacity-50"
-                >
-                  Delete set
-                </button>
-              ) : null}
-            </div>
-
+          <div className="flex items-center justify-end">
             <div className="flex gap-2">
               <button
                 type="button"
