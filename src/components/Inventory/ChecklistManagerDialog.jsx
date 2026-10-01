@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { upsertParentDoc, deleteParentDoc } from "@/lib/checklistsFirestore";
+import React, { useEffect, useMemo, useState } from "react";
+import { upsertParentDoc, deleteParentDoc, listActiveSites } from "@/lib/checklistsFirestore";
 
 export default function ChecklistManagerDialog({
   open,
@@ -20,6 +20,25 @@ export default function ChecklistManagerDialog({
   const [name, setName] = useState(initialDoc?.name || "");
   const [site, setSite] = useState(initialDoc?.site || "");
   const [location, setLocation] = useState(initialDoc?.location || "");
+  const [sites, setSites] = useState([]);
+
+  useEffect(() => {
+    if (!open) return;
+    let active = true;
+    listActiveSites()
+      .then((rows) => { if (active) setSites(rows); })
+      .catch(() => { if (active) setSites([]); });
+    return () => { active = false; };
+  }, [open]);
+
+  // The practice's real sites, plus the box's existing value if it doesn't
+  // match one of them (an older free-text value, or a site since renamed/
+  // deactivated) - so opening this dialog can never silently wipe it.
+  const siteOptions = useMemo(() => {
+    const names = sites.map((s) => s.name).filter(Boolean);
+    if (site && !names.includes(site)) return [site, ...names];
+    return names;
+  }, [sites, site]);
   const [items, setItems] = useState(
     (initialDoc?.items || []).map((it) => ({
       id: it.id || "",
@@ -168,12 +187,17 @@ export default function ChecklistManagerDialog({
 
             <div>
               <div className="text-xs text-slate-400 mb-1">Site (optional)</div>
-              <input
+              <select
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
                 value={site}
                 onChange={(e) => setSite(e.target.value)}
-                placeholder="e.g. main_branch"
-              />
+              >
+                <option value="">No site assigned</option>
+                {siteOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+              {sites.length === 0 && (
+                <p className="mt-1 text-[11px] text-slate-500">No sites set up yet - add one under Practice Admin &gt; Sites.</p>
+              )}
             </div>
 
             <div>

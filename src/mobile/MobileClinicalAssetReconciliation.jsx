@@ -245,7 +245,7 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
           </button>
           <div className="min-w-0 flex-1">
             <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)} className="w-full truncate bg-transparent text-lg font-bold text-[var(--medtrak-text)] outline-none">
-              {boxes.map((box) => <option key={box.id} value={box.id}>{box.name}</option>)}
+              {boxes.map((box) => <option key={box.id} value={box.id}>{box.name}{box.site ? ` · ${box.site}` : ""}</option>)}
             </select>
             <p className="truncate text-xs font-medium text-[var(--medtrak-muted)]">{selected.location || selected.site || "Room not assigned"} · {Math.min(completedCount + 1, items.length)}/{items.length}</p>
           </div>

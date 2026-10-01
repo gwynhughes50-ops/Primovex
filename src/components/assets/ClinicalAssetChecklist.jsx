@@ -14,6 +14,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import ChecklistManagerDialog from "@/components/Inventory/ChecklistManagerDialog";
+import { listActiveSites } from "@/lib/checklistsFirestore";
 import ClinicalChecklistItemRow from "@/components/assets/ClinicalChecklistItemRow";
 import useStock from "@/hooks/useStock";
 import { auth } from "@/lib/firebase";
@@ -143,6 +144,8 @@ export default function ClinicalAssetChecklist({
   const { items: stockItems } = useStock({ includeArchived: false });
   const [entities, setEntities] = useState([]);
   const [selectedId, setSelectedId] = useState("");
+  const [sites, setSites] = useState([]);
+  const [siteFilter, setSiteFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ results: {}, notes: "" });
   const [latest, setLatest] = useState(null);
@@ -161,6 +164,31 @@ export default function ClinicalAssetChecklist({
     () => entities.find((item) => item.id === selectedId) || null,
     [entities, selectedId]
   );
+
+  // Which site's kits are shown in the picker below - "All sites" (the
+  // default) leaves this empty. Deliberately doesn't affect `selected`
+  // itself: a scanned QR label or an Orb link should still open its asset
+  // even if it belongs to a site the filter has hidden.
+  const visibleEntities = useMemo(
+    () => (siteFilter ? entities.filter((entity) => (entity.site || "") === siteFilter) : entities),
+    [entities, siteFilter]
+  );
+
+  useEffect(() => {
+    let active = true;
+    listActiveSites()
+      .then((rows) => { if (active) setSites(rows); })
+      .catch(() => { if (active) setSites([]); });
+    return () => { active = false; };
+  }, []);
+
+  // If the site filter changes and the selected asset is no longer in view,
+  // follow the filter rather than leaving a hidden asset silently selected.
+  useEffect(() => {
+    if (!siteFilter) return;
+    if (selected && visibleEntities.some((entity) => entity.id === selected.id)) return;
+    setSelectedId(visibleEntities[0]?.id || "");
+  }, [siteFilter, visibleEntities, selected]);
 
   const readiness = useMemo(
     () => calculateAssetReadiness({ asset: selected, latest, results: form.results }),
@@ -573,7 +601,7 @@ export default function ClinicalAssetChecklist({
       </section>
 
       <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <StatCard label="Assets" value={entities.length} detail={`Tracked ${entityLabelPlural}`} icon={Boxes} />
+        <StatCard label="Assets" value={visibleEntities.length} detail={siteFilter ? `At ${siteFilter}` : `Tracked ${entityLabelPlural}`} icon={Boxes} />
         <StatCard label="Kit Items" value={readiness.itemCount} detail="Expected contents" icon={PackageCheck} />
         <StatCard label="Missing" value={readiness.missing} detail="Must be resolved" icon={AlertTriangle} />
         <StatCard label="Expiring" value={readiness.expiringSoon} detail="Within 30 days" icon={CalendarClock} />
@@ -585,15 +613,29 @@ export default function ClinicalAssetChecklist({
           <div className="rounded-3xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] p-4 text-[color:var(--medtrak-text)] shadow-sm">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                {sites.length > 0 && (
+                  <>
+                    <label className="text-sm font-medium text-[color:var(--medtrak-muted)]">Site</label>
+                    <select
+                      className="rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm text-[color:var(--medtrak-text)] outline-none ring-offset-background focus:ring-2 focus:ring-ring"
+                      value={siteFilter}
+                      onChange={(event) => setSiteFilter(event.target.value)}
+                    >
+                      <option value="">All sites</option>
+                      {sites.map((site) => <option key={site.id} value={site.name}>{site.name}</option>)}
+                    </select>
+                  </>
+                )}
                 <label className="text-sm font-medium text-[color:var(--medtrak-muted)]">{capitalise(entityLabel)}</label>
                 <select
                   className="min-w-[260px] rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm text-[color:var(--medtrak-text)] outline-none ring-offset-background focus:ring-2 focus:ring-ring"
                   value={selectedId}
                   onChange={(event) => setSelectedId(event.target.value)}
                 >
-                  {entities.map((entity) => (
+                  {visibleEntities.length === 0 && <option value="">No {entityLabelPlural} at this site</option>}
+                  {visibleEntities.map((entity) => (
                     <option key={entity.id} value={entity.id}>
-                      {entity.name}{entity.location ? ` - ${entity.location}` : ""}
+                      {entity.name}{entity.site ? ` · ${entity.site}` : ""}{entity.location ? ` - ${entity.location}` : ""}
                     </option>
                   ))}
                 </select>

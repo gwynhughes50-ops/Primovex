@@ -44,6 +44,22 @@ export async function listAnaphylaxisBoxes() {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
+// The practice's real sites (Practice Admin > Sites), for the site filter on
+// this page and the Site picker in ChecklistManagerDialog - previously the
+// kit's "site" field was free text with nothing connecting it to the actual
+// Main Site / Branch Site records, so there was no reliable way to tell
+// which site a kit belonged to, let alone filter by it. Sorted client-side
+// rather than orderBy("created_at") so a site record missing that field
+// (shouldn't happen, but see this app's own history of exactly that) doesn't
+// just vanish from the list.
+export async function listActiveSites() {
+  const snap = await getDocs(collection(db, "practice_sites"));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((s) => s.active !== false)
+    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+}
+
 export async function getParentDoc(parentCollection, parentId) {
   const ref = doc(db, parentCollection, parentId);
   const snap = await getDoc(ref);
