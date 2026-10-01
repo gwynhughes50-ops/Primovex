@@ -24,8 +24,14 @@ export default function ClinicalChecklistItemRow({
   onChange,
 }) {
   const quantityRequired = item.expectedQty !== null && item.expectedQty !== undefined;
-  const batchRequired = Boolean(item.defaultBatch || item.stock_barcode || result.batch);
-  const expiryRequired = Boolean(item.defaultExpiry || result.expiry);
+  // Batch/serial and expiry used to be disabled entirely unless a default was
+  // already configured on the kit template - since the admin dialog had no
+  // way to set either, that was a closed loop: an item added normally could
+  // never have its batch or expiry recorded, ever. Both fields are now
+  // always editable; these two only decide the hint text shown when there's
+  // no default to fall back on.
+  const batchExpected = Boolean(item.defaultBatch || item.stock_barcode || result.batch);
+  const expiryExpected = Boolean(item.defaultExpiry || result.expiry);
 
   return (
     <article className="p-4 sm:p-5">
@@ -63,28 +69,25 @@ export default function ClinicalChecklistItemRow({
             />
           </Field>
 
-          <Field label="Batch / serial" className="sm:col-span-2 xl:col-span-4" help={!batchRequired ? "No batch or serial is required for this item." : null}>
+          <Field label="Batch / serial" className="sm:col-span-2 xl:col-span-4" help={!batchExpected ? "No default is set for this item - enter it if the physical item has one." : null}>
             <input
-              className={`${controlClass} ${!batchRequired ? "opacity-65" : ""}`}
+              className={controlClass}
               value={result.batch || ""}
               onChange={(event) => onChange({ batch: event.target.value })}
-              placeholder={batchRequired ? "Enter batch or serial" : "Not required"}
-              disabled={!batchRequired}
+              placeholder="Enter batch or serial"
             />
           </Field>
 
           <Field
             label="Expiry"
             className="sm:col-span-2 xl:col-span-3"
-            help={stock ? `Stock level ${stock.current_stock ?? "-"} / minimum ${stock.min_stock ?? 0}` : item.stock_barcode ? "Linked stock item not found." : !expiryRequired ? "No expiry is required for this component." : null}
+            help={stock ? `Stock level ${stock.current_stock ?? "-"} / minimum ${stock.min_stock ?? 0}` : item.stock_barcode ? "Linked stock item not found." : !expiryExpected ? "No default is set for this item - enter it if the physical item has one." : null}
           >
             <input
-              type={expiryRequired ? "date" : "text"}
-              className={`${controlClass} ${!expiryRequired ? "opacity-65" : ""}`}
+              type="date"
+              className={controlClass}
               value={result.expiry || ""}
               onChange={(event) => onChange({ expiry: event.target.value })}
-              placeholder={expiryRequired ? "YYYY-MM-DD" : "Not required"}
-              disabled={!expiryRequired}
             />
           </Field>
 

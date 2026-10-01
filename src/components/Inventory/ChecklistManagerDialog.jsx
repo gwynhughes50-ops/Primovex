@@ -4,6 +4,7 @@ import { upsertParentDoc, deleteParentDoc } from "@/lib/checklistsFirestore";
 export default function ChecklistManagerDialog({
   open,
   onClose,
+  onSaved,
   parentCollection,
   existingIds,
   initialDoc,
@@ -25,6 +26,8 @@ export default function ChecklistManagerDialog({
       section: it.section || "General",
       name: it.name || "",
       expectedQty: it.expectedQty ?? "",
+      defaultBatch: it.defaultBatch ?? "",
+      defaultExpiry: it.defaultExpiry ?? "",
       stock_barcode: it.stock_barcode ?? "",
     }))
   );
@@ -43,7 +46,7 @@ export default function ChecklistManagerDialog({
   function addItem() {
     setItems((prev) => [
       ...prev,
-      { id: `item_${prev.length + 1}`, section: "General", name: "", expectedQty: "", stock_barcode: "" },
+      { id: `item_${prev.length + 1}`, section: "General", name: "", expectedQty: "", defaultBatch: "", defaultExpiry: "", stock_barcode: "" },
     ]);
   }
 
@@ -62,13 +65,22 @@ export default function ChecklistManagerDialog({
       setSaving(true);
 
       const cleanItems = items
-        .map((it, idx) => ({
-          id: String(it.id || "").trim() || `item_${idx + 1}`,
-          ...(itemHasSection ? { section: String(it.section || "General").trim() || "General" } : {}),
-          name: String(it.name || "").trim(),
-          expectedQty: it.expectedQty === "" ? null : Number(it.expectedQty),
-          stock_barcode: String(it.stock_barcode || "").trim() || null,
-        }))
+        .map((it, idx) => {
+          const qty = String(it.expectedQty ?? "").trim();
+          return {
+            id: String(it.id || "").trim() || `item_${idx + 1}`,
+            ...(itemHasSection ? { section: String(it.section || "General").trim() || "General" } : {}),
+            name: String(it.name || "").trim(),
+            // Free-text quantities ("x2", "?") are valid in the original seed
+            // data - coercing them with Number() here used to silently turn
+            // them into NaN the moment this dialog re-saved them. Keep a
+            // clean numeric qty as a number, anything else as the typed text.
+            expectedQty: qty === "" ? null : Number.isFinite(Number(qty)) ? Number(qty) : qty,
+            defaultBatch: String(it.defaultBatch || "").trim() || null,
+            defaultExpiry: String(it.defaultExpiry || "").trim() || null,
+            stock_barcode: String(it.stock_barcode || "").trim() || null,
+          };
+        })
         .filter((it) => it.name);
 
       await upsertParentDoc(parentCollection, id, {
@@ -79,7 +91,8 @@ export default function ChecklistManagerDialog({
         items: cleanItems,
       });
 
-      onClose(true);
+      onSaved?.(id);
+      onClose?.();
     } catch (e) {
       console.error(e);
       setErr(e?.message || String(e));
@@ -98,7 +111,8 @@ export default function ChecklistManagerDialog({
     try {
       setSaving(true);
       await deleteParentDoc(parentCollection, initialDoc.id);
-      onClose(true);
+      onSaved?.();
+      onClose?.();
     } catch (e) {
       console.error(e);
       setErr(e?.message || String(e));
@@ -121,7 +135,7 @@ export default function ChecklistManagerDialog({
           </div>
           <button
             type="button"
-            onClick={() => onClose(false)}
+            onClick={() => onClose?.()}
             className="text-slate-300 hover:text-slate-100 text-sm"
           >
             Close
@@ -184,65 +198,79 @@ export default function ChecklistManagerDialog({
             </button>
           </div>
 
-          <div className="border border-slate-800 rounded-2xl overflow-hidden">
-            <div className="grid grid-cols-12 gap-2 px-3 py-2 bg-slate-900/40 text-xs text-slate-300">
-              {itemHasSection ? <div className="col-span-2">Section</div> : null}
-              <div className={itemHasSection ? "col-span-4" : "col-span-6"}>Name</div>
-              <div className="col-span-2">Expected Qty</div>
-              <div className="col-span-3">Stock barcode (optional)</div>
-              <div className="col-span-1"></div>
-            </div>
-
+          <div className="border border-slate-800 rounded-2xl divide-y divide-slate-800/60 overflow-hidden">
             {items.map((it, idx) => (
-              <div key={idx} className="grid grid-cols-12 gap-2 px-3 py-2 border-t border-slate-800/60">
-                {itemHasSection ? (
-                  <div className="col-span-12 sm:col-span-2">
+              <div key={idx} className="p-3 space-y-2">
+                <div className="flex items-start gap-2">
+                  {itemHasSection && (
+                    <div className="w-28 shrink-0">
+                      <div className="text-[10px] text-slate-500 mb-1">Section</div>
+                      <input
+                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
+                        value={it.section}
+                        onChange={(e) => setItem(idx, { section: e.target.value })}
+                        placeholder="General"
+                      />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] text-slate-500 mb-1">Item name</div>
                     <input
                       className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
-                      value={it.section}
-                      onChange={(e) => setItem(idx, { section: e.target.value })}
-                      placeholder="General"
+                      value={it.name}
+                      onChange={(e) => setItem(idx, { name: e.target.value })}
+                      placeholder="Item name"
                     />
                   </div>
-                ) : null}
-
-                <div className={itemHasSection ? "col-span-12 sm:col-span-4" : "col-span-12 sm:col-span-6"}>
-                  <input
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
-                    value={it.name}
-                    onChange={(e) => setItem(idx, { name: e.target.value })}
-                    placeholder="Item name"
-                  />
-                </div>
-
-                <div className="col-span-6 sm:col-span-2">
-                  <input
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
-                    value={it.expectedQty}
-                    onChange={(e) => setItem(idx, { expectedQty: e.target.value })}
-                    placeholder="-"
-                  />
-                </div>
-
-                <div className="col-span-6 sm:col-span-3">
-                  <input
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
-                    value={it.stock_barcode}
-                    onChange={(e) => setItem(idx, { stock_barcode: e.target.value })}
-                    placeholder="Match stock item barcode"
-                  />
-                </div>
-
-                <div className="col-span-12 sm:col-span-1 flex items-center justify-end">
                   <button
                     type="button"
                     onClick={() => removeItem(idx)}
-                    className="text-xs text-rose-300 hover:text-rose-200"
+                    className="mt-5 shrink-0 text-xs text-rose-300 hover:text-rose-200"
                     title="Remove item"
                   >
                     Remove
                   </button>
                 </div>
+
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <div>
+                    <div className="text-[10px] text-slate-500 mb-1">Expected qty</div>
+                    <input
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
+                      value={it.expectedQty}
+                      onChange={(e) => setItem(idx, { expectedQty: e.target.value })}
+                      placeholder="-"
+                    />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-500 mb-1">Default batch (optional)</div>
+                    <input
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
+                      value={it.defaultBatch}
+                      onChange={(e) => setItem(idx, { defaultBatch: e.target.value })}
+                      placeholder="e.g. L2301A"
+                    />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-500 mb-1">Default expiry (optional)</div>
+                    <input
+                      type="date"
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
+                      value={it.defaultExpiry}
+                      onChange={(e) => setItem(idx, { defaultExpiry: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-slate-500 mb-1">Stock barcode (optional)</div>
+                    <input
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
+                      value={it.stock_barcode}
+                      onChange={(e) => setItem(idx, { stock_barcode: e.target.value })}
+                      placeholder="Match stock item barcode"
+                    />
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-500">Leave batch/expiry blank if this item doesn't need tracking (e.g. a spacer device) - staff can still enter them during a check if needed; they just won't be pre-filled.</p>
               </div>
             ))}
           </div>
@@ -266,7 +294,7 @@ export default function ChecklistManagerDialog({
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => onClose(false)}
+                onClick={() => onClose?.()}
                 className="px-3 py-2 rounded-xl text-sm border border-slate-700 text-slate-200 hover:bg-slate-900/40"
               >
                 Cancel
