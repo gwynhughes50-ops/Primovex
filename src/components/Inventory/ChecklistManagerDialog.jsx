@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { upsertParentDoc, deleteParentDoc, listActiveSites } from "@/lib/checklistsFirestore";
+import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry";
 
 // A plain text input that doubles as a live search against the practice's
 // real stock items, by name or by barcode - typing shows matches below;
@@ -88,6 +89,7 @@ export default function ChecklistManagerDialog({
   const [site, setSite] = useState(initialDoc?.site || "");
   const [location, setLocation] = useState(initialDoc?.location || "");
   const [sites, setSites] = useState([]);
+  const [spaces, setSpaces] = useState([]);
 
   useEffect(() => {
     if (!open) return;
@@ -98,6 +100,18 @@ export default function ChecklistManagerDialog({
     return () => { active = false; };
   }, [open]);
 
+  // Location used to be free text. The practice already has a real Spaces
+  // registry (Practice Admin > Spaces, the same rooms Facilities and Sense
+  // use) - picking from it instead means a kit's location is an actual room,
+  // not whatever was typed that one time. loadSpaceRegistry() is
+  // synchronous/local (kept fresh by the app-wide Sense sync), so no loading
+  // state is needed.
+  useEffect(() => {
+    if (!open) return;
+    const registry = loadSpaceRegistry();
+    setSpaces((registry?.spaces || []).filter((s) => s.status !== "archived"));
+  }, [open]);
+
   // The practice's real sites, plus the box's existing value if it doesn't
   // match one of them (an older free-text value, or a site since renamed/
   // deactivated) - so opening this dialog can never silently wipe it.
@@ -106,6 +120,13 @@ export default function ChecklistManagerDialog({
     if (site && !names.includes(site)) return [site, ...names];
     return names;
   }, [sites, site]);
+
+  // Same reasoning as siteOptions above, for Location.
+  const locationOptions = useMemo(() => {
+    const names = spaces.map((s) => s.name).filter(Boolean);
+    if (location && !names.includes(location)) return [location, ...names];
+    return names;
+  }, [spaces, location]);
   const [items, setItems] = useState(
     (initialDoc?.items || []).map((it) => ({
       id: it.id || "",
@@ -282,12 +303,17 @@ export default function ChecklistManagerDialog({
 
             <div>
               <div className="text-xs text-slate-400 mb-1">Location (optional)</div>
-              <input
+              <select
                 className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
-                placeholder="e.g. Treatment room"
-              />
+              >
+                <option value="">No location set</option>
+                {locationOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+              {spaces.length === 0 && (
+                <p className="mt-1 text-[11px] text-slate-500">No spaces set up yet - add one under Practice Admin &gt; Spaces.</p>
+              )}
             </div>
           </div>
 
