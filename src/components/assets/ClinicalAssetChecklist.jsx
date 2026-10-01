@@ -190,10 +190,55 @@ export default function ClinicalAssetChecklist({
     setSelectedId(visibleEntities[0]?.id || "");
   }, [siteFilter, visibleEntities, selected]);
 
+  // Reporting across every asset in this collection, not just the one
+  // selected below - previously the only status visible anywhere was the
+  // single selected asset's, so there was no way to see at a glance which
+  // kits across the practice were overdue or at risk. One getLatestCheck per
+  // asset, in parallel; fine at the scale this page deals with (a handful of
+  // kits per practice).
+  const [latestByEntity, setLatestByEntity] = useState({});
+  useEffect(() => {
+    let active = true;
+    if (entities.length === 0) {
+      setLatestByEntity({});
+      return undefined;
+    }
+    Promise.all(
+      entities.map((entity) =>
+        getLatestCheck(collectionName, entity.id)
+          .then((record) => [entity.id, record])
+          .catch(() => [entity.id, null])
+      )
+    ).then((pairs) => {
+      if (active) setLatestByEntity(Object.fromEntries(pairs));
+    });
+    return () => {
+      active = false;
+    };
+  }, [entities, collectionName, getLatestCheck]);
+
+  const entityOverview = useMemo(
+    () =>
+      entities.map((entity) => {
+        const latestForEntity = latestByEntity[entity.id] || null;
+        return {
+          entity,
+          latest: latestForEntity,
+          readiness: calculateAssetReadiness({ asset: entity, latest: latestForEntity, results: {} }),
+        };
+      }),
+    [entities, latestByEntity]
+  );
+
   const readiness = useMemo(
     () => calculateAssetReadiness({ asset: selected, latest, results: form.results }),
     [selected, latest, form.results]
   );
+
+  const visibleOverview = useMemo(() => {
+    const visibleIds = new Set(visibleEntities.map((entity) => entity.id));
+    return entityOverview.filter((row) => visibleIds.has(row.entity.id));
+  }, [entityOverview, visibleEntities]);
 
   const statusMeta = readinessCopy(readiness.status);
   const StatusIcon = statusMeta.icon;
@@ -473,6 +518,67 @@ export default function ClinicalAssetChecklist({
     openPrintWindow(html);
   }
 
+  // A quick reference sheet listing every asset in this collection and its
+  // full expected contents - distinct from exportPdf() above, which exports
+  // one completed check for the single selected asset. This is "what should
+  // be in every kit", not "what a specific check found", and covers all of
+  // them in one document (filtered to the current site, if one is chosen).
+  function exportFullList() {
+    const colSpan = enableSections ? 5 : 4;
+    const kitSections = visibleOverview
+      .map(({ entity, latest: entityLatest, readiness: entityReadiness }) => {
+        const itemRows = (entity.items || [])
+          .map(
+            (item) => `
+        <tr>
+          ${enableSections ? `<td>${escapeHtml(item.section || "General")}</td>` : ""}
+          <td>${escapeHtml(item.name)}</td>
+          <td>${escapeHtml(item.expectedQty ?? "-")}</td>
+          <td>${escapeHtml(item.defaultBatch || "-")}</td>
+          <td>${escapeHtml(item.defaultExpiry || "-")}</td>
+        </tr>`
+          )
+          .join("");
+        return `
+      <section class="kit">
+        <h2>${escapeHtml(entity.name)} <span class="id">${escapeHtml(getMedTrakAssetId(collectionName, entity.id))}</span></h2>
+        <p class="meta">${escapeHtml(entity.site || "No site assigned")}${entity.location ? ` &middot; ${escapeHtml(entity.location)}` : ""} &middot; Last check: ${escapeHtml(formatLastChecked(entityLatest))} &middot; Status: ${escapeHtml(entityReadiness.status)}</p>
+        <table>
+          <thead><tr>${enableSections ? "<th>Section</th>" : ""}<th>Item</th><th>Expected qty</th><th>Default batch</th><th>Default expiry</th></tr></thead>
+          <tbody>${itemRows || `<tr><td colspan="${colSpan}">No items configured</td></tr>`}</tbody>
+        </table>
+      </section>`;
+      })
+      .join("");
+
+    const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>${escapeHtml(checklistTitle)} - full contents list</title>
+<style>
+  body { font-family: Arial, sans-serif; color:#111827; margin:24px; }
+  h1 { margin:0 0 4px 0; font-size:20px; }
+  .sub { color:#475569; font-size:12px; margin:0 0 20px 0; }
+  .kit { margin-bottom:20px; page-break-inside: avoid; }
+  .kit h2 { margin:0 0 2px 0; font-size:15px; }
+  .kit .id { font-weight:400; color:#0f766e; font-size:12px; }
+  .kit .meta { margin:0 0 6px 0; font-size:11px; color:#475569; }
+  table { width:100%; border-collapse:collapse; font-size:11px; }
+  th, td { border:1px solid #334155; padding:5px 6px; vertical-align:top; text-align:left; }
+  th { background:#f1f5f9; }
+</style>
+</head>
+<body>
+  <h1>${escapeHtml(checklistTitle)} - full contents list</h1>
+  <p class="sub">${siteFilter ? `${escapeHtml(siteFilter)} &middot; ` : ""}${visibleOverview.length} ${escapeHtml(entityLabelPlural)} &middot; Generated ${new Date().toLocaleString()}</p>
+  ${kitSections || `<p>No ${escapeHtml(entityLabelPlural)} to list.</p>`}
+  <script>window.onload = () => setTimeout(() => window.print(), 200);</script>
+</body>
+</html>`;
+    openPrintWindow(html);
+  }
+
   if (loading) {
     return <div className="rounded-2xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] p-5 text-[color:var(--medtrak-text)]">Loading {entityLabelPlural}...</div>;
   }
@@ -667,6 +773,14 @@ export default function ClinicalAssetChecklist({
                 )}
                 <button
                   type="button"
+                  onClick={exportFullList}
+                  className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm font-medium text-[color:var(--medtrak-text)] transition hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_10%,var(--medtrak-panel))]"
+                  title={`Print every ${entityLabel}'s full contents list${siteFilter ? ` for ${siteFilter}` : ""}`}
+                >
+                  <Printer className="h-4 w-4" /> Print contents list
+                </button>
+                <button
+                  type="button"
                   onClick={exportPdf}
                   className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm font-medium text-[color:var(--medtrak-text)] transition hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_10%,var(--medtrak-panel))]"
                 >
@@ -675,6 +789,37 @@ export default function ClinicalAssetChecklist({
               </div>
             </div>
           </div>
+
+          {visibleOverview.length > 1 && (
+            <div className="rounded-3xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] text-[color:var(--medtrak-text)] shadow-sm">
+              <div className="border-b border-[color:var(--medtrak-border)] px-5 py-4">
+                <h3 className="text-sm font-semibold text-[color:var(--medtrak-text)]">All {entityLabelPlural}{siteFilter ? ` at ${siteFilter}` : ""}</h3>
+                <p className="text-xs text-[color:var(--medtrak-muted)]">At a glance, across every {entityLabel} in view - click one to open it below.</p>
+              </div>
+              <div className="divide-y divide-[color:var(--medtrak-border)]">
+                {visibleOverview.map(({ entity, latest: entityLatest, readiness: entityReadiness }) => {
+                  const rowMeta = readinessCopy(entityReadiness.status);
+                  const RowIcon = rowMeta.icon;
+                  return (
+                    <button
+                      key={entity.id}
+                      type="button"
+                      onClick={() => setSelectedId(entity.id)}
+                      className={`flex w-full items-center justify-between gap-3 px-5 py-3 text-left text-sm transition hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_6%,var(--medtrak-panel))] ${entity.id === selectedId ? "bg-[color:color-mix(in_srgb,var(--medtrak-accent)_10%,var(--medtrak-panel))]" : ""}`}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-[color:var(--medtrak-text)]">{entity.name}</span>
+                        <span className="block truncate text-xs text-[color:var(--medtrak-muted)]">{entity.site || "No site"}{entity.location ? ` · ${entity.location}` : ""} · Last check: {formatLastChecked(entityLatest)}</span>
+                      </span>
+                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold" style={semanticStatusStyle(rowMeta.tone)}>
+                        <RowIcon className="h-3.5 w-3.5" /> {rowMeta.title}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="rounded-3xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] text-[color:var(--medtrak-text)] shadow-sm">
             <div className="border-b border-[color:var(--medtrak-border)] px-5 py-4">
