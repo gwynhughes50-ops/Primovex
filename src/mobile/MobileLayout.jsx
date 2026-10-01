@@ -28,6 +28,7 @@ import { parseIBeaconValue } from "@/modules/sense/services/bleService";
 import { recordEquipmentSighting } from "@/modules/equipment/services/equipmentSightingService";
 import { findEquipmentByBleTag } from "@/modules/equipment/services/equipmentRegistry";
 import { parseComplianceQrPayload } from "@/services/compliance/complianceQrService";
+import { parseAssetQrPayload } from "@/services/assets/assetLabelService";
 import { completeCleaningSession, getActiveCleaningSession, startCleaningSession, subscribeRoomOperational } from "@/modules/facilities/services/cleaningRecordService";
 import { playBeep } from "@/utils/beep";
 import { getOpenQuickNotes, subscribeQuickNotes } from "@/services/quickNotesService";
@@ -110,6 +111,7 @@ export default function MobileLayout({ initialTab = "home" }) {
   const { role, user, displayName, can } = useAuth();
   const routedChecklistTab = location.pathname === '/inventory' ? new URLSearchParams(location.search).get('tab') : null;
   const showRoutedChecklist = routedChecklistTab === 'emergency' || routedChecklistTab === 'anaphylaxis';
+  const routedChecklistAssetId = showRoutedChecklist ? new URLSearchParams(location.search).get('asset') : null;
 
   const handleBottomNavigation = (nextTab) => {
     if (showRoutedChecklist) navigate('/', { replace: true });
@@ -149,6 +151,25 @@ export default function MobileLayout({ initialTab = "home" }) {
     setScannedItem(null);
     setActiveTab("compliance");
     setPendingComplianceScan({ value: code, method });
+    return true;
+  };
+
+  // The printed label on an emergency kit / anaphylaxis box encodes
+  // {type:"medtrak.asset", collection, assetId} (see buildAssetQrPayload in
+  // assetLabelService.js) - this is the other half of that: route straight to
+  // its checklist, the same /inventory?tab=...&asset=... link Orb already
+  // uses. Previously nothing matched this payload at all, so scanning the
+  // label fell through to the unknown-barcode sheet. Returns true when the
+  // code was one of ours.
+  const routeAssetScan = (code) => {
+    const parsed = parseAssetQrPayload(code);
+    if (!parsed) return false;
+    const tab = parsed.collection === "emergency_assets" ? "emergency" : "anaphylaxis";
+    setSpaceScanError("");
+    setScanError("");
+    setUnknownBarcode("");
+    setScannedItem(null);
+    navigate(`/inventory?tab=${tab}&asset=${encodeURIComponent(parsed.assetId)}`);
     return true;
   };
 
@@ -348,6 +369,7 @@ export default function MobileLayout({ initialTab = "home" }) {
     const scannedCode = String(code || "").trim();
     if (!scannedCode) return;
     if (routeComplianceScan(scannedCode, "qr")) return;
+    if (routeAssetScan(scannedCode)) return;
 
     setScanError("");
     setSpaceScanError("");
@@ -586,7 +608,12 @@ export default function MobileLayout({ initialTab = "home" }) {
       <ActiveSenseBanner />
       <MobileDeveloperIssueRecorder />
       {showRoutedChecklist ? (
-        <MobileClinicalAssetReconciliation kind={routedChecklistTab} onExit={() => navigate('/', { replace: true })} />
+        <MobileClinicalAssetReconciliation
+          key={`${routedChecklistTab}:${routedChecklistAssetId || ''}`}
+          kind={routedChecklistTab}
+          requestedAssetId={routedChecklistAssetId}
+          onExit={() => navigate('/', { replace: true })}
+        />
       ) : (
       <>
       {activeTab === "home" && <RoleAdaptiveMobileHome onAction={handleRoleAction} />}

@@ -27,7 +27,8 @@
     "test:governed-audit": "node scripts/verify-governed-audit.mjs",
     "test:desktop-alerts": "esbuild scripts/verify-desktop-alerts.mjs --bundle --platform=node --format=esm --outfile=work/verify-desktop-alerts.bundle.mjs && node work/verify-desktop-alerts.bundle.mjs",
     "test:stock-expiry": "node scripts/verify-stock-expiry.mjs",
-    "test:org-chart": "node scripts/verify-org-chart.mjs"
+    "test:org-chart": "node scripts/verify-org-chart.mjs",
+    "test:asset-qr": "esbuild scripts/verify-asset-qr.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-asset-qr.bundle.mjs && node work/verify-asset-qr.bundle.mjs"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",

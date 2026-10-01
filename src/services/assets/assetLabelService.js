@@ -26,6 +26,29 @@ export function buildAssetQrPayload(collectionName, assetId) {
   });
 }
 
+// The other half of buildAssetQrPayload: given whatever text a scanner read
+// (the printed label's QR, or anything typed/pasted matching it), returns
+// {collection, assetId} if it's one of ours, or null. Until this existed,
+// nothing in the app could actually act on a scanned asset label - see
+// handleMobileScan in MobileLayout.jsx, which is where this gets used.
+const KNOWN_ASSET_COLLECTIONS = new Set(["emergency_assets", "anaphylaxis_boxes"]);
+
+export function parseAssetQrPayload(raw) {
+  const value = String(raw || "").trim();
+  if (!value || value[0] !== "{") return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return null;
+  }
+  if (!parsed || parsed.type !== "medtrak.asset") return null;
+  const collection = String(parsed.collection || "");
+  const assetId = String(parsed.assetId || "");
+  if (!KNOWN_ASSET_COLLECTIONS.has(collection) || !assetId) return null;
+  return { collection, assetId };
+}
+
 import { getQrImageUrl } from "@/lib/qrCode";
 
 export { getQrImageUrl };
@@ -109,7 +132,7 @@ export function openAssetLabelPrintWindow({ asset, collectionName, title = "Clin
 <html>
 <head>
 <meta charset="utf-8" />
-<title>MedTrak Asset Label - ${esc(medtrakId)}</title>
+<title>Primovex Asset Label - ${esc(medtrakId)}</title>
 <style>
   @page { size: A4; margin: 14mm; }
   body { font-family: Arial, sans-serif; color: #0f172a; background: #fff; }
@@ -130,7 +153,7 @@ export function openAssetLabelPrintWindow({ asset, collectionName, title = "Clin
   <div class="sheet">
     <section class="label">
       <div class="brand">
-        <h1>MedTrak+</h1>
+        <h1>Primovex</h1>
         <div class="pill">Clinical Asset</div>
       </div>
       <div class="body">
@@ -145,7 +168,7 @@ export function openAssetLabelPrintWindow({ asset, collectionName, title = "Clin
         </div>
         <img src="${qrUrl}" alt="QR code for ${esc(medtrakId)}" />
       </div>
-      <div class="foot">Scan with MedTrak Mobile to open this asset, verify contents, report faults or view history.</div>
+      <div class="foot">Scan with Primovex Mobile to open this asset and complete its checklist.</div>
     </section>
   </div>
   <script>window.onload = () => setTimeout(() => window.print(), 250);</script>

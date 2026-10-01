@@ -77,7 +77,7 @@ function ResultPill({ status }) {
   return <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${tone}`}>{label}</span>;
 }
 
-export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis", onExit }) {
+export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis", requestedAssetId = null, onExit }) {
   const isEmergency = kind === "emergency";
   const collectionName = isEmergency ? "emergency_assets" : "anaphylaxis_boxes";
   const listEntities = isEmergency ? listEmergencyAssets : listAnaphylaxisBoxes;
@@ -113,7 +113,12 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
         const rows = await listEntities();
         if (!active) return;
         setBoxes(rows);
-        setSelectedId(rows[0]?.id || "");
+        // A scanned kit label (or an Orb link) asks for a specific box - open
+        // that one rather than always defaulting to the first in the list.
+        // Falls back the same way if the requested id doesn't match anything
+        // (wrong tab scanned, or the box was since deleted).
+        const requested = requestedAssetId && rows.some((row) => row.id === requestedAssetId) ? requestedAssetId : rows[0]?.id || "";
+        setSelectedId(requested);
       } catch (loadError) {
         if (active) setError(loadError?.message || `${isEmergency ? "Emergency kits" : "Anaphylaxis boxes"} could not be loaded.`);
       } finally {

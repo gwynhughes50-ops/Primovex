@@ -466,7 +466,7 @@ export default function ClinicalAssetChecklist({
           </div>
           <h2 className="mt-4 text-2xl font-semibold tracking-tight text-[color:var(--medtrak-text)]">No {entityLabelPlural} found</h2>
           <p className="mt-2 text-sm leading-6 text-[color:var(--medtrak-muted)]">
-            Create the default set from your seed checklist or add a custom asset manually. Each asset can receive a MedTrak ID and QR label so staff can scan the physical kit and open the correct workflow instantly.
+            Create the default set from your seed checklist or add a custom asset manually. Each asset can receive a Primovex ID and QR label - scan it with Primovex Mobile to open the correct workflow instantly.
           </p>
           <div className="mt-5 flex flex-wrap gap-3">
             <button

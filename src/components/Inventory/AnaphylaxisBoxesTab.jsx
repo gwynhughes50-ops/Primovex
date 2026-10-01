@@ -12,7 +12,7 @@ export default function AnaphylaxisBoxesTab() {
   return (
     <ClinicalAssetChecklist
       title="Anaphylaxis Boxes"
-      subtitle="A fast clinical safety check for anaphylaxis boxes. Because vials and split packs may not retain manufacturer barcodes, the box itself receives a MedTrak QR identity for verification, readiness and audit history."
+      subtitle="A fast clinical safety check for anaphylaxis boxes. Because vials and split packs may not retain manufacturer barcodes, the box itself receives a Primovex QR identity - scan it with Primovex Mobile to open this checklist directly."
       collectionName="anaphylaxis_boxes"
       entityLabel="box"
       entityLabelPlural="anaphylaxis boxes"

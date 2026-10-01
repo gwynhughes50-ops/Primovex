@@ -12,7 +12,7 @@ export default function EmergencyMonthlyChecklistTab() {
   return (
     <ClinicalAssetChecklist
       title="Emergency Drugs & Equipment"
-      subtitle="A clinical readiness view for emergency kits, resus equipment and practice grab bags. Each physical set can be retrofitted with a MedTrak QR label so staff can scan the kit and complete the correct check instantly."
+      subtitle="A clinical readiness view for emergency kits, resus equipment and practice grab bags. Each physical set can be retrofitted with a Primovex QR label - scan it with Primovex Mobile to open the correct check instantly."
       collectionName="emergency_assets"
       entityLabel="kit"
       entityLabelPlural="emergency kits"
