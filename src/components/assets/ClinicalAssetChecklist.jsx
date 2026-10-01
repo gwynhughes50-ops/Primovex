@@ -718,15 +718,15 @@ export default function ClinicalAssetChecklist({
       </section>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-5">
-          <div className="rounded-3xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] p-4 text-[color:var(--medtrak-text)] shadow-sm">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="min-w-0 space-y-5">
+          <div className="min-w-0 rounded-3xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] p-4 text-[color:var(--medtrak-text)] shadow-sm">
+            <div className="flex min-w-0 flex-col gap-3 md:flex-row md:flex-wrap md:items-center md:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
                 {sites.length > 0 && (
                   <>
                     <label className="text-sm font-medium text-[color:var(--medtrak-muted)]">Site</label>
                     <select
-                      className="rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm text-[color:var(--medtrak-text)] outline-none ring-offset-background focus:ring-2 focus:ring-ring"
+                      className="min-w-0 max-w-[180px] truncate rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm text-[color:var(--medtrak-text)] outline-none ring-offset-background focus:ring-2 focus:ring-ring"
                       value={siteFilter}
                       onChange={(event) => setSiteFilter(event.target.value)}
                     >
@@ -737,7 +737,7 @@ export default function ClinicalAssetChecklist({
                 )}
                 <label className="text-sm font-medium text-[color:var(--medtrak-muted)]">{capitalise(entityLabel)}</label>
                 <select
-                  className="min-w-[260px] rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm text-[color:var(--medtrak-text)] outline-none ring-offset-background focus:ring-2 focus:ring-ring"
+                  className="min-w-0 max-w-full flex-1 basis-[260px] truncate rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm text-[color:var(--medtrak-text)] outline-none ring-offset-background focus:ring-2 focus:ring-ring"
                   value={selectedId}
                   onChange={(event) => setSelectedId(event.target.value)}
                 >
