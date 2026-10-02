@@ -9,6 +9,7 @@ import ReleaseUpdateCard from "@/release/ReleaseUpdateCard";
 import PrimovexHero from "@/components/common/PrimovexHero";
 import { ASSURANCE_PROFILES, CLINICAL_GOVERNANCE_REQUIREMENTS, getAssuranceProfile, getClinicalGovernanceReadiness } from "@/governance/clinicalDataGate";
 import AuditLedgerPanel from "@/components/security/AuditLedgerPanel";
+import MfaSetup from "@/components/security/MfaSetup";
 import { GOVERNANCE_DOCUMENTS, findGovernanceDocument } from "@/config/governanceDocuments";
 import { FileText, Download, ExternalLink } from "lucide-react";
 
@@ -120,6 +121,12 @@ export default function SecurityCentre() {
       />
 
       {auditOpen && <AuditLedgerPanel onClose={() => setAuditOpen(false)} />}
+
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
+        <h2 className="text-lg font-semibold text-white">Your sign-in security</h2>
+        <p className="mt-1 text-sm text-slate-400">Protect your own account with a code from an authenticator app, as well as your password.</p>
+        <div className="mt-4"><MfaSetup /></div>
+      </section>
 
       <section className="grid gap-4 md:grid-cols-4">
         <Metric label="ClinFlow clinical data" value="Locked" note="Synthetic workflows only" status="green" />

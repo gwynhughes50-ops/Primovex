@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import { KeyRound, Mail, ShieldCheck } from "lucide-react";
 import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
+import MfaChallenge from "@/components/security/MfaChallenge";
+import { isMfaRequiredError } from "@/lib/mfaHelpers";
+import { canResolveWithTotp, resolverFromError } from "@/services/mfaService";
 import { auth } from "@/lib/firebase";
 import { writeAuditEvent } from "@/core/identity/auditService";
 import MobileBrandLockup from "./MobileBrandLockup";
@@ -25,6 +28,21 @@ export default function MobileAccountLogin() {
     [email, password, resetMode]
   );
 
+  // Set when the password was right but the account has an authenticator app.
+  const [mfaResolver, setMfaResolver] = useState(null);
+
+  async function completeSignIn(credential, provider) {
+    await writeAuditEvent({
+      actor: credential.user,
+      action: "auth.login.success",
+      module: "security",
+      targetType: "mobile_user_session",
+      targetId: credential.user?.uid,
+      summary: "User signed in to Primovex Mobile.",
+      metadata: { provider, client: "android" },
+    });
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
@@ -45,16 +63,17 @@ export default function MobileAccountLogin() {
       }
 
       const credential = await signInWithEmailAndPassword(auth, cleanEmail, password);
-      await writeAuditEvent({
-        actor: credential.user,
-        action: "auth.login.success",
-        module: "security",
-        targetType: "mobile_user_session",
-        targetId: credential.user?.uid,
-        summary: "User signed in to Primovex Mobile.",
-        metadata: { provider: "firebase-password", client: "android" },
-      });
+      await completeSignIn(credential, "firebase-password");
     } catch (err) {
+      if (isMfaRequiredError(err)) {
+        const resolver = resolverFromError(err);
+        if (canResolveWithTotp(resolver)) {
+          setMfaResolver(resolver);
+        } else {
+          setError("This account needs a sign-in step this version doesn't support. Ask your administrator.");
+        }
+        return;
+      }
       setError(resetMode ? "We couldn't send the reset email. Check the address and connection." : normaliseLoginError(err));
       console.error("Mobile login error:", err);
     } finally {
@@ -80,6 +99,15 @@ export default function MobileAccountLogin() {
               : "Use your Primovex account once, then use your mobile PIN or biometric access."}
           </p>
 
+          {mfaResolver ? (
+            <div className="mt-6">
+              <MfaChallenge
+                resolver={mfaResolver}
+                onVerified={(credential) => completeSignIn(credential, "firebase-password+totp")}
+                onCancel={() => { setMfaResolver(null); setPassword(""); }}
+              />
+            </div>
+          ) : (
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
             <label className="block">
               <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--medtrak-muted)]">Email</span>
@@ -124,6 +152,7 @@ export default function MobileAccountLogin() {
               {saving ? "Please wait…" : resetMode ? "Send reset instructions" : "Sign in securely"}
             </button>
           </form>
+          )}
 
           <button
             type="button"

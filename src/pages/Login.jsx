@@ -2,6 +2,9 @@
 import { useMemo, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import MfaChallenge from "@/components/security/MfaChallenge";
+import { isMfaRequiredError } from "@/lib/mfaHelpers";
+import { canResolveWithTotp, resolverFromError } from "@/services/mfaService";
 import { auth } from "../lib/firebase";
 import { writeAuditEvent } from "@/core/identity/auditService";
 import { DEMO_PROFILES, setActiveDemoProfile } from "@/config/demoMode";
@@ -59,8 +62,24 @@ export default function Login() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [selectedDemo, setSelectedDemo] = useState("gp-practice");
+  // Set when the password was right but the account has an authenticator app: the
+  // code step is shown until it's completed or cancelled.
+  const [mfaResolver, setMfaResolver] = useState(null);
 
   const canSubmit = useMemo(() => String(email || "").trim().includes("@") && password.length >= 6, [email, password]);
+
+  async function completeSignIn(credential, provider) {
+    await writeAuditEvent({
+      actor: credential.user,
+      action: "auth.login.success",
+      module: "security",
+      targetType: "user_session",
+      targetId: credential.user?.uid,
+      summary: "User signed in to Primovex.",
+      metadata: { provider },
+    });
+    navigate(redirectTo, { replace: true });
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -73,17 +92,17 @@ export default function Login() {
     setSaving(true);
     try {
       const credential = await signInWithEmailAndPassword(auth, cleanEmail, password);
-      await writeAuditEvent({
-        actor: credential.user,
-        action: "auth.login.success",
-        module: "security",
-        targetType: "user_session",
-        targetId: credential.user?.uid,
-        summary: "User signed in to Primovex.",
-        metadata: { provider: "firebase-password" },
-      });
-      navigate(redirectTo, { replace: true });
+      await completeSignIn(credential, "firebase-password");
     } catch (err) {
+      if (isMfaRequiredError(err)) {
+        const resolver = resolverFromError(err);
+        if (canResolveWithTotp(resolver)) {
+          setMfaResolver(resolver);
+        } else {
+          setError("This account needs a sign-in step this version doesn't support. Ask your administrator.");
+        }
+        return;
+      }
       setError(normaliseLoginError(err));
       console.error("Login error:", err);
     } finally {
@@ -169,6 +188,15 @@ export default function Login() {
                 <div className={`rounded-2xl border px-3 py-2 text-xs font-semibold ${livePill}`}>Live ready</div>
               </div>
 
+              {mfaResolver ? (
+                <div className="mt-6">
+                  <MfaChallenge
+                    resolver={mfaResolver}
+                    onVerified={(credential) => completeSignIn(credential, "firebase-password+totp")}
+                    onCancel={() => { setMfaResolver(null); setPassword(""); }}
+                  />
+                </div>
+              ) : (
               <form onSubmit={handleSubmit} className="mt-6 space-y-4">
                 <div>
                   <label className={`mb-2 block text-xs font-semibold uppercase tracking-wide ${MUTED}`}>Email</label>
@@ -186,6 +214,7 @@ export default function Login() {
                   {saving ? "Signing in…" : "Sign in securely"}
                 </Button>
               </form>
+              )}
 
               <div className="mt-5 grid gap-3 text-xs sm:grid-cols-3">
                 {[

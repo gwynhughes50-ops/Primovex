@@ -7,6 +7,7 @@ import useRoomOperationalContext from "@/operations/hooks/useRoomOperationalCont
 import usePracticeManagerOverview from "./usePracticeManagerOverview";
 import { getOperationalEscalations } from "@/operations/escalations/operationalEscalationService";
 import ReleaseUpdateCard from "@/release/ReleaseUpdateCard";
+import MfaSetup from "@/components/security/MfaSetup";
 import { normalizeStockItemCategory, summariseExpiry, getExpiryStatus, daysUntilExpiry } from "@/services/stockService";
 import { STOCK_CATEGORIES, categoryLabel } from "@/data/stockCategories";
 
@@ -172,6 +173,7 @@ export default function MobileHome({ mode="home", onNavigate, onScan, onSearch, 
           </div>
         </Card>
         <Section title="Security"><div className="flex items-center gap-3 py-2"><ShieldCheck className="text-[var(--medtrak-accent)]"/><div><b>Mobile access protected</b><p className="text-sm text-[var(--medtrak-muted)]">Biometric, PIN and account password fallback</p></div></div></Section>
+        <Section title="Two-step sign-in"><MfaSetup /></Section>
         <ReleaseUpdateCard />
       </Page>
     );
