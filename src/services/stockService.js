@@ -18,6 +18,7 @@ import { db } from "../lib/firebase";
 import { writeAuditEvent } from "@/core/identity/auditService";
 import { applyLocationDelta, planTransfer } from "@/lib/stockLocations";
 import { daysUntilExpiry, expiryStatus, parseExpiryDate } from "@/lib/stockAlerts";
+import { nextBatchAndExpiry } from "@/lib/stockBatch";
 import { UNCATEGORISED_CATEGORY, UNCATEGORISED_SUBCATEGORY, isKnownCategory, resolveLegacyCategory, getSubcategories } from "@/data/stockCategories";
 
 const ITEMS_COL = "stock_items";
@@ -589,9 +590,40 @@ export async function applyStockMovement(itemId, movement) {
       nextLocations = applyLocationDelta(item.locations, locationId, cleanString(movement?.locationName), movement?.locationType, delta);
     }
 
+    // A delivery's batch and expiry also go on the item itself - the stock card,
+    // the expiry alerts and kits that follow stock all read them from there.
+    // Older stock still on hand keeps priority (see src/lib/stockBatch.js).
+    const receiptUpdates = {};
+    if (type === "receive") {
+      const next = nextBatchAndExpiry({
+        stockBefore: before,
+        existing: item,
+        receipt: { batch_number: movement?.batch_number, expiry_date: movement?.expiry_date },
+      });
+      if (next.changed) {
+        receiptUpdates.batch_number = next.batch_number;
+        receiptUpdates.expiry_date = next.expiry_date;
+      }
+      // An item with no barcode yet can be given one at delivery - with the same
+      // uniqueness check as when an item is created.
+      const receiptBarcode = cleanString(movement?.barcode);
+      if (receiptBarcode && !cleanString(item.barcode)) {
+        const barcodeRef = doc(db, BARCODE_COL, normalizeBarcode(receiptBarcode));
+        const barcodeSnap = await tx.get(barcodeRef);
+        if (barcodeSnap.exists() && barcodeSnap.data()?.item_id !== itemId) {
+          throw new Error("That barcode is already used by another item.");
+        }
+        if (!barcodeSnap.exists()) {
+          tx.set(barcodeRef, { item_id: itemId, barcode: receiptBarcode, created_at: serverTimestamp() });
+        }
+        receiptUpdates.barcode = receiptBarcode;
+      }
+    }
+
     tx.update(itemRef, {
       current_stock: after,
       updated_at: serverTimestamp(),
+      ...receiptUpdates,
       ...(nextLocations !== item.locations ? { locations: nextLocations } : {}),
       last_movement: {
         type,

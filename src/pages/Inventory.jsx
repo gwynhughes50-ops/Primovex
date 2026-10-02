@@ -128,6 +128,8 @@ export default function Inventory() {
     form: "",
     brand: "",
     barcode: "",
+    batch_number: "",
+    expiry_date: "",
     site: "",
     location: "",
     category: UNCATEGORISED_CATEGORY,
@@ -428,6 +430,22 @@ const handleBarcodeScan = (code) => {
     }
   };
 
+  // Receiving a delivery from the Add item dialog: pick a remembered product,
+  // say how many / the batch / the expiry. An archived item is brought back first.
+  const receiveDelivery = async (item, details) => {
+    if (!canWriteInventory) throw new Error("Your login can't receive stock.");
+    if (item.archived_at) await restoreItem(item.id, actorUser);
+    await receiveStock(item.id, details.qty, {
+      actor: actorUser,
+      reason: "delivery",
+      batch_number: details.batch_number,
+      expiry_date: details.expiry_date,
+      barcode: details.barcode,
+      supplier_id: item.preferred_supplier_id || "",
+      supplier_name: item.preferred_supplier_name || "",
+    });
+  };
+
   const confirmDelete = async () => {
     if (!deleteItem) return;
     await archiveItem(deleteItem.id, actorUser);
@@ -462,6 +480,8 @@ const handleBarcodeScan = (code) => {
       form: item?.form ?? "",
       brand: item?.brand ?? "",
       barcode: item?.barcode ?? "",
+      batch_number: item?.batch_number ?? "",
+      expiry_date: item?.expiry_date ?? "",
       site: item?.site ?? "",
       location: item?.location ?? "",
       category: resolvedCategory.category,
@@ -512,6 +532,8 @@ const handleBarcodeScan = (code) => {
         form,
         brand: (editForm.brand || "").trim(),
         barcode: (editForm.barcode || "").trim(),
+        batch_number: (editForm.batch_number || "").trim(),
+        expiry_date: editForm.expiry_date || "",
         site,
         location,
         category: (editForm.category || "").trim() || UNCATEGORISED_CATEGORY,
@@ -876,7 +898,7 @@ const handleBarcodeScan = (code) => {
           />
 
           <StockHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} item={historyItem} />
-          <ManualAddItemDialog open={manualAddOpen} onOpenChange={setManualAddOpen} onCreate={addItem} initialBarcode={initialBarcode} existingForms={existingForms} />
+          <ManualAddItemDialog open={manualAddOpen} onOpenChange={setManualAddOpen} onCreate={addItem} onReceive={receiveDelivery} items={items || []} initialBarcode={initialBarcode} existingForms={existingForms} />
 
           <AssignLocationModal
             open={locationsOpen}
@@ -945,6 +967,28 @@ const handleBarcodeScan = (code) => {
                         onChange={(e) => setEditForm((f) => ({ ...f, barcode: e.target.value }))}
                         placeholder="Optional"
                       />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-slate-400 mb-1">Batch number</p>
+                        <Input
+                          value={editForm.batch_number}
+                          onChange={(e) => setEditForm((f) => ({ ...f, batch_number: e.target.value }))}
+                          placeholder="Optional"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-400 mb-1">Expiry date (soonest on hand)</p>
+                        <Input
+                          type="date"
+                          value={editForm.expiry_date}
+                          onChange={(e) => setEditForm((f) => ({ ...f, expiry_date: e.target.value }))}
+                        />
+                      </div>
+                      <p className="col-span-2 -mt-1 text-[11px] text-slate-500">
+                        Receiving a delivery fills these in, keeping the stock that expires first. Change them here if that stock has been used up.
+                      </p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
