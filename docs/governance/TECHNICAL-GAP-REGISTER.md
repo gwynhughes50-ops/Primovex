@@ -4,7 +4,7 @@ Status: **Open** — these items block approval for real patient data.
 
 | Gap | Risk | Required treatment | Release gate |
 |---|---|---|---|
-| Tauri Content Security Policy is unset | Injection or unapproved network/content execution | Define and test a least-privilege CSP compatible with required Firebase services | Block live clinical data |
+| Tauri Content Security Policy is defined but not yet independently tested | Injection or unapproved network/content execution | A CSP is set in `src-tauri/tauri.conf.json` (default-src 'self'; connect-src and img-src limited to named Google/Firebase hosts; no inline script; object-src none). Still required: automated regression test of the policy, review whenever a new external host is added, and inclusion in the independent penetration test | Block live clinical data |
 | MFA and privileged re-authentication are not enforced | Account compromise or unauthorised admin change | Enforce MFA and recent authentication for privileged actions | Block live clinical data |
 | Mobile quick-unlock PIN verifier uses browser local storage | Offline guessing or device compromise | Move credential material to Android Keystore/iOS Keychain through an approved native secure-storage design | Block clinical mobile deployment |
 | Legacy Firestore collections commonly allow any signed-in user | Cross-role or cross-practice access | Introduce server-verifiable tenant claims and collection-specific capability rules; test with the emulator | Block multi-practice/live clinical data |
@@ -22,5 +22,11 @@ Status: **Open** — these items block approval for real patient data.
 - Patient identity, document content and note text are not uploaded.
 - A non-synthetic mode assertion fails closed in the ClinFlow service.
 - The Security Centre visibly reports that live clinical data is locked.
+
+## Progress recorded 2026-10-02 (evidence: `docs/security/attack-suite`, 132 checks, 0 failed)
+
+- Emergency-kit and anaphylaxis-box checks can now only be recorded by roles holding `inventory.verify`, signed as the recording user and with the server timestamp; recorded checks stay immutable. Creating, editing or deleting a kit needs `inventory.delete`. 38 attack-suite checks cover this, including forged identity, back-dating, ReadOnly/Reception/Partner/anonymous refusal.
+- Firebase Storage rules (stock photos) are deployed with the cross-service IAM role granted to the Storage service agent; image host is named explicitly in the CSP.
+- This does **not** close the "legacy Firestore collections commonly allow any signed-in user" gap; collections other than those hardened to date still need the same review.
 
 The gap register must be reviewed after each material release and closed only against verifiable evidence.
