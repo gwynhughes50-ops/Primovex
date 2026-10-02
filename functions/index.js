@@ -16,6 +16,7 @@ const { recordSensePresenceTap } = require("./services/sensePresenceService");
 const { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa } = require("./services/userAccountService");
 const { getEffectiveCapabilities, hasCapability } = require("./services/roleCapabilities");
 const { notifySarAssignment } = require("./services/notificationService");
+const { listStaffDirectory } = require("./services/staffDirectoryService");
 
 initializeApp();
 const db = getFirestore();
@@ -420,6 +421,24 @@ exports.notifySarAssignment = onCall({ region: "europe-west2" }, async (request)
     callerName: callerProfile.displayName || callerProfile.email || "Primovex",
     sarId,
   });
+});
+
+// The staff list behind the SAR "Assigned To" / "Manager for Escalation"
+// pickers. A SAR team member who isn't an administrator can't read the users
+// collection directly (the rules keep email addresses and roles private), so
+// they got an empty list; this returns just an id, a name and the role, to the
+// people who need to pick someone.
+exports.listStaffDirectory = onCall({ region: "europe-west2" }, async (request) => {
+  assertSignedIn(request);
+  const profile = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
+  if (profile.role !== "System Admin") {
+    const capabilities = await getEffectiveCapabilities(db, profile.role);
+    const allowed = hasCapability(capabilities, "governance.manageSars")
+      || hasCapability(capabilities, "governance.concernsTeam")
+      || hasCapability(capabilities, "admin.access");
+    if (!allowed) throw new HttpsError("permission-denied", "SAR or concerns team access is required to list staff.");
+  }
+  return { staff: await listStaffDirectory({ db }) };
 });
 
 exports.setUserActive = onCall({ region: "europe-west2" }, async (request) => {

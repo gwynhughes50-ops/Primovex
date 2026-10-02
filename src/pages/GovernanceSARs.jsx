@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
 import { FolderOpen, Folder, FolderPlus, Pencil, Trash2, X } from "lucide-react";
 
@@ -8,6 +8,7 @@ import StatusBadge from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { db } from "@/lib/firebase";
+import { listStaffDirectory } from "@/services/staffDirectoryService";
 import { useAuth } from "@/contexts/AuthContext";
 import { Icons } from "@/config/medtrakIcons";
 import {
@@ -163,7 +164,7 @@ function SarMetric({ label, value, tone = "slate" }) {
   );
 }
 
-function SarFormPanel({ open, onClose, users, actor, onSaved, sar, defaultYear = null }) {
+function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, actor, onSaved, sar, defaultYear = null }) {
   const isEdit = !!sar;
   const [form, setForm] = useState(getInitialForm);
   const [busy, setBusy] = useState(false);
@@ -194,12 +195,12 @@ function SarFormPanel({ open, onClose, users, actor, onSaved, sar, defaultYear =
 
   const chooseAssignedUser = (uid) => {
     const selected = users.find((u) => u.id === uid);
-    update({ assignedToUid: uid, assignedToName: selected?.displayName || selected?.email || "Unassigned" });
+    update({ assignedToUid: uid, assignedToName: selected?.label || "Unassigned" });
   };
 
   const chooseManager = (uid) => {
     const selected = users.find((u) => u.id === uid);
-    update({ managerUid: uid, managerName: selected?.displayName || selected?.email || "" });
+    update({ managerUid: uid, managerName: selected?.label || "" });
   };
 
   // Changing the received date moves the due date with it — unless this is an
@@ -360,16 +361,29 @@ function SarFormPanel({ open, onClose, users, actor, onSaved, sar, defaultYear =
             <label className="block text-sm font-semibold text-slate-200">Assigned To</label>
             <select value={form.assignedToUid} onChange={(e) => chooseAssignedUser(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-white">
               <option value="">Unassigned</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.displayName || u.email || u.id}</option>)}
+              {/* Whoever is already chosen stays selectable even if they're no longer on the list (e.g. deactivated). */}
+              {form.assignedToUid && !users.some((u) => u.id === form.assignedToUid) && <option value={form.assignedToUid}>{form.assignedToName || form.assignedToUid}</option>}
+              {users.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
             </select>
+            {usersError && (
+              <p role="alert" className="text-xs text-amber-300">
+                {usersError} <button type="button" onClick={onRetryUsers} className="underline">Try again</button>
+              </p>
+            )}
           </div>
 
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-slate-200">Manager for Escalation</label>
             <select value={form.managerUid} onChange={(e) => chooseManager(e.target.value)} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-white">
               <option value="">None selected yet</option>
-              {users.map((u) => <option key={u.id} value={u.id}>{u.displayName || u.email || u.id}</option>)}
+              {form.managerUid && !users.some((u) => u.id === form.managerUid) && <option value={form.managerUid}>{form.managerName || form.managerUid}</option>}
+              {users.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
             </select>
+            {usersError && (
+              <p role="alert" className="text-xs text-amber-300">
+                {usersError} <button type="button" onClick={onRetryUsers} className="underline">Try again</button>
+              </p>
+            )}
           </div>
 
           <div className="space-y-3">
@@ -575,6 +589,7 @@ export default function GovernanceSARs() {
   const actor = useMemo(() => actorFromUser(user, displayName), [user, displayName]);
   const [rows, setRows] = useState([]);
   const [users, setUsers] = useState([]);
+  const [usersError, setUsersError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("open");
@@ -610,11 +625,20 @@ export default function GovernanceSARs() {
     return () => unsub();
   }, []);
 
-  useEffect(() => {
-    const qUsers = query(collection(db, "users"));
-    const unsub = onSnapshot(qUsers, (snap) => setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
-    return () => unsub();
+  // The names for "Assigned To" / "Manager for Escalation". Read through a
+  // server function: the users collection itself is private to administrators
+  // and the concerns team, so a SAR team member reading it directly just got an
+  // empty list (and no one to pick). A failure is shown, not swallowed.
+  const loadStaff = useCallback(async () => {
+    try {
+      setUsers(await listStaffDirectory());
+      setUsersError("");
+    } catch (err) {
+      console.error("Could not load the staff list", err);
+      setUsersError("The staff list couldn't be loaded, so you can't pick people yet.");
+    }
   }, []);
+  useEffect(() => { loadStaff(); }, [loadStaff]);
 
   useEffect(() => subscribeSarYearFolders(setFolderYears, (err) => console.error("SAR year folders", err)), []);
 
@@ -849,8 +873,8 @@ export default function GovernanceSARs() {
         )}
       </SectionCard>
 
-      <SarFormPanel open={showNew} onClose={() => setShowNew(false)} users={users} actor={actor} defaultYear={yearFilter === "all" ? null : Number(yearFilter)} onSaved={() => { setFilter("open"); setYearFilter("all"); }} />
-      <SarFormPanel open={!!editing} sar={editing} onClose={() => setEditing(null)} users={users} actor={actor} />
+      <SarFormPanel open={showNew} onClose={() => setShowNew(false)} users={users} usersError={usersError} onRetryUsers={loadStaff} actor={actor} defaultYear={yearFilter === "all" ? null : Number(yearFilter)} onSaved={() => { setFilter("open"); setYearFilter("all"); }} />
+      <SarFormPanel open={!!editing} sar={editing} onClose={() => setEditing(null)} users={users} usersError={usersError} onRetryUsers={loadStaff} actor={actor} />
       <SarDetailPanel sar={selected} actor={actor} isTeam={isTeam} canDelete={canDelete} onEdit={setEditing} onDelete={setDeleteTarget} onClose={() => setSelectedId(null)} />
 
       {deleteTarget && (
