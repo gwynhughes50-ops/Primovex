@@ -162,4 +162,49 @@ async function createPasswordLink({ uid, callerRole }) {
   return { uid: cleanUid, email: record.email, link };
 }
 
-module.exports = { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink, VALID_ROLES };
+// Who may reset whose two-step sign-in (authenticator app). Pure, so the rule
+// can be tested without Firebase. An administrator resets someone who has lost
+// their phone; it is never available for your own account (you can only call
+// this signed in, i.e. past the second step already) and only a real System
+// Admin may do it to another System Admin.
+function mfaResetDecision({ callerUid, callerRole, targetUid, targetRole }) {
+  if (!targetUid) return { allowed: false, code: "invalid-argument", message: "Missing user id." };
+  if (callerUid && callerUid === targetUid) {
+    return { allowed: false, code: "failed-precondition", message: "You can't reset your own two-step sign-in. Ask another administrator." };
+  }
+  if (targetRole === "System Admin" && callerRole !== "System Admin") {
+    return { allowed: false, code: "permission-denied", message: "Only a System Admin can reset a System Admin's two-step sign-in." };
+  }
+  return { allowed: true };
+}
+
+// Removes every authenticator app from an account and signs it out everywhere,
+// so the person can sign in with their password and set a new one up. The
+// sign-out matters when the reason is a lost or stolen phone.
+async function resetUserMfa({ uid, callerUid, callerRole }) {
+  const cleanUid = String(uid || "");
+  const db = getFirestore();
+  const profile = cleanUid ? await db.collection("users").doc(cleanUid).get() : null;
+  if (cleanUid && !profile.exists) throw new HttpsError("not-found", "That account has no Primovex profile.");
+
+  const decision = mfaResetDecision({ callerUid, callerRole, targetUid: cleanUid, targetRole: profile?.data()?.role });
+  if (!decision.allowed) throw new HttpsError(decision.code, decision.message);
+
+  let record;
+  try {
+    record = await getAuth().getUser(cleanUid);
+  } catch (error) {
+    if (error.code === "auth/user-not-found") throw new HttpsError("not-found", "That account no longer exists.");
+    throw new HttpsError("internal", error.message || "Could not look up the account.");
+  }
+  const enrolled = record.multiFactor?.enrolledFactors || [];
+  if (enrolled.length === 0) {
+    throw new HttpsError("failed-precondition", "This account doesn't have two-step sign-in set up.");
+  }
+
+  await getAuth().updateUser(cleanUid, { multiFactor: { enrolledFactors: null } });
+  await getAuth().revokeRefreshTokens(cleanUid);
+  return { uid: cleanUid, email: record.email || "", removed: enrolled.length };
+}
+
+module.exports = { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa, mfaResetDecision, VALID_ROLES };

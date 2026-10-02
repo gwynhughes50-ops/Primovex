@@ -51,6 +51,7 @@ import {
   RotateCcw,
   Link2,
   Copy,
+  ShieldOff,
 } from "lucide-react";
 
 import AddUser from "./admin/AddUser";
@@ -65,7 +66,7 @@ import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, se
 import { db } from "../lib/firebase";
 import { CAPABILITY_CATALOG, ROLE_PRESETS, ROLE_TEMPLATES } from "@/core/identity/capabilities";
 import { useAuth } from "@/contexts/AuthContext";
-import { subscribeUsers, updateUserRole, setUserActive, deleteUserAccount, createPasswordLink } from "@/services/adminUserService";
+import { subscribeUsers, updateUserRole, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa } from "@/services/adminUserService";
 
 // --------------------------
 // ✅ Route Guard (Admin only)
@@ -388,6 +389,33 @@ export default function AdminDashboard() {
   // Password-set links from Add User expire after an hour (Firebase's fixed
   // limit) — this issues a fresh one on demand. Nothing is generated until
   // the admin confirms, since each one is an audited credential-setting link.
+  // Lost phone: remove someone's authenticator app so they can set up a new one.
+  const [mfaResetTarget, setMfaResetTarget] = useState(null);
+  const [mfaResetBusy, setMfaResetBusy] = useState(false);
+  const [mfaResetError, setMfaResetError] = useState("");
+  const [mfaResetDone, setMfaResetDone] = useState(false);
+
+  const closeMfaReset = () => {
+    if (mfaResetBusy) return;
+    setMfaResetTarget(null);
+    setMfaResetError("");
+    setMfaResetDone(false);
+  };
+
+  const confirmMfaReset = async () => {
+    if (!mfaResetTarget) return;
+    setMfaResetBusy(true);
+    setMfaResetError("");
+    try {
+      await resetUserMfa(mfaResetTarget.id);
+      setMfaResetDone(true);
+    } catch (error) {
+      setMfaResetError(error?.message || "Could not reset two-step sign-in.");
+    } finally {
+      setMfaResetBusy(false);
+    }
+  };
+
   const [resetLinkTarget, setResetLinkTarget] = useState(null);
   const [resetLinkBusy, setResetLinkBusy] = useState(false);
   const [resetLinkError, setResetLinkError] = useState("");
@@ -692,6 +720,15 @@ export default function AdminDashboard() {
                                       onClick={() => setResetLinkTarget(u)}
                                     >
                                       <Link2 className="h-4 w-4 mr-2" /> Reset password
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60 disabled:opacity-40"
+                                      disabled={isInactive || u.id === user?.uid}
+                                      title={u.id === user?.uid ? "You can't reset your own two-step sign-in" : "Remove their authenticator app (lost phone)"}
+                                      onClick={() => setMfaResetTarget(u)}
+                                    >
+                                      <ShieldOff className="h-4 w-4 mr-2" /> Reset two-step
                                     </Button>
                                     <Button
                                       variant="outline"
@@ -1152,6 +1189,42 @@ export default function AdminDashboard() {
               {!resetLinkResult && (
                 <Button className="rounded-full bg-teal-500 text-slate-950 hover:bg-teal-400" disabled={resetLinkBusy} onClick={generateResetLink}>
                   {resetLinkBusy ? "Generating…" : "Generate link"}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset two-step sign-in */}
+      {mfaResetTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur p-4" role="dialog" aria-modal="true" aria-label="Reset two-step sign-in">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800/70 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
+            <div className="flex items-center gap-2 text-lg font-semibold text-slate-50">
+              <ShieldOff className="h-5 w-5" /> Reset two-step sign-in
+            </div>
+            {!mfaResetDone ? (
+              <div className="mt-2 space-y-2 text-sm text-slate-300">
+                <p>
+                  This removes the authenticator app from <strong className="text-slate-100">{mfaResetTarget.displayName || mfaResetTarget.email}</strong> and signs them out on every device. They can then sign in with their password and set up a new app.
+                </p>
+                <p className="text-xs text-slate-400">Only do this once you're sure it's them asking (for example, a lost or replaced phone). It's recorded in the audit log.</p>
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-emerald-300">Done. They can now sign in with their password and set up two-step sign-in again.</p>
+            )}
+
+            {mfaResetError && (
+              <div className="mt-3 rounded-xl border border-rose-500/25 bg-rose-500/10 p-3 text-xs text-rose-100">{mfaResetError}</div>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <Button variant="outline" className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60" disabled={mfaResetBusy} onClick={closeMfaReset}>
+                {mfaResetDone ? "Done" : "Cancel"}
+              </Button>
+              {!mfaResetDone && (
+                <Button className="rounded-full bg-amber-500 text-slate-950 hover:bg-amber-400" disabled={mfaResetBusy} onClick={confirmMfaReset}>
+                  {mfaResetBusy ? "Resetting…" : "Reset two-step sign-in"}
                 </Button>
               )}
             </div>

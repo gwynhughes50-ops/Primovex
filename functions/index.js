@@ -13,7 +13,7 @@ const { extractClinicalFacts } = require("./services/azureOpenAiExtractionServic
 const { appendGovernedAuditEvent } = require("./services/governedAuditService");
 const { reportRoomIssue } = require("./services/roomIssueService");
 const { recordSensePresenceTap } = require("./services/sensePresenceService");
-const { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink } = require("./services/userAccountService");
+const { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa } = require("./services/userAccountService");
 const { getEffectiveCapabilities, hasCapability } = require("./services/roleCapabilities");
 
 initializeApp();
@@ -363,6 +363,36 @@ exports.createPasswordLink = onCall({ region: "europe-west2" }, async (request) 
     });
   } catch (error) {
     console.error("Password-link audit event failed", { message: error?.message });
+  }
+
+  return result;
+});
+
+exports.resetUserMfa = onCall({ region: "europe-west2" }, async (request) => {
+  const callerRole = await assertAdmin(request);
+  const { uid } = request.data || {};
+  const result = await resetUserMfa({ uid, callerUid: request.auth.uid, callerRole });
+
+  // Removing someone's second factor is exactly what the audit ledger is for.
+  // Best-effort: a failed audit write must not leave a locked-out person stuck.
+  try {
+    const callerProfile = await db.collection("users").doc(request.auth.uid).get();
+    await appendGovernedAuditEvent({
+      db,
+      auth: request.auth,
+      profile: callerProfile.data() || {},
+      data: {
+        action: "admin.user.mfa-reset",
+        module: "administration",
+        targetType: "user",
+        targetId: result.uid,
+        summary: "Two-step sign-in reset for a user account",
+        classification: "security",
+        metadata: { removed: result.removed },
+      },
+    });
+  } catch (error) {
+    console.error("MFA-reset audit event failed", { message: error?.message });
   }
 
   return result;

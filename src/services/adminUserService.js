@@ -58,6 +58,16 @@ export async function createPasswordLink(uid) {
   return response.data;
 }
 
+// Removes someone's authenticator app(s) and signs them out everywhere, for a
+// lost or stolen phone - admin-only, audited, not available for your own
+// account, and only a System Admin can do it for another System Admin.
+// Returns { uid, email, removed }.
+export async function resetUserMfa(uid) {
+  const call = httpsCallable(functions, "resetUserMfa");
+  const response = await call({ uid });
+  return response.data;
+}
+
 // Disables/re-enables sign-in via the setUserActive Cloud Function — the
 // client SDK can't touch another user's Firebase Auth account directly, same
 // reason createUserAccount is a Cloud Function rather than a client write.
