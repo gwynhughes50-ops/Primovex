@@ -1,5 +1,5 @@
 // src/data/demoDataset.js
-// Synthetic MedTrak+ demonstration data. No real patient, staff or practice data.
+// Synthetic Primovex demonstration data. No real patient, staff or practice data.
 
 const today = new Date();
 const isoDate = (offsetDays = 0) => {
@@ -11,7 +11,7 @@ const dateObj = (offsetDays = 0) => new Date(`${isoDate(offsetDays)}T09:00:00`);
 
 export const demoPractice = {
   name: "Oakfield Medical Centre",
-  subtitle: "Synthetic GP practice used for safe MedTrak+ demonstrations and staff training",
+  subtitle: "Synthetic GP practice used for safe Primovex demonstrations and staff training",
   sites: ["Main Surgery", "Branch Surgery", "Research Store"],
   staffCount: 42,
   registeredPatients: 18420,

@@ -43,7 +43,7 @@ import {
 } from "lucide-react";
 
 /**
- * Central MedTrak+ icon library.
+ * Central Primovex icon library.
  *
  * Rule: navigation and shared components should use getIcon("name") rather than
  * rendering Icons.name directly. That prevents a missing icon key from crashing

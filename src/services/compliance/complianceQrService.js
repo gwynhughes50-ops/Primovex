@@ -203,7 +203,7 @@ export function subscribeRecentComplianceChecks(onData, onError, { siteId = "mai
 
 export async function findComplianceAssetByScan(rawScan, { siteId = "main_branch" } = {}) {
   const parsed = parseComplianceQrPayload(rawScan);
-  if (!parsed?.assetId) throw new Error("This QR/NFC tag is not a MedTrak compliance asset.");
+  if (!parsed?.assetId) throw new Error("This QR/NFC tag is not a Primovex compliance asset.");
 
   const assetId = String(parsed.assetId || "").trim();
 

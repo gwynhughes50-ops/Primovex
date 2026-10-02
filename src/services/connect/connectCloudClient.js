@@ -1,7 +1,7 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
 
-function friendlyFunctionError(error, fallback = "MedTrak Connect Cloud is not available yet.") {
+function friendlyFunctionError(error, fallback = "Primovex Connect Cloud is not available yet.") {
   const message = error?.message || fallback;
   if (message.includes("not-found") || message.includes("NOT_FOUND")) {
     return "Connect Cloud functions are not deployed yet. Simulator mode remains available.";
@@ -28,7 +28,7 @@ export async function getConnectCloudHealth({ providerId = "simulator", settings
       message: friendlyFunctionError(error),
       data: {
         status: "not-deployed",
-        service: "MedTrak Connect Cloud",
+        service: "Primovex Connect Cloud",
         provider: providerId,
       },
     };

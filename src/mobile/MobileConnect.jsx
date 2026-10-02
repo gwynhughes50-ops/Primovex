@@ -69,7 +69,7 @@ export default function MobileConnect({ onBack }) {
           {onBack && <button type="button" onClick={onBack} className="mt-1 grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[color:var(--medtrak-border)]" aria-label="Back"><ArrowLeft className="h-5 w-5" /></button>}
           <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-teal-400/20 bg-teal-500/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wide text-teal-100">
-            <RadioTower className="h-3.5 w-3.5" /> MedTrak Connect
+            <RadioTower className="h-3.5 w-3.5" /> Primovex Connect
           </div>
           <h1 className="mt-3 text-2xl font-black tracking-tight">Cold Chain</h1>
           <p className="mt-1 text-sm text-slate-400">Mobile live device view</p>

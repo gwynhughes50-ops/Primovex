@@ -277,7 +277,7 @@ export async function createUserNotification(uid, notification = {}) {
   const ref = doc(collection(db, "users", uid, "notifications"));
   await setDoc(ref, {
     recipientUid: uid,
-    title: notification.title || "MedTrak+ notification",
+    title: notification.title || "Primovex notification",
     message: notification.message || "",
     module: notification.module || "governance",
     priority: notification.priority || "routine",
@@ -286,7 +286,7 @@ export async function createUserNotification(uid, notification = {}) {
     read: false,
     status: "open",
     createdByUid: notification.createdByUid || null,
-    createdByName: notification.createdByName || "MedTrak+",
+    createdByName: notification.createdByName || "Primovex",
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -320,7 +320,7 @@ export async function createSar(form, actor = {}) {
         dueDate: payload.dueDate,
         actionUrl: "/governance/sars",
         createdByUid: actor.uid || null,
-        createdByName: actor.displayName || actor.email || "MedTrak+",
+        createdByName: actor.displayName || actor.email || "Primovex",
       });
     } catch (err) {
       console.warn("Unable to create assignment notification. Check Firestore notification create rules.", err);

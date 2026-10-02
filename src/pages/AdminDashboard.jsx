@@ -92,7 +92,7 @@ const defaultRoles = Object.entries(ROLE_TEMPLATES).map(([name, permissions]) =>
     name === "System Admin"
       ? "Full platform access including identity, permissions and admin tools."
       : name === "Practice Manager"
-        ? "Operational management access across MedTrak+ modules."
+        ? "Operational management access across Primovex modules."
         : `${name} capability template.`,
   permissions,
   protected: ["System Admin", "User", "ReadOnly"].includes(name),

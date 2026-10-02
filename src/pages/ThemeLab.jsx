@@ -120,7 +120,7 @@ export default function ThemeLab() {
             <p className="mt-accent text-xs font-semibold uppercase tracking-[0.3em]">Sprint 21A</p>
             <h1 className="mt-text-primary mt-2 text-3xl font-bold tracking-tight">Theme Lab</h1>
             <p className="mt-text-secondary mt-2 max-w-3xl text-sm leading-6">
-              A quality-control page for checking every MedTrak+ theme across desktop, tablet and mobile components.
+              A quality-control page for checking every Primovex theme across desktop, tablet and mobile components.
               Use this before each release to catch hidden text, weak contrast and awkward component states.
             </p>
           </div>
@@ -197,7 +197,7 @@ export default function ThemeLab() {
         <LabCard title="Forms and inputs">
           <div className="space-y-3">
             <label className="block">
-              <span className="mt-text-secondary text-xs font-medium">Search MedTrak+</span>
+              <span className="mt-text-secondary text-xs font-medium">Search Primovex</span>
               <Input className="mt-input mt-1" placeholder="Search stock, devices or tasks" />
             </label>
             <label className="block">
@@ -217,7 +217,7 @@ export default function ThemeLab() {
             <div className="mt-card rounded-[1.6rem] border p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="mt-accent text-xs font-semibold uppercase tracking-wide">MedTrak Mobile</p>
+                  <p className="mt-accent text-xs font-semibold uppercase tracking-wide">Primovex Mobile</p>
                   <p className="mt-text-primary mt-1 text-lg font-bold">Cold Chain OK</p>
                 </div>
                 <Icons.connect className="mt-accent h-6 w-6" />

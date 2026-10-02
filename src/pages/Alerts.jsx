@@ -982,7 +982,7 @@ export default function Alerts() {
                 <Thermometer className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="font-semibold text-slate-50">MedTrak Connect</h3>
+                <h3 className="font-semibold text-slate-50">Primovex Connect</h3>
                 <p className="mt-1 text-sm text-slate-400">{connectIntelligence.headline}</p>
                 <p className="mt-1 text-xs text-slate-500">Cold-chain readings feed Operations Centre, Practice Pulse and future compliance reports.</p>
               </div>

@@ -158,7 +158,7 @@ function ConnectCloudPanel({ activeProvider, providerSettings, canManageDevices 
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-bold text-white">MedTrak Connect Cloud</h2>
+              <h2 className="text-lg font-bold text-white">Primovex Connect Cloud</h2>
               <span className={`rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${isOnline ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-100" : "border-sky-400/30 bg-sky-500/10 text-sky-100"}`}>
                 {health.status}
               </span>
@@ -295,7 +295,7 @@ function ProviderManager({ activeProvider, providerSettings, setActiveProvider, 
           </div>
 
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-slate-400"><KeyRound className="mr-1 inline h-3.5 w-3.5" /> Never paste Access Secret into MedTrak+ frontend settings.</p>
+            <p className="text-xs text-slate-400"><KeyRound className="mr-1 inline h-3.5 w-3.5" /> Never paste Access Secret into Primovex frontend settings.</p>
             <Button disabled={!canManageDevices} onClick={saveTuyaDraft} className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 px-4 font-semibold text-slate-950">
               Save provider metadata
             </Button>
@@ -779,7 +779,7 @@ export default function Connect() {
   const selectedDevice = devices.find((d) => d.id === selectedId) || devices[0];
 
   if (!canViewConnect) {
-    return <AccessDenied title="MedTrak Connect access restricted" message="You do not currently have permission to view connected devices. Ask a System Admin or Practice Manager to grant the connect.view capability." />;
+    return <AccessDenied title="Primovex Connect access restricted" message="You do not currently have permission to view connected devices. Ask a System Admin or Practice Manager to grant the connect.view capability." />;
   }
 
   return (
@@ -787,7 +787,7 @@ export default function Connect() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="inline-flex items-center gap-2 rounded-full border border-teal-400/20 bg-teal-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-teal-100">
-            <RadioTower className="h-3.5 w-3.5" /> MedTrak Connect
+            <RadioTower className="h-3.5 w-3.5" /> Primovex Connect
           </div>
           <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">Connected Practice</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-400">
@@ -908,7 +908,7 @@ export default function Connect() {
           <h2 className="text-lg font-bold text-white">Provider Security Model</h2>
         </div>
         <p className="mt-2 text-sm text-slate-400">
-          MedTrak+ reads device data from Firestore. External providers sync through backend services so API secrets never touch the React frontend. Tuya, ESP32, MQTT and Home Assistant can all feed the same device registry.
+          Primovex reads device data from Firestore. External providers sync through backend services so API secrets never touch the React frontend. Tuya, ESP32, MQTT and Home Assistant can all feed the same device registry.
         </p>
       </Card>
     </div>

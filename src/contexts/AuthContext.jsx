@@ -30,7 +30,7 @@ function createSyntheticUser(mode) {
       email: `${mode}@medtrak.local`,
       displayName: label,
       role: "System Admin",
-      organisationName: profile?.organisationName || "MedTrak Demo Practice",
+      organisationName: profile?.organisationName || "Primovex Demo Practice",
       platformMode: mode,
       permissions: ["*"],
     },

@@ -206,7 +206,7 @@ function ConcernFormModal({ open, onClose, actor, onCreated, users, concern }) {
               <Icons.governance className="h-3.5 w-3.5" /> Listening to People
             </div>
             <h2 className="mt-3 text-2xl font-black text-white">{isEdit ? `Edit ${concern.reference}` : "New Governance Concern"}</h2>
-            <p className="mt-1 text-sm text-slate-400">MedTrak+ stores anonymised identifiers only. Use EMIS number first, or initials and DOB if EMIS is unavailable.</p>
+            <p className="mt-1 text-sm text-slate-400">Primovex stores anonymised identifiers only. Use EMIS number first, or initials and DOB if EMIS is unavailable.</p>
           </div>
           <button type="button" onClick={onClose} className="rounded-full bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">Close</button>
         </div>

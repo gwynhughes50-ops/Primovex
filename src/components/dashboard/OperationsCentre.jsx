@@ -234,7 +234,7 @@ export default function OperationsCentre() {
           <div className="rounded-2xl border border-slate-800 bg-slate-950/50 p-6 text-sm text-slate-400">Loading your inbox…</div>
         ) : topItems.length === 0 ? (
           <div className="rounded-2xl border border-emerald-400/25 bg-emerald-500/10 p-6 text-sm text-emerald-100">
-            No active priorities. MedTrak+ will bring items here when they need your attention.
+            No active priorities. Primovex will bring items here when they need your attention.
           </div>
         ) : (
           <div className="space-y-3">

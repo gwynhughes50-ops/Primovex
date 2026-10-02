@@ -1,5 +1,5 @@
 /**
- * MedTrak+ Identity & Access Platform
+ * Primovex Identity & Access Platform
  *
  * Capability format: "domain.action".
  * Examples: "inventory.read", "connect.manageDevices", "admin.manageUsers".
@@ -120,7 +120,7 @@ export const CAPABILITY_CATALOG = [
   { id: "governance.concernsTeam", label: "Concerns team — full access to every concern", group: "Governance" },
   { id: "governance.partnerAccess", label: "Partner — read-only visibility across all governance records", group: "Governance" },
 
-  { id: "connect.view", label: "View MedTrak Connect", group: "Connect" },
+  { id: "connect.view", label: "View Primovex Connect", group: "Connect" },
   { id: "connect.manageDevices", label: "Add/edit connected devices", group: "Connect" },
   { id: "connect.acknowledgeAlerts", label: "Acknowledge device alerts", group: "Connect" },
 
@@ -141,7 +141,7 @@ export const CAPABILITY_CATALOG = [
   { id: "clinflow.manage", label: "Manage ClinFlow settings and learning", group: "ClinFlow" },
   { id: "theme.lab", label: "Use Theme Lab", group: "Design System" },
 
-  { id: "mobile.access", label: "Use MedTrak Mobile", group: "Mobile" },
+  { id: "mobile.access", label: "Use Primovex Mobile", group: "Mobile" },
   { id: "mobile.biometricUnlock", label: "Use biometric quick unlock", group: "Mobile" },
 
   { id: "admin.access", label: "Access admin area", group: "System" },

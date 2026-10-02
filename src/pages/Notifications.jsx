@@ -76,7 +76,7 @@ export default function Notifications() {
         icon={Icons.notifications}
         eyebrow="Operations Centre"
         title="Inbox"
-        description="Your personal MedTrak+ work queue. Snooze items when they are not for now; complete them when they are done."
+        description="Your personal Primovex work queue. Snooze items when they are not for now; complete them when they are done."
         actions={
           <div className="flex flex-wrap gap-2">
             <StatusBadge status="info">Unread: {unreadCount || 0}</StatusBadge>

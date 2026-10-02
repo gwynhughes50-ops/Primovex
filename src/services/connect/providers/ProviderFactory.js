@@ -20,7 +20,7 @@ export const CONNECT_PROVIDERS = {
 export const FUTURE_PROVIDERS = [
   {
     id: CONNECT_PROVIDER_IDS.esp32,
-    label: "MedTrak Connect Node / ESP32",
+    label: "Primovex Connect Node / ESP32",
     shortLabel: "ESP32",
     status: "planned",
     mode: "mqtt-or-https",

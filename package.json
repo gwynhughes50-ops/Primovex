@@ -21,7 +21,7 @@
     "dev:android": "vite --mode android",
     "build:android": "vite build --mode android",
     "android:bootstrap": "powershell -ExecutionPolicy Bypass -File scripts/bootstrap-android.ps1",
-    "test:orb-trust": "esbuild scripts/verify-orb-trust.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-trust.bundle.mjs && node work/verify-orb-trust.bundle.mjs",
+    "test:orb-trust": "esbuild scripts/verify-orb-trust.mjs --bundle --platform=node --format=esm --alias:@=./src --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=work/verify-orb-trust.bundle.mjs && node work/verify-orb-trust.bundle.mjs",
     "test:orb-actions": "esbuild scripts/verify-orb-actions.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-actions.bundle.mjs && node work/verify-orb-actions.bundle.mjs",
     "test:clinflow-intelligence": "node scripts/verify-clinflow-intelligence.mjs",
     "test:governed-audit": "node scripts/verify-governed-audit.mjs",

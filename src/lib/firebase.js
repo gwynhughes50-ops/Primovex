@@ -26,7 +26,7 @@ export const db = getFirestore(app);
 // 👤 Firebase Authentication
 export const auth = getAuth(app);
 
-// ☁️ Firebase Functions - Europe/UK region for MedTrak Connect Cloud
+// ☁️ Firebase Functions - Europe/UK region for Primovex Connect Cloud
 export const functions = getFunctions(app, "europe-west2");
 
 // 🖼️ Firebase Storage - practice-owned photos (e.g. stock item photos)
