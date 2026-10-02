@@ -19,6 +19,8 @@ import useStock from "@/hooks/useStock";
 import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
 import { buildFormOptions, matchOption, namesWithCurrent } from "@/lib/stockPickerOptions";
 import { unassignedQty } from "@/lib/stockLocations";
+import useExpirySettings from "@/hooks/useExpirySettings";
+import { stockLevelStatus } from "@/lib/stockAlerts";
 import { purgeConfirmMatches, purgeConsequences } from "@/lib/stockPurge";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
@@ -33,11 +35,11 @@ import { uploadStockItemPhoto, removeStockItemPhoto, deleteStockPhotoFile } from
 import { Search, Package, Pencil, History, Archive, Trash2, RotateCcw, MapPin, BellRing, ImageOff } from "lucide-react";
 
 /* helpers */
-const getStockBadge = (qty, min) => {
-  const q = Number(qty ?? 0);
-  const m = Number(min ?? 0);
-  return q <= m ? "mt-stock-badge mt-stock-badge-low" : "mt-stock-badge mt-stock-badge-ok";
-};
+// Same rule as the Alerts page, the phone and the pop-up (src/lib/stockAlerts.js).
+const getStockBadge = (qty, min) =>
+  stockLevelStatus({ current_stock: qty, min_stock: min })
+    ? "mt-stock-badge mt-stock-badge-low"
+    : "mt-stock-badge mt-stock-badge-ok";
 
 function TabButton({ active, onClick, children }) {
   return (
@@ -147,6 +149,8 @@ export default function Inventory() {
    * We always subscribe to ALL (active + archived) and filter client-side,
    * so the toggle cannot get “stuck” due to a listener not re-subscribing.
    */
+  // The practice's "expiring soon" windows (Alerts page settings); changing them re-renders the cards.
+  const expirySettings = useExpirySettings();
   const { items, loading, error, archiveItem, restoreItem, receiveStock, useStockQty, addItem, updateItem, transferStock, unassignLocation, purgeItem } =
     useStock({ includeArchived: true });
 
@@ -710,7 +714,7 @@ const handleBarcodeScan = (code) => {
                       )}
 
                       {item.expiry_date && (() => {
-                        const status = getExpiryStatus(item);
+                        const status = getExpiryStatus(item, new Date(), expirySettings);
                         const days = daysUntilExpiry(item);
                         return (
                           <p className={`mt-1 text-[11px] font-semibold truncate ${status === "expired" ? "text-rose-400" : status === "soon" ? "text-amber-300" : "text-slate-500"}`}>

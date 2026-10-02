@@ -9,6 +9,8 @@ import { getOperationalEscalations } from "@/operations/escalations/operationalE
 import ReleaseUpdateCard from "@/release/ReleaseUpdateCard";
 import MfaSetup from "@/components/security/MfaSetup";
 import { normalizeStockItemCategory, summariseExpiry, getExpiryStatus, daysUntilExpiry } from "@/services/stockService";
+import useExpirySettings from "@/hooks/useExpirySettings";
+import { stockLevelStatus } from "@/lib/stockAlerts";
 import { STOCK_CATEGORIES, categoryLabel } from "@/data/stockCategories";
 
 const FACILITY_KEY = "primovex.facilities.v2";
@@ -18,15 +20,17 @@ function Card({ children, className = "" }) { return <div className={`pvx-mobile
 export default function MobileHome({ mode="home", onNavigate, onScan, onSearch, onSelectItem, onRaiseIssue, onScanNfc, onQuickNote, quickNoteCount = 0 }) {
   const { displayName, role, capabilities=[] } = useAuth();
   const { allItems=[], loading } = useStock({ includeArchived:false });
-  const low = useMemo(() => allItems.filter(i => Number(i.current_stock||0) <= Number(i.min_stock||0)), [allItems]);
+  // The practice's "expiring soon" windows; changing them re-runs the lists below.
+  const expirySettings = useExpirySettings();
+  const low = useMemo(() => allItems.filter(i => stockLevelStatus(i)), [allItems]);
   // Was previously a hardcoded 0 — nothing on mobile ever flagged expiring
   // stock, even when it genuinely should have.
-  const expiry = useMemo(() => summariseExpiry(allItems), [allItems]);
+  const expiry = useMemo(() => summariseExpiry(allItems, new Date(), expirySettings), [allItems, expirySettings]);
   const expiringItems = useMemo(
     () => allItems
-      .filter((item) => getExpiryStatus(item) != null)
+      .filter((item) => getExpiryStatus(item, new Date(), expirySettings) != null)
       .sort((a, b) => (daysUntilExpiry(a) ?? 0) - (daysUntilExpiry(b) ?? 0)),
-    [allItems]
+    [allItems, expirySettings]
   );
   const [stockCategoryFilter, setStockCategoryFilter] = useState(null);
   const stockCategoryCounts = useMemo(() => {
@@ -307,8 +311,9 @@ function Stat({label,value,warn}) {
 }
 function Empty({text}) { return <div className="flex items-center gap-2 py-3 text-sm text-[var(--medtrak-muted)]"><CheckCircle2 className="h-4 w-4 text-emerald-600"/>{text}</div> }
 function StockRow({ item, onClick }) {
-  const low = Number(item.current_stock || 0) <= Number(item.min_stock || 0);
-  const expiryStatus = getExpiryStatus(item);
+  const expirySettings = useExpirySettings();
+  const low = Boolean(stockLevelStatus(item));
+  const expiryStatus = getExpiryStatus(item, new Date(), expirySettings);
   const days = daysUntilExpiry(item);
   const expiryText = expiryStatus === "expired"
     ? `Expired ${Math.abs(days)}d ago`

@@ -4,12 +4,20 @@
 //
 // The alert only ever carries counts: no reference numbers, names or case
 // details leave the app, so it is safe to appear over another program.
+//
+// It covers SARs and concerns (for the people on those teams) and stock that
+// has expired, is expiring soon, has run out or is low (for everyone who can
+// view inventory). What counts as expired / expiring / low is decided in
+// src/lib/stockAlerts.js, shared with every other screen; the host hands those
+// results in, so this file stays free of that logic.
 
 export const DUE_SOON_DAYS = 2;
 export const REPEAT_MS = 60 * 60 * 1000; // shown again every hour until snoozed or dismissed
 export const NEW_ITEM_GAP_MS = 5 * 60 * 1000; // a newly overdue item can bring it back sooner, but not in a rapid stream
 export const ALERT_START_HOUR = 8;
 export const ALERT_END_HOUR = 18;
+// The corner window is a fixed size and fits about this many lines.
+export const MAX_ALERT_LINES = 4;
 
 const SAR_CLOSED = ["completed", "archived"];
 const CONCERN_CLOSED = ["closed", "archived"];
@@ -68,7 +76,7 @@ function dayCount(value, nowMs) {
 
 // Everything that could be shown right now. Pass only the rows the person's
 // team is allowed to see (an empty list for a team they are not in).
-export function summariseDueItems({ sars = [], concerns = [], now = Date.now() } = {}) {
+export function summariseDueItems({ sars = [], concerns = [], stock = [], now = Date.now() } = {}) {
   const items = [];
   for (const sar of sars) {
     const state = sarAlertState(sar, now);
@@ -78,12 +86,23 @@ export function summariseDueItems({ sars = [], concerns = [], now = Date.now() }
     const state = concernAlertState(concern, now);
     if (state) items.push({ kind: "concern", id: concern.id, state, key: `concern:${concern.id}:${state}` });
   }
+  // `stock` is the list of stock alerts the host worked out: [{ id, state }],
+  // state being "expired" | "soon" | "out" | "low". The id already carries the
+  // state, so the key changes when an item moves from "low" to "out".
+  for (const alert of stock) {
+    if (!alert?.id || !["expired", "soon", "out", "low"].includes(alert.state)) continue;
+    items.push({ kind: "stock", id: alert.id, state: alert.state, key: `stock:${alert.id}` });
+  }
   const count = (kind, state) => items.filter((i) => i.kind === kind && i.state === state).length;
   const counts = {
     sarOverdue: count("sar", "overdue"),
     sarSoon: count("sar", "soon"),
     concernOverdue: count("concern", "overdue"),
     concernSoon: count("concern", "soon"),
+    stockExpired: count("stock", "expired"),
+    stockOut: count("stock", "out"),
+    stockSoon: count("stock", "soon"),
+    stockLow: count("stock", "low"),
   };
   return { items, keys: items.map((i) => i.key), counts, total: items.length };
 }
@@ -99,23 +118,47 @@ export function firstNameOf(displayName) {
 
 // The words on the alert. Overdue lines first, then due-soon.
 export function buildAlertPayload({ displayName, counts }) {
+  const c = {
+    sarOverdue: 0, sarSoon: 0, concernOverdue: 0, concernSoon: 0,
+    stockExpired: 0, stockOut: 0, stockSoon: 0, stockLow: 0,
+    ...counts,
+  };
   const lines = [];
-  if (counts.concernOverdue) lines.push({ tone: "danger", text: `${plural(counts.concernOverdue, "concern", "concerns")} overdue` });
-  if (counts.sarOverdue) lines.push({ tone: "danger", text: `${plural(counts.sarOverdue, "SAR", "SARs")} overdue` });
-  if (counts.concernSoon) lines.push({ tone: "warning", text: `${plural(counts.concernSoon, "concern", "concerns")} due within ${DUE_SOON_DAYS} days` });
-  if (counts.sarSoon) lines.push({ tone: "warning", text: `${plural(counts.sarSoon, "SAR", "SARs")} due within ${DUE_SOON_DAYS} days` });
+  if (c.concernOverdue) lines.push({ tone: "danger", text: `${plural(c.concernOverdue, "concern", "concerns")} overdue` });
+  if (c.sarOverdue) lines.push({ tone: "danger", text: `${plural(c.sarOverdue, "SAR", "SARs")} overdue` });
+  if (c.stockExpired) lines.push({ tone: "danger", text: `${plural(c.stockExpired, "stock item", "stock items")} expired` });
+  if (c.stockOut) lines.push({ tone: "danger", text: `${plural(c.stockOut, "item", "items")} out of stock` });
+  if (c.concernSoon) lines.push({ tone: "warning", text: `${plural(c.concernSoon, "concern", "concerns")} due within ${DUE_SOON_DAYS} days` });
+  if (c.sarSoon) lines.push({ tone: "warning", text: `${plural(c.sarSoon, "SAR", "SARs")} due within ${DUE_SOON_DAYS} days` });
+  if (c.stockSoon) lines.push({ tone: "warning", text: `${plural(c.stockSoon, "item", "items")} expiring soon` });
+  if (c.stockLow) lines.push({ tone: "warning", text: `${plural(c.stockLow, "item", "items")} low on stock` });
+
+  // The window only fits so many lines: keep the most urgent (they are already
+  // in that order) and say how many more there are.
+  const hidden = lines.length - MAX_ALERT_LINES;
+  const shown = hidden > 0
+    ? [...lines.slice(0, MAX_ALERT_LINES - 1), { tone: lines.slice(MAX_ALERT_LINES - 1).some((l) => l.tone === "danger") ? "danger" : "warning", text: `and ${hidden + 1} more to look at` }]
+    : lines;
 
   const name = firstNameOf(displayName);
-  const overdue = counts.concernOverdue + counts.sarOverdue;
+  const governance = c.concernOverdue + c.sarOverdue + c.concernSoon + c.sarSoon;
+  const stock = c.stockExpired + c.stockOut + c.stockSoon + c.stockLow;
+  const urgent = c.concernOverdue + c.sarOverdue + c.stockExpired + c.stockOut > 0;
+
+  // Governance-only alerts keep their original wording.
+  const title = stock === 0
+    ? `${name ? `Hi ${name}` : "Hi"}, ${urgent ? "you have overdue items" : "you have items due soon"}`
+    : `${name ? `Hi ${name}` : "Hi"}, ${urgent ? "some items need attention now" : "some items need attention soon"}`;
+
   // Open the page with the most urgent work: SARs first (a statutory clock),
-  // unless only concerns need attention.
-  const sarWeight = counts.sarOverdue * 2 + counts.sarSoon;
-  const concernWeight = counts.concernOverdue * 2 + counts.concernSoon;
-  return {
-    title: `${name ? `Hi ${name}` : "Hi"}, ${overdue ? "you have overdue items" : "you have items due soon"}`,
-    lines,
-    openPath: concernWeight > sarWeight ? "/governance/concerns" : "/governance/sars",
-  };
+  // unless only concerns need attention - and the Alerts page (which lists the
+  // stock items) when stock is what needs the most attention.
+  const sarWeight = c.sarOverdue * 2 + c.sarSoon;
+  const concernWeight = c.concernOverdue * 2 + c.concernSoon;
+  const stockWeight = (c.stockExpired + c.stockOut) * 2 + c.stockSoon + c.stockLow;
+  let openPath = concernWeight > sarWeight ? "/governance/concerns" : "/governance/sars";
+  if (governance === 0 || stockWeight > Math.max(sarWeight, concernWeight)) openPath = "/alerts";
+  return { title, lines: shown, openPath };
 }
 
 // Mon–Fri, 08:00–18:00 local time: a practice PC left running overnight or at

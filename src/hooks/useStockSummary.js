@@ -3,6 +3,7 @@ import { isSafeSyntheticMode } from "@/config/platformMode";
 import { getDemoStockSummary } from "@/data/demoDataset";
 import { collection, onSnapshot } from "firebase/firestore";
 import { db, auth } from "../lib/firebase";
+import { stockLevelStatus } from "@/lib/stockAlerts";
 
 const ITEMS_COL = "stock_items";
 
@@ -39,13 +40,9 @@ export default function useStockSummary() {
 
           total += 1;
 
-          const current = Number(d.current_stock ?? 0);
-          const min = Number(d.min_stock ?? 0);
-
-          // Flag both a real threshold breach and a genuine stockout (an
-          // item with no minimum set that hits zero shouldn't be invisible
-          // here — it must match the desktop card badge's logic exactly).
-          if ((min > 0 && current <= min) || current <= 0) {
+          // Out of stock or at/below its minimum: the same rule as the stock
+          // card badge, the Alerts page and the pop-up (src/lib/stockAlerts.js).
+          if (stockLevelStatus(d)) {
             low += 1;
           }
         });

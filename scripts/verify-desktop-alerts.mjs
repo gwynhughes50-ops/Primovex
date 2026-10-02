@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import * as R from "../src/desktop/alerts/alertRules.js";
+import { summariseStockAlerts } from "../src/lib/stockAlerts.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log("ok  " + name); };
@@ -59,7 +60,7 @@ const sars = [
 const concerns = [c({ id: "c1", finalResponseDueAt: day(-1) }), c({ id: "c2", finalResponseDueAt: day(40) })];
 const both = R.summariseDueItems({ sars, concerns, now: NOW });
 t("summary counts the right things", () => {
-  assert.deepEqual(both.counts, { sarOverdue: 2, sarSoon: 1, concernOverdue: 1, concernSoon: 0 });
+  assert.deepEqual(both.counts, { sarOverdue: 2, sarSoon: 1, concernOverdue: 1, concernSoon: 0, stockExpired: 0, stockOut: 0, stockSoon: 0, stockLow: 0 });
   assert.equal(both.total, 4);
   assert.deepEqual(both.keys.sort(), ["concern:c1:overdue", "sar:s1:overdue", "sar:s2:overdue", "sar:s3:soon"]);
 });
@@ -206,6 +207,100 @@ t("login reminder shares the same show/repeat/snooze engine as SAR/concern alert
   const snoozed = R.afterSnooze(shown, "snooze_1h", NOW);
   assert.equal(R.shouldShowAlert({ summary, state: snoozed, now: NOW + 30 * 60000 }), false);
   assert.equal(R.shouldShowAlert({ summary, state: snoozed, now: NOW + H + 1 }), true);
+});
+
+// ---- stock (expired / expiring / out / low), for everyone who can view inventory
+const stockList = [
+  { id: "expired-stock-a", state: "expired" },
+  { id: "outofstock-stock-b", state: "out" },
+  { id: "expiring-stock-c", state: "soon" },
+  { id: "lowstock-stock-d", state: "low" },
+  { id: "lowstock-stock-e", state: "low" },
+];
+t("stock only: counted by kind, keyed per item and state, with no governance rows", () => {
+  const s = R.summariseDueItems({ stock: stockList, now: NOW });
+  assert.deepEqual(s.counts, { sarOverdue: 0, sarSoon: 0, concernOverdue: 0, concernSoon: 0, stockExpired: 1, stockOut: 1, stockSoon: 1, stockLow: 2 });
+  assert.equal(s.total, 5);
+  assert.deepEqual(s.keys.sort(), ["stock:expired-stock-a", "stock:expiring-stock-c", "stock:lowstock-stock-d", "stock:lowstock-stock-e", "stock:outofstock-stock-b"]);
+});
+t("stock: junk entries are ignored", () => {
+  const s = R.summariseDueItems({ stock: [null, {}, { id: "x", state: "weird" }, { state: "low" }, { id: "ok", state: "low" }], now: NOW });
+  assert.equal(s.total, 1);
+});
+t("stock message: counts only, the most urgent first, no item ids", () => {
+  const s = R.summariseDueItems({ stock: stockList, now: NOW });
+  const p = R.buildAlertPayload({ displayName: "Liz Jones", counts: s.counts });
+  assert.equal(p.title, "Hi Liz, some items need attention now");
+  assert.deepEqual(p.lines.map((l) => l.text), ["1 stock item expired", "1 item out of stock", "1 item expiring soon", "2 items low on stock"]);
+  assert.deepEqual(p.lines.map((l) => l.tone), ["danger", "danger", "warning", "warning"]);
+  assert.ok(!JSON.stringify(p).match(/stock-a|stock-b|expired-stock/));
+  assert.equal(p.openPath, "/alerts");
+});
+t("stock: only low/expiring (nothing urgent) is the gentler 'soon' wording", () => {
+  const p = R.buildAlertPayload({ displayName: "", counts: { stockSoon: 2, stockLow: 1 } });
+  assert.equal(p.title, "Hi, some items need attention soon");
+  assert.deepEqual(p.lines.map((l) => l.text), ["2 items expiring soon", "1 item low on stock"]);
+});
+t("stock + governance together: shared lines in urgency order, capped to what the window fits", () => {
+  const counts = { sarOverdue: 2, sarSoon: 1, concernOverdue: 1, concernSoon: 1, stockExpired: 3, stockOut: 1, stockSoon: 4, stockLow: 5 };
+  const p = R.buildAlertPayload({ displayName: "A", counts });
+  assert.equal(p.lines.length, R.MAX_ALERT_LINES);
+  assert.deepEqual(p.lines.slice(0, 3).map((l) => l.text), ["1 concern overdue", "2 SARs overdue", "3 stock items expired"]);
+  assert.equal(p.lines[3].text, "and 5 more to look at");
+  assert.equal(p.lines[3].tone, "danger"); // an out-of-stock line is among the hidden ones
+  assert.equal(p.title, "Hi A, some items need attention now");
+});
+t("which page opens: stock-led -> Alerts; governance-led stays as before", () => {
+  assert.equal(R.buildAlertPayload({ displayName: "A", counts: { sarOverdue: 1, stockLow: 1 } }).openPath, "/governance/sars");
+  assert.equal(R.buildAlertPayload({ displayName: "A", counts: { concernOverdue: 1, stockLow: 1 } }).openPath, "/governance/concerns");
+  assert.equal(R.buildAlertPayload({ displayName: "A", counts: { sarSoon: 1, stockExpired: 2 } }).openPath, "/alerts");
+});
+t("governance-only wording is unchanged when stock counts are absent", () => {
+  const p = R.buildAlertPayload({ displayName: "Liz", counts: { sarOverdue: 1, sarSoon: 0, concernOverdue: 0, concernSoon: 0 } });
+  assert.equal(p.title, "Hi Liz, you have overdue items");
+  assert.deepEqual(p.lines.map((l) => l.text), ["1 SAR overdue"]);
+});
+t("stock alerts use the same show/snooze/dismiss engine: dismiss hides them until a NEW one appears", () => {
+  const first = R.summariseDueItems({ stock: stockList, now: NOW });
+  const shown = R.afterDismiss(E, first);
+  assert.equal(R.shouldShowAlert({ summary: first, state: shown, now: NOW }), false);
+  const more = R.summariseDueItems({ stock: [...stockList, { id: "outofstock-stock-z", state: "out" }], now: NOW });
+  assert.equal(R.shouldShowAlert({ summary: more, state: shown, now: NOW }), true);
+});
+t("an item moving from low to out of stock counts as new (its key changes)", () => {
+  const low = R.summariseDueItems({ stock: [{ id: "lowstock-stock-q", state: "low" }], now: NOW });
+  const out = R.summariseDueItems({ stock: [{ id: "outofstock-stock-q", state: "out" }], now: NOW });
+  assert.notDeepEqual(low.keys, out.keys);
+  const dismissed = R.afterDismiss(E, low);
+  assert.equal(R.shouldShowAlert({ summary: out, state: dismissed, now: NOW }), true);
+});
+
+// ---- end to end: stock items -> shared alert rules -> pop-up text
+t("end to end: real-looking stock rows become the right pop-up, resolved alerts stay out of it", () => {
+  const today = new Date(NOW);
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const inDays = (k) => { const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + k); return ymd(d); };
+  const rows = [
+    { id: "adrenaline", name: "Adrenaline", category: "medicines", current_stock: 2, min_stock: 4, expiry_date: inDays(10) }, // low + expiring
+    { id: "gloves", name: "Gloves", category: "clinical-consumables", current_stock: 0, min_stock: 5 },                       // out
+    { id: "swabs", name: "Swabs", category: "clinical-consumables", current_stock: 50, min_stock: 5, expiry_date: inDays(-3) }, // expired
+    { id: "fine", name: "Plasters", category: "general-stores", current_stock: 40, min_stock: 5, expiry_date: inDays(400) },
+    { id: "old", name: "Old", archived_at: "2026-01-01", current_stock: 0, expiry_date: inDays(-90) },
+  ];
+  const alerts = summariseStockAlerts(rows, { categoryOf: (i) => i.category, now: today }).alerts;
+  const summary = R.summariseDueItems({ stock: alerts, now: NOW });
+  assert.deepEqual(summary.counts, { sarOverdue: 0, sarSoon: 0, concernOverdue: 0, concernSoon: 0, stockExpired: 1, stockOut: 1, stockSoon: 1, stockLow: 1 });
+  const p = R.buildAlertPayload({ displayName: "Gwyn Hughes", counts: summary.counts });
+  assert.equal(p.title, "Hi Gwyn, some items need attention now");
+  assert.deepEqual(p.lines.map((l) => l.text), ["1 stock item expired", "1 item out of stock", "1 item expiring soon", "1 item low on stock"]);
+  assert.ok(!JSON.stringify(p).match(/Adrenaline|Gloves|Swabs/), "no item names leave the app");
+
+  // someone marks the glove alert resolved on the Alerts page -> it drops out
+  const resolved = { "outofstock-stock-gloves": true };
+  const after = summariseStockAlerts(rows, { categoryOf: (i) => i.category, now: today, resolved }).alerts;
+  const counts2 = R.summariseDueItems({ stock: after, now: NOW }).counts;
+  assert.equal(counts2.stockOut, 0);
+  assert.equal(counts2.stockExpired, 1);
 });
 
 console.log(`\n${n} passed`);

@@ -2,19 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import useStockSummary from "@/hooks/useStockSummary";
+import useExpirySettings from "@/hooks/useExpirySettings";
+import { stockLevelStatus } from "@/lib/stockAlerts";
+import { getExpiryStatus, daysUntilExpiry, normalizeStockItemCategory } from "@/services/stockService";
 
 const COLLECTIONS = {
   stockItems: "stock_items",
   stockMovements: "stock_movements",
   temperatureLogs: "temperature_logs",
 };
-
-function parseYmd(value) {
-  if (!value || typeof value !== "string") return null;
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return null;
-  return new Date(year, month - 1, day);
-}
 
 export function formatStockMovement(movement) {
   const type = String(movement?.type || "").toLowerCase();
@@ -27,6 +23,7 @@ export function formatStockMovement(movement) {
 }
 
 export default function useSmartHomeData() {
+  const expirySettings = useExpirySettings();
   const stock = useStockSummary();
   const [recentMoves, setRecentMoves] = useState([]);
   const [items, setItems] = useState([]);
@@ -52,21 +49,22 @@ export default function useSmartHomeData() {
     (error) => { setErrors((e) => ({ ...e, temperature: error })); setState((s) => ({ ...s, tempLoading: false })); }
   ), []);
 
-  const lowStockDetails = useMemo(() => items
-    .filter((item) => Number(item.current_stock ?? 0) <= Number(item.min_stock ?? 0))
-    .map((item) => ({ ...item, deficit: Number(item.min_stock ?? 0) - Number(item.current_stock ?? 0) }))
-    .sort((a, b) => b.deficit - a.deficit)
-    .slice(0, 3), [items]);
+  // Archived items never alert. The rules are shared with every other screen
+  // (src/lib/stockAlerts.js); the lists below are complete, and only the few
+  // shown in "Warnings" are trimmed further down.
+  const liveItems = useMemo(() => items.filter((item) => !item.archived_at), [items]);
 
-  const expiringSoon = useMemo(() => {
-    const now = new Date();
-    const cutoff = new Date(now);
-    cutoff.setDate(cutoff.getDate() + 14);
-    return items.map((item) => ({ ...item, _expiryDate: parseYmd(item.expiry_date) }))
-      .filter((item) => item._expiryDate && item._expiryDate >= now && item._expiryDate <= cutoff)
-      .sort((a, b) => a._expiryDate - b._expiryDate)
-      .slice(0, 3);
-  }, [items]);
+  const lowStockDetails = useMemo(() => liveItems
+    .filter((item) => stockLevelStatus(item))
+    .map((item) => ({ ...item, deficit: Number(item.min_stock ?? 0) - Number(item.current_stock ?? 0) }))
+    .sort((a, b) => b.deficit - a.deficit), [liveItems]);
+
+  // Expired and expiring-soon items, soonest first, using the practice's
+  // "expiring soon" windows.
+  const expiringSoon = useMemo(() => liveItems
+    .map((item) => ({ ...item, _status: getExpiryStatus(item, new Date(), expirySettings), _days: daysUntilExpiry(item) }))
+    .filter((item) => item._status)
+    .sort((a, b) => a._days - b._days), [liveItems, expirySettings]);
 
   const temperature = useMemo(() => {
     if (state.tempLoading) return { headline: "—", detail: "Loading temperature…", within: true, loading: true, hasReading: false };
@@ -82,8 +80,12 @@ export default function useSmartHomeData() {
   const issues = useMemo(() => {
     const rows = [];
     if (latestTemp && !temperature.within) rows.push({ key: "temperature", tone: "danger", text: temperature.detail });
-    expiringSoon.forEach((item) => rows.push({ key: `expiry-${item.id}`, tone: "warning", text: `${item.name || "Item"} expiring on ${item.expiry_date}${item.site ? ` (${item.site})` : ""}.` }));
-    lowStockDetails.forEach((item) => rows.push({ key: `stock-${item.id}`, tone: "neutral", text: `${item.name || "Item"} low: ${item.current_stock ?? 0}/${item.min_stock ?? 0}${item.site ? ` (${item.site})` : ""}.` }));
+    expiringSoon.slice(0, 3).forEach((item) => rows.push({
+      key: `expiry-${item.id}`,
+      tone: item._status === "expired" ? "danger" : "warning",
+      text: `${item.name || "Item"} ${item._status === "expired" ? "expired on" : "expiring on"} ${item.expiry_date}${item.site ? ` (${item.site})` : ""}.`,
+    }));
+    lowStockDetails.slice(0, 3).forEach((item) => rows.push({ key: `stock-${item.id}`, tone: "neutral", text: `${item.name || "Item"} low: ${item.current_stock ?? 0}/${item.min_stock ?? 0}${item.site ? ` (${item.site})` : ""}.` }));
     return rows.slice(0, 3);
   }, [expiringSoon, latestTemp, lowStockDetails, temperature]);
 

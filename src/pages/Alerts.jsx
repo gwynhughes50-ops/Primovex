@@ -41,6 +41,14 @@ import { buildOperationsIntelligence } from "../services/medAiOperationsService"
 import StockVerificationWidget from "../components/stock/StockVerificationWidget";
 import useConnectedDevices from "@/hooks/useConnectedDevices";
 import { normalizeStockItemCategory } from "@/services/stockService";
+import {
+  DEFAULT_CATEGORY_THRESHOLDS,
+  DEFAULT_EXPIRY_SOON_DAYS,
+  daysUntilExpiry,
+  expiryStatus,
+  stockAlertId,
+  stockLevelStatus,
+} from "@/lib/stockAlerts";
 import { categoryLabel as stockCategoryLabel } from "@/data/stockCategories";
 import { CONCERNS_COLLECTION, CONCERN_STATUSES, getDeadlineTone as getConcernDeadlineTone } from "@/modules/governance/services/concernService";
 import { SAR_COLLECTION, getSarDeadlineTone } from "@/modules/governance/services/sarService";
@@ -59,28 +67,10 @@ const RESOLUTIONS_COL = "alert_resolutions";
 const USERS_COL = "users";
 const SETTINGS_DOC_PATH = "settings/alerts";
 
-/**
- * Defaults for "expiring soon" thresholds.
- * Stored practice-wide in Firestore (settings/alerts) with these defaults as fallback.
- */
-const DEFAULT_EXPIRY_SOON_DAYS = 30;
-
-// Keyed by the fixed taxonomy's main category id (src/data/stockCategories.js).
-// A value of 0 means "no override, use the global default" below.
-const DEFAULT_CATEGORY_THRESHOLDS = {
-  medicines: 30,
-  "emergency-equipment": 60,
-  "clinical-consumables": 30,
-  diagnostics: 30,
-  laboratory: 30,
-  "cold-chain": 30,
-  "cleaning-infection-control": 0,
-  "office-administration": 0,
-  "equipment-assets": 0,
-  "rooms-facilities": 0,
-  "general-stores": 0,
-  uncategorised: 0,
-};
+// The "expiring soon" windows are stored practice-wide in Firestore
+// (settings/alerts); their defaults, and the rules that decide expired /
+// expiring / low stock, are shared with the rest of the app in
+// src/lib/stockAlerts.js so every screen agrees.
 
 /**
  * Temperature ranges fallback.
@@ -486,16 +476,16 @@ export default function Alerts() {
       ]);
       const expiryDate = parseMaybeDate(expiryRaw);
 
-      let soonDays = globalExpirySoonDays;
-      const perCat = safeNumber(categoryThresholds?.[category]);
-      if (perCat !== null && perCat > 0) soonDays = perCat;
-
-      const soonCutoff = new Date(now.getTime() + soonDays * 86400000);
+      // Same decision as the stock cards, the phone and the desktop pop-up
+      // (src/lib/stockAlerts.js), using the windows being edited on this page.
+      const status = expiryDate
+        ? expiryStatus(item, { categoryId: category, settings: { globalDays: globalExpirySoonDays, categoryDays: categoryThresholds }, now })
+        : null;
 
       if (expiryDate) {
-        if (expiryDate < now) {
+        if (status === "expired") {
           list.push({
-            id: `expired-stock-${item.id}`,
+            id: stockAlertId("expired", item.id),
             source: "stock",
             type: "expired",
             severity: "critical",
@@ -505,10 +495,10 @@ export default function Alerts() {
             } and replace immediately.`,
             sortTime: expiryDate.getTime(),
           });
-        } else if (soonDays > 0 && expiryDate <= soonCutoff) {
-          const days = daysBetween(now, expiryDate);
+        } else if (status === "soon") {
+          const days = daysUntilExpiry(item, now);
           list.push({
-            id: `expiring-stock-${item.id}`,
+            id: stockAlertId("soon", item.id),
             source: "stock",
             type: "expiring",
             severity: "warning",
@@ -521,22 +511,23 @@ export default function Alerts() {
         }
       }
 
-      if (currentStock !== null && minStock !== null) {
-        if (currentStock <= 0) {
+      const level = stockLevelStatus(item);
+      if (level) {
+        if (level === "out") {
           list.push({
-            id: `outofstock-stock-${item.id}`,
+            id: stockAlertId("out", item.id),
             source: "stock",
             type: "low_stock",
             severity: "critical",
             title: `${name} out of stock`,
-            message: `0 remaining (min ${minStock}). Reorder for ${site}${
+            message: `0 remaining (min ${minStock ?? 0}). Reorder for ${site}${
               location ? ` • ${location}` : ""
             }.`,
             sortTime: now.getTime(),
           });
-        } else if (currentStock <= minStock) {
+        } else {
           list.push({
-            id: `lowstock-stock-${item.id}`,
+            id: stockAlertId("low", item.id),
             source: "stock",
             type: "low_stock",
             severity: "warning",

@@ -6,6 +6,9 @@ import { listen } from "@tauri-apps/api/event";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
 import { isTauriRuntime } from "@/release/updateService";
+import useExpirySettings from "@/hooks/useExpirySettings";
+import { getExpirySettings, summariseStockAlerts } from "@/lib/stockAlerts";
+import { normalizeStockItemCategory } from "@/services/stockService";
 import { SAR_STATUSES } from "@/modules/governance/services/sarService";
 import { CONCERN_STATUSES } from "@/modules/governance/services/concernService";
 import {
@@ -33,29 +36,48 @@ const OPEN_CONCERN_STATUSES = [
   CONCERN_STATUSES.learning,
 ];
 
-// Watches the open SARs and concerns for the people on those teams and, when
-// something is overdue or due within two days, asks the desktop shell to show
-// the corner alert (see src-tauri/src/lib.rs and src/alert). Renders nothing.
-// Only runs in the desktop app; the alert holds counts only.
+// Watches the open SARs and concerns for the people on those teams, and the
+// stock list for everyone who can view inventory, and when something is
+// overdue / due within two days / expired / expiring soon / out of stock / low,
+// asks the desktop shell to show the corner alert (see src-tauri/src/lib.rs and
+// src/alert). Renders nothing. Only runs in the desktop app; the alert holds
+// counts only. What counts as an expiring or low stock item is decided in
+// src/lib/stockAlerts.js, the same rule every other screen uses, and an alert
+// someone has already resolved on the Alerts page is left out.
 export default function DesktopAlertsHost() {
   const { user, displayName, can } = useAuth();
   const navigate = useNavigate();
   const uid = user?.uid || null;
   const inSarTeam = can("governance.manageSars");
   const inConcernsTeam = can("governance.concernsTeam");
-  const active = isTauriRuntime() && Boolean(uid) && (inSarTeam || inConcernsTeam);
+  const canSeeStock = can("inventory.read");
+  const active = isTauriRuntime() && Boolean(uid) && (inSarTeam || inConcernsTeam || canSeeStock);
+  // Keeps the practice's "expiring soon" windows live for the checks below.
+  useExpirySettings();
 
-  const rows = useRef({ sars: [], concerns: [] });
-  const ready = useRef({ sars: true, concerns: true });
+  const rows = useRef({ sars: [], concerns: [], stock: [], resolved: {} });
+  const ready = useRef({ sars: true, concerns: true, stock: true });
   const lastPayload = useRef(null);
   const latest = useRef({});
   latest.current = { uid, displayName, navigate };
+  const canSeeStockRef = useRef(canSeeStock);
+  canSeeStockRef.current = canSeeStock;
 
-  const summarise = () => summariseDueItems({ sars: rows.current.sars, concerns: rows.current.concerns, now: Date.now() });
+  const summarise = () => {
+    const stock = canSeeStockRef.current
+      ? summariseStockAlerts(rows.current.stock, {
+          categoryOf: (item) => normalizeStockItemCategory(item).category,
+          settings: getExpirySettings(),
+          now: new Date(),
+          resolved: rows.current.resolved,
+        }).alerts
+      : [];
+    return summariseDueItems({ sars: rows.current.sars, concerns: rows.current.concerns, stock, now: Date.now() });
+  };
 
   function evaluate() {
     const { uid: who, displayName: name } = latest.current;
-    if (!who || !ready.current.sars || !ready.current.concerns) return;
+    if (!who || !ready.current.sars || !ready.current.concerns || !ready.current.stock) return;
     if (!isDesktopAlertsEnabled(who)) {
       invoke("close_alert_popup").catch(() => {});
       return;
@@ -76,8 +98,8 @@ export default function DesktopAlertsHost() {
   // Live lists of the open items this person's team can see.
   useEffect(() => {
     if (!active) return undefined;
-    rows.current = { sars: [], concerns: [] };
-    ready.current = { sars: !inSarTeam, concerns: !inConcernsTeam };
+    rows.current = { sars: [], concerns: [], stock: [], resolved: {} };
+    ready.current = { sars: !inSarTeam, concerns: !inConcernsTeam, stock: !canSeeStock };
     const unsubs = [];
 
     const watch = (key, enabled, collectionName, statuses) => {
@@ -102,6 +124,38 @@ export default function DesktopAlertsHost() {
     watch("sars", inSarTeam, "governance_sars", OPEN_SAR_STATUSES);
     watch("concerns", inConcernsTeam, "governance_concerns", OPEN_CONCERN_STATUSES);
 
+    // Stock for everyone who can view inventory, and the alerts already marked
+    // resolved on the Alerts page (so those aren't nagged about again).
+    if (canSeeStock) {
+      unsubs.push(
+        onSnapshot(
+          collection(db, "stock_items"),
+          (snap) => {
+            rows.current.stock = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+            ready.current.stock = true;
+            evaluateRef.current();
+          },
+          (err) => {
+            console.warn("Desktop alerts: could not read stock_items.", err);
+            rows.current.stock = [];
+            ready.current.stock = true;
+          }
+        )
+      );
+      unsubs.push(
+        onSnapshot(
+          collection(db, "alert_resolutions"),
+          (snap) => {
+            const next = {};
+            snap.docs.forEach((d) => { next[d.id] = true; });
+            rows.current.resolved = next;
+            evaluateRef.current();
+          },
+          (err) => console.warn("Desktop alerts: could not read alert_resolutions.", err)
+        )
+      );
+    }
+
     // Items become overdue with the passing of time, not because a record changed.
     const timer = window.setInterval(() => evaluateRef.current(), CHECK_EVERY_MS);
     return () => {
@@ -109,7 +163,7 @@ export default function DesktopAlertsHost() {
       window.clearInterval(timer);
       invoke("close_alert_popup").catch(() => {});
     };
-  }, [active, uid, inSarTeam, inConcernsTeam]);
+  }, [active, uid, inSarTeam, inConcernsTeam, canSeeStock]);
 
   // What the person chose on the alert.
   useEffect(() => {

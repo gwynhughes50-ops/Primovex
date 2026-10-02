@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Camera, CheckCircle2, ImageOff, MapPin, Minus, Package, Plus, X } from "lucide-react";
 import { formatProductSubtitle } from "@/utils/productDisplay";
 import { daysUntilExpiry, getExpiryStatus } from "@/services/stockService";
+import useExpirySettings from "@/hooks/useExpirySettings";
 import { uploadStockItemPhoto, removeStockItemPhoto } from "@/services/stockPhotoService";
 import MobilePhotoCapture from "./MobilePhotoCapture";
 
@@ -64,7 +65,8 @@ export default function MobileRapidStockAction({
     }
   }
 
-  const expiryStatus = getExpiryStatus(item);
+  const expirySettings = useExpirySettings();
+  const expiryStatus = getExpiryStatus(item, new Date(), expirySettings);
   const expiryDays = daysUntilExpiry(item);
 
   return (

@@ -17,6 +17,7 @@ import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { db } from "../lib/firebase";
 import { writeAuditEvent } from "@/core/identity/auditService";
 import { applyLocationDelta, planTransfer } from "@/lib/stockLocations";
+import { daysUntilExpiry, expiryStatus, parseExpiryDate } from "@/lib/stockAlerts";
 import { UNCATEGORISED_CATEGORY, UNCATEGORISED_SUBCATEGORY, isKnownCategory, resolveLegacyCategory, getSubcategories } from "@/data/stockCategories";
 
 const ITEMS_COL = "stock_items";
@@ -38,43 +39,22 @@ function normalizeBarcode(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-// Parses a plain "YYYY-MM-DD" date input as a local-midnight Date, the same
-// way useSmartHomeData.js already does — new Date("YYYY-MM-DD") parses as
-// UTC and can land on the wrong day once compared against a local "now".
-export function parseExpiryDate(value) {
-  if (!value || typeof value !== "string") return null;
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return null;
-  const date = new Date(year, month - 1, day);
-  return Number.isNaN(date.getTime()) ? null : date;
+// Expiry and low-stock rules live in src/lib/stockAlerts.js - the one place
+// "expired", "expiring soon", "out of stock" and "low stock" are decided, so the
+// register, the phone, the Dashboard, the Alerts page and the desktop pop-up
+// can't disagree. These keep the names this file always exported.
+export { parseExpiryDate, daysUntilExpiry };
+
+// "expired" | "soon" (inside the practice's window for this item's category) | null.
+export function getExpiryStatus(item, now = new Date(), settings) {
+  return expiryStatus(item, { categoryId: normalizeStockItemCategory(item).category, settings, now });
 }
 
-// The one place "how many days until an item expires" is decided, so the
-// register, the mobile item sheet and the mobile dashboard's summary can't
-// quietly drift into disagreeing with each other about what "soon" means.
-const EXPIRY_SOON_DAYS = 14;
-
-export function daysUntilExpiry(item, now = new Date()) {
-  const date = parseExpiryDate(item?.expiry_date);
-  if (!date) return null;
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.round((date.getTime() - start.getTime()) / 86400000);
-}
-
-// "expired" | "soon" (within EXPIRY_SOON_DAYS) | null (no date, or not due yet).
-export function getExpiryStatus(item, now = new Date()) {
-  const days = daysUntilExpiry(item, now);
-  if (days === null) return null;
-  if (days < 0) return "expired";
-  if (days <= EXPIRY_SOON_DAYS) return "soon";
-  return null;
-}
-
-export function summariseExpiry(items = [], now = new Date()) {
+export function summariseExpiry(items = [], now = new Date(), settings) {
   let expired = 0;
   let soon = 0;
   for (const item of items) {
-    const status = getExpiryStatus(item, now);
+    const status = getExpiryStatus(item, now, settings);
     if (status === "expired") expired += 1;
     else if (status === "soon") soon += 1;
   }
