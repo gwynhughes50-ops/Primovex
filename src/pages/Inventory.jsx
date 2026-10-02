@@ -16,6 +16,8 @@ import EmergencyMonthlyChecklistTab from "@/components/Inventory/EmergencyMonthl
 import AnaphylaxisBoxesTab from "@/components/Inventory/AnaphylaxisBoxesTab";
 
 import useStock from "@/hooks/useStock";
+import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
+import { buildFormOptions, matchOption, namesWithCurrent } from "@/lib/stockPickerOptions";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, query } from "firebase/firestore";
@@ -143,6 +145,14 @@ export default function Inventory() {
    */
   const { items, loading, error, archiveItem, restoreItem, receiveStock, useStockQty, addItem, updateItem, assignLocation, unassignLocation } =
     useStock({ includeArchived: true });
+
+  // Form / Site / Location are picked, not typed: sites and spaces from Practice
+  // Admin, forms from the standard list plus whatever stock already uses.
+  const { siteNames: editSiteNames, spaceNames: editSpaceNames, loaded: editNamesLoaded } = useSiteSpaceNames(editOpen);
+  const existingForms = useMemo(() => (items || []).map((i) => i?.form).filter(Boolean), [items]);
+  const editFormOptions = useMemo(() => buildFormOptions(existingForms, editForm.form), [existingForms, editForm.form]);
+  const editSiteOptions = namesWithCurrent(editSiteNames, editForm.site);
+  const editLocationOptions = namesWithCurrent(editSpaceNames, editForm.location);
 
   const [locationsOpen, setLocationsOpen] = useState(false);
   const [locationsItem, setLocationsItem] = useState(null);
@@ -436,12 +446,12 @@ const handleBarcodeScan = (code) => {
       }
 
       if (!site || site.toLowerCase() === "both sites") {
-        setEditError('Please enter a valid building name in Site (not "Both sites").');
+        setEditError('Please choose a Site (a single building, not "Both sites").');
         return;
       }
 
       if (!location) {
-        setEditError("Location is required (room/cupboard).");
+        setEditError("Please choose a Location (room/cupboard).");
         return;
       }
 
@@ -799,7 +809,7 @@ const handleBarcodeScan = (code) => {
           />
 
           <StockHistoryDialog open={historyOpen} onOpenChange={setHistoryOpen} item={historyItem} />
-          <ManualAddItemDialog open={manualAddOpen} onOpenChange={setManualAddOpen} onCreate={addItem} initialBarcode={initialBarcode} />
+          <ManualAddItemDialog open={manualAddOpen} onOpenChange={setManualAddOpen} onCreate={addItem} initialBarcode={initialBarcode} existingForms={existingForms} />
 
           <AssignLocationModal
             open={locationsOpen}
@@ -837,11 +847,14 @@ const handleBarcodeScan = (code) => {
 
                       <div>
                         <p className="text-xs text-slate-400 mb-1">Form</p>
-                        <Input
-                          value={editForm.form}
+                        <select
+                          value={matchOption(editFormOptions, editForm.form)}
                           onChange={(e) => setEditForm((f) => ({ ...f, form: e.target.value }))}
-                          placeholder="e.g. tablets"
-                        />
+                          className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                        >
+                          <option value="">Select a form</option>
+                          {editFormOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                        </select>
                       </div>
 
                       <div>
@@ -870,20 +883,26 @@ const handleBarcodeScan = (code) => {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <p className="text-xs text-slate-400 mb-1">Site (building) *</p>
-                        <Input
+                        <select
                           value={editForm.site}
                           onChange={(e) => setEditForm((f) => ({ ...f, site: e.target.value }))}
-                          placeholder="e.g. main_branch"
-                        />
+                          className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                        >
+                          <option value="">{editNamesLoaded && editSiteOptions.length === 0 ? "No sites set up" : "Select a site"}</option>
+                          {editSiteOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                        </select>
                       </div>
 
                       <div>
                         <p className="text-xs text-slate-400 mb-1">Room / Location *</p>
-                        <Input
+                        <select
                           value={editForm.location}
                           onChange={(e) => setEditForm((f) => ({ ...f, location: e.target.value }))}
-                          placeholder="e.g. Room D90"
-                        />
+                          className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                        >
+                          <option value="">{editSpaceNames.length === 0 ? "No spaces set up" : "Select a location"}</option>
+                          {editLocationOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                        </select>
                       </div>
                     </div>
 

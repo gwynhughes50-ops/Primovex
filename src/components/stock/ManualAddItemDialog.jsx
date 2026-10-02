@@ -3,9 +3,14 @@ import { X, Save } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { STOCK_CATEGORIES, UNCATEGORISED_CATEGORY, getSubcategories } from "@/data/stockCategories";
+import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
+import { buildFormOptions, matchOption, namesWithCurrent } from "@/lib/stockPickerOptions";
 
-export default function ManualAddItemDialog({ open, onOpenChange, onCreate, initialBarcode = "" }) {
+const selectCls = "mt-1 h-10 w-full rounded-xl border border-slate-700/70 bg-slate-900 px-3 text-sm";
+
+export default function ManualAddItemDialog({ open, onOpenChange, onCreate, initialBarcode = "", existingForms = [] }) {
   const scrollRef = useRef(null);
+  const { siteNames, spaceNames, loaded } = useSiteSpaceNames(open);
 
   const [form, setForm] = useState({
     name: "",
@@ -53,7 +58,21 @@ export default function ManualAddItemDialog({ open, onOpenChange, onCreate, init
     }
   }, [open, initialBarcode]);
 
+  // A practice with one site/space doesn't need to choose: fill it in.
+  useEffect(() => {
+    if (!open) return;
+    setForm((p) => ({
+      ...p,
+      site: !p.site && siteNames.length === 1 ? siteNames[0] : p.site,
+      location: !p.location && spaceNames.length === 1 ? spaceNames[0] : p.location,
+    }));
+  }, [open, siteNames, spaceNames]);
+
   if (!open) return null;
+
+  const formOptions = buildFormOptions(existingForms, form.form);
+  const siteOptions = namesWithCurrent(siteNames, form.site);
+  const locationOptions = namesWithCurrent(spaceNames, form.location);
 
   const canSave = form.name.trim().length > 0;
 
@@ -85,7 +104,10 @@ export default function ManualAddItemDialog({ open, onOpenChange, onCreate, init
 
           <div>
             <label className="text-xs text-slate-400">Form</label>
-            <Input className="mt-1" value={form.form} onChange={(e) => setForm((p) => ({ ...p, form: e.target.value }))} placeholder="e.g. tablets" />
+            <select className={selectCls} value={matchOption(formOptions, form.form)} onChange={(e) => setForm((p) => ({ ...p, form: e.target.value }))}>
+              <option value="">Select a form</option>
+              {formOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
           </div>
 
           <div>
@@ -127,12 +149,21 @@ export default function ManualAddItemDialog({ open, onOpenChange, onCreate, init
 
           <div>
             <label className="text-xs text-slate-400">Site</label>
-            <Input className="mt-1" value={form.site} onChange={(e) => setForm((p) => ({ ...p, site: e.target.value }))} />
+            <select className={selectCls} value={form.site} onChange={(e) => setForm((p) => ({ ...p, site: e.target.value }))}>
+              <option value="">{loaded && siteOptions.length === 0 ? "No sites set up" : "Select a site"}</option>
+              {siteOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
           </div>
 
           <div>
             <label className="text-xs text-slate-400">Location</label>
-            <Input className="mt-1" value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))} />
+            <select className={selectCls} value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}>
+              <option value="">{spaceNames.length === 0 ? "No spaces set up" : "Select a location"}</option>
+              {locationOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+            {loaded && (siteOptions.length === 0 || spaceNames.length === 0) && (
+              <p className="mt-1 text-[11px] text-slate-500">Sites and spaces are added in Practice Admin.</p>
+            )}
           </div>
 
           <div className="sm:col-span-2 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3 text-xs text-cyan-100">
