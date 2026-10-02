@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import {
   blankItem,
+  fieldsFromStock,
   formatExpiry,
   nextItemId,
   normaliseItem,
@@ -71,6 +72,20 @@ t("summariseItem: only the details that are set", () => {
   );
   assert.equal(summariseItem({ expectedQty: 0 }), "Qty 0");
   assert.equal(summariseItem({ expectedQty: "" }), "No quantity, batch, expiry or barcode set");
+});
+
+t("fieldsFromStock: picking a stock item brings its barcode, batch and expiry", () => {
+  assert.deepEqual(
+    fieldsFromStock({ name: "Water for Injection 2ml", barcode: "5012345", batch_number: " L2301A ", expiry_date: "2028-08-31" }),
+    { name: "Water for Injection 2ml", stock_barcode: "5012345", defaultBatch: "L2301A", defaultExpiry: "2028-08-31" }
+  );
+});
+t("fieldsFromStock: anything the stock item lacks comes through blank, not stale", () => {
+  assert.deepEqual(fieldsFromStock({ name: "Gloves" }), { name: "Gloves", stock_barcode: "", defaultBatch: "", defaultExpiry: "" });
+});
+t("fieldsFromStock: an expiry that isn't a YYYY-MM-DD date is left for the person to enter", () => {
+  assert.equal(fieldsFromStock({ name: "x", expiry_date: "Aug 2028" }).defaultExpiry, "");
+  assert.equal(fieldsFromStock({ name: "x", expiry_date: "31/08/2028" }).defaultExpiry, "");
 });
 
 console.log(`\n${n} passed`);

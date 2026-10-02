@@ -59,3 +59,19 @@ export function summariseItem(item) {
   if (item.stock_barcode) bits.push(`Barcode ${item.stock_barcode}`);
   return bits.length ? bits.join(" · ") : "No quantity, batch, expiry or barcode set";
 }
+
+// What picking a stock item should fill in on a kit item: its name and
+// barcode, plus the batch and expiry already recorded against it in
+// Inventory, so they don't have to be typed twice. Anything the stock item
+// doesn't have comes through blank rather than keeping the previous item's
+// value. Expiry is only carried across when it's a real YYYY-MM-DD date (what
+// the date field needs); anything else is left for the person to enter.
+export function fieldsFromStock(stock = {}) {
+  const expiry = String(stock.expiry_date || "").trim();
+  return {
+    name: stock.name || "",
+    stock_barcode: stock.barcode || "",
+    defaultBatch: String(stock.batch_number || "").trim(),
+    defaultExpiry: /^\d{4}-\d{2}-\d{2}$/.test(expiry) ? expiry : "",
+  };
+}

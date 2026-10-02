@@ -4,6 +4,7 @@ import { upsertParentDoc, deleteParentDoc, listActiveSites } from "@/lib/checkli
 import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry";
 import {
   blankItem,
+  fieldsFromStock,
   nextItemId,
   normaliseItem,
   summariseItem,
@@ -104,7 +105,7 @@ function ItemEditor({ editor, itemHasSection, stockItems, onChange, onCommit, on
             placeholder="Item name"
             stockItems={stockItems}
             onChange={(value) => onChange({ name: value })}
-            onPick={(stock) => onChange({ name: stock.name, stock_barcode: stock.barcode || "" })}
+            onPick={(stock) => onChange(fieldsFromStock(stock))}
           />
         </div>
       </div>
@@ -129,10 +130,16 @@ function ItemEditor({ editor, itemHasSection, stockItems, onChange, onCommit, on
             placeholder="Type barcode"
             stockItems={stockItems}
             onChange={(value) => onChange({ stock_barcode: value })}
-            onPick={(stock) => onChange({ name: item.name || stock.name, stock_barcode: stock.barcode || "" })}
+            onPick={(stock) => onChange(fieldsFromStock(stock))}
           />
         </div>
       </div>
+
+      {stockItems.length > 0 && (
+        <p className="text-xs text-[color:var(--medtrak-muted)]">
+          Pick the item from your stock and its barcode, batch and expiry fill in from Inventory. Change them if this box holds a different batch.
+        </p>
+      )}
 
       {error && <p className="text-xs text-rose-500">{error}</p>}
 
