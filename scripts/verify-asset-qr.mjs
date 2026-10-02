@@ -4,6 +4,7 @@
 // imported via the project's @/ alias.
 import assert from "node:assert/strict";
 import { buildAssetQrPayload, getMedTrakAssetId, parseAssetQrPayload } from "../src/services/assets/assetLabelService.js";
+import { parseComplianceQrPayload } from "../src/services/compliance/complianceQrService.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log("ok  " + name); };
@@ -75,6 +76,34 @@ t("links that are not one of ours are rejected", () => {
   assert.equal(parseAssetQrPayload("primovex://asset/anaphylaxis_boxes/"), null);     // no id
   assert.equal(parseAssetQrPayload("primovex://sense/open/space/abc"), null);          // a room tag, handled elsewhere
   assert.equal(parseAssetQrPayload("primovex://asset/anaphylaxis_boxes/%E0%A4%A"), null); // broken escape
+});
+
+// ---- the scan chain: every scanner tries compliance tags first, then box labels
+const routeFor = (code) => {
+  if (parseComplianceQrPayload(code)) return "compliance";
+  const parsed = parseAssetQrPayload(code);
+  if (!parsed) return null;
+  return `/inventory?tab=${parsed.collection === "emergency_assets" ? "emergency" : "anaphylaxis"}&asset=${encodeURIComponent(parsed.assetId)}`;
+};
+
+t("scanning Kit 3's label (new link, and the older JSON form) goes to that box's check, never to the compliance route", () => {
+  const id = "anaphylaxis_box_3";
+  const expected = "/inventory?tab=anaphylaxis&asset=anaphylaxis_box_3";
+  assert.equal(routeFor(buildAssetQrPayload("anaphylaxis_boxes", id)), expected);
+  assert.equal(routeFor(JSON.stringify({ type: "medtrak.asset", version: 1, collection: "anaphylaxis_boxes", assetId: id, medtrakId: "ANX-ANAPHYLAXIS-BOX-3" })), expected);
+});
+
+t("an emergency kit label goes to the emergency check", () => {
+  assert.equal(routeFor(buildAssetQrPayload("emergency_assets", "cmc_resus")), "/inventory?tab=emergency&asset=cmc_resus");
+});
+
+t("a compliance tag is still claimed by the compliance route, not the box check", () => {
+  assert.equal(routeFor("MEDTRAK:COMPLIANCE:FP-007"), "compliance");
+  assert.equal(parseAssetQrPayload("MEDTRAK:COMPLIANCE:FP-007"), null);
+});
+
+t("a box id with a space reaches the check URL safely encoded", () => {
+  assert.equal(routeFor(buildAssetQrPayload("anaphylaxis_boxes", "Kit 3")), "/inventory?tab=anaphylaxis&asset=Kit%203");
 });
 
 console.log(`\n${n} passed`);
