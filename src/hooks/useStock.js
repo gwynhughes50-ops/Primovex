@@ -6,6 +6,7 @@ import {
 
   // archive/restore
   archiveStockItem as archiveItem,
+  purgeStockItem,
   restoreStockItem as restoreItem,
 
   // ✅ these DO exist in stockService.js
@@ -29,6 +30,9 @@ function useStockImpl(options = {}) {
   const archive = async (id, user = null) => {
     return archiveItem(id, user);
   };
+
+  // Permanent delete (needs inventory.purge); returns what was removed.
+  const purge = async (id) => purgeStockItem(id);
 
   const restore = async (id, user = null) => {
     return restoreItem(id, user);
@@ -164,6 +168,7 @@ function useStockImpl(options = {}) {
 
     // actions exposed to Inventory.jsx
     archiveItem: archive,
+    purgeItem: purge,
     restoreItem: restore,
 
     addItem,

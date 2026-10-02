@@ -83,6 +83,14 @@ async function main() {
       involvedUserIds: ["user-uid"], source: "patient", summary: "test concern",
     });
     await setDoc(doc(db, "stock_items", "item-1"), { name: "Bandages", current_stock: 10 });
+    // permanent-delete permission (inventory.purge), held by a custom role only
+    await setDoc(doc(db, "roles", "Stock Controller"), { name: "Stock Controller", capabilities: ["inventory.read", "inventory.purge"], builtIn: false });
+    await setDoc(doc(db, "users", "stockctl-uid"), { role: "Stock Controller", displayName: "Stock Controller" });
+    for (const id of ["purge-admin", "purge-ctl", "purge-pm", "purge-nurse", "purge-ro", "purge-anon", "purge-ctl-edit"]) {
+      await setDoc(doc(db, "stock_items", id), { name: "Item " + id, current_stock: 3, barcode: "bc-" + id });
+    }
+    await setDoc(doc(db, "stock_barcodes", "bc-purge-ctl"), { item_id: "purge-ctl", barcode: "bc-purge-ctl" });
+    await setDoc(doc(db, "stock_barcodes", "bc-purge-nurse"), { item_id: "purge-nurse", barcode: "bc-purge-nurse" });
     await setDoc(doc(db, "clinflow_workflow_records", "rec-primary"), {
       dataMode: "synthetic", practiceId: "primary", siteId: "SITE-MAIN",
     });
@@ -102,6 +110,7 @@ async function main() {
   });
 
   const admin = testEnv.authenticatedContext("admin-uid").firestore();
+  const stockctl = testEnv.authenticatedContext("stockctl-uid").firestore();
   const pm = testEnv.authenticatedContext("pm-uid").firestore();
   const user = testEnv.authenticatedContext("user-uid").firestore();
   const readonly = testEnv.authenticatedContext("readonly-uid").firestore();
@@ -348,6 +357,28 @@ async function main() {
       assertSucceeds(setDoc(doc(admin, coll, "kit-admin"), { name: "Admin kit", items: [] })));
   }
 
+  console.log("\n=== 9c. Permanently deleting stock items (inventory.purge) ===");
+  await check("Admin CAN permanently delete a stock item", () =>
+    assertSucceeds(deleteDoc(doc(admin, "stock_items", "purge-admin"))));
+  await check("A custom role granted inventory.purge CAN permanently delete a stock item", () =>
+    assertSucceeds(deleteDoc(doc(stockctl, "stock_items", "purge-ctl"))));
+  await check("...and CAN release that item's barcode entry as part of it", () =>
+    assertSucceeds(deleteDoc(doc(stockctl, "stock_barcodes", "bc-purge-ctl"))));
+  await check("...but that purge-only role CANNOT edit stock (the permission is delete-only)", () =>
+    assertFails(updateDoc(doc(stockctl, "stock_items", "purge-ctl-edit"), { current_stock: 99 })));
+  await check("Practice Manager (can archive, no inventory.purge) CANNOT permanently delete", () =>
+    assertFails(deleteDoc(doc(pm, "stock_items", "purge-pm"))));
+  await check("Nurse (can edit stock, no inventory.purge) CANNOT permanently delete", () =>
+    assertFails(deleteDoc(doc(nurse, "stock_items", "purge-nurse"))));
+  await check("ReadOnly CANNOT permanently delete", () =>
+    assertFails(deleteDoc(doc(readonly, "stock_items", "purge-ro"))));
+  await check("Anonymous CANNOT permanently delete", () =>
+    assertFails(deleteDoc(doc(anon, "stock_items", "purge-anon"))));
+  await check("Archiving still works for Practice Manager (inventory.write), unaffected by the new permission", () =>
+    assertSucceeds(updateDoc(doc(pm, "stock_items", "purge-pm"), { archived_at: 1 })));
+  await check("A role without inventory.purge or inventory.write cannot delete a barcode entry", () =>
+    assertFails(deleteDoc(doc(readonly, "stock_barcodes", "bc-purge-nurse"))));
+
   console.log("\n=== 10. Storage: stock item photos (storage.rules) ===");
   // storage.rules ports firestore.rules' capability check directly, so this
   // proves that port actually works against the real Storage emulator - a
@@ -356,6 +387,7 @@ async function main() {
   const nurseStorage = testEnv.authenticatedContext("nurse-uid").storage();
   const readonlyStorage = testEnv.authenticatedContext("readonly-uid").storage();
   const anonStorage = testEnv.unauthenticatedContext().storage();
+  const stockctlStorage = testEnv.authenticatedContext("stockctl-uid").storage();
   const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0]);
   const tooBig = new Uint8Array(9 * 1024 * 1024);
 
@@ -379,6 +411,12 @@ async function main() {
     assertFails(deleteObject(ref(readonlyStorage, "stock_photos/item-1/a.jpg"))));
   await check("Nurse CAN delete (replace) a stock photo", () =>
     assertSucceeds(deleteObject(ref(nurseStorage, "stock_photos/item-1/a.jpg"))));
+  await check("A custom role granted inventory.purge CAN delete a stock photo (when removing the item)", async () => {
+    await assertSucceeds(uploadBytes(ref(nurseStorage, "stock_photos/item-9/a.jpg"), jpeg, { contentType: "image/jpeg" }));
+    await assertSucceeds(deleteObject(ref(stockctlStorage, "stock_photos/item-9/a.jpg")));
+  });
+  await check("...but that role CANNOT upload a photo", () =>
+    assertFails(uploadBytes(ref(stockctlStorage, "stock_photos/item-10/a.jpg"), jpeg, { contentType: "image/jpeg" })));
   await check("Everywhere outside stock_photos/ is closed, even to an admin", () =>
     assertFails(uploadBytes(ref(adminStorage, "some_other_path/a.jpg"), jpeg, { contentType: "image/jpeg" })));
 

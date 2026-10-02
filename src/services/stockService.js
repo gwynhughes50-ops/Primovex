@@ -358,6 +358,48 @@ export async function updateStockItem(id, patch) {
 }
 
 /**
+ * Permanently deletes a stock item and releases its barcode, in one
+ * transaction. Not undoable - archiveStockItem is the normal way to retire an
+ * item. Past stock_movements are deliberately left: they're the immutable
+ * history and each carries the item's name, so they stay readable. The server
+ * records who did it in the audit ledger. Returns what was deleted (so the
+ * caller can also remove the item's photo file from Storage).
+ */
+export async function purgeStockItem(id) {
+  const itemRef = doc(db, ITEMS_COL, id);
+  const removed = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(itemRef);
+    if (!snap.exists()) throw new Error("Item not found.");
+    const data = snap.data() || {};
+
+    // The barcode registry entry is only this item's to remove if it still
+    // points at it: an archived item's barcode was released and may have been
+    // taken by a newer item.
+    const barcodeKey = normalizeBarcode(data.barcode);
+    if (barcodeKey) {
+      const barcodeRef = doc(db, BARCODE_COL, barcodeKey);
+      const barcodeSnap = await tx.get(barcodeRef);
+      if (barcodeSnap.exists() && barcodeSnap.data()?.item_id === id) tx.delete(barcodeRef);
+    }
+
+    tx.delete(itemRef);
+    return { name: data.name || "", barcode: data.barcode || "", photo_path: data.photo_path || "", current_stock: toNumber(data.current_stock, 0), category: data.category || "" };
+  });
+
+  writeAuditEvent({
+    action: "inventory.stock.purge",
+    module: "inventory",
+    targetType: "stock_item",
+    targetId: id,
+    summary: `Stock item permanently deleted: ${removed.name}`,
+    classification: "operational",
+    metadata: { name: removed.name, barcode: removed.barcode, stockAtDeletion: removed.current_stock, category: removed.category },
+  }).catch(() => {});
+
+  return removed;
+}
+
+/**
  * ✅ Archive instead of delete
  */
 export async function archiveStockItem(id, actor = null) {

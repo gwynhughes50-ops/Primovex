@@ -19,6 +19,7 @@ import useStock from "@/hooks/useStock";
 import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
 import { buildFormOptions, matchOption, namesWithCurrent } from "@/lib/stockPickerOptions";
 import { unassignedQty } from "@/lib/stockLocations";
+import { purgeConfirmMatches, purgeConsequences } from "@/lib/stockPurge";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, query } from "firebase/firestore";
@@ -27,9 +28,9 @@ import { listEquipment } from "@/modules/equipment/services/equipmentRegistry";
 import AssignLocationModal from "@/components/stock/AssignLocationModal";
 import { STOCK_CATEGORIES, getSubcategories, categoryLabel, subcategoryLabel, UNCATEGORISED_CATEGORY } from "@/data/stockCategories";
 import { normalizeStockItemCategory, migrateStockItemCategoryIfNeeded, createReorderRequest, getExpiryStatus, daysUntilExpiry } from "@/services/stockService";
-import { uploadStockItemPhoto, removeStockItemPhoto } from "@/services/stockPhotoService";
+import { uploadStockItemPhoto, removeStockItemPhoto, deleteStockPhotoFile } from "@/services/stockPhotoService";
 
-import { Search, Package, Pencil, History, Archive, RotateCcw, MapPin, BellRing, ImageOff } from "lucide-react";
+import { Search, Package, Pencil, History, Archive, Trash2, RotateCcw, MapPin, BellRing, ImageOff } from "lucide-react";
 
 /* helpers */
 const getStockBadge = (qty, min) => {
@@ -82,6 +83,8 @@ export default function Inventory() {
 
   const canWriteInventory = !authLoading && can("inventory.write");
   const canDeleteInventory = !authLoading && can("inventory.delete");
+  // Permanent delete is a separate permission from archiving - only logins whose role has it see the button.
+  const canPurgeInventory = !authLoading && can("inventory.purge");
 
   /* tabs */
   const [tab, setTab] = useState("stock"); // "stock" | "emergency" | "anaphylaxis"
@@ -144,7 +147,7 @@ export default function Inventory() {
    * We always subscribe to ALL (active + archived) and filter client-side,
    * so the toggle cannot get “stuck” due to a listener not re-subscribing.
    */
-  const { items, loading, error, archiveItem, restoreItem, receiveStock, useStockQty, addItem, updateItem, transferStock, unassignLocation } =
+  const { items, loading, error, archiveItem, restoreItem, receiveStock, useStockQty, addItem, updateItem, transferStock, unassignLocation, purgeItem } =
     useStock({ includeArchived: true });
 
   // Form / Site / Location are picked, not typed: sites and spaces from Practice
@@ -378,6 +381,47 @@ const handleBarcodeScan = (code) => {
     if (!canDeleteInventory) return;
     setDeleteItem(item);
     setDeleteOpen(true);
+  };
+
+  // Permanent delete: typed-name confirmation, then the record, its barcode
+  // entry and its photo file go. Rules enforce inventory.purge as well, so the
+  // button being hidden is a convenience, not the protection.
+  const [purgeTarget, setPurgeTarget] = useState(null);
+  const [purgeText, setPurgeText] = useState("");
+  const [purgeBusy, setPurgeBusy] = useState(false);
+  const [purgeError, setPurgeError] = useState("");
+
+  const openPurge = (item) => {
+    if (!canPurgeInventory) return;
+    setPurgeTarget(item);
+    setPurgeText("");
+    setPurgeError("");
+  };
+
+  const closePurge = () => {
+    if (purgeBusy) return;
+    setPurgeTarget(null);
+    setPurgeText("");
+    setPurgeError("");
+  };
+
+  const confirmPurge = async () => {
+    if (!purgeTarget || !purgeConfirmMatches(purgeText, purgeTarget.name)) return;
+    setPurgeBusy(true);
+    setPurgeError("");
+    try {
+      const removed = await purgeItem(purgeTarget.id);
+      await deleteStockPhotoFile(removed?.photo_path || purgeTarget.photo_path);
+      setPurgeTarget(null);
+      setPurgeText("");
+    } catch (err) {
+      console.error("Permanent delete failed:", err);
+      setPurgeError(err?.code === "permission-denied"
+        ? "Your login doesn't have permission to permanently delete stock items."
+        : err?.message || "Could not delete this item. Nothing has been changed.");
+    } finally {
+      setPurgeBusy(false);
+    }
   };
 
   const confirmDelete = async () => {
@@ -778,6 +822,19 @@ const handleBarcodeScan = (code) => {
                           <RotateCcw className="h-4 w-4" />
                         </Button>
                       )}
+
+                      {canPurgeInventory && (
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-rose-400 hover:text-rose-300"
+                          onClick={() => openPurge(item)}
+                          title="Delete permanently"
+                          aria-label={`Delete ${item.name} permanently`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
 
@@ -1139,6 +1196,45 @@ const handleBarcodeScan = (code) => {
                     </Button>
                     <Button className="bg-rose-500" onClick={confirmDelete}>
                       Yes, archive
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {purgeTarget && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Delete item permanently">
+                <div className="max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-rose-500/40 bg-slate-900 p-4">
+                  <p className="font-semibold text-rose-300">Delete permanently?</p>
+                  <p className="mt-1 text-sm text-slate-300">
+                    You are about to permanently delete <strong>{purgeTarget.name}</strong>. This cannot be undone.
+                  </p>
+                  <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-400">
+                    {purgeConsequences(purgeTarget).map((line) => <li key={line}>{line}</li>)}
+                  </ul>
+
+                  <label className="mt-4 block text-xs text-slate-400">
+                    Type the item's name to confirm
+                    <Input
+                      className="mt-1"
+                      value={purgeText}
+                      onChange={(e) => setPurgeText(e.target.value)}
+                      placeholder={purgeTarget.name}
+                      autoFocus
+                      disabled={purgeBusy}
+                    />
+                  </label>
+
+                  {purgeError && <p className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-2 text-xs text-rose-200">{purgeError}</p>}
+
+                  <div className="mt-4 flex justify-end gap-2">
+                    <Button variant="outline" onClick={closePurge} disabled={purgeBusy}>Cancel</Button>
+                    <Button
+                      className="bg-rose-600 text-white hover:bg-rose-500"
+                      onClick={confirmPurge}
+                      disabled={purgeBusy || !purgeConfirmMatches(purgeText, purgeTarget.name)}
+                    >
+                      {purgeBusy ? "Deleting…" : "Delete permanently"}
                     </Button>
                   </div>
                 </div>

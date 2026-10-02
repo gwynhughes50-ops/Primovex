@@ -134,7 +134,8 @@ service firebase.storage {
       allow write: if (hasPermission("inventory", "write") || isAdmin())
         && request.resource.size < 8 * 1024 * 1024
         && request.resource.contentType.matches("image/.*");
-      allow delete: if hasPermission("inventory", "write") || isAdmin();
+      // Also removable by whoever may permanently delete the item itself.
+      allow delete: if hasPermission("inventory", "write") || hasPermission("inventory", "purge") || isAdmin();
     }
 
     // Everything else is closed by default.

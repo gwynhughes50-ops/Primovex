@@ -60,6 +60,18 @@ export async function uploadStockItemPhoto(item, dataUrl) {
   return url;
 }
 
+// Deletes just the photo file (for an item that's being deleted outright, so
+// there's no record left to update). A failure leaves an unused file behind and
+// is not worth failing the delete over.
+export async function deleteStockPhotoFile(photoPath) {
+  if (!photoPath) return;
+  try {
+    await deleteObject(ref(storage, photoPath));
+  } catch (error) {
+    console.warn("Deleted item's photo could not be removed from storage.", error);
+  }
+}
+
 // Removes a stock item's photo, from both the item record and Storage.
 export async function removeStockItemPhoto(item) {
   if (!item?.id) return;

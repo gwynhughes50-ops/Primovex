@@ -22,6 +22,7 @@ export const CAPABILITIES = {
     adjust: "inventory.adjust",
     verify: "inventory.verify",
     delete: "inventory.delete",
+    purge: "inventory.purge",
   },
   purchasing: {
     read: "purchasing.read",
@@ -105,6 +106,7 @@ export const CAPABILITY_CATALOG = [
   { id: "inventory.adjust", label: "Adjust stock levels", group: "Inventory" },
   { id: "inventory.verify", label: "Complete stock verification", group: "Inventory" },
   { id: "inventory.delete", label: "Delete/archive stock", group: "Inventory" },
+  { id: "inventory.purge", label: "Permanently delete stock items (cannot be undone)", group: "Inventory" },
 
   { id: "purchasing.read", label: "View purchasing", group: "Purchasing" },
   { id: "purchasing.write", label: "Create/edit purchase orders", group: "Purchasing" },

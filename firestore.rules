@@ -139,7 +139,9 @@ service cloud.firestore {
     }
     match /stock_barcodes/{barcodeId} {
   allow read: if signedIn();
-  allow create, update, delete: if hasPermission("inventory", "write") || isAdmin();
+  allow create, update: if hasPermission("inventory", "write") || isAdmin();
+  // Deleting an item releases its barcode in the same transaction.
+  allow delete: if hasPermission("inventory", "write") || hasPermission("inventory", "purge") || isAdmin();
 }
 
   // -------------------------
@@ -157,7 +159,9 @@ match /reorder_requests/{requestId} {
     match /stock_items/{docId} {
       allow get, list: if signedIn();
       allow create, update: if hasPermission("inventory", "write") || isAdmin();
-      allow delete: if isAdmin();
+      // Permanent delete is its own permission (inventory.purge), separate from
+      // archiving, so it can be given to chosen logins through a custom role.
+      allow delete: if hasPermission("inventory", "purge") || isAdmin();
     }
 
     // -------------------------

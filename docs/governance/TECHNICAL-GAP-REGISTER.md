@@ -23,10 +23,11 @@ Status: **Open** — these items block approval for real patient data.
 - A non-synthetic mode assertion fails closed in the ClinFlow service.
 - The Security Centre visibly reports that live clinical data is locked.
 
-## Progress recorded 2026-10-02 (evidence: `docs/security/attack-suite`, 132 checks, 0 failed)
+## Progress recorded 2026-10-02 (evidence: `docs/security/attack-suite`, 144 checks, 0 failed)
 
 - Emergency-kit and anaphylaxis-box checks can now only be recorded by roles holding `inventory.verify`, signed as the recording user and with the server timestamp; recorded checks stay immutable. Creating, editing or deleting a kit needs `inventory.delete`. 38 attack-suite checks cover this, including forged identity, back-dating, ReadOnly/Reception/Partner/anonymous refusal.
 - Firebase Storage rules (stock photos) are deployed with the cross-service IAM role granted to the Storage service agent; image host is named explicitly in the CSP.
+- Permanently deleting a stock item is a separate permission, `inventory.purge`, held by System Admin only unless an administrator grants it to a custom role; archiving remains `inventory.delete`. 12 attack-suite checks cover it (and show a purge-only role cannot edit stock or upload photos).
 - This does **not** close the "legacy Firestore collections commonly allow any signed-in user" gap; collections other than those hardened to date still need the same review.
 
 The gap register must be reviewed after each material release and closed only against verifiable evidence.
