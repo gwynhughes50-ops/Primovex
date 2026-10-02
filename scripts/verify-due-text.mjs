@@ -1,0 +1,11 @@
+import assert from "node:assert/strict";
+import { describeDueRun } from "../src/lib/dueNotificationsText.js";
+let n = 0;
+const t = (name, fn) => { fn(); n++; console.log("ok  " + name); };
+t("nothing due", () => assert.match(describeDueRun({ considered: 0, created: 0, alreadySent: 0, skippedInactive: 0 }), /Nothing is due/));
+t("some sent", () => assert.equal(describeDueRun({ considered: 3, created: 3, alreadySent: 0, skippedInactive: 0 }), "Sent 3 new notifications."));
+t("singular wording", () => assert.equal(describeDueRun({ considered: 2, created: 1, alreadySent: 1, skippedInactive: 0 }), "Sent 1 new notification. 1 was already sent earlier."));
+t("all already sent", () => assert.equal(describeDueRun({ considered: 2, created: 0, alreadySent: 2, skippedInactive: 0 }), "No new notifications were needed. 2 were already sent earlier."));
+t("skipped accounts are explained", () => assert.match(describeDueRun({ considered: 1, created: 0, alreadySent: 0, skippedInactive: 1 }), /deactivated or missing/));
+t("missing counts are safe", () => assert.match(describeDueRun(undefined), /Nothing is due/));
+console.log(`\n${n} passed`);

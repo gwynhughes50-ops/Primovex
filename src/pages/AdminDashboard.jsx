@@ -69,6 +69,8 @@ import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, se
 import { db } from "../lib/firebase";
 import { CAPABILITY_CATALOG, ROLE_PRESETS, ROLE_TEMPLATES } from "@/core/identity/capabilities";
 import { describeNotificationAccess, ON_THEIR_COMPUTER } from "@/lib/notificationAccess";
+import { sendDueNotificationsNow } from "@/services/dueNotificationsService";
+import { describeDueRun } from "@/lib/dueNotificationsText";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeUsers, updateUserRole, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa } from "@/services/adminUserService";
 
@@ -393,6 +395,23 @@ export default function AdminDashboard() {
   // Password-set links from Add User expire after an hour (Firebase's fixed
   // limit) — this issues a fresh one on demand. Nothing is generated until
   // the admin confirms, since each one is an audited credential-setting link.
+  // Run the morning due-date notification job on demand.
+  const [dueRun, setDueRun] = useState({ busy: false, message: "", error: "" });
+  const runDueNotifications = async () => {
+    setDueRun({ busy: true, message: "", error: "" });
+    try {
+      setDueRun({ busy: false, message: describeDueRun(await sendDueNotificationsNow()), error: "" });
+    } catch (error) {
+      setDueRun({
+        busy: false,
+        message: "",
+        error: error?.code === "functions/permission-denied"
+          ? "Only an administrator can run this."
+          : "Couldn't run the check just now. Make sure you're signed in with a real administrator account, then try again.",
+      });
+    }
+  };
+
   // "Why isn't this person getting notifications?" - what a login's role will
   // and won't receive (src/lib/notificationAccess.js).
   const [notifCheckTarget, setNotifCheckTarget] = useState(null);
@@ -894,6 +913,25 @@ export default function AdminDashboard() {
             path="notifications"
             element={
               <div className="mt-6 space-y-6">
+                <Card className="rounded-2xl border border-slate-800/70 bg-slate-900/60 text-slate-100 backdrop-blur">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BellRing className="h-5 w-5 text-teal-300" />
+                      Due-date notifications
+                    </CardTitle>
+                    <CardDescription className="text-slate-300/80">
+                      Every morning at 7:30, Primovex tells the person a SAR or concern is assigned to when it is due within two days, and again when it goes overdue. A SAR's escalation manager is told once it is overdue. Each one is sent once.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <Button className="rounded-full bg-teal-500 text-slate-950 hover:bg-teal-400" disabled={dueRun.busy} onClick={runDueNotifications}>
+                      {dueRun.busy ? "Checking…" : "Check and send now"}
+                    </Button>
+                    {dueRun.message && <p role="status" className="text-sm text-emerald-300">{dueRun.message}</p>}
+                    {dueRun.error && <p role="alert" className="text-sm text-rose-300">{dueRun.error}</p>}
+                  </CardContent>
+                </Card>
+
                 <Card className="rounded-2xl border border-slate-800/70 bg-slate-900/60 text-slate-100 backdrop-blur">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">

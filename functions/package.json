@@ -8,7 +8,7 @@
     "node": "22"
   },
   "scripts": {
-    "lint": "node --check index.js && node --check config/clinflowSyntheticPack.js && node --check services/azureDocumentIntelligenceService.js && node --check services/governedAuditService.js && node --check providers/providerFactory.js && node --check providers/simulatorProvider.js && node --check providers/tuyaProvider.js && node --check services/deviceSyncService.js && node --check services/alertService.js && node --check services/eventBus.js && node --check services/roomIssueService.js && node --check services/userAccountService.js && node --check services/notificationService.js && node --check services/staffDirectoryService.js",
+    "lint": "node --check index.js && node --check config/clinflowSyntheticPack.js && node --check services/azureDocumentIntelligenceService.js && node --check services/governedAuditService.js && node --check providers/providerFactory.js && node --check providers/simulatorProvider.js && node --check providers/tuyaProvider.js && node --check services/deviceSyncService.js && node --check services/alertService.js && node --check services/eventBus.js && node --check services/roomIssueService.js && node --check services/userAccountService.js && node --check services/notificationService.js && node --check services/staffDirectoryService.js && node --check services/dueNotificationService.js",
     "test:audit": "node --test tests/governedAudit.test.js",
     "test:clinflow": "node --test tests/clinflowAzure.test.js",
     "serve": "firebase emulators:start --only functions,firestore",

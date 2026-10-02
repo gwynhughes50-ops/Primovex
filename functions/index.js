@@ -17,6 +17,7 @@ const { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink,
 const { getEffectiveCapabilities, hasCapability } = require("./services/roleCapabilities");
 const { notifySarAssignment } = require("./services/notificationService");
 const { listStaffDirectory } = require("./services/staffDirectoryService");
+const { sendDueNotifications } = require("./services/dueNotificationService");
 
 initializeApp();
 const db = getFirestore();
@@ -451,6 +452,32 @@ exports.deleteUserAccount = onCall({ region: "europe-west2" }, async (request) =
   await assertAdmin(request);
   const { uid } = request.data || {};
   return deleteUserAccount({ uid, actorUid: request.auth.uid });
+});
+
+// Due-soon and overdue notifications for SARs and concerns, into each person's
+// in-app inbox, every morning at 07:30 London time. The person a SAR/concern is
+// assigned to is told when it is due within two days and again when it goes
+// overdue; a SAR's escalation manager is told only once it is overdue. Each
+// notification is created once (a fixed id per record, person and due date), so
+// running every day never repeats one. See services/dueNotificationService.js.
+exports.scheduledDueNotifications = onSchedule(
+  {
+    region: "europe-west2",
+    schedule: "30 7 * * *",
+    timeZone: "Europe/London",
+    timeoutSeconds: 120,
+  },
+  async () => {
+    const result = await sendDueNotifications({ db });
+    console.log("Due-date notifications", result);
+  }
+);
+
+// The same job, run on demand by an administrator (Admin > Notifications), so
+// the schedule can be tried without waiting for the morning.
+exports.sendDueNotificationsNow = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
+  await assertAdmin(request);
+  return sendDueNotifications({ db });
 });
 
 exports.scheduledConnectSimulatorSync = onSchedule(
