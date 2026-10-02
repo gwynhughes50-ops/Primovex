@@ -877,7 +877,10 @@ match /subject_access_requests/{requestId} {
 // -------------------------
 match /emergency_assets/{assetId} {
   allow get, list: if signedIn();
-  allow create, update, delete: if isAdmin();
+  // Setting up / editing / removing a kit needs inventory.delete (Practice
+  // Manager and System Admin, or any custom role given it) - the same level as
+  // archiving stock. Everyone with inventory.verify can still record checks.
+  allow create, update, delete: if hasPermission("inventory", "delete") || isAdmin();
 
   match /checks/{checkId} {
     allow get, list: if signedIn();
@@ -897,7 +900,10 @@ match /emergency_assets/{assetId} {
 // -------------------------
 match /anaphylaxis_boxes/{boxId} {
   allow get, list: if signedIn();
-  allow create, update, delete: if isAdmin();
+  // Setting up / editing / removing a kit needs inventory.delete (Practice
+  // Manager and System Admin, or any custom role given it) - the same level as
+  // archiving stock. Everyone with inventory.verify can still record checks.
+  allow create, update, delete: if hasPermission("inventory", "delete") || isAdmin();
 
   match /checks/{checkId} {
     allow get, list: if signedIn();

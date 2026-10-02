@@ -137,7 +137,7 @@ export default function ClinicalAssetChecklist({
 }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { can, role, user, profile, isAdmin } = useAuth();
+  const { can, role, user, profile } = useAuth();
   const { items: stockItems } = useStock({ includeArchived: false });
   const [entities, setEntities] = useState([]);
   const [selectedId, setSelectedId] = useState("");
@@ -591,10 +591,10 @@ export default function ClinicalAssetChecklist({
     return <div className="rounded-2xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] p-5 text-[color:var(--medtrak-text)]">Loading {entityLabelPlural}...</div>;
   }
 
-  // emergency_assets/anaphylaxis_boxes writes require isAdmin() at the
-  // Firestore rule level — this must match, or a non-admin sees an enabled
-  // button that then fails with an unexplained permission error.
-  const canManage = Boolean(isAdmin);
+  // emergency_assets/anaphylaxis_boxes writes require inventory.delete (or
+  // admin) at the Firestore rule level - this must match, or a user sees an
+  // enabled button that then fails with an unexplained permission error.
+  const canManage = can("inventory.delete");
   const existingIds = entities.map((entity) => entity.id);
   const qrPayload = selected ? buildAssetQrPayload(collectionName, selected.id) : "";
   const medtrakAssetId = selected ? getMedTrakAssetId(collectionName, selected.id) : "";

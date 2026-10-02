@@ -332,8 +332,20 @@ async function main() {
       assertFails(deleteDoc(doc(admin, coll, "kit-1", "checks", "c-nurse"))));
     await check(`[${coll}] ReadOnly CAN still read the checks`, () =>
       assertSucceeds(getDoc(doc(readonly, coll, "kit-1", "checks", "c-nurse"))));
-    await check(`[${coll}] Nurse CANNOT create or edit the kit itself (admin only)`, () =>
+    await check(`[${coll}] Nurse CANNOT create or edit the kit itself (needs inventory.delete)`, () =>
       assertFails(setDoc(doc(nurse, coll, "kit-2"), { name: "Sneaky kit", items: [] })));
+    await check(`[${coll}] ReadOnly CANNOT create the kit`, () =>
+      assertFails(setDoc(doc(readonly, coll, "kit-2"), { name: "Sneaky kit", items: [] })));
+    await check(`[${coll}] Practice Manager CAN create the kit`, () =>
+      assertSucceeds(setDoc(doc(pm, coll, "kit-pm"), { name: "PM kit", items: [] })));
+    await check(`[${coll}] Practice Manager CAN edit the kit`, () =>
+      assertSucceeds(updateDoc(doc(pm, coll, "kit-pm"), { name: "PM kit renamed" })));
+    await check(`[${coll}] Nurse CANNOT delete the kit`, () =>
+      assertFails(deleteDoc(doc(nurse, coll, "kit-pm"))));
+    await check(`[${coll}] Practice Manager CAN delete the kit`, () =>
+      assertSucceeds(deleteDoc(doc(pm, coll, "kit-pm"))));
+    await check(`[${coll}] Admin CAN create the kit`, () =>
+      assertSucceeds(setDoc(doc(admin, coll, "kit-admin"), { name: "Admin kit", items: [] })));
   }
 
   console.log("\n=== 10. Storage: stock item photos (storage.rules) ===");
