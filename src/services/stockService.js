@@ -19,6 +19,7 @@ import { writeAuditEvent } from "@/core/identity/auditService";
 import { applyLocationDelta, planTransfer } from "@/lib/stockLocations";
 import { daysUntilExpiry, expiryStatus, parseExpiryDate } from "@/lib/stockAlerts";
 import { nextBatchAndExpiry } from "@/lib/stockBatch";
+import { matchStockByScan, parseGs1, toGtin14 } from "@/lib/gs1";
 import { UNCATEGORISED_CATEGORY, UNCATEGORISED_SUBCATEGORY, isKnownCategory, resolveLegacyCategory, getSubcategories } from "@/data/stockCategories";
 
 const ITEMS_COL = "stock_items";
@@ -1041,6 +1042,14 @@ export async function findStockItemByBarcode(barcode) {
   const snap = await getDocs(q);
 
   if (snap.empty) {
+    // Not an exact match. A product's single pack, box and case each have their
+    // own barcode, and a box can carry a second one with the expiry and lot, so
+    // match on the product itself (src/lib/gs1.js) before giving up.
+    if (parseGs1(raw)?.gtin || toGtin14(raw)) {
+      const everything = await getDocs(collection(db, ITEMS_COL));
+      const match = matchStockByScan(everything.docs.map((d) => ({ id: d.id, ...d.data() })), raw);
+      if (match.item && !match.item.archived_at) return match.item;
+    }
     throw new Error("Item not found for this barcode.");
   }
 

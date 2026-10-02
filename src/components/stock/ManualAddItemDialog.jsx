@@ -6,6 +6,11 @@ import { STOCK_CATEGORIES, UNCATEGORISED_CATEGORY, getSubcategories } from "@/da
 import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
 import { buildFormOptions, matchOption, namesWithCurrent } from "@/lib/stockPickerOptions";
 import { findSameProduct, receiveDefaults, stockAfterReceive, suggestStock, suggestionDetail } from "@/lib/stockSuggestions";
+import { matchStockByScan, parseGs1 } from "@/lib/gs1";
+
+const dmy = (iso) => (/^\d{4}-\d{2}-\d{2}$/.test(iso || "") ? iso.split("-").reverse().join("/") : iso);
+// A scanner "types" the code and presses Enter into whichever box has focus.
+const looksLikeBarcode = (text) => Boolean(parseGs1(text)) || /^\d{8,14}$/.test(String(text || "").trim());
 
 const selectCls = "mt-1 h-10 w-full rounded-xl border border-slate-700/70 bg-slate-900 px-3 text-sm";
 
@@ -58,6 +63,8 @@ export default function ManualAddItemDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
+  const [scanText, setScanText] = useState("");
+  const [scanNote, setScanNote] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -68,6 +75,8 @@ export default function ManualAddItemDialog({
     setSuggestOpen(false);
     setError("");
     setDone("");
+    setScanText("");
+    setScanNote("");
   }, [open, initialBarcode]);
 
   // A practice with one site/space doesn't need to choose: fill it in.
@@ -100,13 +109,68 @@ export default function ManualAddItemDialog({
   const duplicate = mode === "new" ? findSameProduct(items, form) : null;
   const canSave = form.name.trim().length > 0 && !duplicate && !busy;
 
-  function chooseExisting(item) {
+  function chooseExisting(item, details = {}) {
+    const defaults = receiveDefaults(item);
     setTarget(item);
-    setRecv(receiveDefaults(item));
+    setRecv({
+      ...defaults,
+      // What the box's own barcodes said about this delivery, when scanned.
+      batch_number: details.lot || "",
+      expiry_date: details.expiry || "",
+      qty: details.count ? String(details.count) : defaults.qty,
+      barcode: !item.barcode && details.gtin ? details.gtin : "",
+    });
     setMode("receive");
     setSuggestOpen(false);
     setError("");
     setDone("");
+  }
+
+  // A scanned barcode - from the box, the single pack, or the second barcode
+  // that carries the expiry, lot and quantity. Finds the product whichever pack
+  // barcode it is, and fills in whatever the scan says about the delivery.
+  function handleScan(raw) {
+    const text = String(raw || "").trim();
+    if (!text) return;
+    setError("");
+    setDone("");
+    const { item, via, details } = matchStockByScan(items, text);
+    const bits = [];
+    if (details.lot) bits.push(`batch ${details.lot}`);
+    if (details.expiry) bits.push(`expiry ${dmy(details.expiry)}`);
+    if (details.count) bits.push(`quantity ${details.count}`);
+    const tail = bits.length ? ` - ${bits.join(", ")}` : "";
+
+    if (item) {
+      chooseExisting(item, details);
+      setScanNote(`Found ${item.name}${via === "other-pack" ? " (the same product's other pack barcode)" : ""}${tail}.`);
+    } else if (details.gtin) {
+      setForm((p) => ({
+        ...p,
+        barcode: details.gtin,
+        batch_number: details.lot ?? p.batch_number,
+        expiry_date: details.expiry ?? p.expiry_date,
+        current_stock: details.count ?? p.current_stock,
+      }));
+      setMode("new");
+      setTarget(null);
+      setScanNote(`This product isn't on file yet${tail}. Type its name below to add it.`);
+      window.setTimeout(() => nameRef.current?.focus(), 30);
+    } else if (bits.length) {
+      if (mode === "receive") {
+        setRecv((p) => ({ ...p, batch_number: details.lot ?? p.batch_number, expiry_date: details.expiry ?? p.expiry_date, qty: details.count ? String(details.count) : p.qty }));
+        setScanNote(`Filled in${tail}.`);
+      } else {
+        setForm((p) => ({ ...p, batch_number: details.lot ?? p.batch_number, expiry_date: details.expiry ?? p.expiry_date, current_stock: details.count ?? p.current_stock }));
+        setScanNote(`Read${tail}. Now scan the product barcode too, or pick the product by name.`);
+      }
+    } else {
+      setForm((p) => ({ ...p, barcode: text }));
+      setMode("new");
+      setTarget(null);
+      setScanNote("That barcode isn't on file. Type the product's name below to add it.");
+      window.setTimeout(() => nameRef.current?.focus(), 30);
+    }
   }
 
   // Ready for the next item in the delivery: same site and room, everything else blank.
@@ -116,6 +180,8 @@ export default function ManualAddItemDialog({
     setTarget(null);
     setError("");
     setDone(message);
+    setScanText("");
+    setScanNote("");
     window.setTimeout(() => {
       scrollRef.current?.scrollTo?.({ top: 0 });
       nameRef.current?.focus();
@@ -167,6 +233,15 @@ export default function ManualAddItemDialog({
   }
 
   function onNameKeyDown(event) {
+    // A scanner pointed at the name box: treat a barcode + Enter as a scan.
+    if (event.key === "Enter" && looksLikeBarcode(form.name)) {
+      event.preventDefault();
+      const scanned = form.name;
+      setForm((p) => ({ ...p, name: "" }));
+      setSuggestOpen(false);
+      handleScan(scanned);
+      return;
+    }
     if (!suggestions.length) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
@@ -207,6 +282,25 @@ export default function ManualAddItemDialog({
               <CheckCircle2 className="h-4 w-4 shrink-0" /> {done} Add the next item below, or press Done.
             </p>
           )}
+
+          <div className="sm:col-span-2">
+            <label className="text-xs text-slate-400">Scan the delivery barcode (box or pack)</label>
+            <Input
+              className="mt-1"
+              autoComplete="off"
+              value={scanText}
+              placeholder="Scan here - or skip this and type the name below"
+              onChange={(e) => setScanText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                const scanned = scanText;
+                setScanText("");
+                handleScan(scanned);
+              }}
+            />
+            {scanNote && <p role="status" className="mt-1 text-[11px] text-teal-200">{scanNote}</p>}
+          </div>
 
           {receiving ? (
             <form id="receive-form" onSubmit={submitReceive} className="grid gap-3 sm:col-span-2 sm:grid-cols-2">
