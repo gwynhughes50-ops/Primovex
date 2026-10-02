@@ -144,6 +144,13 @@ export default function ClinicalAssetChecklist({
   const [sites, setSites] = useState([]);
   const [siteFilter, setSiteFilter] = useState("");
   const [loading, setLoading] = useState(true);
+  // A failed load must never look like "you have none": it gets its own state,
+  // with a Retry, instead of falling through to the empty-state below.
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  // Kits whose last-check lookup failed (status genuinely unknown, not "overdue").
+  const [statusFailed, setStatusFailed] = useState({});
+  const [latestError, setLatestError] = useState(false);
   const [form, setForm] = useState({ results: {}, notes: "" });
   const [latest, setLatest] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -203,11 +210,13 @@ export default function ClinicalAssetChecklist({
     Promise.all(
       entities.map((entity) =>
         getLatestCheck(collectionName, entity.id)
-          .then((record) => [entity.id, record])
-          .catch(() => [entity.id, null])
+          .then((record) => [entity.id, record, false])
+          .catch(() => [entity.id, null, true])
       )
     ).then((pairs) => {
-      if (active) setLatestByEntity(Object.fromEntries(pairs));
+      if (!active) return;
+      setLatestByEntity(Object.fromEntries(pairs.map(([id, record]) => [id, record])));
+      setStatusFailed(Object.fromEntries(pairs.filter(([, , failed]) => failed).map(([id]) => [id, true])));
     });
     return () => {
       active = false;
@@ -252,12 +261,14 @@ export default function ClinicalAssetChecklist({
     (async () => {
       try {
         setLoading(true);
+        setLoadError("");
         const list = await listEntities();
         if (!mounted) return;
         setEntities(list);
         setSelectedId(list[0]?.id || "");
       } catch (error) {
         console.error(error);
+        if (mounted) setLoadError(error?.message || "Unknown error");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -265,7 +276,7 @@ export default function ClinicalAssetChecklist({
     return () => {
       mounted = false;
     };
-  }, [listEntities]);
+  }, [listEntities, reloadKey]);
 
   useEffect(() => {
     if (orbProposalState.proposal?.status === 'confirmed') {
@@ -316,11 +327,13 @@ export default function ClinicalAssetChecklist({
     let mounted = true;
     (async () => {
       try {
+        setLatestError(false);
         const record = await getLatestCheck(collectionName, selectedId);
         if (!mounted) return;
         setLatest(record);
       } catch (error) {
         console.error(error);
+        if (mounted) setLatestError(true);
       }
     })();
     return () => {
@@ -586,6 +599,25 @@ export default function ClinicalAssetChecklist({
   const qrPayload = selected ? buildAssetQrPayload(collectionName, selected.id) : "";
   const medtrakAssetId = selected ? getMedTrakAssetId(collectionName, selected.id) : "";
 
+  if (loadError && entities.length === 0) {
+    return (
+      <div className="rounded-3xl border border-rose-500/40 bg-[color:var(--medtrak-panel)] p-6 text-[color:var(--medtrak-text)] shadow-sm">
+        <h2 className="text-xl font-semibold">Couldn't load your {entityLabelPlural}</h2>
+        <p className="mt-2 text-sm leading-6 text-[color:var(--medtrak-muted)]">
+          This isn't the same as having none - they just couldn't be fetched, so nothing has been changed. Check your connection and try again; if it keeps happening, ask an administrator to check your access.
+        </p>
+        <p className="mt-2 break-words text-xs text-[color:var(--medtrak-muted)]">Detail: {loadError}</p>
+        <button
+          type="button"
+          onClick={() => setReloadKey((n) => n + 1)}
+          className="mt-4 rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:opacity-90"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
   if (entities.length === 0) {
     return (
       <div className="rounded-3xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] p-6 text-[color:var(--medtrak-text)] shadow-sm">
@@ -684,7 +716,7 @@ export default function ClinicalAssetChecklist({
                   <MapPin className="h-3.5 w-3.5" /> {selected.location || "Location not set"}
                 </span>
                 <span className="rounded-full border border-[color:var(--medtrak-border)] bg-[color:color-mix(in_srgb,var(--medtrak-bg)_88%,var(--medtrak-panel))] px-3 py-1">
-                  Last check: {formatLastChecked(latest)}
+                  Last check: {latestError ? "couldn't be loaded - the status above may be out of date" : formatLastChecked(latest)}
                 </span>
               </div>
             )}
@@ -808,11 +840,17 @@ export default function ClinicalAssetChecklist({
                     >
                       <span className="min-w-0">
                         <span className="block truncate font-medium text-[color:var(--medtrak-text)]">{entity.name}</span>
-                        <span className="block truncate text-xs text-[color:var(--medtrak-muted)]">{entity.site || "No site"}{entity.location ? ` · ${entity.location}` : ""} · Last check: {formatLastChecked(entityLatest)}</span>
+                        <span className="block truncate text-xs text-[color:var(--medtrak-muted)]">{entity.site || "No site"}{entity.location ? ` · ${entity.location}` : ""} · Last check: {statusFailed[entity.id] ? "couldn't be loaded" : formatLastChecked(entityLatest)}</span>
                       </span>
-                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold" style={semanticStatusStyle(rowMeta.tone)}>
-                        <RowIcon className="h-3.5 w-3.5" /> {rowMeta.title}
-                      </span>
+                      {statusFailed[entity.id] ? (
+                        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold" style={semanticStatusStyle("warning")}>
+                          <AlertTriangle className="h-3.5 w-3.5" /> Status unavailable
+                        </span>
+                      ) : (
+                        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold" style={semanticStatusStyle(rowMeta.tone)}>
+                          <RowIcon className="h-3.5 w-3.5" /> {rowMeta.title}
+                        </span>
+                      )}
                     </button>
                   );
                 })}

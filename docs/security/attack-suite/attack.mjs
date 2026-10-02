@@ -10,7 +10,7 @@ import {
   assertSucceeds,
 } from "@firebase/rules-unit-testing";
 import {
-  doc, getDoc, setDoc, updateDoc, addDoc, collection, deleteDoc,
+  doc, getDoc, setDoc, updateDoc, addDoc, collection, deleteDoc, serverTimestamp,
 } from "firebase/firestore";
 import { ref, uploadBytes, getBytes, deleteObject } from "firebase/storage";
 
@@ -304,6 +304,37 @@ async function main() {
     assertSucceeds(updateDoc(doc(admin, "cleaning_logs", "log-c4"), { notes: "Admin correction" })));
   await check("Admin CAN delete a cleaning log", () =>
     assertSucceeds(deleteDoc(doc(admin, "cleaning_logs", "log-c4"))));
+
+  console.log("\n=== 9b. Emergency kit and anaphylaxis box checks ===");
+  const kitCheck = (uid, extra = {}) => ({ results: {}, notes: "", createdAt: serverTimestamp(), createdBy: { uid, name: uid }, ...extra });
+  for (const coll of ["emergency_assets", "anaphylaxis_boxes"]) {
+    await check(`[${coll}] Nurse (inventory.verify) CAN record a check as themselves`, () =>
+      assertSucceeds(setDoc(doc(nurse, coll, "kit-1", "checks", "c-nurse"), kitCheck("nurse-uid"))));
+    await check(`[${coll}] Practice Manager CAN record a check`, () =>
+      assertSucceeds(setDoc(doc(pm, coll, "kit-1", "checks", "c-pm"), kitCheck("pm-uid"))));
+    await check(`[${coll}] Admin CAN record a check`, () =>
+      assertSucceeds(setDoc(doc(admin, coll, "kit-1", "checks", "c-admin"), kitCheck("admin-uid"))));
+    await check(`[${coll}] ReadOnly (no inventory.verify) CANNOT record a check`, () =>
+      assertFails(setDoc(doc(readonly, coll, "kit-1", "checks", "c-ro"), kitCheck("readonly-uid"))));
+    await check(`[${coll}] Reception CANNOT record a check`, () =>
+      assertFails(setDoc(doc(reception, coll, "kit-1", "checks", "c-rec"), kitCheck("reception-uid"))));
+    await check(`[${coll}] Partner CANNOT record a check`, () =>
+      assertFails(setDoc(doc(partner, coll, "kit-1", "checks", "c-par"), kitCheck("partner-uid"))));
+    await check(`[${coll}] Anonymous CANNOT record a check`, () =>
+      assertFails(setDoc(doc(anon, coll, "kit-1", "checks", "c-anon"), kitCheck("anon"))));
+    await check(`[${coll}] A check CANNOT be signed in someone else's name`, () =>
+      assertFails(setDoc(doc(nurse, coll, "kit-1", "checks", "c-forge"), kitCheck("admin-uid"))));
+    await check(`[${coll}] A check CANNOT be back-dated (createdAt must be the server's time)`, () =>
+      assertFails(setDoc(doc(nurse, coll, "kit-1", "checks", "c-old"), kitCheck("nurse-uid", { createdAt: new Date("2020-01-01") }))));
+    await check(`[${coll}] A recorded check CANNOT be edited, even by an admin`, () =>
+      assertFails(updateDoc(doc(admin, coll, "kit-1", "checks", "c-nurse"), { notes: "changed" })));
+    await check(`[${coll}] A recorded check CANNOT be deleted, even by an admin`, () =>
+      assertFails(deleteDoc(doc(admin, coll, "kit-1", "checks", "c-nurse"))));
+    await check(`[${coll}] ReadOnly CAN still read the checks`, () =>
+      assertSucceeds(getDoc(doc(readonly, coll, "kit-1", "checks", "c-nurse"))));
+    await check(`[${coll}] Nurse CANNOT create or edit the kit itself (admin only)`, () =>
+      assertFails(setDoc(doc(nurse, coll, "kit-2"), { name: "Sneaky kit", items: [] })));
+  }
 
   console.log("\n=== 10. Storage: stock item photos (storage.rules) ===");
   // storage.rules ports firestore.rules' capability check directly, so this

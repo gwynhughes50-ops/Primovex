@@ -881,7 +881,13 @@ match /emergency_assets/{assetId} {
 
   match /checks/{checkId} {
     allow get, list: if signedIn();
-    allow create: if signedIn();
+    // Recording a monthly check needs inventory.verify (what the app already
+    // requires before showing Save), only as yourself, and with the server's
+    // own timestamp so a check can't be back-dated or signed as someone else.
+    allow create: if signedIn()
+      && (hasPermission("inventory", "verify") || isAdmin())
+      && request.resource.data.createdBy.uid == request.auth.uid
+      && request.resource.data.createdAt == request.time;
     allow update, delete: if false; // keep checks immutable
   }
 }
@@ -895,7 +901,13 @@ match /anaphylaxis_boxes/{boxId} {
 
   match /checks/{checkId} {
     allow get, list: if signedIn();
-    allow create: if signedIn();
+    // Recording a monthly check needs inventory.verify (what the app already
+    // requires before showing Save), only as yourself, and with the server's
+    // own timestamp so a check can't be back-dated or signed as someone else.
+    allow create: if signedIn()
+      && (hasPermission("inventory", "verify") || isAdmin())
+      && request.resource.data.createdBy.uid == request.auth.uid
+      && request.resource.data.createdAt == request.time;
     allow update, delete: if false; // keep checks immutable
   }
 }
