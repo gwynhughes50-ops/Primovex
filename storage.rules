@@ -8,6 +8,11 @@ rules_version = '2';
 // rather than re-deriving a simplified version that could quietly drift out
 // of step with what Firestore itself allows. If the role/capability model in
 // firestore.rules changes, mirror the change here too.
+// Cross-service rules (firestore.get below) need the Storage service agent to
+// hold roles/firebaserules.firestoreServiceAgent on the project. The Firebase
+// CLI grants it when it uploads CHANGED rules from an interactive terminal (and
+// asks first); it skips the grant when run non-interactively or when the rules
+// are unchanged. Without it every write here is denied as "unauthorized".
 service firebase.storage {
   match /b/{bucket}/o {
 
