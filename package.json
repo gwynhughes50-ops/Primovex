@@ -39,8 +39,8 @@
     "test:notification-access": "esbuild scripts/verify-notification-access.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-notification-access.bundle.mjs && node work/verify-notification-access.bundle.mjs",
     "test:due-text": "node scripts/verify-due-text.mjs",
     "test:stock-suggestions": "esbuild scripts/verify-stock-suggestions.mjs --bundle --platform=node --format=esm --outfile=work/verify-stock-suggestions.bundle.mjs && node work/verify-stock-suggestions.bundle.mjs",
-    "test:stock-batch": "esbuild scripts/verify-stock-batch.mjs --bundle --platform=node --format=esm --outfile=work/verify-stock-batch.bundle.mjs && node work/verify-stock-batch.bundle.mjs",
     "test:gs1": "esbuild scripts/verify-gs1.mjs --bundle --platform=node --format=esm --outfile=work/verify-gs1.bundle.mjs && node work/verify-gs1.bundle.mjs",
+    "test:stock-batches": "esbuild scripts/verify-stock-batches.mjs --bundle --platform=node --format=esm --outfile=work/verify-stock-batches.bundle.mjs && node work/verify-stock-batches.bundle.mjs",
     "test:asset-qr": "esbuild scripts/verify-asset-qr.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-asset-qr.bundle.mjs && node work/verify-asset-qr.bundle.mjs"
   },
   "dependencies": {

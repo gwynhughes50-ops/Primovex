@@ -57,7 +57,7 @@ t("nextItemId: copes with seeded ids that aren't item_N", () => {
 t("normaliseItem / blankItem: fill every field", () => {
   assert.deepEqual(blankItem(), {
     id: "", section: "General", name: "", expectedQty: "", defaultBatch: "", defaultExpiry: "", stock_barcode: "",
-    stock_item_id: "", followStock: true,
+    stock_item_id: "", followStock: true, stock_batch: null,
   });
   assert.equal(normaliseItem({ name: "Adrenaline", expectedQty: 0 }).expectedQty, 0);
   assert.equal(normaliseItem({ name: "x", defaultBatch: null }).defaultBatch, "");
@@ -81,11 +81,11 @@ t("summariseItem: only the details that are set", () => {
 t("fieldsFromStock: picking a stock item brings its barcode, batch and expiry", () => {
   assert.deepEqual(
     fieldsFromStock({ id: "wfi", name: "Water for Injection 2ml", barcode: "5012345", batch_number: " L2301A ", expiry_date: "2028-08-31" }),
-    { name: "Water for Injection 2ml", stock_barcode: "5012345", stock_item_id: "wfi", followStock: true, defaultBatch: "L2301A", defaultExpiry: "2028-08-31" }
+    { name: "Water for Injection 2ml", stock_barcode: "5012345", stock_item_id: "wfi", followStock: true, stock_batch: null, defaultBatch: "L2301A", defaultExpiry: "2028-08-31" }
   );
 });
 t("fieldsFromStock: anything the stock item lacks comes through blank, not stale", () => {
-  assert.deepEqual(fieldsFromStock({ id: "g", name: "Gloves" }), { name: "Gloves", stock_barcode: "", stock_item_id: "g", followStock: true, defaultBatch: "", defaultExpiry: "" });
+  assert.deepEqual(fieldsFromStock({ id: "g", name: "Gloves" }), { name: "Gloves", stock_barcode: "", stock_item_id: "g", followStock: true, stock_batch: null, defaultBatch: "", defaultExpiry: "" });
 });
 t("fieldsFromStock: an expiry that isn't a YYYY-MM-DD date is left for the person to enter", () => {
   assert.equal(fieldsFromStock({ name: "x", expiry_date: "Aug 2028" }).defaultExpiry, "");
@@ -138,6 +138,48 @@ t("resolveKitItems: maps every item", () => {
   const out = resolveKitItems([{ stock_item_id: "wfi" }, { name: "plain" }], stock);
   assert.equal(out[0].defaultBatch, "NEW-9");
   assert.equal(out[1].name, "plain");
+});
+
+// ---- a specific batch chosen for the kit (several batches of the same product in stock)
+const adrenalineStock = {
+  id: "adr", name: "Adrenaline 1mg/1ml", current_stock: 52, batch_number: "A", expiry_date: "2027-02-28",
+  batches: [
+    { batch_number: "A", expiry_date: "2027-02-28", quantity: 12 },
+    { batch_number: "B", expiry_date: "2031-02-28", quantity: 40 },
+  ],
+};
+t("a kit item with no batch chosen follows the soonest-expiring batch", () => {
+  const r = resolveKitItem({ stock_item_id: "adr", followStock: true, stock_batch: null }, [adrenalineStock]);
+  assert.equal(r.defaultBatch, "A");
+  assert.equal(r.defaultExpiry, "2027-02-28");
+});
+t("choosing batch B puts B's batch and expiry in the kit, not the soonest", () => {
+  const r = resolveKitItem({ stock_item_id: "adr", followStock: true, stock_batch: { batch_number: "B", expiry_date: "2031-02-28" } }, [adrenalineStock]);
+  assert.equal(r.defaultBatch, "B");
+  assert.equal(r.defaultExpiry, "2031-02-28");
+  assert.equal(r.fromStock, true);
+  assert.equal(r.batchQuantity, 40);
+});
+t("a chosen batch keeps its own details when other batches come and go", () => {
+  const later = { ...adrenalineStock, batch_number: "C", expiry_date: "2026-11-30", current_stock: 60, batches: [...adrenalineStock.batches, { batch_number: "C", expiry_date: "2026-11-30", quantity: 8 }] };
+  const r = resolveKitItem({ stock_item_id: "adr", stock_batch: { batch_number: "B", expiry_date: "2031-02-28" } }, [later]);
+  assert.equal(r.defaultBatch, "B"); // the summary moved to C; the kit still holds B
+});
+t("if the chosen batch has been used up, the saved values stay and it is flagged", () => {
+  const usedUp = { ...adrenalineStock, current_stock: 40, batches: [{ batch_number: "B", expiry_date: "2031-02-28", quantity: 40 }] };
+  const r = resolveKitItem({ stock_item_id: "adr", defaultBatch: "A", defaultExpiry: "2027-02-28", stock_batch: { batch_number: "A", expiry_date: "2027-02-28" } }, [usedUp]);
+  assert.equal(r.batchGone, true);
+  assert.equal(r.defaultBatch, "A");
+  assert.equal(r.defaultExpiry, "2027-02-28");
+});
+t("a chosen batch with the stock item missing just keeps the saved values", () => {
+  const item = { stock_item_id: "gone", defaultBatch: "A", defaultExpiry: "2027-02-28", stock_batch: { batch_number: "A", expiry_date: "2027-02-28" } };
+  assert.equal(resolveKitItem(item, []), item);
+});
+t("normaliseItem carries the chosen batch through, and ignores junk", () => {
+  assert.deepEqual(normaliseItem({ name: "x", stock_batch: { batch_number: "B", expiry_date: "2031-02-28" } }).stock_batch, { batch_number: "B", expiry_date: "2031-02-28" });
+  assert.equal(normaliseItem({ name: "x", stock_batch: "nonsense" }).stock_batch, null);
+  assert.equal(normaliseItem({ name: "x" }).stock_batch, null);
 });
 
 console.log(`\n${n} passed`);

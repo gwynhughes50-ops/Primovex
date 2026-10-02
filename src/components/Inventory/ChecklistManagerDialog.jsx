@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { upsertParentDoc, deleteParentDoc, listActiveSites } from "@/lib/checklistsFirestore";
+import { batchKey, describeBatches } from "@/lib/stockBatches";
 import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry";
 import { spaceNamesForSite } from "@/modules/sense/services/siteLink";
 import {
@@ -96,9 +97,18 @@ function ItemEditor({ editor, itemHasSection, stockItems, onChange, onCommit, on
   // from Inventory (live) and can't be typed over here; untick to set them by hand.
   const linkedStock = findStockForItem(item, stockItems);
   const shown = resolveKitItem(item, stockItems);
-  const following = Boolean(linkedStock) && item.followStock !== false;
-  function setFollow(on) {
-    onChange(on ? { followStock: true } : { followStock: false, defaultBatch: shown.defaultBatch, defaultExpiry: shown.defaultExpiry });
+  const following = Boolean(linkedStock) && (Boolean(item.stock_batch) || item.followStock !== false);
+  // Which batch of this product goes in the kit: the soonest-expiring one in
+  // stock (follows stock), a specific batch, or values typed here.
+  const batches = linkedStock ? describeBatches(linkedStock) : [];
+  const batchChoice = item.stock_batch ? batchKey(item.stock_batch) : item.followStock === false ? "__own__" : "";
+  function chooseBatch(value) {
+    if (value === "") onChange({ followStock: true, stock_batch: null });
+    else if (value === "__own__") onChange({ followStock: false, stock_batch: null, defaultBatch: shown.defaultBatch, defaultExpiry: shown.defaultExpiry });
+    else {
+      const picked = batches.find((b) => b.key === value);
+      if (picked) onChange({ followStock: true, stock_batch: { batch_number: picked.batch_number, expiry_date: picked.expiry_date }, defaultBatch: picked.batch_number, defaultExpiry: picked.expiry_date });
+    }
   }
   return (
     <div ref={innerRef} className="space-y-3 border-l-4 border-primary/60 bg-[color:color-mix(in_srgb,var(--medtrak-accent)_6%,var(--medtrak-panel))] p-3">
@@ -147,21 +157,31 @@ function ItemEditor({ editor, itemHasSection, stockItems, onChange, onCommit, on
       </div>
 
       {linkedStock ? (
-        <label className="flex items-start gap-2 text-xs text-[color:var(--medtrak-text)]">
-          <input type="checkbox" className="mt-0.5" checked={following} onChange={(e) => setFollow(e.target.checked)} />
-          <span>
-            Follow the batch and expiry in stock
-            <span className="block text-[color:var(--medtrak-muted)]">
-              {following
-                ? "Updates automatically when you receive a new batch in Inventory. Untick if this box holds a different batch from your main stock."
-                : "Using the batch and expiry typed here. Tick to follow the Inventory record again."}
-            </span>
-          </span>
-        </label>
+        <div className="space-y-1">
+          <label className={labelCls}>Which batch goes in this kit?</label>
+          <select className={inputCls} value={batchChoice} onChange={(e) => chooseBatch(e.target.value)}>
+            <option value="">Follow the soonest-expiring batch in stock (updates itself)</option>
+            {batches.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
+            <option value="__own__">Use the batch and expiry I type above</option>
+          </select>
+          {batches.length > 1 && !item.stock_batch && item.followStock !== false && (
+            <p className="text-xs text-amber-600">This product has {batches.length} batches in stock. Choose the one you are putting in this kit.</p>
+          )}
+          {shown.batchGone && (
+            <p className="text-xs text-rose-500">The batch chosen for this kit is no longer in stock. Choose another, or the saved details stay.</p>
+          )}
+          <p className="text-xs text-[color:var(--medtrak-muted)]">
+            {item.stock_batch
+              ? "This batch's expiry comes from stock and shows in the kit's checks."
+              : item.followStock === false
+                ? "Using the batch and expiry typed above."
+                : "Updates automatically when you receive or use stock in Inventory."}
+          </p>
+        </div>
       ) : (
         stockItems.length > 0 && (
           <p className="text-xs text-[color:var(--medtrak-muted)]">
-            Pick the item from your stock and its barcode, batch and expiry fill in from Inventory, and stay in step with it.
+            Pick the item from your stock and its barcode appears, and you can choose which batch goes in this kit.
           </p>
         )
       )}
@@ -335,6 +355,7 @@ function ChecklistManagerForm({
             stock_barcode: String(it.stock_barcode || "").trim() || null,
             stock_item_id: String(it.stock_item_id || "").trim() || null,
             followStock: it.followStock !== false,
+            stock_batch: it.stock_batch ? { batch_number: String(it.stock_batch.batch_number || ""), expiry_date: String(it.stock_batch.expiry_date || "") } : null,
           };
         })
         .filter((it) => it.name);

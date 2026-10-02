@@ -1,3 +1,5 @@
+import { findBatch } from "./stockBatches";
+
 // Small pure helpers for building an emergency kit / anaphylaxis box in the
 // Manage dialog (ChecklistManagerDialog.jsx). Kept separate so the ID and
 // item logic can be tested without React.
@@ -15,6 +17,9 @@ export function normaliseItem(it = {}) {
     // record's current batch / expiry (the default) or its own saved ones.
     stock_item_id: it.stock_item_id ?? "",
     followStock: it.followStock !== false,
+    // A specific batch of the stock item chosen for this kit ({ batch_number,
+    // expiry_date }); null means "whichever batch expires soonest in stock".
+    stock_batch: it.stock_batch && typeof it.stock_batch === "object" ? it.stock_batch : null,
   };
 }
 
@@ -94,6 +99,7 @@ export function fieldsFromStock(stock = {}) {
     stock_barcode: stock.barcode || "",
     stock_item_id: stock.id || "",
     followStock: true,
+    stock_batch: null,
     defaultBatch: String(stock.batch_number || "").trim(),
     defaultExpiry: isoDate(stock.expiry_date),
   };
@@ -106,7 +112,20 @@ export function fieldsFromStock(stock = {}) {
 // `fromStock` marks which values came from the stock record so the screens can
 // say so. Never written back - saving a kit uses the editor's own fields.
 export function resolveKitItem(item, stockItems = []) {
-  if (!item || item.followStock === false) return item;
+  if (!item) return item;
+
+  // A batch chosen for this kit: its batch number and expiry come from that
+  // batch in stock. If that batch has since been used up, the values saved when
+  // it was chosen stay, and `batchGone` says so (so the kit can be re-checked).
+  if (item.stock_batch) {
+    const stock = findStockForItem(item, stockItems);
+    if (!stock) return item;
+    const chosen = findBatch(stock, item.stock_batch);
+    if (!chosen) return { ...item, batchGone: true };
+    return { ...item, defaultBatch: chosen.batch_number, defaultExpiry: chosen.expiry_date, fromStock: true, batchQuantity: chosen.quantity };
+  }
+
+  if (item.followStock === false) return item;
   const stock = findStockForItem(item, stockItems);
   if (!stock) return item;
   const batch = String(stock.batch_number || "").trim();

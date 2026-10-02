@@ -18,7 +18,7 @@ import { db } from "../lib/firebase";
 import { writeAuditEvent } from "@/core/identity/auditService";
 import { applyLocationDelta, planTransfer } from "@/lib/stockLocations";
 import { daysUntilExpiry, expiryStatus, parseExpiryDate } from "@/lib/stockAlerts";
-import { nextBatchAndExpiry } from "@/lib/stockBatch";
+import { adjustBatches, batchSummary, receiveIntoBatches, restoreToBatches, useFromBatches } from "@/lib/stockBatches";
 import { matchStockByScan, parseGs1, toGtin14 } from "@/lib/gs1";
 import { UNCATEGORISED_CATEGORY, UNCATEGORISED_SUBCATEGORY, isKnownCategory, resolveLegacyCategory, getSubcategories } from "@/data/stockCategories";
 
@@ -238,6 +238,12 @@ export async function createStockItem(data) {
 
     created_at: serverTimestamp(),
   });
+
+  // Stock it starts with is its first batch (src/lib/stockBatches.js).
+  payload.batches = receiveIntoBatches(
+    { current_stock: 0 },
+    { qty: payload.current_stock, batch_number: payload.batch_number, expiry_date: payload.expiry_date }
+  );
 
   const barcodeKey = normalizeBarcode(payload.barcode);
 
@@ -591,20 +597,38 @@ export async function applyStockMovement(itemId, movement) {
       nextLocations = applyLocationDelta(item.locations, locationId, cleanString(movement?.locationName), movement?.locationType, delta);
     }
 
-    // A delivery's batch and expiry also go on the item itself - the stock card,
-    // the expiry alerts and kits that follow stock all read them from there.
-    // Older stock still on hand keeps priority (see src/lib/stockBatch.js).
+    // Batches (src/lib/stockBatches.js): a delivery joins its own batch, stock
+    // used comes off the soonest-expiring first, a count adjusts the same way.
+    // The item's own batch_number / expiry_date summarise the soonest-expiring
+    // batch still on hand - the stock card, the expiry alerts and kits that
+    // follow stock all read those.
     const receiptUpdates = {};
-    if (type === "receive") {
-      const next = nextBatchAndExpiry({
-        stockBefore: before,
-        existing: item,
-        receipt: { batch_number: movement?.batch_number, expiry_date: movement?.expiry_date },
-      });
-      if (next.changed) {
-        receiptUpdates.batch_number = next.batch_number;
-        receiptUpdates.expiry_date = next.expiry_date;
+    let batchAllocations = null;
+    {
+      let result = null;
+      if (type === "receive") {
+        result = {
+          batches: receiveIntoBatches(item, {
+            qty: delta,
+            batch_number: movement?.batch_number,
+            expiry_date: movement?.expiry_date,
+          }),
+        };
+      } else if (type === "use") {
+        result = useFromBatches(item, -delta);
+        batchAllocations = result.allocations;
+      } else if (type === "adjust") {
+        result = adjustBatches(item, after);
+        if (delta < 0) batchAllocations = result.allocations;
       }
+      if (result) {
+        const summary = batchSummary(result.batches);
+        receiptUpdates.batches = result.batches;
+        receiptUpdates.batch_number = summary.batch_number;
+        receiptUpdates.expiry_date = summary.expiry_date;
+      }
+    }
+    if (type === "receive") {
       // An item with no barcode yet can be given one at delivery - with the same
       // uniqueness check as when an item is created.
       const receiptBarcode = cleanString(movement?.barcode);
@@ -661,6 +685,7 @@ export async function applyStockMovement(itemId, movement) {
       barcode: context.barcode,
       space_id: context.space_id,
       space_name: context.space_name,
+      ...(batchAllocations && batchAllocations.length ? { batch_allocations: batchAllocations } : {}),
       location_id: locationId || null,
       location_name: locationId ? cleanString(movement?.locationName) || locationId : null,
       location_type: locationId ? (movement?.locationType || "space") : null,
@@ -885,8 +910,15 @@ export async function reverseStockUseMovement(itemId, movementId, reversal = {})
       movementKind: "compensating-reversal",
     });
 
+    // Put the quantity back into the batches it came out of.
+    const restoredBatches = restoreToBatches(item, original.batch_allocations, qty);
+    const restoredSummary = batchSummary(restoredBatches);
+
     tx.update(itemRef, {
       current_stock: after,
+      batches: restoredBatches,
+      batch_number: restoredSummary.batch_number,
+      expiry_date: restoredSummary.expiry_date,
       updated_at: serverTimestamp(),
       last_movement: {
         type: "receive",

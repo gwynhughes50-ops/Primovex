@@ -176,7 +176,7 @@ export default function ClinicalAssetChecklist({
         rawEntities.flatMap((entity) =>
           (entity.items || []).map((item) => {
             const stock = findStockForItem(item, stockItems);
-            return stock ? [stock.id, stock.batch_number || "", stock.expiry_date || ""] : null;
+            return stock ? [stock.id, stock.batch_number || "", stock.expiry_date || "", JSON.stringify(stock.batches || [])] : null;
           })
         )
       ),

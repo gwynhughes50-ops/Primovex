@@ -21,6 +21,7 @@ import { buildFormOptions, matchOption, namesWithCurrent } from "@/lib/stockPick
 import { unassignedQty } from "@/lib/stockLocations";
 import useExpirySettings from "@/hooks/useExpirySettings";
 import { stockLevelStatus } from "@/lib/stockAlerts";
+import { describeBatches, hasExplicitBatches } from "@/lib/stockBatches";
 import { purgeConfirmMatches, purgeConsequences } from "@/lib/stockPurge";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
@@ -482,6 +483,8 @@ const handleBarcodeScan = (code) => {
       barcode: item?.barcode ?? "",
       batch_number: item?.batch_number ?? "",
       expiry_date: item?.expiry_date ?? "",
+      hasBatches: hasExplicitBatches(item),
+      batchList: describeBatches(item),
       site: item?.site ?? "",
       location: item?.location ?? "",
       category: resolvedCategory.category,
@@ -532,8 +535,11 @@ const handleBarcodeScan = (code) => {
         form,
         brand: (editForm.brand || "").trim(),
         barcode: (editForm.barcode || "").trim(),
-        batch_number: (editForm.batch_number || "").trim(),
-        expiry_date: editForm.expiry_date || "",
+        // With real batches, the item's batch/expiry are worked out from them
+        // (receiving and using stock), so they are not overwritten from here.
+        ...(editForm.hasBatches
+          ? {}
+          : { batch_number: (editForm.batch_number || "").trim(), expiry_date: editForm.expiry_date || "" }),
         site,
         location,
         category: (editForm.category || "").trim() || UNCATEGORISED_CATEGORY,
@@ -734,6 +740,17 @@ const handleBarcodeScan = (code) => {
                           {item.supplier_sku ? ` - SKU: ${item.supplier_sku}` : ""}
                         </p>
                       )}
+
+                      {(() => {
+                        const batches = describeBatches(item);
+                        if (batches.length < 2) return null;
+                        return (
+                          <p className="mt-1 text-[11px] text-slate-400" title={batches.map((b) => b.label).join("\n")}>
+                            {batches.length} batches:{" "}
+                            {batches.map((b) => `${b.batch_number || "no batch no."}${b.expiry_date ? ` (exp ${b.expiry_date.split("-").reverse().join("/")})` : ""} ×${b.quantity}`).join(" · ")}
+                          </p>
+                        );
+                      })()}
 
                       {item.expiry_date && (() => {
                         const status = getExpiryStatus(item, new Date(), expirySettings);
@@ -969,27 +986,39 @@ const handleBarcodeScan = (code) => {
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Batch number</p>
-                        <Input
-                          value={editForm.batch_number}
-                          onChange={(e) => setEditForm((f) => ({ ...f, batch_number: e.target.value }))}
-                          placeholder="Optional"
-                        />
+                    {editForm.hasBatches ? (
+                      <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Batches in stock</p>
+                        <ul className="mt-2 space-y-1 text-sm text-slate-200">
+                          {(editForm.batchList || []).map((b) => <li key={b.key}>{b.label}</li>)}
+                        </ul>
+                        <p className="mt-2 text-[11px] text-slate-500">
+                          Batches are set by receiving and using stock - stock is used from the soonest-expiring batch first.
+                        </p>
                       </div>
-                      <div>
-                        <p className="text-xs text-slate-400 mb-1">Expiry date (soonest on hand)</p>
-                        <Input
-                          type="date"
-                          value={editForm.expiry_date}
-                          onChange={(e) => setEditForm((f) => ({ ...f, expiry_date: e.target.value }))}
-                        />
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs text-slate-400 mb-1">Batch number</p>
+                          <Input
+                            value={editForm.batch_number}
+                            onChange={(e) => setEditForm((f) => ({ ...f, batch_number: e.target.value }))}
+                            placeholder="Optional"
+                          />
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-400 mb-1">Expiry date</p>
+                          <Input
+                            type="date"
+                            value={editForm.expiry_date}
+                            onChange={(e) => setEditForm((f) => ({ ...f, expiry_date: e.target.value }))}
+                          />
+                        </div>
+                        <p className="col-span-2 -mt-1 text-[11px] text-slate-500">
+                          The next delivery you receive becomes this item's first tracked batch.
+                        </p>
                       </div>
-                      <p className="col-span-2 -mt-1 text-[11px] text-slate-500">
-                        Receiving a delivery fills these in, keeping the stock that expires first. Change them here if that stock has been used up.
-                      </p>
-                    </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
