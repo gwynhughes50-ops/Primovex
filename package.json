@@ -28,6 +28,7 @@
     "test:desktop-alerts": "esbuild scripts/verify-desktop-alerts.mjs --bundle --platform=node --format=esm --outfile=work/verify-desktop-alerts.bundle.mjs && node work/verify-desktop-alerts.bundle.mjs",
     "test:stock-expiry": "node scripts/verify-stock-expiry.mjs",
     "test:org-chart": "node scripts/verify-org-chart.mjs",
+    "test:checklist-kit": "esbuild scripts/verify-checklist-kit.mjs --bundle --platform=node --format=esm --outfile=work/verify-checklist-kit.bundle.mjs && node work/verify-checklist-kit.bundle.mjs",
     "test:asset-qr": "esbuild scripts/verify-asset-qr.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-asset-qr.bundle.mjs && node work/verify-asset-qr.bundle.mjs"
   },
   "dependencies": {

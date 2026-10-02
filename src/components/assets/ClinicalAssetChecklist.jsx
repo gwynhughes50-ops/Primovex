@@ -630,6 +630,7 @@ export default function ClinicalAssetChecklist({
           initialDoc={manageDoc}
           title={title}
           itemHasSection={enableSections}
+          entityLabel={entityLabel}
           stockItems={stockItems}
           onSaved={async (savedId) => {
             const list = await reloadEntities(false);
@@ -926,6 +927,7 @@ export default function ClinicalAssetChecklist({
         initialDoc={manageDoc}
         title={title}
         itemHasSection={enableSections}
+        entityLabel={entityLabel}
         stockItems={stockItems}
         onSaved={async (savedId) => {
           const list = await reloadEntities(false);

@@ -506,19 +506,19 @@
           "defaultExpiry": "2026-03-01"
         },
         {
-          "name": "Shringe 1ml",
+          "name": "Syringe 1ml",
           "expectedQty": "x2",
           "defaultBatch": "2307020",
           "defaultExpiry": "2028-06-01"
         },
         {
-          "name": "Shringe 2ml",
+          "name": "Syringe 2ml",
           "expectedQty": "x2",
           "defaultBatch": "307727",
           "defaultExpiry": "2029-05-01"
         },
         {
-          "name": "Shringe 5ml",
+          "name": "Syringe 5ml",
           "expectedQty": "x2",
           "defaultBatch": "307731",
           "defaultExpiry": "2026-08-01"
@@ -576,19 +576,19 @@
           "defaultExpiry": "2026-03-01"
         },
         {
-          "name": "Shringe 1ml",
+          "name": "Syringe 1ml",
           "expectedQty": "x2",
           "defaultBatch": "2307020",
           "defaultExpiry": "2028-06-01"
         },
         {
-          "name": "Shringe 2ml",
+          "name": "Syringe 2ml",
           "expectedQty": "x2",
           "defaultBatch": "307727",
           "defaultExpiry": "2029-05-01"
         },
         {
-          "name": "Shringe 5ml",
+          "name": "Syringe 5ml",
           "expectedQty": "x2",
           "defaultBatch": "307731",
           "defaultExpiry": "2026-08-01"

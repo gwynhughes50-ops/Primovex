@@ -1,17 +1,31 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Trash2 } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { upsertParentDoc, deleteParentDoc, listActiveSites } from "@/lib/checklistsFirestore";
 import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry";
+import {
+  blankItem,
+  nextItemId,
+  normaliseItem,
+  summariseItem,
+  uniqueKitId,
+} from "@/lib/checklistKitHelpers";
+
+const inputCls =
+  "w-full rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm text-[color:var(--medtrak-text)] outline-none focus:border-primary/60 focus:ring-2 focus:ring-ring";
+const labelCls = "mb-1 block text-xs font-medium text-[color:var(--medtrak-muted)]";
+const secondaryBtn =
+  "rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2 text-sm font-medium text-[color:var(--medtrak-text)] transition hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_10%,var(--medtrak-panel))] disabled:cursor-not-allowed disabled:opacity-50";
+const primaryBtn =
+  "inline-flex items-center justify-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition hover:bg-primary/15 disabled:cursor-not-allowed disabled:opacity-50";
+const dangerBtn =
+  "inline-flex items-center gap-1.5 rounded-xl border border-rose-500/40 px-3 py-1.5 text-sm font-medium text-rose-500 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-50";
 
 // A plain text input that doubles as a live search against the practice's
-// real stock items, by name or by barcode - typing shows matches below;
-// scanning a barcode (a hardware scanner "types" the code then Enter) or
-// pasting one that matches exactly selects it immediately. Used for both the
-// Item name and Stock barcode fields below, since either one can drive the
-// match - staff might know the name but not the barcode, or vice versa.
-// Picking a match fills both fields together; nothing stops typing a name
-// that isn't in stock at all (not every emergency drug is necessarily
-// tracked as general stock).
+// real stock items, by name or by barcode - typing shows matches below, and
+// picking one fills the name and barcode together. A barcode typed or pasted
+// in full (or sent by a hardware scanner acting as a keyboard) that matches
+// exactly is selected on Enter. Nothing forces a match: an item that isn't
+// tracked as general stock still saves as typed.
 function StockLookupInput({ value, placeholder, stockItems, onChange, onPick }) {
   const [open, setOpen] = useState(false);
 
@@ -24,14 +38,14 @@ function StockLookupInput({ value, placeholder, stockItems, onChange, onPick }) 
   }, [query, stockItems]);
 
   const exactBarcodeMatch = useMemo(
-    () => stockItems.find((s) => String(s.barcode || "").trim().toLowerCase() === query && query),
+    () => (query ? stockItems.find((s) => String(s.barcode || "").trim().toLowerCase() === query) : null),
     [query, stockItems]
   );
 
   return (
     <div className="relative">
       <input
-        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
+        className={inputCls}
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
@@ -46,7 +60,7 @@ function StockLookupInput({ value, placeholder, stockItems, onChange, onPick }) 
         }}
       />
       {open && matches.length > 0 && (
-        <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 shadow-lg">
+        <div className="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] shadow-lg">
           {matches.map((s) => (
             <button
               key={s.id}
@@ -56,10 +70,10 @@ function StockLookupInput({ value, placeholder, stockItems, onChange, onPick }) 
                 onPick(s);
                 setOpen(false);
               }}
-              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs text-slate-200 hover:bg-slate-800"
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs text-[color:var(--medtrak-text)] hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_10%,var(--medtrak-panel))]"
             >
               <span className="truncate">{s.name}</span>
-              <span className="shrink-0 font-mono text-slate-500">{s.barcode || "no barcode"}</span>
+              <span className="shrink-0 font-mono text-[color:var(--medtrak-muted)]">{s.barcode || "no barcode"}</span>
             </button>
           ))}
         </div>
@@ -68,105 +82,203 @@ function StockLookupInput({ value, placeholder, stockItems, onChange, onPick }) 
   );
 }
 
-export default function ChecklistManagerDialog({
-  open,
+// The form for one item - used both to add a new item and to edit an
+// existing one. Nothing here touches the box until "Add to box" / "Update
+// item" is pressed, and nothing reaches the database until the box itself is
+// saved.
+function ItemEditor({ editor, itemHasSection, stockItems, onChange, onCommit, onCancel, innerRef }) {
+  const { item, error, index } = editor;
+  return (
+    <div ref={innerRef} className="space-y-3 border-l-4 border-primary/60 bg-[color:color-mix(in_srgb,var(--medtrak-accent)_6%,var(--medtrak-panel))] p-3">
+      <div className="flex flex-wrap items-start gap-2">
+        {itemHasSection && (
+          <div className="w-32 shrink-0">
+            <label className={labelCls}>Section</label>
+            <input className={inputCls} value={item.section} onChange={(e) => onChange({ section: e.target.value })} placeholder="General" />
+          </div>
+        )}
+        <div className="min-w-[200px] flex-1">
+          <label className={labelCls}>Item name - start typing to find it in your stock</label>
+          <StockLookupInput
+            value={item.name}
+            placeholder="Item name"
+            stockItems={stockItems}
+            onChange={(value) => onChange({ name: value })}
+            onPick={(stock) => onChange({ name: stock.name, stock_barcode: stock.barcode || "" })}
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div>
+          <label className={labelCls}>Expected qty</label>
+          <input className={inputCls} value={item.expectedQty} onChange={(e) => onChange({ expectedQty: e.target.value })} placeholder="-" />
+        </div>
+        <div>
+          <label className={labelCls}>Batch (optional)</label>
+          <input className={inputCls} value={item.defaultBatch} onChange={(e) => onChange({ defaultBatch: e.target.value })} placeholder="e.g. L2301A" />
+        </div>
+        <div>
+          <label className={labelCls}>Expiry (optional)</label>
+          <input type="date" className={inputCls} value={item.defaultExpiry} onChange={(e) => onChange({ defaultExpiry: e.target.value })} />
+        </div>
+        <div>
+          <label className={labelCls}>Barcode (if available)</label>
+          <StockLookupInput
+            value={item.stock_barcode}
+            placeholder="Type barcode"
+            stockItems={stockItems}
+            onChange={(value) => onChange({ stock_barcode: value })}
+            onPick={(stock) => onChange({ name: item.name || stock.name, stock_barcode: stock.barcode || "" })}
+          />
+        </div>
+      </div>
+
+      {error && <p className="text-xs text-rose-500">{error}</p>}
+
+      <div className="flex justify-end gap-2">
+        <button type="button" onClick={onCancel} className={secondaryBtn}>Cancel</button>
+        <button type="button" onClick={onCommit} className={primaryBtn}>{index === null ? "Add to box" : "Update item"}</button>
+      </div>
+    </div>
+  );
+}
+
+function ChecklistManagerForm({
   onClose,
   onSaved,
   parentCollection,
-  existingIds,
+  existingIds = [],
   initialDoc,
   title,
   itemHasSection,
   stockItems = [],
+  entityLabel = "set",
 }) {
   const isEdit = Boolean(initialDoc?.id);
 
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
-  const [docId, setDocId] = useState(initialDoc?.id || "");
   const [name, setName] = useState(initialDoc?.name || "");
   const [site, setSite] = useState(initialDoc?.site || "");
   const [location, setLocation] = useState(initialDoc?.location || "");
+  const [items, setItems] = useState(() => (initialDoc?.items || []).map(normaliseItem));
+  const [initialJson] = useState(() => JSON.stringify({ name, site, location, items }));
+
+  // One item is added or edited at a time: { index (null = a new item), item,
+  // original, error }. null means no item form is open.
+  const [editor, setEditor] = useState(null);
+  const [filter, setFilter] = useState("");
+  const [flashId, setFlashId] = useState(null);
+
   const [sites, setSites] = useState([]);
   const [spaces, setSpaces] = useState([]);
 
+  const rowRefs = useRef(new Map());
+  const editorRef = useRef(null);
+
+  // A new box's ID is assigned from its name; an existing box keeps its own.
+  const docId = isEdit ? initialDoc.id : uniqueKitId(name, existingIds);
+
   useEffect(() => {
-    if (!open) return;
     let active = true;
     listActiveSites()
       .then((rows) => { if (active) setSites(rows); })
       .catch(() => { if (active) setSites([]); });
     return () => { active = false; };
-  }, [open]);
+  }, []);
 
-  // Location used to be free text. The practice already has a real Spaces
-  // registry (Practice Admin > Spaces, the same rooms Facilities and Sense
-  // use) - picking from it instead means a kit's location is an actual room,
-  // not whatever was typed that one time. loadSpaceRegistry() is
-  // synchronous/local (kept fresh by the app-wide Sense sync), so no loading
-  // state is needed.
+  // Location comes from the practice's real Spaces (Practice Admin > Spaces),
+  // not free text. loadSpaceRegistry() is synchronous and local, kept fresh by
+  // the app-wide sync, so there's no loading state to manage.
   useEffect(() => {
-    if (!open) return;
     const registry = loadSpaceRegistry();
     setSpaces((registry?.spaces || []).filter((s) => s.status !== "archived"));
-  }, [open]);
+  }, []);
 
-  // The practice's real sites, plus the box's existing value if it doesn't
-  // match one of them (an older free-text value, or a site since renamed/
-  // deactivated) - so opening this dialog can never silently wipe it.
+  // The real sites/spaces, plus the box's existing value if it doesn't match
+  // one of them (an older free-text value, or one since renamed) - so opening
+  // this can never silently wipe it.
   const siteOptions = useMemo(() => {
     const names = sites.map((s) => s.name).filter(Boolean);
-    if (site && !names.includes(site)) return [site, ...names];
-    return names;
+    return site && !names.includes(site) ? [site, ...names] : names;
   }, [sites, site]);
-
-  // Same reasoning as siteOptions above, for Location.
   const locationOptions = useMemo(() => {
     const names = spaces.map((s) => s.name).filter(Boolean);
-    if (location && !names.includes(location)) return [location, ...names];
-    return names;
+    return location && !names.includes(location) ? [location, ...names] : names;
   }, [spaces, location]);
-  const [items, setItems] = useState(
-    (initialDoc?.items || []).map((it) => ({
-      id: it.id || "",
-      section: it.section || "General",
-      name: it.name || "",
-      expectedQty: it.expectedQty ?? "",
-      defaultBatch: it.defaultBatch ?? "",
-      defaultExpiry: it.defaultExpiry ?? "",
-      stock_barcode: it.stock_barcode ?? "",
-    }))
-  );
 
-  const idTaken = useMemo(() => {
-    const id = (docId || "").trim();
-    if (!id) return false;
-    if (isEdit && id === initialDoc.id) return false;
-    return existingIds.includes(id);
-  }, [docId, existingIds, isEdit, initialDoc]);
+  const dirty =
+    JSON.stringify({ name, site, location, items }) !== initialJson ||
+    Boolean(editor && JSON.stringify(editor.item) !== editor.original);
 
-  function setItem(idx, patch) {
-    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+  function requestClose() {
+    if (dirty && !window.confirm("Discard your unsaved changes?")) return;
+    onClose?.();
   }
 
-  function addItem() {
-    setItems((prev) => [
-      ...prev,
-      { id: `item_${prev.length + 1}`, section: "General", name: "", expectedQty: "", defaultBatch: "", defaultExpiry: "", stock_barcode: "" },
-    ]);
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key === "Escape") requestClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
+  useEffect(() => {
+    if (editor) editorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [editor?.index]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!flashId) return undefined;
+    rowRefs.current.get(flashId)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const timer = window.setTimeout(() => setFlashId(null), 2200);
+    return () => window.clearTimeout(timer);
+  }, [flashId]);
+
+  function startAdd() {
+    const item = blankItem();
+    setEditor({ index: null, item, original: JSON.stringify(item), error: "" });
   }
 
-  function removeItem(idx) {
+  function startEdit(idx) {
+    const item = { ...items[idx] };
+    setEditor({ index: idx, item, original: JSON.stringify(item), error: "" });
+  }
+
+  function patchEditor(patch) {
+    setEditor((prev) => (prev ? { ...prev, item: { ...prev.item, ...patch }, error: "" } : prev));
+  }
+
+  function commitEditor() {
+    if (!editor) return;
+    const draft = { ...editor.item, name: String(editor.item.name || "").trim() };
+    if (!draft.name) {
+      setEditor((prev) => ({ ...prev, error: "Enter an item name first." }));
+      return;
+    }
+    if (editor.index === null) {
+      const id = nextItemId(items);
+      setFilter("");
+      setItems((prev) => [...prev, { ...draft, id }]);
+      setFlashId(id);
+    } else {
+      const id = items[editor.index].id;
+      setItems((prev) => prev.map((it, i) => (i === editor.index ? { ...draft, id } : it)));
+      setFlashId(id);
+    }
+    setEditor(null);
+  }
+
+  function deleteItem(idx) {
     setItems((prev) => prev.filter((_, i) => i !== idx));
   }
 
   async function save() {
     setErr("");
-    const id = (docId || "").trim();
-    if (!id) return setErr("ID is required (e.g. cmc_emergency_trolley).");
-    if (idTaken) return setErr("That ID is already in use.");
-    if (!name.trim()) return setErr("Name is required.");
+    if (editor) return;
+    if (!name.trim()) return setErr("Enter a name first.");
 
     try {
       setSaving(true);
@@ -179,9 +291,8 @@ export default function ChecklistManagerDialog({
             ...(itemHasSection ? { section: String(it.section || "General").trim() || "General" } : {}),
             name: String(it.name || "").trim(),
             // Free-text quantities ("x2", "?") are valid in the original seed
-            // data - coercing them with Number() here used to silently turn
-            // them into NaN the moment this dialog re-saved them. Keep a
-            // clean numeric qty as a number, anything else as the typed text.
+            // data - coercing them with Number() used to turn them into NaN.
+            // Keep a clean number as a number, anything else as typed.
             expectedQty: qty === "" ? null : Number.isFinite(Number(qty)) ? Number(qty) : qty,
             defaultBatch: String(it.defaultBatch || "").trim() || null,
             defaultExpiry: String(it.defaultExpiry || "").trim() || null,
@@ -190,7 +301,7 @@ export default function ChecklistManagerDialog({
         })
         .filter((it) => it.name);
 
-      await upsertParentDoc(parentCollection, id, {
+      await upsertParentDoc(parentCollection, docId, {
         name: name.trim(),
         site: site.trim() || null,
         location: location.trim() || null,
@@ -198,7 +309,7 @@ export default function ChecklistManagerDialog({
         items: cleanItems,
       });
 
-      onSaved?.(id);
+      onSaved?.(docId);
       onClose?.();
     } catch (e) {
       console.error(e);
@@ -211,7 +322,7 @@ export default function ChecklistManagerDialog({
   async function doDelete() {
     if (!isEdit) return;
     const ok = window.confirm(
-      "Delete this set? This removes the box/trolley definition. Past checks remain but will be orphaned."
+      `Delete this ${entityLabel}? This removes the ${entityLabel} and its list of contents. Past checks remain but will be orphaned.`
     );
     if (!ok) return;
 
@@ -228,212 +339,184 @@ export default function ChecklistManagerDialog({
     }
   }
 
-  if (!open) return null;
+  const needle = filter.trim().toLowerCase();
+  const visibleItems = items
+    .map((it, idx) => ({ it, idx }))
+    .filter(({ it }) => !needle || String(it.name || "").toLowerCase().includes(needle));
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3">
-      <div className="w-full max-w-3xl bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between gap-3">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3">
+      {/* The card has a fixed maximum height and its own scrolling body, with
+          the header and the Save row pinned - a long item list used to push
+          the header and Save off-screen with no way to reach them. */}
+      <div className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] text-[color:var(--medtrak-text)] shadow-2xl">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--medtrak-border)] px-4 py-3">
           <div className="min-w-0">
-            <div className="truncate text-slate-100 font-semibold">{title}</div>
-            <div className="text-xs text-slate-400">
-              {isEdit ? "Edit existing set" : "Create a new set"} (admin only)
+            <div className="truncate font-semibold">{title}</div>
+            <div className="text-xs text-[color:var(--medtrak-muted)]">
+              {isEdit ? `Edit ${entityLabel}` : `Add a new ${entityLabel}`} (admin only)
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-3">
             {isEdit && (
-              <button
-                type="button"
-                onClick={doDelete}
-                disabled={saving}
-                title="Delete this whole box/trolley"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-500/40 px-3 py-1.5 text-sm text-rose-300 hover:bg-rose-500/10 disabled:opacity-50"
-              >
-                <Trash2 className="h-4 w-4" /> Delete set
+              <button type="button" onClick={doDelete} disabled={saving} title={`Delete this whole ${entityLabel}`} className={dangerBtn}>
+                <Trash2 className="h-4 w-4" /> Delete {entityLabel}
               </button>
             )}
-            <button
-              type="button"
-              onClick={() => onClose?.()}
-              className="text-slate-300 hover:text-slate-100 text-sm"
-            >
+            <button type="button" onClick={requestClose} className="text-sm text-[color:var(--medtrak-muted)] hover:text-[color:var(--medtrak-text)]">
               Close
             </button>
           </div>
-        </div>
+        </header>
 
-        <div className="p-4 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <div className="text-xs text-slate-400 mb-1">ID (slug) *</div>
-              <input
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
-                value={docId}
-                onChange={(e) => setDocId(e.target.value)}
-                placeholder="e.g. cmc_emergency_trolley"
-                disabled={isEdit}
-              />
-              {idTaken && <div className="text-xs text-rose-300 mt-1">ID already exists.</div>}
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="sm:col-span-3">
+              <label className={labelCls}>Name *</label>
+              <input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. CMC Emergency Trolley" />
+              <p className="mt-1 text-[11px] text-[color:var(--medtrak-muted)]">
+                {isEdit ? `ID: ${docId}` : name.trim() ? `Primovex will assign the ID: ${docId}` : "Primovex assigns the ID automatically from the name."}
+              </p>
             </div>
 
-            <div>
-              <div className="text-xs text-slate-400 mb-1">Name *</div>
-              <input
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. CMC Emergency Trolley"
-              />
-            </div>
-
-            <div>
-              <div className="text-xs text-slate-400 mb-1">Site (optional)</div>
-              <select
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
-                value={site}
-                onChange={(e) => setSite(e.target.value)}
-              >
+            <div className="sm:col-span-1">
+              <label className={labelCls}>Site (optional)</label>
+              <select className={inputCls} value={site} onChange={(e) => setSite(e.target.value)}>
                 <option value="">No site assigned</option>
-                {siteOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                {siteOptions.map((siteName) => <option key={siteName} value={siteName}>{siteName}</option>)}
               </select>
-              {sites.length === 0 && (
-                <p className="mt-1 text-[11px] text-slate-500">No sites set up yet - add one under Practice Admin &gt; Sites.</p>
-              )}
+              {sites.length === 0 && <p className="mt-1 text-[11px] text-[color:var(--medtrak-muted)]">No sites set up yet - add one under Practice Admin &gt; Sites.</p>}
             </div>
 
-            <div>
-              <div className="text-xs text-slate-400 mb-1">Location (optional)</div>
-              <select
-                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-              >
+            <div className="sm:col-span-2">
+              <label className={labelCls}>Location (optional)</label>
+              <select className={inputCls} value={location} onChange={(e) => setLocation(e.target.value)}>
                 <option value="">No location set</option>
-                {locationOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                {locationOptions.map((spaceName) => <option key={spaceName} value={spaceName}>{spaceName}</option>)}
               </select>
-              {spaces.length === 0 && (
-                <p className="mt-1 text-[11px] text-slate-500">No spaces set up yet - add one under Practice Admin &gt; Spaces.</p>
-              )}
+              {spaces.length === 0 && <p className="mt-1 text-[11px] text-[color:var(--medtrak-muted)]">No spaces set up yet - add one under Practice Admin &gt; Spaces.</p>}
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="text-sm text-slate-200 font-semibold">Contents</div>
-            <button
-              type="button"
-              onClick={addItem}
-              className="px-3 py-2 rounded-xl text-sm border bg-teal-600/20 border-teal-500/60 text-teal-100 hover:bg-teal-600/30"
-            >
-              Add item
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <div className="text-sm font-semibold">Contents ({items.length})</div>
+                <p className="text-[11px] text-[color:var(--medtrak-muted)]">
+                  Add each item, then save the {entityLabel} at the bottom. Edit or delete an item at any time before saving.
+                </p>
+              </div>
+              <button type="button" onClick={startAdd} disabled={Boolean(editor)} className={primaryBtn}>
+                <Plus className="h-4 w-4" /> Add item
+              </button>
+            </div>
+
+            {items.length > 10 && (
+              <input
+                className={`${inputCls} mt-3`}
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+                placeholder={`Filter ${items.length} items by name...`}
+              />
+            )}
+
+            <ul className="mt-3 divide-y divide-[color:var(--medtrak-border)] rounded-2xl border border-[color:var(--medtrak-border)]">
+              {editor && editor.index === null && (
+                <li className="first:rounded-t-2xl">
+                  <ItemEditor
+                    editor={editor}
+                    itemHasSection={itemHasSection}
+                    stockItems={stockItems}
+                    onChange={patchEditor}
+                    onCommit={commitEditor}
+                    onCancel={() => setEditor(null)}
+                    innerRef={editorRef}
+                  />
+                </li>
+              )}
+
+              {visibleItems.length === 0 && !editor && (
+                <li className="px-3 py-6 text-center text-sm text-[color:var(--medtrak-muted)]">
+                  {items.length === 0 ? `No items yet - use "Add item" to build the contents.` : "No items match that filter."}
+                </li>
+              )}
+
+              {visibleItems.map(({ it, idx }) =>
+                editor && editor.index === idx ? (
+                  <li key={it.id || idx}>
+                    <ItemEditor
+                      editor={editor}
+                      itemHasSection={itemHasSection}
+                      stockItems={stockItems}
+                      onChange={patchEditor}
+                      onCommit={commitEditor}
+                      onCancel={() => setEditor(null)}
+                      innerRef={editorRef}
+                    />
+                  </li>
+                ) : (
+                  <li
+                    key={it.id || idx}
+                    ref={(el) => {
+                      if (el) rowRefs.current.set(it.id, el);
+                      else rowRefs.current.delete(it.id);
+                    }}
+                    className={`flex items-start justify-between gap-3 px-3 py-2.5 transition-colors last:rounded-b-2xl ${flashId === it.id ? "bg-primary/10" : ""}`}
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {itemHasSection && (
+                          <span className="rounded-full border border-[color:var(--medtrak-border)] px-2 py-0.5 text-[11px] text-[color:var(--medtrak-muted)]">
+                            {it.section || "General"}
+                          </span>
+                        )}
+                        <span className="text-sm font-semibold">{it.name}</span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-[color:var(--medtrak-muted)]">{summariseItem(it)}</p>
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <button type="button" onClick={() => startEdit(idx)} disabled={Boolean(editor)} className={`${secondaryBtn} inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs`} title="Edit this item">
+                        <Pencil className="h-3.5 w-3.5" /> Edit
+                      </button>
+                      <button type="button" onClick={() => deleteItem(idx)} disabled={Boolean(editor)} className={`${dangerBtn} px-2.5 text-xs`} title="Remove this item from the list">
+                        <Trash2 className="h-3.5 w-3.5" /> Delete
+                      </button>
+                    </div>
+                  </li>
+                )
+              )}
+            </ul>
+          </div>
+        </div>
+
+        <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[color:var(--medtrak-border)] px-4 py-3">
+          <div className="min-w-0 text-xs">
+            {err ? (
+              <span className="text-rose-500">{err}</span>
+            ) : editor ? (
+              <span className="text-[color:var(--medtrak-muted)]">Finish or cancel the item you're editing to save the {entityLabel}.</span>
+            ) : dirty ? (
+              <span className="text-amber-500">Unsaved changes</span>
+            ) : (
+              <span className="text-[color:var(--medtrak-muted)]">Changes aren't saved until you press Save {entityLabel}.</span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={requestClose} className={secondaryBtn}>Cancel</button>
+            <button type="button" onClick={save} disabled={saving || Boolean(editor)} className={primaryBtn}>
+              {saving ? "Saving..." : `Save ${entityLabel}`}
             </button>
           </div>
-
-          <div className="border border-slate-800 rounded-2xl divide-y divide-slate-800/60 overflow-hidden">
-            {items.map((it, idx) => (
-              <div key={idx} className="p-3 space-y-2">
-                <div className="flex items-start gap-2">
-                  {itemHasSection && (
-                    <div className="w-28 shrink-0">
-                      <div className="text-[10px] text-slate-500 mb-1">Section</div>
-                      <input
-                        className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
-                        value={it.section}
-                        onChange={(e) => setItem(idx, { section: e.target.value })}
-                        placeholder="General"
-                      />
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[10px] text-slate-500 mb-1">Item name - type to search stock, or scan/type a barcode</div>
-                    <StockLookupInput
-                      value={it.name}
-                      placeholder="Item name"
-                      stockItems={stockItems}
-                      onChange={(value) => setItem(idx, { name: value })}
-                      onPick={(stock) => setItem(idx, { name: stock.name, stock_barcode: stock.barcode || "" })}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeItem(idx)}
-                    className="mt-5 inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-rose-500/40 px-2.5 py-2 text-xs font-medium text-rose-300 hover:bg-rose-500/10"
-                    title="Remove this item from the kit"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" /> Remove
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <div>
-                    <div className="text-[10px] text-slate-500 mb-1">Expected qty</div>
-                    <input
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
-                      value={it.expectedQty}
-                      onChange={(e) => setItem(idx, { expectedQty: e.target.value })}
-                      placeholder="-"
-                    />
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-500 mb-1">Default batch (optional)</div>
-                    <input
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
-                      value={it.defaultBatch}
-                      onChange={(e) => setItem(idx, { defaultBatch: e.target.value })}
-                      placeholder="e.g. L2301A"
-                    />
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-500 mb-1">Default expiry (optional)</div>
-                    <input
-                      type="date"
-                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-100"
-                      value={it.defaultExpiry}
-                      onChange={(e) => setItem(idx, { defaultExpiry: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-500 mb-1">Stock barcode (optional) - scan or search</div>
-                    <StockLookupInput
-                      value={it.stock_barcode}
-                      placeholder="Scan or type a barcode"
-                      stockItems={stockItems}
-                      onChange={(value) => setItem(idx, { stock_barcode: value })}
-                      onPick={(stock) => setItem(idx, { name: it.name || stock.name, stock_barcode: stock.barcode || "" })}
-                    />
-                  </div>
-                </div>
-                <p className="text-[11px] text-slate-500">Type a name or scan a barcode in either field above to match it to a real stock item - picking a match fills both. Leave batch/expiry blank if this item doesn't need tracking (e.g. a spacer device) - staff can still enter them during a check if needed; they just won't be pre-filled.</p>
-              </div>
-            ))}
-          </div>
-
-          {err && <div className="text-sm text-rose-300">{err}</div>}
-
-          <div className="flex items-center justify-end">
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => onClose?.()}
-                className="px-3 py-2 rounded-xl text-sm border border-slate-700 text-slate-200 hover:bg-slate-900/40"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={save}
-                disabled={saving}
-                className="px-3 py-2 rounded-xl text-sm border bg-teal-600/20 border-teal-500/60 text-teal-100 hover:bg-teal-600/30 disabled:opacity-50"
-              >
-                {saving ? "Saving..." : "Save"}
-              </button>
-            </div>
-          </div>
-
-          <div className="text-xs text-slate-500">
-            Note: deleting a set removes the box/trolley definition. Existing monthly check records are not deleted.
-          </div>
-        </div>
+        </footer>
       </div>
     </div>
   );
+}
+
+// The form is mounted fresh every time the dialog opens, so it always starts
+// from the box being edited (or a blank one) - the previous version kept its
+// state between openings and could show whatever was typed last time.
+export default function ChecklistManagerDialog(props) {
+  if (!props.open) return null;
+  return <ChecklistManagerForm key={props.initialDoc?.id || "new"} {...props} />;
 }
