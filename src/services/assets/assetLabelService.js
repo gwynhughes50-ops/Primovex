@@ -16,14 +16,13 @@ export function getMedTrakAssetId(collectionName, rawId) {
   return `${getAssetPrefix(collectionName)}-${normaliseAssetId(rawId)}`;
 }
 
+// What the label's QR code holds: a short link, primovex://asset/<kind>/<id>.
+// Short matters - it makes a much simpler code with bigger dots that a phone
+// reads easily at label size - and being a link means the phone's own camera
+// can hand it to Primovex too, not just Primovex's scanner. (Labels printed
+// earlier hold a longer JSON text; parseAssetQrPayload still reads those.)
 export function buildAssetQrPayload(collectionName, assetId) {
-  return JSON.stringify({
-    type: "medtrak.asset",
-    version: 1,
-    collection: collectionName,
-    assetId,
-    medtrakId: getMedTrakAssetId(collectionName, assetId),
-  });
+  return `primovex://asset/${collectionName}/${encodeURIComponent(assetId)}`;
 }
 
 // The other half of buildAssetQrPayload: given whatever text a scanner read
@@ -33,9 +32,28 @@ export function buildAssetQrPayload(collectionName, assetId) {
 // handleMobileScan in MobileLayout.jsx, which is where this gets used.
 const KNOWN_ASSET_COLLECTIONS = new Set(["emergency_assets", "anaphylaxis_boxes"]);
 
+const ASSET_LINK = /^(?:primovex:\/\/asset|https:\/\/app\.primovex\.co\.uk\/asset)\/([a-z_]+)\/([^/?#\s]+)\/?(?:[?#].*)?$/i;
+
 export function parseAssetQrPayload(raw) {
   const value = String(raw || "").trim();
-  if (!value || value[0] !== "{") return null;
+  if (!value) return null;
+
+  // The current label: a short link.
+  const link = ASSET_LINK.exec(value);
+  if (link) {
+    const collection = link[1].toLowerCase();
+    let assetId = "";
+    try {
+      assetId = decodeURIComponent(link[2]);
+    } catch {
+      return null;
+    }
+    if (!KNOWN_ASSET_COLLECTIONS.has(collection) || !assetId) return null;
+    return { collection, assetId };
+  }
+
+  // Labels printed before the short link: a JSON text.
+  if (value[0] !== "{") return null;
   let parsed;
   try {
     parsed = JSON.parse(value);
@@ -121,7 +139,7 @@ export function openAssetLabelPrintWindow({ asset, collectionName, title = "Clin
   if (!asset?.id) return;
   const medtrakId = getMedTrakAssetId(collectionName, asset.id);
   const payload = buildAssetQrPayload(collectionName, asset.id);
-  const qrUrl = getQrImageUrl(payload, 260);
+  const qrUrl = getQrImageUrl(payload, 300);
   const esc = (v) =>
     String(v ?? "")
       .replaceAll("&", "&amp;")
@@ -142,11 +160,11 @@ export function openAssetLabelPrintWindow({ asset, collectionName, title = "Clin
   .brand { display:flex; justify-content:space-between; align-items:center; gap:10px; border-bottom:1px solid #cbd5e1; padding-bottom:10px; margin-bottom:12px; }
   .brand h1 { margin:0; font-size:22px; color:#0f172a; letter-spacing:-0.02em; }
   .pill { font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:#0f766e; font-weight:700; }
-  .body { display:grid; grid-template-columns: 1fr 132px; gap:14px; align-items:center; }
+  .body { display:grid; grid-template-columns: 1fr 150px; gap:14px; align-items:center; }
   .name { font-size:18px; font-weight:800; margin:0 0 8px 0; }
   .meta { font-size:12px; line-height:1.65; color:#334155; }
   .asset { margin-top:10px; font-size:18px; font-weight:800; letter-spacing:0.08em; color:#0f766e; }
-  img { width:132px; height:132px; object-fit:contain; border:1px solid #cbd5e1; border-radius:12px; padding:4px; }
+  img { width:150px; height:150px; object-fit:contain; border:1px solid #cbd5e1; border-radius:12px; padding:4px; }
   .foot { margin-top:12px; padding-top:8px; border-top:1px solid #e2e8f0; font-size:11px; color:#64748b; }
 </style>
 </head>
@@ -169,7 +187,7 @@ export function openAssetLabelPrintWindow({ asset, collectionName, title = "Clin
         </div>
         <img src="${qrUrl}" alt="QR code for ${esc(medtrakId)}" />
       </div>
-      <div class="foot">Scan with Primovex Mobile to open this asset and complete its checklist.</div>
+      <div class="foot">Scan with the Primovex app (or your phone camera) to open this box and start its check.</div>
     </section>
   </div>
 </body>

@@ -40,4 +40,41 @@ t("parseAssetQrPayload: tolerates surrounding whitespace from a real scanner", (
   assert.deepEqual(parseAssetQrPayload(`  ${payload}\n`), { collection: "anaphylaxis_boxes", assetId: "box1" });
 });
 
+// ---- the short link on current labels, and labels printed earlier
+const LEGACY = (collection, assetId) => JSON.stringify({ type: "medtrak.asset", version: 1, collection, assetId, medtrakId: "X" });
+
+t("the label is now a short link, not a long JSON text", () => {
+  const payload = buildAssetQrPayload("anaphylaxis_boxes", "anaphylaxis_box_3");
+  assert.equal(payload, "primovex://asset/anaphylaxis_boxes/anaphylaxis_box_3");
+  assert.ok(payload.length < 60);
+  assert.ok(payload.length < LEGACY("anaphylaxis_boxes", "anaphylaxis_box_3").length / 2);
+});
+
+t("labels printed before the short link still scan: the old JSON text is still read", () => {
+  assert.deepEqual(parseAssetQrPayload(LEGACY("anaphylaxis_boxes", "kit_1")), { collection: "anaphylaxis_boxes", assetId: "kit_1" });
+  assert.deepEqual(parseAssetQrPayload(LEGACY("emergency_assets", "resus")), { collection: "emergency_assets", assetId: "resus" });
+});
+
+t("the https form of the link works too, and trailing slashes or query bits are tolerated", () => {
+  assert.deepEqual(parseAssetQrPayload("https://app.primovex.co.uk/asset/anaphylaxis_boxes/kit_3"), { collection: "anaphylaxis_boxes", assetId: "kit_3" });
+  assert.deepEqual(parseAssetQrPayload("primovex://asset/emergency_assets/resus/"), { collection: "emergency_assets", assetId: "resus" });
+  assert.deepEqual(parseAssetQrPayload("primovex://asset/emergency_assets/resus?x=1"), { collection: "emergency_assets", assetId: "resus" });
+  assert.deepEqual(parseAssetQrPayload("PRIMOVEX://ASSET/anaphylaxis_boxes/kit_3"), { collection: "anaphylaxis_boxes", assetId: "kit_3" });
+});
+
+t("a box id with spaces or odd characters survives the round trip", () => {
+  for (const id of ["Kit 3", "box/2", "ward & clinic", "kit-3_a"]) {
+    assert.deepEqual(parseAssetQrPayload(buildAssetQrPayload("anaphylaxis_boxes", id)), { collection: "anaphylaxis_boxes", assetId: id });
+  }
+});
+
+t("links that are not one of ours are rejected", () => {
+  assert.equal(parseAssetQrPayload("https://evil.example/asset/anaphylaxis_boxes/kit_3"), null);
+  assert.equal(parseAssetQrPayload("https://app.primovex.co.uk.evil.example/asset/anaphylaxis_boxes/kit_3"), null);
+  assert.equal(parseAssetQrPayload("primovex://asset/stock_items/x"), null);        // not a kit collection
+  assert.equal(parseAssetQrPayload("primovex://asset/anaphylaxis_boxes/"), null);     // no id
+  assert.equal(parseAssetQrPayload("primovex://sense/open/space/abc"), null);          // a room tag, handled elsewhere
+  assert.equal(parseAssetQrPayload("primovex://asset/anaphylaxis_boxes/%E0%A4%A"), null); // broken escape
+});
+
 console.log(`\n${n} passed`);

@@ -177,6 +177,9 @@ export default function MobileLayout({ initialTab = "home" }) {
     const code = String(rawCode || "").trim();
     if (!code) return;
     if (routeComplianceScan(code, "qr")) return;
+    // A kit / anaphylaxis box label scanned with the room scanner (or NFC) used to
+    // be treated as a room code and rejected; any scanner now opens the box check.
+    if (routeAssetScan(code)) return;
     setSpaceScanError("");
 
     let entityType = "space";
@@ -251,6 +254,7 @@ export default function MobileLayout({ initialTab = "home" }) {
       if (event.detail?.type !== "scanned" || !event.detail?.value) return;
       const value = event.detail.value;
       if (routeComplianceScan(value, "nfc")) return;
+      if (routeAssetScan(value)) return;
       handleSpaceCodeScan(value);
     }
     window.addEventListener("primovex-native-nfc", handleNativeNfc);

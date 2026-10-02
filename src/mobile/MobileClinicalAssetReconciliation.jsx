@@ -122,8 +122,14 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
         // that one rather than always defaulting to the first in the list.
         // Falls back the same way if the requested id doesn't match anything
         // (wrong tab scanned, or the box was since deleted).
-        const requested = requestedAssetId && rows.some((row) => row.id === requestedAssetId) ? requestedAssetId : rows[0]?.id || "";
-        setSelectedId(requested);
+        // A label that names a box that isn't on file must not quietly open a
+        // different box (and have someone check the wrong kit): say so instead.
+        if (requestedAssetId && !rows.some((row) => row.id === requestedAssetId)) {
+          setError(`This label points to a ${isEmergency ? "kit" : "box"} that isn't on file (${requestedAssetId}). It may have been deleted, or belong to another practice. Ask an administrator to check it.`);
+          setSelectedId("");
+          return;
+        }
+        setSelectedId(requestedAssetId || rows[0]?.id || "");
       } catch (loadError) {
         if (active) setError(loadError?.message || `${isEmergency ? "Emergency kits" : "Anaphylaxis boxes"} could not be loaded.`);
       } finally {
