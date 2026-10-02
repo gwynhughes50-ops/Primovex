@@ -3,6 +3,7 @@ import { Archive, Building2, CheckCircle2, ChevronDown, Layers3, MapPinned, Penc
 import { SPACE_TYPES, getSpaceTemplate } from '../data/spaceTemplates';
 import { addHierarchyItem, addSpace, archiveSpace, deleteHierarchyItem, updateSpace } from '../services/spaceRegistryService';
 import { createLinkedSite, linkSite, planSiteLinks } from '../services/siteLink';
+import { renameHierarchyItem } from '../services/hierarchyEdit';
 
 const field = 'mt-1 w-full rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2.5 text-sm text-[color:var(--medtrak-text)]';
 const button = 'rounded-xl border border-[color:var(--medtrak-border)] px-3 py-2 text-sm font-semibold transition hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_8%,var(--medtrak-panel))]';
@@ -15,6 +16,23 @@ export default function SpaceBuilder({ state, commit, actor, onSelect, practiceS
   const [form, setForm] = useState(emptyForm);
   const [hierarchyMode, setHierarchyMode] = useState('floor');
   const [hierarchyName, setHierarchyName] = useState('');
+  // The floor or zone being renamed in "Current hierarchy": { collection, id, value, error }.
+  const [renaming, setRenaming] = useState(null);
+
+  function startRename(collection, item) {
+    setRenaming({ collection, id: item.id, value: item.name, error: '' });
+  }
+
+  function saveRename() {
+    if (!renaming) return;
+    const result = renameHierarchyItem(state, renaming.collection, renaming.id, renaming.value);
+    if (!result.ok) {
+      setRenaming({ ...renaming, error: result.error });
+      return;
+    }
+    if (result.state !== state) commit(result.state);
+    setRenaming(null);
+  }
 
   const activeSpaces = useMemo(() => state.spaces.filter((space) => space.status !== 'archived'), [state.spaces]);
   const parentOptions = activeSpaces.filter((space) => space.id !== editingId);
@@ -145,8 +163,15 @@ export default function SpaceBuilder({ state, commit, actor, onSelect, practiceS
                 {state.floors.filter((floor) => floor.siteId === site.id).sort((a,b)=>(a.order||0)-(b.order||0)).map((floor) => (
                   <div key={floor.id} className="ml-3 mt-2 border-l border-[color:var(--medtrak-border)] pl-3">
                     <div className="flex items-center justify-between gap-2">
-                      <div className="text-sm font-semibold">{floor.name}</div>
-                      <button type="button" onClick={() => removeHierarchy('floors', floor)} className="rounded-lg p-1.5 text-[color:var(--medtrak-muted)] transition hover:bg-red-500/10 hover:text-red-600" title={`Delete ${floor.name}`} aria-label={`Delete ${floor.name}`}><Trash2 className="h-4 w-4" /></button>
+                      {renaming?.collection === 'floors' && renaming.id === floor.id
+                        ? <InlineRename renaming={renaming} onChange={(value) => setRenaming({ ...renaming, value, error: '' })} onSave={saveRename} onCancel={() => setRenaming(null)} label="Floor name" />
+                        : <>
+                            <div className="text-sm font-semibold">{floor.name}</div>
+                            <span className="flex shrink-0 items-center">
+                              <button type="button" onClick={() => startRename('floors', floor)} className="rounded-lg p-1.5 text-[color:var(--medtrak-muted)] transition hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_10%,var(--medtrak-panel))] hover:text-[color:var(--medtrak-accent)]" title={`Rename ${floor.name}`} aria-label={`Rename ${floor.name}`}><Pencil className="h-4 w-4" /></button>
+                              <button type="button" onClick={() => removeHierarchy('floors', floor)} className="rounded-lg p-1.5 text-[color:var(--medtrak-muted)] transition hover:bg-red-500/10 hover:text-red-600" title={`Delete ${floor.name}`} aria-label={`Delete ${floor.name}`}><Trash2 className="h-4 w-4" /></button>
+                            </span>
+                          </>}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-1">{activeSpaces.filter((space) => space.siteId === site.id && (space.floorId === floor.id || space.linkedFloorIds?.includes(floor.id))).map((space) => <button key={space.id} onClick={() => onSelect?.(space.id)} className="rounded-full border border-[color:var(--medtrak-border)] px-2 py-1 text-xs hover:border-[color:var(--medtrak-accent)]">{space.name}</button>)}</div>
                   </div>
@@ -156,10 +181,13 @@ export default function SpaceBuilder({ state, commit, actor, onSelect, practiceS
                     <div className="mb-1 text-[11px] font-bold uppercase tracking-[.12em] text-[color:var(--medtrak-muted)]">Zones</div>
                     <div className="flex flex-wrap gap-1.5">
                       {state.zones.filter((zone) => zone.siteId === site.id).map((zone) => (
-                        <span key={zone.id} className="inline-flex items-center gap-1 rounded-full border border-[color:var(--medtrak-border)] px-2 py-1 text-xs">
-                          {zone.name}
-                          <button type="button" onClick={() => removeHierarchy('zones', zone)} className="rounded-full p-0.5 text-[color:var(--medtrak-muted)] hover:bg-red-500/10 hover:text-red-600" title={`Delete ${zone.name}`} aria-label={`Delete ${zone.name}`}><Trash2 className="h-3 w-3" /></button>
-                        </span>
+                        renaming?.collection === 'zones' && renaming.id === zone.id
+                          ? <div key={zone.id} className="w-full"><InlineRename renaming={renaming} onChange={(value) => setRenaming({ ...renaming, value, error: '' })} onSave={saveRename} onCancel={() => setRenaming(null)} label="Zone name" /></div>
+                          : <span key={zone.id} className="inline-flex items-center gap-1 rounded-full border border-[color:var(--medtrak-border)] px-2 py-1 text-xs">
+                              {zone.name}
+                              <button type="button" onClick={() => startRename('zones', zone)} className="rounded-full p-0.5 text-[color:var(--medtrak-muted)] hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_10%,var(--medtrak-panel))] hover:text-[color:var(--medtrak-accent)]" title={`Rename ${zone.name}`} aria-label={`Rename ${zone.name}`}><Pencil className="h-3 w-3" /></button>
+                              <button type="button" onClick={() => removeHierarchy('zones', zone)} className="rounded-full p-0.5 text-[color:var(--medtrak-muted)] hover:bg-red-500/10 hover:text-red-600" title={`Delete ${zone.name}`} aria-label={`Delete ${zone.name}`}><Trash2 className="h-3 w-3" /></button>
+                            </span>
                       ))}
                     </div>
                   </div>
@@ -250,6 +278,32 @@ export function SiteLinkPanel({ state, practiceSites, commit }) {
           Only in Spaces, not in Practice Admin: {plan.unlinked.map((site) => site.name).join(', ')}. These cannot be chosen for stock or kits. Add them in Practice Admin to link them, or delete them here if they are not real.
         </p>
       )}
+    </div>
+  );
+}
+
+// A name field that replaces the floor/zone name while it's being renamed.
+// Enter saves, Escape cancels; a refused name (blank, or already used on this
+// site) shows its reason underneath and stays open.
+function InlineRename({ renaming, onChange, onSave, onCancel, label }) {
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-1.5">
+        <input
+          autoFocus
+          value={renaming.value}
+          aria-label={label}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); onSave(); }
+            if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+          }}
+          className="min-w-0 flex-1 rounded-lg border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-2 py-1 text-sm text-[color:var(--medtrak-text)]"
+        />
+        <button type="button" onClick={onSave} className="rounded-lg bg-[color:var(--medtrak-accent)] px-2.5 py-1 text-xs font-semibold text-white">Save</button>
+        <button type="button" onClick={onCancel} className="rounded-lg border border-[color:var(--medtrak-border)] px-2.5 py-1 text-xs font-semibold">Cancel</button>
+      </div>
+      {renaming.error && <p role="alert" className="mt-1 text-xs text-red-600">{renaming.error}</p>}
     </div>
   );
 }
