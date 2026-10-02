@@ -29,7 +29,7 @@ import { STOCK_CATEGORIES, getSubcategories, categoryLabel, subcategoryLabel, UN
 import { normalizeStockItemCategory, migrateStockItemCategoryIfNeeded, createReorderRequest, getExpiryStatus, daysUntilExpiry } from "@/services/stockService";
 import { uploadStockItemPhoto, removeStockItemPhoto } from "@/services/stockPhotoService";
 
-import { Search, Package, Pencil, History, Trash2, Archive, RotateCcw, MapPin, BellRing, ImageOff } from "lucide-react";
+import { Search, Package, Pencil, History, Archive, RotateCcw, MapPin, BellRing, ImageOff } from "lucide-react";
 
 /* helpers */
 const getStockBadge = (qty, min) => {
@@ -155,6 +155,8 @@ export default function Inventory() {
   const editSiteOptions = namesWithCurrent(editSiteNames, editForm.site);
   const editLocationOptions = namesWithCurrent(editSpaceNames, editForm.location);
 
+  // Photos whose image failed to load show the placeholder instead of a broken-image icon.
+  const [brokenPhotos, setBrokenPhotos] = useState({});
   const [locationsOpen, setLocationsOpen] = useState(false);
   const [locationsItem, setLocationsItem] = useState(null);
   const openLocations = (item) => {
@@ -607,8 +609,13 @@ const handleBarcodeScan = (code) => {
                   }`}
                 >
                   <div className="flex justify-between gap-3">
-                    {item.photo_url ? (
-                      <img src={item.photo_url} alt="" className="h-14 w-14 shrink-0 rounded-xl border border-slate-700 object-cover" />
+                    {item.photo_url && !brokenPhotos[item.photo_url] ? (
+                      <img
+                        src={item.photo_url}
+                        alt=""
+                        onError={() => setBrokenPhotos((prev) => ({ ...prev, [item.photo_url]: true }))}
+                        className="h-14 w-14 shrink-0 rounded-xl border border-slate-700 object-cover"
+                      />
                     ) : (
                       <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-dashed border-slate-700 text-slate-600">
                         <ImageOff className="h-5 w-5" />
@@ -716,8 +723,8 @@ const handleBarcodeScan = (code) => {
                     </div>
                   )}
 
-                  <div className="mt-3 flex justify-between items-center">
-                    <div className="flex items-center gap-2">
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <PhotoCapture
                         buttonLabel={item.photo_url ? "Replace" : "Photo"}
                         onCapture={(img) => handlePhotoCapture(item, img)}
@@ -736,7 +743,7 @@ const handleBarcodeScan = (code) => {
                       {photoBusyId === item.id && <span className="text-xs text-slate-400">Saving…</span>}
                     </div>
 
-                    <div className="flex gap-1">
+                    <div className="ml-auto flex shrink-0 gap-1">
                       <Button size="icon" variant="ghost" onClick={() => openHistory(item)} title="History">
                         <History className="h-4 w-4" />
                       </Button>
@@ -751,22 +758,13 @@ const handleBarcodeScan = (code) => {
                         <Pencil className="h-4 w-4" />
                       </Button>
 
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => openDelete(item)}
-                        disabled={!canDeleteInventory}
-                        title="Archive (via confirm)"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-
                       {!archived ? (
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => archiveItem(item.id, actorUser)}
-                          title="Archive"
+                          onClick={() => openDelete(item)}
+                          disabled={!canDeleteInventory}
+                          title="Archive (asks first)"
                         >
                           <Archive className="h-4 w-4" />
                         </Button>
