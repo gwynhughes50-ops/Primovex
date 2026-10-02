@@ -94,6 +94,30 @@ export const CAPABILITIES = {
   },
 };
 
+// Starting points offered when an administrator adds a role (Roles &
+// Permissions > Add Role). They only pre-fill the form - nothing is created
+// until the role is saved, and every permission can be changed first.
+export const ROLE_PRESETS = [
+  {
+    name: "Stock Controller",
+    description: "Looks after stock and may permanently delete stock items. Give this role only to the logins you trust with that.",
+    permissions: [
+      "dashboard.read",
+      "operations.read",
+      "inventory.read",
+      "inventory.write",
+      "inventory.adjust",
+      "inventory.verify",
+      "inventory.delete",
+      "inventory.purge",
+      "purchasing.read",
+      "suppliers.read",
+      "mobile.access",
+      "mobile.biometricUnlock",
+    ],
+  },
+];
+
 export const ALL_CAPABILITIES = Object.values(CAPABILITIES).flatMap((group) => Object.values(group));
 
 export const CAPABILITY_CATALOG = [

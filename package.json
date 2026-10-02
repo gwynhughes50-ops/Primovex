@@ -34,6 +34,7 @@
     "test:site-link": "esbuild scripts/verify-site-link.mjs --bundle --platform=node --format=esm --outfile=work/verify-site-link.bundle.mjs && node work/verify-site-link.bundle.mjs",
     "test:mfa-helpers": "esbuild scripts/verify-mfa-helpers.mjs --bundle --platform=node --format=esm --outfile=work/verify-mfa-helpers.bundle.mjs && node work/verify-mfa-helpers.bundle.mjs",
     "test:stock-purge": "esbuild scripts/verify-stock-purge.mjs --bundle --platform=node --format=esm --outfile=work/verify-stock-purge.bundle.mjs && node work/verify-stock-purge.bundle.mjs",
+    "test:role-presets": "esbuild scripts/verify-role-presets.mjs --bundle --platform=node --format=esm --outfile=work/verify-role-presets.bundle.mjs && node work/verify-role-presets.bundle.mjs",
     "test:asset-qr": "esbuild scripts/verify-asset-qr.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-asset-qr.bundle.mjs && node work/verify-asset-qr.bundle.mjs"
   },
   "dependencies": {

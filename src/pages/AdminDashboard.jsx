@@ -63,7 +63,7 @@ import { loadFacilitiesState } from "@/modules/facilities/services/facilitiesSto
 // ✅ Firestore activity feed
 import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { CAPABILITY_CATALOG, ROLE_TEMPLATES } from "@/core/identity/capabilities";
+import { CAPABILITY_CATALOG, ROLE_PRESETS, ROLE_TEMPLATES } from "@/core/identity/capabilities";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeUsers, updateUserRole, setUserActive, deleteUserAccount, createPasswordLink } from "@/services/adminUserService";
 
@@ -1204,6 +1204,25 @@ export default function AdminDashboard() {
             <div className="p-5 pb-0">
               <div className="text-lg font-semibold text-slate-50">{editingRole ? "Edit Role" : "Add Role"}</div>
               <div className="text-xs text-slate-400 mt-1">{editingRole ? `Update ${editingRole.name}'s permissions.` : "Create a non-admin role."}</div>
+
+              {!editingRole && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                  <span>Start from:</span>
+                  {ROLE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.name}
+                      type="button"
+                      className="rounded-full border border-slate-700/70 px-3 py-1 text-slate-200 hover:bg-slate-800/60"
+                      onClick={() => {
+                        setAddRoleError("");
+                        setNewRole({ name: preset.name, description: preset.description, permissions: [...preset.permissions] });
+                      }}
+                    >
+                      {preset.name}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="mt-4 space-y-3">
                 <div>
