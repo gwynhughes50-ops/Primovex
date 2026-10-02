@@ -10,7 +10,7 @@ const selectCls = "mt-1 h-10 w-full rounded-xl border border-slate-700/70 bg-sla
 
 export default function ManualAddItemDialog({ open, onOpenChange, onCreate, initialBarcode = "", existingForms = [] }) {
   const scrollRef = useRef(null);
-  const { siteNames, spaceNames, loaded } = useSiteSpaceNames(open);
+  const { siteNames, spaceNames, spaceNamesFor, loaded } = useSiteSpaceNames(open);
 
   const [form, setForm] = useState({
     name: "",
@@ -61,18 +61,18 @@ export default function ManualAddItemDialog({ open, onOpenChange, onCreate, init
   // A practice with one site/space doesn't need to choose: fill it in.
   useEffect(() => {
     if (!open) return;
-    setForm((p) => ({
-      ...p,
-      site: !p.site && siteNames.length === 1 ? siteNames[0] : p.site,
-      location: !p.location && spaceNames.length === 1 ? spaceNames[0] : p.location,
-    }));
-  }, [open, siteNames, spaceNames]);
+    setForm((p) => {
+      const site = !p.site && siteNames.length === 1 ? siteNames[0] : p.site;
+      const rooms = spaceNamesFor(site);
+      return { ...p, site, location: !p.location && rooms.length === 1 ? rooms[0] : p.location };
+    });
+  }, [open, siteNames, spaceNamesFor]);
 
   if (!open) return null;
 
   const formOptions = buildFormOptions(existingForms, form.form);
   const siteOptions = namesWithCurrent(siteNames, form.site);
-  const locationOptions = namesWithCurrent(spaceNames, form.location);
+  const locationOptions = namesWithCurrent(spaceNamesFor(form.site), form.location);
 
   const canSave = form.name.trim().length > 0;
 
@@ -149,7 +149,15 @@ export default function ManualAddItemDialog({ open, onOpenChange, onCreate, init
 
           <div>
             <label className="text-xs text-slate-400">Site</label>
-            <select className={selectCls} value={form.site} onChange={(e) => setForm((p) => ({ ...p, site: e.target.value }))}>
+            <select
+              className={selectCls}
+              value={form.site}
+              onChange={(e) => {
+                // The Location list narrows to this site's rooms; drop a location that isn't one of them.
+                const site = e.target.value;
+                setForm((p) => ({ ...p, site, location: spaceNamesFor(site).includes(p.location) ? p.location : "" }));
+              }}
+            >
               <option value="">{loaded && siteOptions.length === 0 ? "No sites set up" : "Select a site"}</option>
               {siteOptions.map((name) => <option key={name} value={name}>{name}</option>)}
             </select>

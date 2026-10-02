@@ -149,11 +149,11 @@ export default function Inventory() {
 
   // Form / Site / Location are picked, not typed: sites and spaces from Practice
   // Admin, forms from the standard list plus whatever stock already uses.
-  const { siteNames: editSiteNames, spaceNames: editSpaceNames, loaded: editNamesLoaded } = useSiteSpaceNames(editOpen);
+  const { siteNames: editSiteNames, spaceNames: editSpaceNames, spaceNamesFor: editSpaceNamesFor, loaded: editNamesLoaded } = useSiteSpaceNames(editOpen);
   const existingForms = useMemo(() => (items || []).map((i) => i?.form).filter(Boolean), [items]);
   const editFormOptions = useMemo(() => buildFormOptions(existingForms, editForm.form), [existingForms, editForm.form]);
   const editSiteOptions = namesWithCurrent(editSiteNames, editForm.site);
-  const editLocationOptions = namesWithCurrent(editSpaceNames, editForm.location);
+  const editLocationOptions = namesWithCurrent(editSpaceNamesFor(editForm.site), editForm.location);
 
   // Photos whose image failed to load show the placeholder instead of a broken-image icon.
   const [brokenPhotos, setBrokenPhotos] = useState({});
@@ -891,7 +891,11 @@ const handleBarcodeScan = (code) => {
                         <p className="text-xs text-slate-400 mb-1">Site (building) *</p>
                         <select
                           value={editForm.site}
-                          onChange={(e) => setEditForm((f) => ({ ...f, site: e.target.value }))}
+                          onChange={(e) => {
+                            // Location narrows to this site's rooms; drop one that isn't in it.
+                            const site = e.target.value;
+                            setEditForm((f) => ({ ...f, site, location: editSpaceNamesFor(site).includes(f.location) ? f.location : "" }));
+                          }}
                           className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
                         >
                           <option value="">{editNamesLoaded && editSiteOptions.length === 0 ? "No sites set up" : "Select a site"}</option>

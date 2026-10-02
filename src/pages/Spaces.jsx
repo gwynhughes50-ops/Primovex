@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Activity, BatteryMedium, Bluetooth, Building2, CheckCircle2, ChevronDown, ChevronRight, LocateFixed, MapPin, PackageSearch, Radio, RotateCcw, ScanLine, ShieldCheck, Wrench } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { loadFacilitiesState } from '@/modules/facilities/services/facilitiesStore';
 import useSenseContext from '@/modules/sense/hooks/useSenseContext';
 import NfcManager from '@/modules/sense/components/NfcManager';
 import SpaceBuilder from '@/modules/sense/components/SpaceBuilder';
+import { listActiveSites } from '@/lib/checklistsFirestore';
+import { reconcileLinkedNames } from '@/modules/sense/services/siteLink';
 import { calculateSpaceReadiness, confirmSpaceContext, moveAsset, resetSenseState, saveSenseState } from '@/modules/sense/services/senseStore';
 
 const panel = 'rounded-2xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] shadow-xl shadow-black/10';
@@ -66,6 +68,26 @@ export default function Spaces() {
     saveSenseState(next);
   }
 
+  // Practice Admin's sites (null until loaded, or if they could not be read).
+  // Linked sites take their name from there, so a rename in Practice Admin
+  // shows up here without anyone re-entering it.
+  const [practiceSites, setPracticeSites] = useState(null);
+  const latestState = useRef(senseState);
+  latestState.current = senseState;
+  useEffect(() => {
+    let active = true;
+    listActiveSites()
+      .then((rows) => {
+        if (!active) return;
+        setPracticeSites(rows);
+        const reconciled = reconcileLinkedNames(latestState.current, rows);
+        if (reconciled !== latestState.current) commit(reconciled);
+      })
+      .catch(() => {});  // unreadable: leave the link panel hidden rather than claim there are none
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function confirmSelected() {
     if (!selectedSpaceId) return;
     commit(confirmSpaceContext(senseState, selectedSpaceId, actor));
@@ -118,7 +140,7 @@ export default function Spaces() {
         </section>
       )}
 
-      <SpaceBuilder state={senseState} commit={commit} actor={actor} onSelect={setSelectedSpaceId} />
+      <SpaceBuilder state={senseState} commit={commit} actor={actor} onSelect={setSelectedSpaceId} practiceSites={practiceSites} />
 
       <div className="grid gap-5 xl:grid-cols-[0.85fr_1.5fr]">
         <section className={`${panel} p-4 sm:p-5`}>

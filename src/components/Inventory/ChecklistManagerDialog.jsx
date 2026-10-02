@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { upsertParentDoc, deleteParentDoc, listActiveSites } from "@/lib/checklistsFirestore";
 import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry";
+import { spaceNamesForSite } from "@/modules/sense/services/siteLink";
 import {
   blankItem,
   fieldsFromStock,
@@ -235,10 +236,14 @@ function ChecklistManagerForm({
     const names = sites.map((s) => s.name).filter(Boolean);
     return site && !names.includes(site) ? [site, ...names] : names;
   }, [sites, site]);
+  // Narrowed to the chosen site's rooms (every room if that site isn't linked
+  // to its rooms yet - see siteLink.js).
+  const roomsForSite = (siteName) => spaceNamesForSite({ sites: loadSpaceRegistry().sites, spaces }, sites, siteName);
   const locationOptions = useMemo(() => {
-    const names = spaces.map((s) => s.name).filter(Boolean);
+    const names = roomsForSite(site);
     return location && !names.includes(location) ? [location, ...names] : names;
-  }, [spaces, location]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spaces, sites, site, location]);
 
   const dirty =
     JSON.stringify({ name, site, location, items }) !== initialJson ||
@@ -414,7 +419,16 @@ function ChecklistManagerForm({
 
             <div className="sm:col-span-1">
               <label className={labelCls}>Site (optional)</label>
-              <select className={inputCls} value={site} onChange={(e) => setSite(e.target.value)}>
+              <select
+                className={inputCls}
+                value={site}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setSite(next);
+                  // Drop a Location that isn't one of this site's rooms.
+                  if (location && !roomsForSite(next).includes(location)) setLocation("");
+                }}
+              >
                 <option value="">No site assigned</option>
                 {siteOptions.map((siteName) => <option key={siteName} value={siteName}>{siteName}</option>)}
               </select>

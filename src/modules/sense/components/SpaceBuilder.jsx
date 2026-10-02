@@ -1,18 +1,19 @@
 import { useMemo, useState } from 'react';
-import { Archive, Building2, ChevronDown, Layers3, MapPinned, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
+import { Archive, Building2, CheckCircle2, ChevronDown, Layers3, MapPinned, Pencil, Plus, Save, Trash2, X } from 'lucide-react';
 import { SPACE_TYPES, getSpaceTemplate } from '../data/spaceTemplates';
 import { addHierarchyItem, addSpace, archiveSpace, deleteHierarchyItem, updateSpace } from '../services/spaceRegistryService';
+import { createLinkedSite, linkSite, planSiteLinks } from '../services/siteLink';
 
 const field = 'mt-1 w-full rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2.5 text-sm text-[color:var(--medtrak-text)]';
 const button = 'rounded-xl border border-[color:var(--medtrak-border)] px-3 py-2 text-sm font-semibold transition hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_8%,var(--medtrak-panel))]';
 
 const emptyForm = { name: '', typeId: 'consulting-room', siteId: 'SITE-MAIN', floorId: 'FLOOR-GROUND', zoneId: 'ZONE-CLINICAL', parentSpaceId: '', linkedFloorIds: [], cleaningFrequencyHours: 24, notes: '' };
 
-export default function SpaceBuilder({ state, commit, actor, onSelect }) {
+export default function SpaceBuilder({ state, commit, actor, onSelect, practiceSites = null }) {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
-  const [hierarchyMode, setHierarchyMode] = useState('site');
+  const [hierarchyMode, setHierarchyMode] = useState('floor');
   const [hierarchyName, setHierarchyName] = useState('');
 
   const activeSpaces = useMemo(() => state.spaces.filter((space) => space.status !== 'archived'), [state.spaces]);
@@ -69,8 +70,8 @@ export default function SpaceBuilder({ state, commit, actor, onSelect }) {
     event.preventDefault();
     const name = hierarchyName.trim();
     if (!name) return;
-    const collection = hierarchyMode === 'site' ? 'sites' : hierarchyMode === 'floor' ? 'floors' : 'zones';
-    const input = hierarchyMode === 'site' ? { name, status: 'active' } : hierarchyMode === 'floor' ? { name, siteId: form.siteId || state.sites[0]?.id, order: state.floors.length } : { name, siteId: form.siteId || state.sites[0]?.id };
+    const collection = hierarchyMode === 'floor' ? 'floors' : 'zones';
+    const input = hierarchyMode === 'floor' ? { name, siteId: form.siteId || state.sites[0]?.id, order: state.floors.length } : { name, siteId: form.siteId || state.sites[0]?.id };
     commit(addHierarchyItem(state, collection, input));
     setHierarchyName('');
   }
@@ -112,12 +113,14 @@ export default function SpaceBuilder({ state, commit, actor, onSelect }) {
         <button onClick={startCreate} className={`${button} bg-[color:var(--medtrak-accent)] text-white`}><Plus className="mr-2 inline h-4 w-4" />Add space</button>
       </div>
 
+      <SiteLinkPanel state={state} practiceSites={practiceSites} commit={commit} />
+
       <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1.4fr]">
         <form onSubmit={addHierarchy} className="rounded-2xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] p-4">
           <h3 className="flex items-center gap-2 font-semibold"><Building2 className="h-4 w-4 text-[color:var(--medtrak-accent)]" />Building structure</h3>
-          <p className="mt-1 text-xs text-[color:var(--medtrak-muted)]">Add another site, floor or zone without changing existing Sense IDs.</p>
+          <p className="mt-1 text-xs text-[color:var(--medtrak-muted)]">Add another floor or zone without changing existing Sense IDs. Sites are added once, in Practice Admin, and linked above.</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-[9rem_1fr_auto]">
-            <select value={hierarchyMode} onChange={(e) => setHierarchyMode(e.target.value)} className={field.replace('mt-1 ', '')}><option value="site">Site</option><option value="floor">Floor</option><option value="zone">Zone</option></select>
+            <select value={hierarchyMode} onChange={(e) => setHierarchyMode(e.target.value)} className={field.replace('mt-1 ', '')}><option value="floor">Floor</option><option value="zone">Zone</option></select>
             <input value={hierarchyName} onChange={(e) => setHierarchyName(e.target.value)} placeholder={`New ${hierarchyMode} name`} className={field.replace('mt-1 ', '')} />
             <button className={button}>Add</button>
           </div>
@@ -134,8 +137,10 @@ export default function SpaceBuilder({ state, commit, actor, onSelect }) {
             {state.sites.map((site) => (
               <div key={site.id}>
                 <div className="flex items-center justify-between gap-2">
-                  <div className="font-bold">{site.name}</div>
-                  <button type="button" onClick={() => removeHierarchy('sites', site)} className="rounded-lg p-1.5 text-[color:var(--medtrak-muted)] transition hover:bg-red-500/10 hover:text-red-600" title={`Delete ${site.name}`} aria-label={`Delete ${site.name}`}><Trash2 className="h-4 w-4" /></button>
+                  <div className="font-bold">{site.name}{!site.practiceSiteId && practiceSites !== null && <span className="ml-2 text-[11px] font-semibold text-amber-600">not in Practice Admin</span>}</div>
+                  {site.practiceSiteId
+                    ? <span className="text-[11px] font-semibold text-[color:var(--medtrak-muted)]" title="Managed in Practice Admin">From Practice Admin</span>
+                    : <button type="button" onClick={() => removeHierarchy('sites', site)} className="rounded-lg p-1.5 text-[color:var(--medtrak-muted)] transition hover:bg-red-500/10 hover:text-red-600" title={`Delete ${site.name}`} aria-label={`Delete ${site.name}`}><Trash2 className="h-4 w-4" /></button>}
                 </div>
                 {state.floors.filter((floor) => floor.siteId === site.id).sort((a,b)=>(a.order||0)-(b.order||0)).map((floor) => (
                   <div key={floor.id} className="ml-3 mt-2 border-l border-[color:var(--medtrak-border)] pl-3">
@@ -191,6 +196,61 @@ export default function SpaceBuilder({ state, commit, actor, onSelect }) {
       <div className="mt-5 flex items-center justify-between"><div><h3 className="font-semibold">Spaces</h3><p className="text-sm text-[color:var(--medtrak-muted)]">{activeSpaces.length} active space{activeSpaces.length === 1 ? '' : 's'}</p></div><ChevronDown className="h-5 w-5 text-[color:var(--medtrak-muted)]" /></div>
       <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{activeSpaces.map((space)=><div key={space.id} className="rounded-2xl border border-[color:var(--medtrak-border)] p-3"><button onClick={() => onSelect?.(space.id)} className="w-full text-left"><b>{space.name}</b><p className="text-xs text-[color:var(--medtrak-muted)]">{space.type} · {state.floors.find(f=>f.id===space.floorId)?.name || 'Multi-floor'} · {state.zones.find(z=>z.id===space.zoneId)?.name || 'No zone'}</p></button><div className="mt-2 flex justify-end"><button onClick={() => startEdit(space)} className={button}><Pencil className="mr-1 inline h-3.5 w-3.5" />Edit</button></div></div>)}</div>
     </section>
+  );
+}
+
+// Practice Admin is the master list of sites. This shows which of them are in
+// Spaces yet, suggests a match for any that aren't (never applied without a
+// click), and lists Spaces-only sites that can't be picked in stock or kits
+// until they're linked.
+export function SiteLinkPanel({ state, practiceSites, commit }) {
+  const [choices, setChoices] = useState({});
+  if (practiceSites === null) return null;
+
+  const plan = planSiteLinks(state.sites, practiceSites);
+  const pending = plan.rows.filter((row) => !row.linked);
+  const box = 'mt-5 rounded-2xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] p-4';
+
+  if (practiceSites.length === 0) {
+    return (
+      <div className={box}>
+        <h3 className="flex items-center gap-2 font-semibold"><Building2 className="h-4 w-4 text-[color:var(--medtrak-accent)]" />Sites</h3>
+        <p className="mt-1 text-xs text-[color:var(--medtrak-muted)]">No sites in Practice Admin yet. Add your sites there (Practice Admin, Sites) and they will appear here to link to your rooms.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={box}>
+      <h3 className="flex items-center gap-2 font-semibold"><Building2 className="h-4 w-4 text-[color:var(--medtrak-accent)]" />Sites from Practice Admin</h3>
+      <p className="mt-1 text-xs text-[color:var(--medtrak-muted)]">Your sites are added once, in Practice Admin. Linking one here lets rooms belong to it, and lets stock and kits narrow Location by Site.</p>
+
+      <ul className="mt-3 space-y-2">
+        {plan.rows.filter((row) => row.linked).map(({ practiceSite, linked }) => (
+          <li key={practiceSite.id} className="flex items-center gap-2 text-sm"><CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" /><b>{practiceSite.name}</b><span className="text-xs text-[color:var(--medtrak-muted)]">linked ({(n => `${n} room${n === 1 ? '' : 's'}`)(state.spaces.filter((space) => space.siteId === linked.id && space.status !== 'archived').length)})</span></li>
+        ))}
+        {pending.map(({ practiceSite, suggested }) => {
+          const value = choices[practiceSite.id] ?? suggested?.id ?? '__new__';
+          return (
+            <li key={practiceSite.id} className="flex flex-wrap items-center gap-2 text-sm">
+              <b className="min-w-[8rem]">{practiceSite.name}</b>
+              <span className="text-xs text-[color:var(--medtrak-muted)]">not linked yet</span>
+              <select value={value} onChange={(e) => setChoices({ ...choices, [practiceSite.id]: e.target.value })} className={`${field.replace('mt-1 ', '')} max-w-xs`}>
+                {plan.unlinked.map((site) => <option key={site.id} value={site.id}>{site.id === suggested?.id ? `Link to "${site.name}" (same name)` : `Link to "${site.name}"`}</option>)}
+                <option value="__new__">Create it as a new site in Spaces</option>
+              </select>
+              <button type="button" className={button} onClick={() => commit(value === '__new__' ? createLinkedSite(state, practiceSite) : linkSite(state, value, practiceSite))}>Link</button>
+            </li>
+          );
+        })}
+      </ul>
+
+      {pending.length === 0 && plan.unlinked.length > 0 && (
+        <p className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-800">
+          Only in Spaces, not in Practice Admin: {plan.unlinked.map((site) => site.name).join(', ')}. These cannot be chosen for stock or kits. Add them in Practice Admin to link them, or delete them here if they are not real.
+        </p>
+      )}
+    </div>
   );
 }
 
