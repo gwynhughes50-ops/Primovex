@@ -52,6 +52,9 @@ import {
   Link2,
   Copy,
   ShieldOff,
+  BellRing,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 import AddUser from "./admin/AddUser";
@@ -65,6 +68,7 @@ import { loadFacilitiesState } from "@/modules/facilities/services/facilitiesSto
 import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { CAPABILITY_CATALOG, ROLE_PRESETS, ROLE_TEMPLATES } from "@/core/identity/capabilities";
+import { describeNotificationAccess, ON_THEIR_COMPUTER } from "@/lib/notificationAccess";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeUsers, updateUserRole, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa } from "@/services/adminUserService";
 
@@ -389,6 +393,15 @@ export default function AdminDashboard() {
   // Password-set links from Add User expire after an hour (Firebase's fixed
   // limit) — this issues a fresh one on demand. Nothing is generated until
   // the admin confirms, since each one is an audited credential-setting link.
+  // "Why isn't this person getting notifications?" - what a login's role will
+  // and won't receive (src/lib/notificationAccess.js).
+  const [notifCheckTarget, setNotifCheckTarget] = useState(null);
+  const notifCheck = useMemo(() => {
+    if (!notifCheckTarget) return null;
+    const customCaps = Object.fromEntries((liveCustomRoles || []).map((r) => [r.name, r.capabilities || []]));
+    return describeNotificationAccess(notifCheckTarget, customCaps);
+  }, [notifCheckTarget, liveCustomRoles]);
+
   // Lost phone: remove someone's authenticator app so they can set up a new one.
   const [mfaResetTarget, setMfaResetTarget] = useState(null);
   const [mfaResetBusy, setMfaResetBusy] = useState(false);
@@ -720,6 +733,14 @@ export default function AdminDashboard() {
                                       onClick={() => setResetLinkTarget(u)}
                                     >
                                       <Link2 className="h-4 w-4 mr-2" /> Reset password
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
+                                      title="See what notifications this login will and won't receive"
+                                      onClick={() => setNotifCheckTarget(u)}
+                                    >
+                                      <BellRing className="h-4 w-4 mr-2" /> Notifications
                                     </Button>
                                     <Button
                                       variant="outline"
@@ -1191,6 +1212,45 @@ export default function AdminDashboard() {
                   {resetLinkBusy ? "Generating…" : "Generate link"}
                 </Button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notification check */}
+      {notifCheckTarget && notifCheck && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur p-4" role="dialog" aria-modal="true" aria-label="Notification check">
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col rounded-2xl border border-slate-800/70 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
+            <div className="flex items-center gap-2 text-lg font-semibold text-slate-50">
+              <BellRing className="h-5 w-5" /> Notifications for {notifCheckTarget.displayName || notifCheckTarget.email}
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              {notifCheck.popups.length
+                ? `Gets the desktop pop-up for: ${notifCheck.popups.join(", ")}.`
+                : "Gets no desktop pop-up."}
+            </p>
+
+            <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+              {notifCheck.rows.map((row) => (
+                <div key={row.id} className={`flex items-start gap-2 rounded-xl border p-3 text-sm ${row.ok ? "border-slate-800/70 bg-slate-950/40" : "border-amber-500/30 bg-amber-500/10"}`}>
+                  {row.ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" /> : <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />}
+                  <div className="min-w-0">
+                    <div className="font-medium text-slate-100">{row.label}</div>
+                    <div className="text-xs text-slate-300">{row.detail}</div>
+                  </div>
+                </div>
+              ))}
+
+              <div className="rounded-xl border border-slate-800/70 bg-slate-950/40 p-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Also check on their computer</div>
+                <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-slate-300">
+                  {ON_THEIR_COMPUTER.map((line) => <li key={line}>{line}</li>)}
+                </ul>
+              </div>
+            </div>
+
+            <div className="mt-4 flex justify-end">
+              <Button variant="outline" className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60" onClick={() => setNotifCheckTarget(null)}>Close</Button>
             </div>
           </div>
         </div>

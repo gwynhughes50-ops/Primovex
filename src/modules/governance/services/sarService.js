@@ -15,7 +15,8 @@ import {
   where,
 } from "firebase/firestore";
 
-import { db } from "@/lib/firebase";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "@/lib/firebase";
 import { writeAuditEvent } from "@/core/identity/auditService";
 
 export const SAR_COLLECTION = "governance_sars";
@@ -272,25 +273,20 @@ export async function addSarActivity(sarId, activity = {}) {
   }
 }
 
-export async function createUserNotification(uid, notification = {}) {
-  if (!uid) return null;
-  const ref = doc(collection(db, "users", uid, "notifications"));
-  await setDoc(ref, {
-    recipientUid: uid,
-    title: notification.title || "Primovex notification",
-    message: notification.message || "",
-    module: notification.module || "governance",
-    priority: notification.priority || "routine",
-    dueDate: notification.dueDate || null,
-    actionUrl: notification.actionUrl || "",
-    read: false,
-    status: "open",
-    createdByUid: notification.createdByUid || null,
-    createdByName: notification.createdByName || "Primovex",
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-  return ref.id;
+// Tells the person a SAR is assigned to that it is. This used to write the
+// notification from the browser, which the Firestore rules refuse (a client
+// can't create notifications), so the warning below fired every time and no one
+// was ever notified. The server now creates it from the SAR record
+// (functions/services/notificationService.js). Never blocks saving the SAR.
+export async function notifySarAssignee(sarId) {
+  if (!sarId) return null;
+  try {
+    const response = await httpsCallable(functions, "notifySarAssignment")({ sarId });
+    return response.data;
+  } catch (err) {
+    console.warn("Unable to send the SAR assignment notification.", err);
+    return null;
+  }
 }
 
 export async function createSar(form, actor = {}) {
@@ -310,22 +306,7 @@ export async function createSar(form, actor = {}) {
     actor,
   });
 
-  if (payload.assignedToUid) {
-    try {
-      await createUserNotification(payload.assignedToUid, {
-        title: `New SAR assigned: ${payload.reference}`,
-        message: `${payload.requestTypeLabel} request due ${formatDateInput(toDate(payload.dueDate))}.`,
-        module: "sar",
-        priority: payload.priority,
-        dueDate: payload.dueDate,
-        actionUrl: "/governance/sars",
-        createdByUid: actor.uid || null,
-        createdByName: actor.displayName || actor.email || "Primovex",
-      });
-    } catch (err) {
-      console.warn("Unable to create assignment notification. Check Firestore notification create rules.", err);
-    }
-  }
+  if (payload.assignedToUid) await notifySarAssignee(ref.id);
 
   return ref.id;
 }
@@ -428,20 +409,7 @@ export async function updateSarDetails(sarId, form, actor = {}, before = {}) {
   });
 
   if (fields.assignedToUid && fields.assignedToUid !== (before.assignedToUid || "")) {
-    try {
-      await createUserNotification(fields.assignedToUid, {
-        title: `SAR assigned to you: ${before.reference || ""}`.trim(),
-        message: `${fields.requestTypeLabel} request due ${formatDateInput(toDate(fields.dueDate))}.`,
-        module: "sar",
-        priority: fields.priority,
-        dueDate: fields.dueDate,
-        actionUrl: "/governance/sars",
-        createdByUid: actor.uid || null,
-        createdByName: actor.displayName || actor.email || "Primovex",
-      });
-    } catch (err) {
-      console.warn("Unable to create assignment notification. Check Firestore notification create rules.", err);
-    }
+    await notifySarAssignee(sarId);
   }
 }
 

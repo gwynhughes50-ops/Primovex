@@ -15,6 +15,7 @@ const { reportRoomIssue } = require("./services/roomIssueService");
 const { recordSensePresenceTap } = require("./services/sensePresenceService");
 const { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa } = require("./services/userAccountService");
 const { getEffectiveCapabilities, hasCapability } = require("./services/roleCapabilities");
+const { notifySarAssignment } = require("./services/notificationService");
 
 initializeApp();
 const db = getFirestore();
@@ -396,6 +397,29 @@ exports.resetUserMfa = onCall({ region: "europe-west2" }, async (request) => {
   }
 
   return result;
+});
+
+// Tells the person a SAR has been assigned to that it has. The app used to try
+// to write this notification straight from the browser, which the Firestore
+// rules refuse (clients can't create notifications), so no one ever received
+// one. The content is built here from the SAR itself; the caller only names
+// the SAR, and must be on the SAR team (the same people the rules let assign one).
+exports.notifySarAssignment = onCall({ region: "europe-west2" }, async (request) => {
+  assertSignedIn(request);
+  const callerProfile = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
+  if (callerProfile.role !== "System Admin") {
+    const capabilities = await getEffectiveCapabilities(db, callerProfile.role);
+    if (!hasCapability(capabilities, "governance.manageSars")) {
+      throw new HttpsError("permission-denied", "SAR management permission is required.");
+    }
+  }
+  const { sarId } = request.data || {};
+  return notifySarAssignment({
+    db,
+    callerUid: request.auth.uid,
+    callerName: callerProfile.displayName || callerProfile.email || "Primovex",
+    sarId,
+  });
 });
 
 exports.setUserActive = onCall({ region: "europe-west2" }, async (request) => {

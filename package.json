@@ -36,6 +36,7 @@
     "test:stock-purge": "esbuild scripts/verify-stock-purge.mjs --bundle --platform=node --format=esm --outfile=work/verify-stock-purge.bundle.mjs && node work/verify-stock-purge.bundle.mjs",
     "test:role-presets": "esbuild scripts/verify-role-presets.mjs --bundle --platform=node --format=esm --outfile=work/verify-role-presets.bundle.mjs && node work/verify-role-presets.bundle.mjs",
     "test:hierarchy-edit": "esbuild scripts/verify-hierarchy-edit.mjs --bundle --platform=node --format=esm --outfile=work/verify-hierarchy-edit.bundle.mjs && node work/verify-hierarchy-edit.bundle.mjs",
+    "test:notification-access": "esbuild scripts/verify-notification-access.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-notification-access.bundle.mjs && node work/verify-notification-access.bundle.mjs",
     "test:asset-qr": "esbuild scripts/verify-asset-qr.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-asset-qr.bundle.mjs && node work/verify-asset-qr.bundle.mjs"
   },
   "dependencies": {
