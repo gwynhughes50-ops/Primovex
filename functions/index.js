@@ -18,6 +18,7 @@ const { getEffectiveCapabilities, hasCapability } = require("./services/roleCapa
 const { notifySarAssignment } = require("./services/notificationService");
 const { listStaffDirectory } = require("./services/staffDirectoryService");
 const { sendDueNotifications } = require("./services/dueNotificationService");
+const { sendKitNotification, replaceKitItemBatch } = require("./services/kitCheckService");
 
 initializeApp();
 const db = getFirestore();
@@ -436,10 +437,66 @@ exports.listStaffDirectory = onCall({ region: "europe-west2" }, async (request) 
     const capabilities = await getEffectiveCapabilities(db, profile.role);
     const allowed = hasCapability(capabilities, "governance.manageSars")
       || hasCapability(capabilities, "governance.concernsTeam")
-      || hasCapability(capabilities, "admin.access");
-    if (!allowed) throw new HttpsError("permission-denied", "SAR or concerns team access is required to list staff.");
+      || hasCapability(capabilities, "admin.access")
+      || hasCapability(capabilities, "inventory.verify"); // choosing a colleague to message from a kit check
+    if (!allowed) throw new HttpsError("permission-denied", "You need SAR, concerns, admin or stock-verification access to list staff.");
   }
   return { staff: await listStaffDirectory({ db }) };
+});
+
+// Whoever does the kit checks (the people who can verify stock) - and System Admin.
+async function assertCanVerifyStock(request) {
+  assertSignedIn(request);
+  const profile = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
+  if (profile.role !== "System Admin") {
+    const capabilities = await getEffectiveCapabilities(db, profile.role);
+    if (!hasCapability(capabilities, "inventory.verify")) {
+      throw new HttpsError("permission-denied", "Stock verification permission is required.");
+    }
+  }
+  return profile;
+}
+
+// A message to a colleague, or a reminder to yourself, from the phone's kit check.
+// Delivered into the in-app inbox; clients can't create notifications themselves,
+// and the content is built here from the real kit and the sender's own name.
+exports.sendKitNotification = onCall({ region: "europe-west2" }, async (request) => {
+  const profile = await assertCanVerifyStock(request);
+  return sendKitNotification({
+    db,
+    callerUid: request.auth.uid,
+    callerName: profile.displayName || profile.email || "A colleague",
+    data: request.data || {},
+  });
+});
+
+// Swapping an item in a kit for a new batch during a check. Kits can only be edited
+// directly by administrators, so this is the narrow route for the people doing the
+// check: it changes one item's expected batch and expiry, nothing else, and is audited.
+exports.replaceKitItemBatch = onCall({ region: "europe-west2" }, async (request) => {
+  const profile = await assertCanVerifyStock(request);
+  const callerName = profile.displayName || profile.email || "A colleague";
+  const result = await replaceKitItemBatch({ db, callerUid: request.auth.uid, callerName, data: request.data || {} });
+
+  try {
+    await appendGovernedAuditEvent({
+      db,
+      auth: request.auth,
+      profile,
+      data: {
+        action: "inventory.kit.item-replaced",
+        module: "inventory",
+        targetType: String(request.data?.collection || "kit"),
+        targetId: String(request.data?.kitId || ""),
+        summary: `Kit item replaced: ${result.itemName}`,
+        classification: "operational",
+        metadata: { itemId: String(request.data?.itemId || ""), previousBatch: result.previous.batch_number, newBatch: result.now.batch_number, newExpiry: result.now.expiry_date },
+      },
+    });
+  } catch (error) {
+    console.error("Kit replacement audit event failed", { message: error?.message });
+  }
+  return result;
 });
 
 exports.setUserActive = onCall({ region: "europe-west2" }, async (request) => {

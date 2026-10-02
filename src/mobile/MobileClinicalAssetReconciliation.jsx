@@ -7,12 +7,19 @@ import {
   Clock3,
   PackagePlus,
   ShieldAlert,
+  BellRing,
+  MessageSquare,
+  RefreshCw,
   ShoppingCart,
   X,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import useStock from "@/hooks/useStock";
 import { resolveKitItems } from "@/lib/checklistKitHelpers";
+import { buildReplacement, isRealChange } from "@/lib/kitCheckActions";
+import { kitActionError, replaceKitItemBatch, sendKitMessage, setKitReminder } from "@/services/kitCheckService";
+import { listStaffDirectory } from "@/services/staffDirectoryService";
+import { LaterSheet, MessageSheet, ReplaceSheet } from "./kitcheck/KitCheckSheets";
 import {
   createMonthlyCheck,
   getLatestCheck,
@@ -99,6 +106,15 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
   const [sourceLocation, setSourceLocation] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Quick actions on the current item: replace it, message someone, flag it for later.
+  const [sheet, setSheet] = useState(null); // "replace" | "message" | "later"
+  const [extras, setExtras] = useState({}); // itemId -> { messages: [], flaggedLater }
+  const [staff, setStaff] = useState([]);
+  const [staffError, setStaffError] = useState("");
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [saveNotice, setSaveNotice] = useState(null);
 
   const { items: stockItems } = useStock({ includeArchived: false });
   const selected = useMemo(() => boxes.find((box) => box.id === selectedId) || null, [boxes, selectedId]);
@@ -188,9 +204,86 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
     window.setTimeout(() => advance(resolvedIndex, resolutionFor.item.id), 160);
   }
 
+  function openSheet(type) {
+    if (!canVerify || !currentItem) return;
+    setActionError("");
+    setNotice("");
+    setSheet(type);
+    if (type === "message" && !staff.length) loadStaff();
+  }
+
+  async function loadStaff() {
+    setStaffError("");
+    try {
+      const list = await listStaffDirectory();
+      setStaff(list.filter((person) => person.id !== (user?.uid || profile?.uid)));
+    } catch {
+      setStaffError("The list of colleagues couldn't be loaded.");
+    }
+  }
+
+  // Swap this item for a new one: it's marked present with the new batch and
+  // expiry, and saving the check updates what the kit expects.
+  function confirmReplace(replacement) {
+    if (!currentItem) return;
+    const base = buildResult(currentItem, "OK");
+    setResults((previous) => ({
+      ...previous,
+      [currentItem.id]: { ...base, batch: replacement.batch_number || null, expiry: replacement.expiry_date || null, replacement },
+    }));
+    const at = index;
+    const id = currentItem.id;
+    setSheet(null);
+    setNotice(`${currentItem.name} replaced - ${replacement.batch_number ? `batch ${replacement.batch_number}` : "new one"} noted. The kit is updated when you save the check.`);
+    window.setTimeout(() => advance(at, id), 160);
+  }
+
+  async function confirmMessage({ toUid, toLabel, text }) {
+    if (!currentItem) return;
+    setActionBusy(true);
+    setActionError("");
+    try {
+      await sendKitMessage({ collection: collectionName, kitId: selected.id, toUid, text, itemName: currentItem.name });
+      setExtras((previous) => ({
+        ...previous,
+        [currentItem.id]: { ...(previous[currentItem.id] || {}), messages: [...(previous[currentItem.id]?.messages || []), { toUid, toLabel, text, at: new Date().toISOString() }] },
+      }));
+      setSheet(null);
+      setNotice(`Message sent to ${toLabel || "your colleague"}.`);
+    } catch (err) {
+      setActionError(kitActionError(err));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
+  // Flag this item to come back to: a reminder lands in your own inbox at the
+  // time you pick, and the check moves on to the next item.
+  async function confirmLater({ note, remindAt }) {
+    if (!currentItem) return;
+    setActionBusy(true);
+    setActionError("");
+    try {
+      await setKitReminder({ collection: collectionName, kitId: selected.id, remindAt, text: note, itemName: currentItem.name });
+      const id = currentItem.id;
+      setExtras((previous) => ({ ...previous, [id]: { ...(previous[id] || {}), flaggedLater: true } }));
+      setSheet(null);
+      setNotice(`Reminder set for ${remindAt.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}. Moving on.`);
+      window.setTimeout(() => advance(index, null), 160);
+    } catch (err) {
+      setActionError(kitActionError(err));
+    } finally {
+      setActionBusy(false);
+    }
+  }
+
   async function saveVerification() {
     if (!canVerify || !selected || completedCount !== items.length) return;
-    const resultRows = items.map((item) => results[item.id]);
+    const resultRows = items.map((item) => ({
+      ...results[item.id],
+      ...(extras[item.id]?.messages?.length ? { messages: extras[item.id].messages } : {}),
+      ...(extras[item.id]?.flaggedLater ? { flaggedLater: true } : {}),
+    }));
     const missing = resultRows.filter((result) => result.status === "Missing").length;
     const expired = resultRows.filter((result) => result.status === "Expired").length;
     const pendingActions = resultRows.filter((result) => result.resolution).map((result) => ({
@@ -231,10 +324,21 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
           source: "primovex-mobile",
           stockChanged: false,
           readinessChangedBeforeSave: false,
-          statement: "Resolution choices are recorded follow-up intentions. No stock movement, transfer, order, or readiness change was performed silently.",
+          statement: "Resolution choices are recorded follow-up intentions. No stock movement, transfer or order was made. An item replaced during the check updates the kit's expected batch and expiry only.",
         },
       });
       setLatest(await getLatestCheck(collectionName, selected.id));
+      // Items swapped for a new one during the check now change what the kit expects.
+      const swaps = resultRows.filter((row) => row.replacement && isRealChange(row.replacement));
+      const failed = [];
+      for (const row of swaps) {
+        try {
+          await replaceKitItemBatch({ collection: collectionName, kitId: selected.id, itemId: row.itemId, batch_number: row.replacement.batch_number, expiry_date: row.replacement.expiry_date });
+        } catch {
+          failed.push(row.itemName);
+        }
+      }
+      setSaveNotice({ updated: swaps.length - failed.length, failed });
       setSaved(true);
     } catch (saveError) {
       setError(saveError?.message || "The reconciliation could not be saved.");
@@ -270,6 +374,7 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
       <main className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
         {!canVerify && <div className="mb-3 rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Your role can view this box but cannot complete a clinical verification.</div>}
         {error && <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
+        {notice && !saved && <div role="status" className="mb-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">{notice}</div>}
 
         {saved ? (
           <section className="flex min-h-full flex-col items-center justify-center rounded-3xl border border-emerald-200 bg-emerald-50 p-6 text-center text-emerald-950">
@@ -277,6 +382,8 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
             <h2 className="mt-4 text-2xl font-bold">Reconciliation saved</h2>
             <p className="mt-2 text-sm">{selected.name} is {Object.values(results).some((result) => result.status === "Missing" || result.status === "Expired") ? "not ready and has recorded follow-up actions" : "clinically ready based on this completed check"}.</p>
             <p className="mt-3 text-xs text-emerald-800">No stock was changed automatically.</p>
+            {saveNotice?.updated > 0 && <p className="mt-2 text-sm font-semibold">{saveNotice.updated} item{saveNotice.updated === 1 ? "" : "s"} in the kit {saveNotice.updated === 1 ? "now shows" : "now show"} the replacement batch.</p>}
+            {saveNotice?.failed?.length > 0 && <p role="alert" className="mt-2 rounded-xl border border-amber-300 bg-amber-50 p-2 text-sm text-amber-900">The check was saved, but the kit couldn't be updated for: {saveNotice.failed.join(", ")}. Ask an administrator to update the batch in Manage.</p>}
             <button type="button" onClick={onExit} className="mt-6 rounded-xl bg-[var(--medtrak-accent)] px-6 py-3 font-bold text-white">Done</button>
           </section>
         ) : completedCount === items.length ? (
@@ -313,6 +420,14 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
               <button type="button" disabled={!canVerify} onClick={() => recordSimple("N/A")} className="flex min-h-20 flex-col items-center justify-center rounded-2xl border border-slate-300 bg-slate-50 p-3 font-bold text-slate-700 active:scale-[.98] disabled:opacity-50"><ShieldAlert className="mb-1 h-6 w-6" />Not required</button>
             </div>
 
+            <div className="mt-3 grid grid-cols-3 gap-2" aria-label="Other actions for this item">
+              <button type="button" disabled={!canVerify} onClick={() => openSheet("replace")} className="flex min-h-14 flex-col items-center justify-center rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-2 text-sm font-bold active:scale-[.98] disabled:opacity-50"><RefreshCw className="mb-0.5 h-5 w-5 text-[var(--medtrak-accent)]" />Replace</button>
+              <button type="button" disabled={!canVerify} onClick={() => openSheet("message")} className="flex min-h-14 flex-col items-center justify-center rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-2 text-sm font-bold active:scale-[.98] disabled:opacity-50"><MessageSquare className="mb-0.5 h-5 w-5 text-[var(--medtrak-accent)]" />Message</button>
+              <button type="button" disabled={!canVerify} onClick={() => openSheet("later")} className="flex min-h-14 flex-col items-center justify-center rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-2 text-sm font-bold active:scale-[.98] disabled:opacity-50"><BellRing className="mb-0.5 h-5 w-5 text-[var(--medtrak-accent)]" />Later</button>
+            </div>
+            {extras[currentItem.id]?.flaggedLater && <p className="mt-2 text-xs font-semibold text-amber-700">Flagged to come back to - answer it now, or finish the others first.</p>}
+            {extras[currentItem.id]?.messages?.length > 0 && <p className="mt-1 text-xs text-[var(--medtrak-muted)]">Messaged {extras[currentItem.id].messages.map((m) => m.toLabel || "a colleague").join(", ")}.</p>}
+
             <div className="mt-4 flex items-center justify-between text-sm">
               <button type="button" disabled={index === 0} onClick={() => setIndex((value) => Math.max(0, value - 1))} className="rounded-xl px-3 py-2 font-semibold text-[var(--medtrak-muted)] disabled:opacity-30">Previous</button>
               <p className="text-xs text-[var(--medtrak-muted)]">Present advances automatically</p>
@@ -323,6 +438,16 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
 
         {latest && !saved && <p className="mt-3 text-center text-xs text-[var(--medtrak-muted)]">Previous audit evidence is retained. This check creates a new record.</p>}
       </main>
+
+      {sheet === "replace" && currentItem && (
+        <ReplaceSheet item={currentItem} stockItems={stockItems || []} onConfirm={confirmReplace} onClose={() => setSheet(null)} />
+      )}
+      {sheet === "message" && currentItem && (
+        <MessageSheet item={currentItem} kitName={selected.name} staff={staff} staffError={staffError} onRetryStaff={loadStaff} onSend={confirmMessage} onClose={() => setSheet(null)} busy={actionBusy} error={actionError} />
+      )}
+      {sheet === "later" && currentItem && (
+        <LaterSheet item={currentItem} onConfirm={confirmLater} onClose={() => setSheet(null)} busy={actionBusy} error={actionError} />
+      )}
 
       {resolutionFor && (
         <div className="fixed inset-0 z-[120] flex items-end bg-black/50" role="dialog" aria-modal="true" aria-label={`${resolutionFor.status} item resolution`}>

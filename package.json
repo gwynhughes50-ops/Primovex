@@ -41,6 +41,7 @@
     "test:stock-suggestions": "esbuild scripts/verify-stock-suggestions.mjs --bundle --platform=node --format=esm --outfile=work/verify-stock-suggestions.bundle.mjs && node work/verify-stock-suggestions.bundle.mjs",
     "test:gs1": "esbuild scripts/verify-gs1.mjs --bundle --platform=node --format=esm --outfile=work/verify-gs1.bundle.mjs && node work/verify-gs1.bundle.mjs",
     "test:stock-batches": "esbuild scripts/verify-stock-batches.mjs --bundle --platform=node --format=esm --outfile=work/verify-stock-batches.bundle.mjs && node work/verify-stock-batches.bundle.mjs",
+    "test:kit-check-actions": "esbuild scripts/verify-kit-check-actions.mjs --bundle --platform=node --format=esm --outfile=work/verify-kit-check-actions.bundle.mjs && node work/verify-kit-check-actions.bundle.mjs",
     "test:asset-qr": "esbuild scripts/verify-asset-qr.mjs --bundle --platform=node --format=esm --alias:@=./src --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=work/verify-asset-qr.bundle.mjs && node work/verify-asset-qr.bundle.mjs"
   },
   "dependencies": {
