@@ -14,6 +14,7 @@ import {
   applyStockMovement,
   assignStockToLocation,
   unassignStockFromLocation,
+  transferStockBetweenLocations,
 } from "../services/stockService";
 
 function useStockImpl(options = {}) {
@@ -82,6 +83,10 @@ function useStockImpl(options = {}) {
 
   const assignLocation = async (id, { locationId, locationName, locationType, quantity }, meta = {}) => {
     return assignStockToLocation(id, { locationId, locationName, locationType, quantity }, meta?.actor || null);
+  };
+
+  const transferStock = async (id, move, meta = {}) => {
+    return transferStockBetweenLocations(id, move, meta?.actor || null);
   };
 
   const unassignLocation = async (id, locationId, quantity, meta = {}) => {
@@ -167,6 +172,7 @@ function useStockImpl(options = {}) {
     useStockQty,
     assignLocation,
     unassignLocation,
+    transferStock,
   };
 }
 

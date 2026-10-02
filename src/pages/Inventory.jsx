@@ -18,6 +18,7 @@ import AnaphylaxisBoxesTab from "@/components/Inventory/AnaphylaxisBoxesTab";
 import useStock from "@/hooks/useStock";
 import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
 import { buildFormOptions, matchOption, namesWithCurrent } from "@/lib/stockPickerOptions";
+import { unassignedQty } from "@/lib/stockLocations";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
 import { collection, onSnapshot, query } from "firebase/firestore";
@@ -143,7 +144,7 @@ export default function Inventory() {
    * We always subscribe to ALL (active + archived) and filter client-side,
    * so the toggle cannot get “stuck” due to a listener not re-subscribing.
    */
-  const { items, loading, error, archiveItem, restoreItem, receiveStock, useStockQty, addItem, updateItem, assignLocation, unassignLocation } =
+  const { items, loading, error, archiveItem, restoreItem, receiveStock, useStockQty, addItem, updateItem, transferStock, unassignLocation } =
     useStock({ includeArchived: true });
 
   // Form / Site / Location are picked, not typed: sites and spaces from Practice
@@ -633,6 +634,13 @@ const handleBarcodeScan = (code) => {
                         </p>
                       )}
 
+                      {Array.isArray(item.locations) && item.locations.length > 0 && (
+                        <p className="mt-1 text-[11px] text-teal-200/90">
+                          In store {unassignedQty(item)}
+                          {item.locations.map((loc) => ` · ${loc.locationName} ${loc.quantity}`).join("")}
+                        </p>
+                      )}
+
                       <p className="mt-1 text-[11px] text-slate-400 truncate">
                         {(() => {
                           const resolved = normalizeStockItemCategory(item);
@@ -815,7 +823,7 @@ const handleBarcodeScan = (code) => {
             open={locationsOpen}
             onOpenChange={setLocationsOpen}
             item={(items || []).find((i) => i.id === locationsItem?.id) || locationsItem}
-            onAssign={(payload) => assignLocation(locationsItem.id, payload, { actor: actorUser })}
+            onTransfer={(move) => transferStock(locationsItem.id, move, { actor: actorUser })}
             onUnassign={(locationId, quantity) => unassignLocation(locationsItem.id, locationId, quantity, { actor: actorUser })}
           />
 

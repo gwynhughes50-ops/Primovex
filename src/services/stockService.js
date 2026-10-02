@@ -16,6 +16,7 @@ import {
 import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { db } from "../lib/firebase";
 import { writeAuditEvent } from "@/core/identity/auditService";
+import { applyLocationDelta, planTransfer } from "@/lib/stockLocations";
 import { UNCATEGORISED_CATEGORY, UNCATEGORISED_SUBCATEGORY, isKnownCategory, resolveLegacyCategory, getSubcategories } from "@/data/stockCategories";
 
 const ITEMS_COL = "stock_items";
@@ -149,25 +150,6 @@ function normalizeActor(actor) {
 // "unassigned". This keeps every existing dashboard/alert/report that reads
 // current_stock working unchanged, while adding real per-location tracking
 // on top.
-function applyLocationDelta(locations, locationId, locationName, locationType, delta) {
-  const list = Array.isArray(locations) ? locations.map((loc) => ({ ...loc })) : [];
-  const index = list.findIndex((loc) => loc.locationId === locationId);
-  if (index === -1) {
-    if (delta < 0) throw new Error("This location has no recorded stock for this item.");
-    if (delta === 0) return list;
-    list.push({ locationId, locationName: locationName || locationId, locationType: locationType || "space", quantity: delta });
-    return list;
-  }
-  const nextQty = toNumber(list[index].quantity, 0) + delta;
-  if (nextQty < 0) throw new Error("Not enough stock recorded at this location.");
-  if (nextQty === 0) {
-    list.splice(index, 1);
-  } else {
-    list[index] = { ...list[index], quantity: nextQty, locationName: locationName || list[index].locationName };
-  }
-  return list;
-}
-
 function normalizeMovementContext(movement = {}) {
   return {
     source: cleanString(movement?.source) || "manual",
@@ -695,6 +677,74 @@ export async function assignStockToLocation(itemId, { locationId, locationName, 
       created_at: serverTimestamp(),
     });
   });
+}
+
+/**
+ * Move some of an item's stock from one place to another - e.g. 2 adrenaline
+ * from the store room into an anaphylaxis box. The source loses the quantity
+ * and the destination gains it in one transaction, so the two can't drift
+ * apart. `fromLocationId` / `toLocationId` of null mean the item's main store.
+ * The item's overall current_stock does not change (it's all still on the
+ * premises); only where it is does.
+ */
+export async function transferStockBetweenLocations(
+  itemId,
+  { fromLocationId = null, toLocationId = null, toLocationName = "", toLocationType = "space", quantity } = {},
+  actor = null
+) {
+  const itemRef = doc(db, ITEMS_COL, itemId);
+  const moveRef = doc(collection(db, MOVES_COL));
+  const actorSafe = normalizeActor(actor);
+
+  const result = await runTransaction(db, async (tx) => {
+    if (await movementAlreadyRecorded(tx, moveRef)) return null;
+    const snap = await tx.get(itemRef);
+    if (!snap.exists()) throw new Error("Item not found.");
+    const item = snap.data() || {};
+    const total = toNumber(item.current_stock, 0);
+
+    const plan = planTransfer(item, {
+      fromLocationId: cleanString(fromLocationId) || null,
+      to: cleanString(toLocationId)
+        ? { locationId: cleanString(toLocationId), locationName: cleanString(toLocationName), locationType: toLocationType }
+        : null,
+      quantity,
+    });
+
+    tx.update(itemRef, { locations: plan.nextLocations, updated_at: serverTimestamp() });
+    tx.set(moveRef, {
+      item_id: itemId,
+      item_name: item.name || "",
+      type: "transfer",
+      delta: 0,
+      qty_before: total,
+      qty_after: total,
+      transfer_qty: plan.quantity,
+      from_location_id: cleanString(fromLocationId) || null,
+      from_location_name: plan.fromName,
+      location_id: cleanString(toLocationId) || null,
+      location_name: plan.toName,
+      location_type: cleanString(toLocationId) ? toLocationType || "space" : null,
+      reason: null,
+      notes: `Moved ${plan.quantity} from ${plan.fromName} to ${plan.toName}`,
+      actor: actorSafe,
+      created_at: serverTimestamp(),
+    });
+    return { movementId: moveRef.id, ...plan };
+  });
+
+  if (result) {
+    writeAuditEvent({
+      action: "inventory.stock.transfer",
+      module: "inventory",
+      targetType: "stock_item",
+      targetId: itemId,
+      summary: `Stock moved: ${result.quantity} from ${result.fromName} to ${result.toName}`,
+      correlationId: result.movementId,
+      metadata: { movementId: result.movementId, quantity: result.quantity, from: result.fromName, to: result.toName },
+    }).catch(() => {});
+  }
+  return result;
 }
 
 /**

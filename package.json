@@ -30,6 +30,7 @@
     "test:org-chart": "node scripts/verify-org-chart.mjs",
     "test:checklist-kit": "esbuild scripts/verify-checklist-kit.mjs --bundle --platform=node --format=esm --outfile=work/verify-checklist-kit.bundle.mjs && node work/verify-checklist-kit.bundle.mjs",
     "test:stock-pickers": "esbuild scripts/verify-stock-pickers.mjs --bundle --platform=node --format=esm --outfile=work/verify-stock-pickers.bundle.mjs && node work/verify-stock-pickers.bundle.mjs",
+    "test:stock-transfer": "esbuild scripts/verify-stock-transfer.mjs --bundle --platform=node --format=esm --outfile=work/verify-stock-transfer.bundle.mjs && node work/verify-stock-transfer.bundle.mjs",
     "test:asset-qr": "esbuild scripts/verify-asset-qr.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-asset-qr.bundle.mjs && node work/verify-asset-qr.bundle.mjs"
   },
   "dependencies": {
