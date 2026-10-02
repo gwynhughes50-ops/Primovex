@@ -69,7 +69,7 @@ export default function ClinicalChecklistItemRow({
             />
           </Field>
 
-          <Field label="Batch / serial" className="sm:col-span-2 xl:col-span-4" help={!batchExpected ? "No default is set for this item - enter it if the physical item has one." : null}>
+          <Field label="Batch / serial" className="sm:col-span-2 xl:col-span-4" help={item.fromStock ? "Filled from your stock record - change it if the batch in this box is different." : !batchExpected ? "No default is set for this item - enter it if the physical item has one." : null}>
             <input
               className={controlClass}
               value={result.batch || ""}

@@ -5,6 +5,8 @@ import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry"
 import {
   blankItem,
   fieldsFromStock,
+  findStockForItem,
+  resolveKitItem,
   nextItemId,
   normaliseItem,
   summariseItem,
@@ -89,6 +91,14 @@ function StockLookupInput({ value, placeholder, stockItems, onChange, onPick }) 
 // saved.
 function ItemEditor({ editor, itemHasSection, stockItems, onChange, onCommit, onCancel, innerRef }) {
   const { item, error, index } = editor;
+  // Linked to a stock record, and set to follow it: batch and expiry are shown
+  // from Inventory (live) and can't be typed over here; untick to set them by hand.
+  const linkedStock = findStockForItem(item, stockItems);
+  const shown = resolveKitItem(item, stockItems);
+  const following = Boolean(linkedStock) && item.followStock !== false;
+  function setFollow(on) {
+    onChange(on ? { followStock: true } : { followStock: false, defaultBatch: shown.defaultBatch, defaultExpiry: shown.defaultExpiry });
+  }
   return (
     <div ref={innerRef} className="space-y-3 border-l-4 border-primary/60 bg-[color:color-mix(in_srgb,var(--medtrak-accent)_6%,var(--medtrak-panel))] p-3">
       <div className="flex flex-wrap items-start gap-2">
@@ -104,7 +114,7 @@ function ItemEditor({ editor, itemHasSection, stockItems, onChange, onCommit, on
             value={item.name}
             placeholder="Item name"
             stockItems={stockItems}
-            onChange={(value) => onChange({ name: value })}
+            onChange={(value) => onChange({ name: value, stock_item_id: "" })}
             onPick={(stock) => onChange(fieldsFromStock(stock))}
           />
         </div>
@@ -117,11 +127,11 @@ function ItemEditor({ editor, itemHasSection, stockItems, onChange, onCommit, on
         </div>
         <div>
           <label className={labelCls}>Batch (optional)</label>
-          <input className={inputCls} value={item.defaultBatch} onChange={(e) => onChange({ defaultBatch: e.target.value })} placeholder="e.g. L2301A" />
+          <input className={`${inputCls} ${following ? "opacity-70" : ""}`} value={shown.defaultBatch} disabled={following} onChange={(e) => onChange({ defaultBatch: e.target.value })} placeholder="e.g. L2301A" />
         </div>
         <div>
           <label className={labelCls}>Expiry (optional)</label>
-          <input type="date" className={inputCls} value={item.defaultExpiry} onChange={(e) => onChange({ defaultExpiry: e.target.value })} />
+          <input type="date" className={`${inputCls} ${following ? "opacity-70" : ""}`} value={shown.defaultExpiry} disabled={following} onChange={(e) => onChange({ defaultExpiry: e.target.value })} />
         </div>
         <div>
           <label className={labelCls}>Barcode (if available)</label>
@@ -129,16 +139,30 @@ function ItemEditor({ editor, itemHasSection, stockItems, onChange, onCommit, on
             value={item.stock_barcode}
             placeholder="Type barcode"
             stockItems={stockItems}
-            onChange={(value) => onChange({ stock_barcode: value })}
+            onChange={(value) => onChange({ stock_barcode: value, stock_item_id: "" })}
             onPick={(stock) => onChange(fieldsFromStock(stock))}
           />
         </div>
       </div>
 
-      {stockItems.length > 0 && (
-        <p className="text-xs text-[color:var(--medtrak-muted)]">
-          Pick the item from your stock and its barcode, batch and expiry fill in from Inventory. Change them if this box holds a different batch.
-        </p>
+      {linkedStock ? (
+        <label className="flex items-start gap-2 text-xs text-[color:var(--medtrak-text)]">
+          <input type="checkbox" className="mt-0.5" checked={following} onChange={(e) => setFollow(e.target.checked)} />
+          <span>
+            Follow the batch and expiry in stock
+            <span className="block text-[color:var(--medtrak-muted)]">
+              {following
+                ? "Updates automatically when you receive a new batch in Inventory. Untick if this box holds a different batch from your main stock."
+                : "Using the batch and expiry typed here. Tick to follow the Inventory record again."}
+            </span>
+          </span>
+        </label>
+      ) : (
+        stockItems.length > 0 && (
+          <p className="text-xs text-[color:var(--medtrak-muted)]">
+            Pick the item from your stock and its barcode, batch and expiry fill in from Inventory, and stay in step with it.
+          </p>
+        )
       )}
 
       {error && <p className="text-xs text-rose-500">{error}</p>}
@@ -304,6 +328,8 @@ function ChecklistManagerForm({
             defaultBatch: String(it.defaultBatch || "").trim() || null,
             defaultExpiry: String(it.defaultExpiry || "").trim() || null,
             stock_barcode: String(it.stock_barcode || "").trim() || null,
+            stock_item_id: String(it.stock_item_id || "").trim() || null,
+            followStock: it.followStock !== false,
           };
         })
         .filter((it) => it.name);
@@ -479,7 +505,7 @@ function ChecklistManagerForm({
                         )}
                         <span className="text-sm font-semibold">{it.name}</span>
                       </div>
-                      <p className="mt-0.5 text-xs text-[color:var(--medtrak-muted)]">{summariseItem(it)}</p>
+                      <p className="mt-0.5 text-xs text-[color:var(--medtrak-muted)]">{summariseItem(resolveKitItem(it, stockItems))}{resolveKitItem(it, stockItems).fromStock ? " · from stock" : ""}</p>
                     </div>
                     <div className="flex shrink-0 gap-2">
                       <button type="button" onClick={() => startEdit(idx)} disabled={Boolean(editor)} className={`${secondaryBtn} inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs`} title="Edit this item">

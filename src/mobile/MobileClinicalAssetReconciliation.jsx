@@ -11,6 +11,8 @@ import {
   X,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import useStock from "@/hooks/useStock";
+import { resolveKitItems } from "@/lib/checklistKitHelpers";
 import {
   createMonthlyCheck,
   getLatestCheck,
@@ -98,8 +100,11 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const { items: stockItems } = useStock({ includeArchived: false });
   const selected = useMemo(() => boxes.find((box) => box.id === selectedId) || null, [boxes, selectedId]);
-  const items = selected?.items || [];
+  // Items linked to a stock record show its current batch / expiry (unless set
+  // to use their own), so a new batch received in Inventory shows here too.
+  const items = useMemo(() => resolveKitItems(selected?.items || [], stockItems || []), [selected, stockItems]);
   const currentItem = items[index] || null;
   const completedCount = Object.keys(results).length;
   const progress = items.length ? Math.round((completedCount / items.length) * 100) : 0;
@@ -290,7 +295,7 @@ export default function MobileClinicalAssetReconciliation({ kind = "anaphylaxis"
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--medtrak-accent)]">Item {index + 1} of {items.length}</p>
                 <h2 className="mt-2 text-2xl font-bold leading-tight">{currentItem.name}</h2>
-                {(currentItem.expectedQty || currentItem.defaultExpiry) && <p className="mt-1 text-sm text-[var(--medtrak-muted)]">{currentItem.expectedQty ? `Expected ${currentItem.expectedQty}` : ""}{currentItem.expectedQty && currentItem.defaultExpiry ? " · " : ""}{currentItem.defaultExpiry ? `Expiry ${currentItem.defaultExpiry}` : ""}</p>}
+                {(currentItem.expectedQty || currentItem.defaultExpiry) && <p className="mt-1 text-sm text-[var(--medtrak-muted)]">{currentItem.expectedQty ? `Expected ${currentItem.expectedQty}` : ""}{currentItem.expectedQty && currentItem.defaultExpiry ? " · " : ""}{currentItem.defaultExpiry ? `Expiry ${currentItem.defaultExpiry}` : ""}{currentItem.fromStock ? " (from stock)" : ""}</p>}
               </div>
               {results[currentItem.id] && <ResultPill status={results[currentItem.id].status} />}
             </div>

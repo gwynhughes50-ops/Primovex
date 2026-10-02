@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import ChecklistManagerDialog from "@/components/Inventory/ChecklistManagerDialog";
 import { listActiveSites } from "@/lib/checklistsFirestore";
+import { findStockForItem, resolveKitItems } from "@/lib/checklistKitHelpers";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
 import ClinicalChecklistItemRow from "@/components/assets/ClinicalChecklistItemRow";
 import useStock from "@/hooks/useStock";
@@ -139,7 +140,7 @@ export default function ClinicalAssetChecklist({
   const navigate = useNavigate();
   const { can, role, user, profile } = useAuth();
   const { items: stockItems } = useStock({ includeArchived: false });
-  const [entities, setEntities] = useState([]);
+  const [rawEntities, setEntities] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [sites, setSites] = useState([]);
   const [siteFilter, setSiteFilter] = useState("");
@@ -163,6 +164,29 @@ export default function ClinicalAssetChecklist({
   const [orbActionMessage, setOrbActionMessage] = useState("");
   const orbProposalState = useMemo(() => parseGovernedProposal(location.search, collectionName), [collectionName, location.search]);
   const orbActor = { userId: user?.uid || profile?.uid || null, role: role || profile?.role || null };
+
+  // Kit items linked to a stock record show that record's current batch and
+  // expiry (unless the item is set to use its own). Live stock updates would
+  // otherwise hand every consumer below a new object each time anything in
+  // Inventory changes - and reset a check that's half filled in - so this only
+  // rebuilds when a value a kit actually uses has changed.
+  const stockSignature = useMemo(
+    () =>
+      JSON.stringify(
+        rawEntities.flatMap((entity) =>
+          (entity.items || []).map((item) => {
+            const stock = findStockForItem(item, stockItems);
+            return stock ? [stock.id, stock.batch_number || "", stock.expiry_date || ""] : null;
+          })
+        )
+      ),
+    [rawEntities, stockItems]
+  );
+  const entities = useMemo(
+    () => rawEntities.map((entity) => ({ ...entity, items: resolveKitItems(entity.items || [], stockItems) })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rawEntities, stockSignature]
+  );
 
   const selected = useMemo(
     () => entities.find((item) => item.id === selectedId) || null,
@@ -366,10 +390,8 @@ export default function ClinicalAssetChecklist({
     }));
   }
 
-  function stockForBarcode(barcode) {
-    if (!barcode) return null;
-    const b = String(barcode).trim().toLowerCase();
-    return stockItems.find((s) => String(s?.barcode || "").trim().toLowerCase() === b) || null;
+  function stockForItem(item) {
+    return findStockForItem(item, stockItems);
   }
 
   async function handleSeed() {
@@ -455,7 +477,7 @@ export default function ClinicalAssetChecklist({
     const rows = (selected.items || [])
       .map((item) => {
         const result = form.results?.[item.id] || {};
-        const stock = item.stock_barcode ? stockForBarcode(item.stock_barcode) : null;
+        const stock = stockForItem(item);
         const stockText = stock
           ? `${stock.current_stock ?? "-"} (min ${stock.min_stock ?? 0})`
           : item.stock_barcode
@@ -873,7 +895,7 @@ export default function ClinicalAssetChecklist({
               {(selected?.items || []).map((item) => {
                 const result = form.results?.[item.id] || {};
                 const expiryDays = daysUntil(result.expiry || item.defaultExpiry);
-                const stock = item.stock_barcode ? stockForBarcode(item.stock_barcode) : null;
+                const stock = stockForItem(item);
                 const status = result.status || "OK";
                 return (
                   <ClinicalChecklistItemRow

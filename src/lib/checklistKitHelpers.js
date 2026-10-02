@@ -11,6 +11,10 @@ export function normaliseItem(it = {}) {
     defaultBatch: it.defaultBatch ?? "",
     defaultExpiry: it.defaultExpiry ?? "",
     stock_barcode: it.stock_barcode ?? "",
+    // Link to the Inventory stock record, and whether this kit item shows that
+    // record's current batch / expiry (the default) or its own saved ones.
+    stock_item_id: it.stock_item_id ?? "",
+    followStock: it.followStock !== false,
   };
 }
 
@@ -60,18 +64,62 @@ export function summariseItem(item) {
   return bits.length ? bits.join(" · ") : "No quantity, batch, expiry or barcode set";
 }
 
-// What picking a stock item should fill in on a kit item: its name and
-// barcode, plus the batch and expiry already recorded against it in
-// Inventory, so they don't have to be typed twice. Anything the stock item
-// doesn't have comes through blank rather than keeping the previous item's
-// value. Expiry is only carried across when it's a real YYYY-MM-DD date (what
-// the date field needs); anything else is left for the person to enter.
+// The stock item a kit item is linked to: by id when it has one, otherwise by
+// barcode (kit items set up before the id link existed).
+export function findStockForItem(item, stockItems = []) {
+  if (!item) return null;
+  if (item.stock_item_id) {
+    const byId = stockItems.find((s) => s.id === item.stock_item_id);
+    if (byId) return byId;
+  }
+  const barcode = String(item.stock_barcode || "").trim().toLowerCase();
+  if (!barcode) return null;
+  return stockItems.find((s) => String(s?.barcode || "").trim().toLowerCase() === barcode) || null;
+}
+
+function isoDate(value) {
+  const text = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+}
+
+// What picking a stock item should fill in on a kit item: its name, barcode
+// and link, plus the batch and expiry recorded against it in Inventory, so
+// they don't have to be typed twice. Anything the stock item doesn't have
+// comes through blank rather than keeping the previous item's value. Expiry
+// is only carried across when it's a real YYYY-MM-DD date (what the date
+// field needs); anything else is left for the person to enter.
 export function fieldsFromStock(stock = {}) {
-  const expiry = String(stock.expiry_date || "").trim();
   return {
     name: stock.name || "",
     stock_barcode: stock.barcode || "",
+    stock_item_id: stock.id || "",
+    followStock: true,
     defaultBatch: String(stock.batch_number || "").trim(),
-    defaultExpiry: /^\d{4}-\d{2}-\d{2}$/.test(expiry) ? expiry : "",
+    defaultExpiry: isoDate(stock.expiry_date),
   };
+}
+
+// The batch / expiry a kit item should show right now. A linked item that
+// follows stock takes the stock record's current values; where the stock
+// record has none, the item's own saved value is kept rather than blanked.
+// An item set to use its own values, or with no stock record, is returned as is.
+// `fromStock` marks which values came from the stock record so the screens can
+// say so. Never written back - saving a kit uses the editor's own fields.
+export function resolveKitItem(item, stockItems = []) {
+  if (!item || item.followStock === false) return item;
+  const stock = findStockForItem(item, stockItems);
+  if (!stock) return item;
+  const batch = String(stock.batch_number || "").trim();
+  const expiry = isoDate(stock.expiry_date);
+  if (!batch && !expiry) return item;
+  return {
+    ...item,
+    defaultBatch: batch || item.defaultBatch || "",
+    defaultExpiry: expiry || item.defaultExpiry || "",
+    fromStock: true,
+  };
+}
+
+export function resolveKitItems(items = [], stockItems = []) {
+  return items.map((item) => resolveKitItem(item, stockItems));
 }
