@@ -61,15 +61,50 @@ t("people are summarised: sessions, days, time, where it went, most recent first
   assert.deepEqual(overview(users), { people: 2, sessions: 3, activeSeconds: 1600, flagged: 0 });
 });
 
-t("using two devices in a day, or signing in at night, flags the person", () => {
+t("signing in at night flags the person", () => {
   const [u] = summariseUsers([
-    session({ id: "1", deviceId: "pvx-1", startedAt: at(5, 9) }),
-    session({ id: "2", deviceId: "pvx-2", startedAt: at(5, 11) }),
-    session({ id: "3", deviceId: "pvx-1", startedAt: at(3, 2), lastSeenAt: at(3, 3) }),
+    session({ id: "1", startedAt: at(5, 9), lastSeenAt: at(5, 10) }),
+    session({ id: "3", startedAt: at(3, 2), lastSeenAt: at(3, 3) }),
   ], NOW);
-  assert.deepEqual(u.flags, ["1 sign-in outside normal hours", "Used more than one device on 1 day"]);
-  assert.equal(u.deviceCount, 2);
+  assert.deepEqual(u.flags, ["1 sign-in outside normal hours"]);
   assert.equal(overview([u]).flagged, 1);
+});
+
+t("a laptop then a phone, one after the other, is normal and isn't flagged", () => {
+  const [u] = summariseUsers([
+    session({ id: "1", deviceId: "pvx-1", startedAt: at(5, 9), lastSeenAt: at(5, 10), endedAt: at(5, 10) }),
+    session({ id: "2", deviceId: "pvx-2", startedAt: at(5, 11), lastSeenAt: at(5, 11, 30) }),
+  ], NOW);
+  assert.deepEqual(u.flags, []);
+  assert.equal(u.deviceCount, 2);
+});
+
+t("two devices in at the same time is flagged, with the count", () => {
+  const [u] = summariseUsers([
+    session({ id: "1", deviceId: "pvx-1", startedAt: at(5, 9), lastSeenAt: at(5, 10, 30) }),
+    session({ id: "2", deviceId: "pvx-2", startedAt: at(5, 10), lastSeenAt: at(5, 11) }),
+    session({ id: "3", deviceId: "pvx-2", startedAt: at(4, 9), lastSeenAt: at(4, 9, 40) }),
+    session({ id: "4", deviceId: "pvx-1", startedAt: at(4, 9, 10), lastSeenAt: at(4, 9, 30) }),
+  ], NOW);
+  assert.deepEqual(u.flags, ["In on two devices at the same time on 2 occasions"]);
+});
+
+t("a brief overlap, the same device twice, or no recorded device isn't flagged", () => {
+  const brief = summariseUsers([
+    session({ id: "1", deviceId: "pvx-1", startedAt: at(5, 9), lastSeenAt: at(5, 10) }),
+    session({ id: "2", deviceId: "pvx-2", startedAt: at(5, 9, 58), lastSeenAt: at(5, 10, 30) }),
+  ], NOW)[0];
+  assert.deepEqual(brief.flags, []);
+  const same = summariseUsers([
+    session({ id: "1", deviceId: "pvx-1", startedAt: at(5, 9), lastSeenAt: at(5, 10) }),
+    session({ id: "2", deviceId: "pvx-1", startedAt: at(5, 9, 10), lastSeenAt: at(5, 10) }),
+  ], NOW)[0];
+  assert.deepEqual(same.flags, []);
+  const unknown = summariseUsers([
+    session({ id: "1", deviceId: "", startedAt: at(5, 9), lastSeenAt: at(5, 10) }),
+    session({ id: "2", deviceId: "pvx-2", startedAt: at(5, 9, 10), lastSeenAt: at(5, 10) }),
+  ], NOW)[0];
+  assert.deepEqual(unknown.flags, []);
 });
 
 t("the CSV has one row per session with the areas and times, and can't run as a formula", () => {

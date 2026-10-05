@@ -6,6 +6,9 @@ export const ACTIVE_WITHIN_MS = 10 * 60 * 1000;
 export const LONG_SESSION_HOURS = 12;
 // Sign-ins outside these hours are flagged for a second look (not as wrong:
 // out-of-hours working is normal for some roles).
+// Two devices only count as "at the same time" if their sessions overlap by more
+// than this - using a laptop then a phone one after the other is normal.
+export const OVERLAP_MINUTES = 5;
 export const NORMAL_HOURS = { from: 6, to: 22 };
 
 const AREA_NAMES = {
@@ -106,6 +109,24 @@ export function endText(session) {
   return END_TEXT[session.endReason] ?? "Ended";
 }
 
+// How many times one person was in on two different devices at once: pairs of
+// sessions on different devices whose time in the app overlapped by more than a
+// few minutes. Sessions with no recorded device are ignored.
+export function simultaneousDevicePairs(sessions = []) {
+  const withDevice = sessions.filter((s) => s.deviceId && s.startedAt);
+  let pairs = 0;
+  for (let i = 0; i < withDevice.length; i += 1) {
+    for (let j = i + 1; j < withDevice.length; j += 1) {
+      const a = withDevice[i];
+      const b = withDevice[j];
+      if (a.deviceId === b.deviceId) continue;
+      const overlapMs = Math.min(a.endedAt || a.lastSeenAt, b.endedAt || b.lastSeenAt) - Math.max(a.startedAt, b.startedAt);
+      if (overlapMs > OVERLAP_MINUTES * 60 * 1000) pairs += 1;
+    }
+  }
+  return pairs;
+}
+
 // Per person: how often and how long they were in, where they spent it, and flags.
 export function summariseUsers(rawSessions = [], now = new Date()) {
   const sessions = rawSessions.map((raw) => describeSession(raw, now)).filter((s) => s.startedAt);
@@ -113,7 +134,7 @@ export function summariseUsers(rawSessions = [], now = new Date()) {
 
   sessions.forEach((session) => {
     if (!people.has(session.uid)) {
-      people.set(session.uid, { uid: session.uid, name: session.name, role: session.role, sessions: [], days: new Set(), areaSeconds: new Map(), devices: new Set(), devicesByDay: new Map() });
+      people.set(session.uid, { uid: session.uid, name: session.name, role: session.role, sessions: [], days: new Set(), areaSeconds: new Map(), devices: new Set() });
     }
     const person = people.get(session.uid);
     person.sessions.push(session);
@@ -121,8 +142,6 @@ export function summariseUsers(rawSessions = [], now = new Date()) {
     person.days.add(day);
     if (session.deviceId) {
       person.devices.add(session.deviceId);
-      if (!person.devicesByDay.has(day)) person.devicesByDay.set(day, new Set());
-      person.devicesByDay.get(day).add(session.deviceId);
     }
     session.pages.forEach((page) => person.areaSeconds.set(page.path, (person.areaSeconds.get(page.path) || 0) + (Number(page.seconds) || 0)));
   });
@@ -135,8 +154,8 @@ export function summariseUsers(rawSessions = [], now = new Date()) {
       if (outHours) flags.push(`${outHours} sign-in${outHours === 1 ? "" : "s"} outside normal hours`);
       const long = sorted.filter((s) => s.spanSeconds > LONG_SESSION_HOURS * 3600).length;
       if (long) flags.push(`${long} session${long === 1 ? "" : "s"} over ${LONG_SESSION_HOURS} hours`);
-      const multi = [...person.devicesByDay.values()].filter((set) => set.size > 1).length;
-      if (multi) flags.push(`Used more than one device on ${multi} day${multi === 1 ? "" : "s"}`);
+      const together = simultaneousDevicePairs(sorted);
+      if (together) flags.push(`In on two devices at the same time on ${together} occasion${together === 1 ? "" : "s"}`);
       const topAreas = [...person.areaSeconds.entries()]
         .sort((a, b) => b[1] - a[1])
         .slice(0, 4)
