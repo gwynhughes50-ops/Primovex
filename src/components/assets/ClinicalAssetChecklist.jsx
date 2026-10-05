@@ -135,6 +135,10 @@ export default function ClinicalAssetChecklist({
   seedButtonLabel,
   checklistTitle,
   enableSections = false,
+  // The checks themselves are done in the mobile app. A page can drop the
+  // on-screen checklist and show something else in its place.
+  hideVerificationChecklist = false,
+  belowContent = null,
 }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -623,6 +627,7 @@ export default function ClinicalAssetChecklist({
 
   if (loadError && entities.length === 0) {
     return (
+      <div className="space-y-5">
       <div className="rounded-3xl border border-rose-500/40 bg-[color:var(--medtrak-panel)] p-6 text-[color:var(--medtrak-text)] shadow-sm">
         <h2 className="text-xl font-semibold">Couldn't load your {entityLabelPlural}</h2>
         <p className="mt-2 text-sm leading-6 text-[color:var(--medtrak-muted)]">
@@ -637,11 +642,14 @@ export default function ClinicalAssetChecklist({
           Try again
         </button>
       </div>
+      {hideVerificationChecklist && belowContent}
+      </div>
     );
   }
 
   if (entities.length === 0) {
     return (
+      <div className="space-y-5">
       <div className="rounded-3xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] p-6 text-[color:var(--medtrak-text)] shadow-sm">
         <div className="max-w-3xl">
           <div className="inline-flex rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
@@ -691,6 +699,8 @@ export default function ClinicalAssetChecklist({
             setSelectedId(savedId || list[0]?.id || "");
           }}
         />
+      </div>
+      {hideVerificationChecklist && belowContent}
       </div>
     );
   }
@@ -880,6 +890,7 @@ export default function ClinicalAssetChecklist({
             </div>
           )}
 
+          {hideVerificationChecklist ? belowContent : (
           <div className="rounded-3xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] text-[color:var(--medtrak-text)] shadow-sm">
             <div className="border-b border-[color:var(--medtrak-border)] px-5 py-4">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -935,6 +946,7 @@ export default function ClinicalAssetChecklist({
               </div>
             </div>
           </div>
+          )}
         </div>
 
         <aside className="space-y-5">

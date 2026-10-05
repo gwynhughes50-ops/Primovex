@@ -7,12 +7,15 @@ import {
   seedFromJson,
 } from "@/lib/checklistsFirestore";
 import ClinicalAssetChecklist from "@/components/assets/ClinicalAssetChecklist";
+import AnaphylaxisGuidance from "@/components/Inventory/AnaphylaxisGuidance";
 
 export default function AnaphylaxisBoxesTab() {
   return (
     <ClinicalAssetChecklist
       title="Anaphylaxis Boxes"
-      subtitle="A fast clinical safety check for anaphylaxis boxes. Because vials and split packs may not retain manufacturer barcodes, the box itself receives a Primovex QR identity - scan it with Primovex Mobile to open this checklist directly."
+      subtitle="Anaphylaxis boxes and their contents. Checks are done in the Primovex mobile app: because vials and split packs may not retain manufacturer barcodes, each box has a Primovex QR label - scan it to start the check. Select a box here to manage its contents."
+      hideVerificationChecklist
+      belowContent={<AnaphylaxisGuidance />}
       collectionName="anaphylaxis_boxes"
       entityLabel="box"
       entityLabelPlural="anaphylaxis boxes"
