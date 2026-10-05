@@ -13,7 +13,7 @@ import SpaceBuilder from "@/modules/sense/components/SpaceBuilder";
 import OrgChart from "@/components/admin/OrgChart";
 import { loadSenseState, saveSenseState } from "@/modules/sense/services/senseStore";
 import { getPlatformModeConfig, getStoredPlatformMode } from "@/config/platformMode";
-import { subscribeUsers, updateUserOrgHighlight, updateUserReportsTo } from "@/services/adminUserService";
+import { subscribeUsers, updateUserDepartment, updateUserOrgHighlight, updateUserReportsTo } from "@/services/adminUserService";
 import {
   addDepartment,
   addPracticeRole,
@@ -432,6 +432,19 @@ export default function PracticeAdministration() {
     }
   };
 
+  const handleChangeDepartment = async (uid, department) => {
+    beginAction();
+    try {
+      setBusy(true);
+      await updateUserDepartment(uid, department);
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || "Failed to update the department.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleToggleHighlight = async (uid, highlighted) => {
     beginAction();
     try {
@@ -719,12 +732,15 @@ export default function PracticeAdministration() {
               {canListUsers ? (
                 <>
                   <p className="mb-4 text-sm mt-text-secondary">
-                    Who reports to whom. {canManage ? "Tick who each person reports to under their name - tick more than one if they genuinely report to several people (they'll appear once under each, clearly marked). Tick \"Highlight\" to pick someone out visually (e.g. a senior partner among several partners) without changing where they sit in the tree." : "Read-only: System Admin permission is required to change reporting lines."}
+                    Who reports to whom, and which department each person is in. {canManage ? "Select a person in the chart (or under By department) to set their department and who they report to. Teams below the top two levels start closed in a large practice. Use Print to get the chart, one page per department, or a staff list." : "Read-only: System Admin permission is required to change reporting lines and departments."}
                   </p>
                   <OrgChart
                     users={users}
+                    departments={departments}
+                    practiceName={practice?.name || "Practice"}
                     canManage={canManage}
                     onChangeManager={handleChangeManager}
+                    onChangeDepartment={handleChangeDepartment}
                     onToggleHighlight={handleToggleHighlight}
                     busy={busy}
                   />

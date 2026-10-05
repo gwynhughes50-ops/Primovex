@@ -44,6 +44,7 @@
     "test:usage-tracker": "esbuild scripts/verify-usage-tracker.mjs --bundle --platform=node --format=esm --outfile=work/verify-usage-tracker.bundle.mjs && node work/verify-usage-tracker.bundle.mjs",
     "test:usage-report": "esbuild scripts/verify-usage-report.mjs --bundle --platform=node --format=esm --outfile=work/verify-usage-report.bundle.mjs && node work/verify-usage-report.bundle.mjs",
     "test:anaphylaxis-guidance": "esbuild scripts/verify-anaphylaxis-guidance.mjs --bundle --platform=node --format=esm --outfile=work/verify-anaphylaxis-guidance.bundle.mjs && node work/verify-anaphylaxis-guidance.bundle.mjs",
+    "test:org-chart-large": "esbuild scripts/verify-org-chart-large.mjs --bundle --platform=node --format=esm --outfile=work/verify-org-chart-large.bundle.mjs && node work/verify-org-chart-large.bundle.mjs",
     "test:kit-check-actions": "esbuild scripts/verify-kit-check-actions.mjs --bundle --platform=node --format=esm --outfile=work/verify-kit-check-actions.bundle.mjs && node work/verify-kit-check-actions.bundle.mjs",
     "test:asset-qr": "esbuild scripts/verify-asset-qr.mjs --bundle --platform=node --format=esm --alias:@=./src --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=work/verify-asset-qr.bundle.mjs && node work/verify-asset-qr.bundle.mjs"
   },

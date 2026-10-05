@@ -95,3 +95,21 @@
 .org-node {
   display: inline-flex;
 }
+
+/* A big team of people with no reports of their own: a grid under the manager
+   instead of one very wide row. */
+.org-leaves {
+  display: grid;
+  gap: 8px;
+  margin-top: 28px;
+  position: relative;
+}
+
+.org-leaves::before {
+  content: "";
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  height: 28px;
+  border-left: 2px solid var(--org-line, #64748b);
+}

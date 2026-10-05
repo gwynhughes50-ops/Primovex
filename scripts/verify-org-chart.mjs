@@ -1,46 +1,7 @@
-// Mirrors managersOf/buildTree/collectDescendants from
-// src/components/admin/OrgChart.jsx. Not imported directly: that file is a
-// .jsx module (imports React + a .css file), which a plain Node ESM script
-// can't load without a bundler step - same reasoning already documented in
-// verify-stock-expiry.mjs. Keep this in step with the real implementation if
-// either changes.
+// Covers the reporting-line maths in src/lib/orgChart.js (used by the
+// organisation chart in Practice Administration).
 import assert from "node:assert/strict";
-
-function managersOf(user, byId) {
-  const raw = Array.isArray(user.reportsTo) ? user.reportsTo : user.reportsTo ? [user.reportsTo] : [];
-  return [...new Set(raw)].filter((id) => id && id !== user.id && byId.has(id));
-}
-
-function buildTree(users) {
-  const byId = new Map(users.map((u) => [u.id, u]));
-  const childrenOf = new Map();
-  const roots = [];
-
-  for (const user of users) {
-    const managers = managersOf(user, byId);
-    if (managers.length === 0) {
-      roots.push(user);
-      continue;
-    }
-    for (const managerId of managers) {
-      if (!childrenOf.has(managerId)) childrenOf.set(managerId, []);
-      childrenOf.get(managerId).push(user);
-    }
-  }
-  return { byId, childrenOf, roots };
-}
-
-function collectDescendants(uid, childrenOf, acc = new Set(), visited = new Set()) {
-  if (visited.has(uid)) return acc;
-  visited.add(uid);
-  for (const child of childrenOf.get(uid) || []) {
-    if (!acc.has(child.id)) {
-      acc.add(child.id);
-      collectDescendants(child.id, childrenOf, acc, visited);
-    }
-  }
-  return acc;
-}
+import { buildTree, collectDescendants, managersOf } from "../src/lib/orgChart.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log("ok  " + name); };

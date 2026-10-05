@@ -41,6 +41,13 @@ export async function updateUserReportsTo(uid, managerUids) {
   await updateDoc(doc(db, "users", uid), { reportsTo: Array.isArray(managerUids) ? managerUids : (managerUids ? [managerUids] : []) });
 }
 
+// Which department someone belongs to (a name from Practice Administration >
+// Departments, or empty for none). Drives the organisation chart's department
+// view and prints.
+export async function updateUserDepartment(uid, department) {
+  await updateDoc(doc(db, "users", uid), { department: String(department || "").trim() });
+}
+
 // A purely visual marker for the organisation chart - e.g. picking out a
 // senior partner among several partners who all sit at the same level (same
 // manager or none). Deliberately separate from reportsTo/role: it changes
