@@ -1,5 +1,6 @@
 import {
   collection,
+  deleteDoc,
   doc,
   limit,
   onSnapshot,
@@ -37,6 +38,28 @@ export function subscribeDeviceRegistry(callback, onError) {
 function finiteNumber(value, fallback) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+// Take a device off the registry (a retired sensor, or one on a service the
+// practice no longer uses). Its past readings and temperature logs are kept.
+// A local (Shelly) thermometer also loses its saved setup, otherwise the desktop
+// app would simply add it back at the next poll.
+export async function removeConnectedDevice(device) {
+  if (!device?.id) throw new Error("Choose a device to remove.");
+  if (device.provider === "shelly-local") {
+    const { removeShellyLocalThermometer } = await import("./shellyLocalPoller");
+    await removeShellyLocalThermometer(device.id);
+  } else {
+    await deleteDoc(doc(db, CONNECTED_DEVICES_COLLECTION, device.id));
+  }
+  await writeAuditEvent({
+    action: "connect.device.remove",
+    module: "connect",
+    targetType: "connected_device",
+    targetId: device.id,
+    summary: "Connected device removed from the registry",
+    metadata: { provider: device.provider || "unknown" },
+  });
 }
 
 export async function saveDeviceAssignment(device, assignment, actor = {}) {

@@ -32,6 +32,7 @@ import { buildDeviceHistory, getDeviceStatus, listProviders } from "@/services/c
 import { buildTuyaBackendContract } from "@/services/connect/providers/TuyaProvider";
 import { getConnectCloudHealth, syncConnectProvider, buildConnectCloudDeploymentNotes } from "@/services/connect/connectCloudClient";
 import DeviceAssignmentSheet from "@/components/temperature/DeviceAssignmentSheet";
+import { removeConnectedDevice } from "@/services/connect/DeviceRegistry";
 import { addShellyLocalThermometer, getShellyWakeWebhookUrl, pollShellyLocalThermometerOnce, removeShellyLocalThermometer, subscribeShellyLocalThermometers } from "@/services/connect/shellyLocalPoller";
 
 function ConnectBadge({ device }) {
@@ -550,7 +551,10 @@ function DeviceCard({ device, selected, onSelect }) {
   );
 }
 
-function DeviceDetail({ device, canManage, onAssign, onClose }) {
+function DeviceDetail({ device, canManage, onAssign, onRemove, onClose }) {
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState("");
   if (!device) return null;
   const status = getDeviceStatus(device);
   return (
@@ -609,6 +613,31 @@ function DeviceDetail({ device, canManage, onAssign, onClose }) {
         </div>
         {canManage && <Button type="button" onClick={onAssign} className="rounded-full bg-sky-600 px-4 font-semibold text-white hover:bg-sky-500">{device.integrationStatus === "active" ? "Edit assignment" : "Assign device"}</Button>}
       </div>
+
+      {canManage && onRemove && (
+        <div className="mt-3 rounded-2xl border border-rose-400/20 bg-rose-500/5 p-4">
+          {!confirmRemove ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-300">No longer using this device? Remove it from Primovex. Its past readings are kept.</p>
+              <Button type="button" variant="outline" onClick={() => setConfirmRemove(true)} className="rounded-full border-rose-400/40 bg-transparent text-rose-200">Remove device</Button>
+            </div>
+          ) : (
+            <div>
+              <p className="text-sm font-semibold text-rose-100">Remove {device.name} ({device.providerLabel}) from Primovex?</p>
+              <p className="mt-1 text-xs text-slate-400">It will disappear from this list and stop being monitored. This can't be undone, but the device can be added again later.</p>
+              {removeError && <p role="alert" className="mt-2 text-sm text-rose-300">{removeError}</p>}
+              <div className="mt-3 flex gap-2">
+                <Button type="button" disabled={removing} onClick={async () => {
+                  setRemoving(true);
+                  setRemoveError("");
+                  try { await onRemove(device); } catch (error) { setRemoveError(error?.message || "Could not remove the device."); setRemoving(false); }
+                }} className="rounded-full bg-rose-600 px-4 font-semibold text-white hover:bg-rose-500">{removing ? "Removing…" : "Yes, remove it"}</Button>
+                <Button type="button" variant="outline" disabled={removing} onClick={() => setConfirmRemove(false)} className="rounded-full border-white/10 bg-transparent text-slate-200">Keep it</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-5 rounded-2xl border border-teal-400/20 bg-teal-500/10 p-4">
         <div className="flex items-start gap-3">
@@ -682,7 +711,7 @@ export function TemperatureMonitoring() {
       {selectedDevice && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/75 p-4" onClick={() => setSelectedId(null)}>
           <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto" onClick={(event) => event.stopPropagation()}>
-            <DeviceDetail device={selectedDevice} canManage={canManageDevices} onAssign={() => setAssigningDevice(selectedDevice)} onClose={() => setSelectedId(null)} />
+            <DeviceDetail device={selectedDevice} canManage={canManageDevices} onAssign={() => setAssigningDevice(selectedDevice)} onRemove={async (device) => { await removeConnectedDevice(device); setSelectedId(null); }} onClose={() => setSelectedId(null)} />
           </div>
         </div>
       )}

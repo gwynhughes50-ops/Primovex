@@ -558,15 +558,3 @@ exports.scheduledConnectSimulatorSync = onSchedule(
     await syncProvider("simulator", {});
   }
 );
-
-exports.scheduledTuyaSync = onSchedule(
-  {
-    region: "europe-west2",
-    schedule: "every 5 minutes",
-    timeZone: "Europe/London",
-    secrets: TUYA_SECRETS,
-  },
-  async () => {
-    await syncProvider("tuya", {});
-  }
-);
