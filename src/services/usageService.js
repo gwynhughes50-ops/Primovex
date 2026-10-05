@@ -56,12 +56,15 @@ function flush(session) {
 }
 
 // Begin (or carry on) tracking for this signed-in person. Safe to call again.
+// Returns true when this started a brand-new session (the app was just opened or
+// the person just signed in), false when it carried on an existing one.
 export function startUsageTracking(uid) {
-  if (!uid) return;
-  if (active?.uid === uid && !active.ended) return;
+  if (!uid) return false;
+  if (active?.uid === uid && !active.ended) return false;
   stopUsageTracking();
 
-  const sessionId = readStoredSession(uid) || newSessionId();
+  const carriedOn = readStoredSession(uid);
+  const sessionId = carriedOn || newSessionId();
   storeSession(uid, sessionId);
   const tracker = createUsageTracker();
   const session = { uid, sessionId, tracker, timers: [], sending: false, ended: false, cleanup: [] };
@@ -84,6 +87,7 @@ export function startUsageTracking(uid) {
   tracker.setPath(globalThis.location?.pathname || "/");
   // The first report anchors the session's start on the server clock.
   flush(session);
+  return !carriedOn;
 }
 
 export function trackUsagePath(pathname) {
