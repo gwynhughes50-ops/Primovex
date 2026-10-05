@@ -24,7 +24,7 @@ export function SessionProvider({ children }) {
     } finally {
       sessionStorage.clear();
       setDeviceSession(null);
-      await signOut();
+      await signOut(reason);
     }
   }, [signOut]);
 

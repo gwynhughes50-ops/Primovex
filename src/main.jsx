@@ -13,6 +13,7 @@ import { SenseSessionProvider } from "@/contexts/SenseSessionContext";
 import SpaceRegistrySync from "@/modules/sense/components/SpaceRegistrySync";
 import EquipmentRegistrySync from "@/modules/equipment/components/EquipmentRegistrySync";
 import DeepLinkNavigator from "@/routes/DeepLinkNavigator";
+import UsageTracker from "@/components/security/UsageTracker";
 
 const isAndroidRuntime = /Android/i.test(navigator.userAgent) && Boolean(window.__TAURI_INTERNALS__);
 const isAndroidBuild = import.meta.env.MODE === "android";
@@ -37,6 +38,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <BrowserRouter>
       <DeepLinkNavigator />
       <AuthProvider>
+        <UsageTracker />
         <SpaceRegistrySync />
         <EquipmentRegistrySync />
         <SessionProvider>

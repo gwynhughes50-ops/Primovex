@@ -91,6 +91,11 @@ async function main() {
     }
     await setDoc(doc(db, "stock_barcodes", "bc-purge-ctl"), { item_id: "purge-ctl", barcode: "bc-purge-ctl" });
     await setDoc(doc(db, "stock_barcodes", "bc-purge-nurse"), { item_id: "purge-nurse", barcode: "bc-purge-nurse" });
+    // sign-in/activity report: readable by admins and audit readers only, written by the server only
+    await setDoc(doc(db, "roles", "Auditor"), { name: "Auditor", capabilities: ["audit.read"], builtIn: false });
+    await setDoc(doc(db, "users", "auditor-uid"), { role: "Auditor", displayName: "Auditor" });
+    await setDoc(doc(db, "usage_sessions", "user-uid_sess-00000001"), { uid: "user-uid", practiceId: "primary", displayName: "User", role: "User", pages: [], activeSeconds: 10 });
+    await setDoc(doc(db, "usage_sessions", "other-uid_sess-00000002"), { uid: "other-uid", practiceId: "site-b", displayName: "Other", role: "User", pages: [], activeSeconds: 10 });
     await setDoc(doc(db, "clinflow_workflow_records", "rec-primary"), {
       dataMode: "synthetic", practiceId: "primary", siteId: "SITE-MAIN",
     });
@@ -123,6 +128,7 @@ async function main() {
   const cleaner = testEnv.authenticatedContext("cleaner-uid").firestore();
   const cleaner2 = testEnv.authenticatedContext("cleaner2-uid").firestore();
   const anon = testEnv.unauthenticatedContext().firestore();
+  const auditor = testEnv.authenticatedContext("auditor-uid").firestore();
 
   console.log("\n=== 1. Today's fix: custom-role SAR access (Craig) ===");
   await check("Craig (Medical Secretary, has governance.manageSars) CAN create a SAR", () =>
@@ -419,6 +425,26 @@ async function main() {
     assertFails(uploadBytes(ref(stockctlStorage, "stock_photos/item-10/a.jpg"), jpeg, { contentType: "image/jpeg" })));
   await check("Everywhere outside stock_photos/ is closed, even to an admin", () =>
     assertFails(uploadBytes(ref(adminStorage, "some_other_path/a.jpg"), jpeg, { contentType: "image/jpeg" })));
+
+  console.log("\n=== 12. Sign-in and activity report (usage_sessions) ===");
+  await check("Admin CAN read a sign-in session", () => assertSucceeds(getDoc(doc(admin, "usage_sessions", "user-uid_sess-00000001"))));
+  await check("An audit reader CAN read a sign-in session", () => assertSucceeds(getDoc(doc(auditor, "usage_sessions", "user-uid_sess-00000001"))));
+  await check("...but not another practice's session", () => assertFails(getDoc(doc(auditor, "usage_sessions", "other-uid_sess-00000002"))));
+  await check("A normal user CANNOT read their own session record", () => assertFails(getDoc(doc(user, "usage_sessions", "user-uid_sess-00000001"))));
+  await check("Practice Manager (holds audit.read, like the audit ledger) CAN read sessions", () => assertSucceeds(getDoc(doc(pm, "usage_sessions", "user-uid_sess-00000001"))));
+  await check("A nurse (no audit.read) CANNOT read sessions", () => assertFails(getDoc(doc(nurse, "usage_sessions", "user-uid_sess-00000001"))));
+  await check("Anonymous CANNOT read sessions", () => assertFails(getDoc(doc(anon, "usage_sessions", "user-uid_sess-00000001"))));
+  await check("A user CANNOT write a session record (the server does)", () =>
+    assertFails(setDoc(doc(user, "usage_sessions", "user-uid_sess-00000003"), { uid: "user-uid", practiceId: "primary", activeSeconds: 999999 })));
+  await check("A user CANNOT edit or erase their own session record", async () => {
+    await assertFails(updateDoc(doc(user, "usage_sessions", "user-uid_sess-00000001"), { activeSeconds: 0 }));
+    await assertFails(deleteDoc(doc(user, "usage_sessions", "user-uid_sess-00000001")));
+  });
+  await check("Not even an admin or audit reader can write or erase a session record", async () => {
+    await assertFails(setDoc(doc(admin, "usage_sessions", "admin-uid_sess-00000004"), { uid: "admin-uid", practiceId: "primary" }));
+    await assertFails(updateDoc(doc(auditor, "usage_sessions", "user-uid_sess-00000001"), { activeSeconds: 0 }));
+    await assertFails(deleteDoc(doc(admin, "usage_sessions", "user-uid_sess-00000001")));
+  });
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();

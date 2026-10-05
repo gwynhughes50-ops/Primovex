@@ -15,6 +15,14 @@
         { "fieldPath": "practiceId", "order": "ASCENDING" },
         { "fieldPath": "occurredAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "usage_sessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "practiceId", "order": "ASCENDING" },
+        { "fieldPath": "startedAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

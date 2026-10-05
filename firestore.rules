@@ -730,6 +730,15 @@ match /subject_access_requests/{requestId} {
       allow update, delete: if false;
     }
 
+    // Sign-in sessions and the areas of the app used, written only by the
+    // recordUsage Cloud Function (identity and times come from the server).
+    match /usage_sessions/{sessionId} {
+      allow get, list: if signedIn()
+        && (hasPermission("audit", "read") || isAdmin())
+        && auditPracticeMatches(resource.data.practiceId);
+      allow create, update, delete: if false;
+    }
+
     match /audit_ledger_heads/{practiceId} {
       allow read, write: if false;
     }

@@ -8,6 +8,7 @@ import { getStoredPlatformMode, isSafeSyntheticMode, setPlatformMode } from "@/c
 import { getActiveDemoProfile } from "@/config/demoMode";
 import { writeAuditEvent } from "@/core/identity/auditService";
 import { getDeviceId } from "@/services/deviceSessionService";
+import { endUsageSession } from "@/services/usageService";
 import { startShellyLocalPolling } from "@/services/connect/shellyLocalPoller";
 import { recordLoginTimestamp } from "@/desktop/alerts/alertRules";
 
@@ -243,12 +244,14 @@ export function AuthProvider({ children }) {
 
   const isAdmin = role === "System Admin" || can("admin.access");
 
-  async function signOut() {
+  async function signOut(reason) {
     if (isSafeSyntheticMode(platformMode)) {
       setPlatformMode("live");
       setPlatformModeState("live");
       return;
     }
+    // Close out the activity record while still signed in.
+    await endUsageSession(reason === "session_timeout" ? "session_timeout" : "signed_out").catch(() => {});
     await writeAuditEvent({
       action: "auth.logout",
       module: "identity",

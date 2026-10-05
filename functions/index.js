@@ -19,6 +19,7 @@ const { notifySarAssignment } = require("./services/notificationService");
 const { listStaffDirectory } = require("./services/staffDirectoryService");
 const { sendDueNotifications } = require("./services/dueNotificationService");
 const { sendKitNotification, replaceKitItemBatch } = require("./services/kitCheckService");
+const { recordUsage } = require("./services/usageService");
 
 initializeApp();
 const db = getFirestore();
@@ -468,6 +469,16 @@ exports.sendKitNotification = onCall({ region: "europe-west2" }, async (request)
     callerName: profile.displayName || profile.email || "A colleague",
     data: request.data || {},
   });
+});
+
+// Sign-in and activity reporting: the app tells us which area of it a person is in
+// and for how long. Identity and every time come from the server, and what is
+// stored is areas of the app only. Read back by administrators and audit readers.
+exports.recordUsage = onCall({ region: "europe-west2", timeoutSeconds: 15, memory: "256MiB" }, async (request) => {
+  assertSignedIn(request);
+  const snapshot = await db.collection("users").doc(request.auth.uid).get();
+  if (!snapshot.exists) throw new HttpsError("failed-precondition", "A Primovex user profile is required.");
+  return recordUsage({ db, callerUid: request.auth.uid, profile: snapshot.data() || {}, data: request.data || {} });
 });
 
 // Swapping an item in a kit for a new batch during a check. Kits can only be edited
