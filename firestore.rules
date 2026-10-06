@@ -739,6 +739,13 @@ match /subject_access_requests/{requestId} {
       allow create, update, delete: if false;
     }
 
+    // Counters for the Orb's language assistant (per person per hour, and per day).
+    // Written only by the orbRoute Cloud Function; administrators may read them.
+    match /orb_ai_usage/{docId} {
+      allow get, list: if isAdmin();
+      allow create, update, delete: if false;
+    }
+
     match /audit_ledger_heads/{practiceId} {
       allow read, write: if false;
     }

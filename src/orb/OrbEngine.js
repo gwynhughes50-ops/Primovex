@@ -11,10 +11,13 @@ import { PermissionGateway } from './PermissionGateway';
 import { createOrbRequest, createOrbResponse, ORB_CORE_VERSION } from './types';
 import { approvedIntentChoices } from './clinicalIntentCatalog';
 import { TrustPolicy } from './TrustPolicy';
+import { applyAiRouting, markAiRouted } from './aiRouting';
+import { getAiRouter } from './AiRouter';
 
 export class OrbEngine {
-  constructor({ provider = getPrimovexAIProvider() } = {}) {
+  constructor({ provider = getPrimovexAIProvider(), aiRouter = getAiRouter() } = {}) {
     this.version = ORB_CORE_VERSION;
+    this.aiRouter = aiRouter;
     this.provider = provider;
     this.intent = new IntentEngine();
     this.context = new ContextEngine();
@@ -46,7 +49,15 @@ export class OrbEngine {
       return this._finaliseResponse({ raw, request, context, startedAt, fallbackIntent: 'llm.response' });
     }
 
-    const classified = this.intent.classify(request.input, context);
+    // The rules engine answers what it recognises. Only a question it did not
+    // understand goes to the language assistant (when an administrator has turned it
+    // on), which can only pick one of the approved read-only lookups.
+    const { classified, aiRouted } = await applyAiRouting({
+      classified: this.intent.classify(request.input, context),
+      input: request.input,
+      context,
+      router: this.aiRouter,
+    });
     if (!classified.toolId) {
       const clarification = {
         question: 'I did not understand that safely. What were you trying to do?',
@@ -69,7 +80,7 @@ export class OrbEngine {
       return { ...response, auditId };
     }
     const raw = await this.provider.ask({ prompt: request.input, toolContext: context, orbIntent: classified });
-    return this._finaliseResponse({ raw, request, context, startedAt, fallbackIntent: classified.id });
+    return this._finaliseResponse({ raw: aiRouted ? markAiRouted(raw) : raw, request, context, startedAt, fallbackIntent: classified.id });
   }
 
   _finaliseResponse({ raw, request, context, startedAt, fallbackIntent }) {

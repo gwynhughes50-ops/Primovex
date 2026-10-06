@@ -61,6 +61,7 @@ import {
 import AddUser from "./admin/AddUser";
 import ImportStaff from "./admin/ImportStaff";
 import OrbLearningReview from "@/orb/OrbLearningReview";
+import OrbAiSettings from "@/components/admin/OrbAiSettings";
 import OrbKnowledgeManager from "@/orb/OrbKnowledgeManager";
 import SpaceBuilder from "@/modules/sense/components/SpaceBuilder";
 import { loadSenseState, saveSenseState } from "@/modules/sense/services/senseStore";
@@ -840,6 +841,7 @@ export default function AdminDashboard() {
             element={
               <RequireAdmin isAdmin={isAdmin} loading={authLoading}>
                 <div className="mt-6 space-y-6">
+                  <OrbAiSettings />
                   <OrbLearningReview />
                   <OrbKnowledgeManager />
                 </div>

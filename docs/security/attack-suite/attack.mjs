@@ -96,6 +96,8 @@ async function main() {
     await setDoc(doc(db, "users", "auditor-uid"), { role: "Auditor", displayName: "Auditor" });
     await setDoc(doc(db, "usage_sessions", "user-uid_sess-00000001"), { uid: "user-uid", practiceId: "primary", displayName: "User", role: "User", pages: [], activeSeconds: 10 });
     await setDoc(doc(db, "usage_sessions", "other-uid_sess-00000002"), { uid: "other-uid", practiceId: "site-b", displayName: "Other", role: "User", pages: [], activeSeconds: 10 });
+    await setDoc(doc(db, "orb_ai_usage", "all_20261006"), { count: 3, kind: "day", day: "20261006" });
+    await setDoc(doc(db, "settings", "orb"), { aiRouting: false });
     await setDoc(doc(db, "clinflow_workflow_records", "rec-primary"), {
       dataMode: "synthetic", practiceId: "primary", siteId: "SITE-MAIN",
     });
@@ -445,6 +447,18 @@ async function main() {
     await assertFails(updateDoc(doc(auditor, "usage_sessions", "user-uid_sess-00000001"), { activeSeconds: 0 }));
     await assertFails(deleteDoc(doc(admin, "usage_sessions", "user-uid_sess-00000001")));
   });
+
+  console.log("\n=== 13. Orb language assistant (settings/orb, orb_ai_usage) ===");
+  await check("Admin CAN read the Orb's usage counters", () => assertSucceeds(getDoc(doc(admin, "orb_ai_usage", "all_20261006"))));
+  await check("A normal user CANNOT read usage counters", () => assertFails(getDoc(doc(user, "orb_ai_usage", "all_20261006"))));
+  await check("Nobody can write the usage counters (the server does)", async () => {
+    await assertFails(setDoc(doc(user, "orb_ai_usage", "all_20261006"), { count: 0 }));
+    await assertFails(setDoc(doc(admin, "orb_ai_usage", "all_20261006"), { count: 0 }));
+    await assertFails(deleteDoc(doc(admin, "orb_ai_usage", "all_20261006")));
+  });
+  await check("Admin CAN turn the language assistant on", () => assertSucceeds(setDoc(doc(admin, "settings", "orb"), { aiRouting: true }, { merge: true })));
+  await check("A normal user CANNOT turn it on", () => assertFails(setDoc(doc(user, "settings", "orb"), { aiRouting: true }, { merge: true })));
+  await check("Practice Manager (not System Admin) CANNOT turn it on", () => assertFails(setDoc(doc(pm, "settings", "orb"), { aiRouting: true }, { merge: true })));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();

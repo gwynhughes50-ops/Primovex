@@ -20,6 +20,7 @@ const { listStaffDirectory } = require("./services/staffDirectoryService");
 const { sendDueNotifications } = require("./services/dueNotificationService");
 const { sendKitNotification, replaceKitItemBatch } = require("./services/kitCheckService");
 const { recordUsage } = require("./services/usageService");
+const { routeQuestion } = require("./services/orbRouterService");
 
 initializeApp();
 const db = getFirestore();
@@ -470,6 +471,55 @@ exports.sendKitNotification = onCall({ region: "europe-west2" }, async (request)
     data: request.data || {},
   });
 });
+
+// The Orb's language layer: works out which approved read-only lookup a question in
+// ordinary words is asking for. The model sees only the (scrubbed) question and the
+// lookups this person may use, never any practice data; the lookup then runs in the
+// app under their own permissions. Off unless an administrator turns it on
+// (settings/orb.aiRouting), limited per person and per day.
+exports.orbRoute = onCall(
+  {
+    region: "europe-west2",
+    timeoutSeconds: 20,
+    memory: "256MiB",
+    secrets: [AZURE_OPENAI_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT],
+  },
+  async (request) => {
+    assertSignedIn(request);
+    const snapshot = await db.collection("users").doc(request.auth.uid).get();
+    if (!snapshot.exists) throw new HttpsError("failed-precondition", "A Primovex user profile is required.");
+    const profile = snapshot.data() || {};
+    const capabilities = await getEffectiveCapabilities(db, profile.role);
+    const startedAt = Date.now();
+    const result = await routeQuestion({
+      db,
+      uid: request.auth.uid,
+      capabilities,
+      question: request.data?.question,
+      azure: { endpoint: AZURE_OPENAI_ENDPOINT.value(), key: AZURE_OPENAI_KEY.value(), deployment: AZURE_OPENAI_DEPLOYMENT.value() },
+    });
+    if (result.enabled && result.reason !== "empty" && result.reason !== "no-tools") {
+      // Which lookup was chosen, never the question's words.
+      appendGovernedAuditEvent({
+        db,
+        auth: request.auth,
+        profile,
+        data: {
+          action: "orb.ai.route",
+          module: "orb",
+          targetType: "orb_request",
+          summary: result.toolId ? "Orb language assistant chose a lookup" : "Orb language assistant found no matching lookup",
+          classification: "operational",
+          metadata: { tool: result.toolId || "none", reason: result.reason || "matched", redactions: result.redactions || 0, ms: Date.now() - startedAt },
+        },
+      }).catch((error) => console.error("Orb AI audit failed", { message: error?.message }));
+    }
+    // The client needs only the decision.
+    const { detail, ...decision } = result;
+    if (detail) console.warn("Orb language assistant unavailable", { detail });
+    return decision;
+  }
+);
 
 // Sign-in and activity reporting: the app tells us which area of it a person is in
 // and for how long. Identity and every time come from the server, and what is

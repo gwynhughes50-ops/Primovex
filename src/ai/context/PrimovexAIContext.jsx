@@ -36,7 +36,7 @@ export function PrimovexAIProvider({ children }) {
         context: { capabilities, role, userId: user?.uid || null, profile, forcedIntent: options.forcedIntent || null },
         conversation: messages,
       });
-      const timeout = new Promise((_, reject) => window.setTimeout(() => reject(new Error('Orb request timed out')), 8000));
+      const timeout = new Promise((_, reject) => window.setTimeout(() => reject(new Error('Orb request timed out')), 14000));
       const raw = await Promise.race([providerRequest, timeout]);
       setStatus(AI_STATES.REASONING);
       await new Promise((resolve) => window.setTimeout(resolve, 220));
