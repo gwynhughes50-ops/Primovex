@@ -13,7 +13,8 @@ import {
   departmentPagesPrintHtml,
   departmentSummary,
   descendantCount,
-  leafColumns,
+  isLeafGroup,
+  splitKids,
   managersOf,
   nameOf,
   outsideManagers,
@@ -113,13 +114,13 @@ function PersonEditor({ user, users, byId, childrenOf, departments, busy, onChan
 
 // The box for one person (used for a manager in the tree and for each person in a
 // grid of a big team).
-function PersonCard({ user, parentId, ctx, children = null }) {
+function PersonCard({ user, parentId, ctx, children = null, narrow = false }) {
   const { byId, matches, canManage, onEdit, showDept, allById, shownIds } = ctx;
   const others = managersOf(user, byId).filter((id) => id !== parentId).map((id) => nameOf(byId.get(id)));
   const outside = parentId === null ? outsideManagers(user, allById, shownIds) : [];
   const dept = departmentOf(user);
   return (
-    <div className={`min-w-[140px] max-w-[190px] rounded-xl border px-2.5 py-2 text-center ${user.orgHighlight ? "border-amber-400/60 bg-amber-400/10" : "mt-card-strong"} ${matches.has(user.id) ? "ring-2 ring-sky-400" : ""}`}>
+    <div className={`${narrow ? "w-[138px]" : "w-[170px]"} rounded-xl border px-2.5 py-2 text-center ${user.orgHighlight ? "border-amber-400/60 bg-amber-400/10" : "mt-card-strong"} ${matches.has(user.id) ? "ring-2 ring-sky-400" : ""}`}>
       {canManage ? (
         <button type="button" onClick={() => onEdit(user.id)} className="block w-full text-center" title="Change department or who they report to">
           <span className="block text-sm font-bold mt-text-primary">{nameOf(user)}</span>
@@ -144,7 +145,8 @@ function OrgNode({ user, parentId, ancestors, ctx }) {
   const kids = (childrenOf.get(user.id) || []).filter((k) => !ancestors.has(k.id));
   const isOpen = kids.length > 0 && expanded.has(user.id);
   const nextAncestors = useMemo(() => new Set([...ancestors, user.id]), [ancestors, user.id]);
-  const columns = leafColumns(kids, childrenOf);
+  const hang = isLeafGroup(kids, childrenOf);
+  const { leaves, branches, stacked } = splitKids(kids, childrenOf);
 
   return (
     <li>
@@ -164,13 +166,24 @@ function OrgNode({ user, parentId, ancestors, ctx }) {
           )}
         </PersonCard>
       </div>
-      {isOpen && (columns ? (
-        <div className="org-leaves" style={{ gridTemplateColumns: `repeat(${columns}, auto)` }}>
-          {kids.map((child) => <PersonCard key={child.id} user={child} parentId={user.id} ctx={ctx} />)}
+      {isOpen && (hang ? (
+        <div className="org-hang">
+          {kids.map((child) => (
+            <div key={child.id} className="org-hang-item">
+              <PersonCard user={child} parentId={user.id} ctx={ctx} narrow />
+            </div>
+          ))}
         </div>
       ) : (
         <ul>
-          {kids.map((child) => <OrgNode key={`${user.id}>${child.id}`} user={child} parentId={user.id} ancestors={nextAncestors} ctx={ctx} />)}
+          {(stacked ? branches : kids).map((child) => <OrgNode key={`${user.id}>${child.id}`} user={child} parentId={user.id} ancestors={nextAncestors} ctx={ctx} />)}
+          {stacked && (
+            <li>
+              <div className="org-stack">
+                {leaves.map((child) => <PersonCard key={child.id} user={child} parentId={user.id} ctx={ctx} narrow />)}
+              </div>
+            </li>
+          )}
         </ul>
       ))}
     </li>

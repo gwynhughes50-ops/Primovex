@@ -92,13 +92,21 @@ export function outsideManagers(user, allById, shownIds) {
 // ---- big teams ------------------------------------------------------------------
 
 // A manager with this many direct reports, none of whom manage anyone, has them
-// laid out as a compact grid instead of one very wide row (20 receptionists in a
-// row is 3,000+ pixels). Returns the number of columns, or 0 for a normal row.
+// hang down in one column under the manager (like a list on a branch) instead of
+// one very wide row: 20 receptionists in a row is 3,000+ pixels, in a column it is
+// a narrow strip. Anyone with reports of their own keeps the normal tree.
 export const LEAF_GROUP_MIN = 5;
-export function leafColumns(kids, childrenOf) {
-  if (kids.length < LEAF_GROUP_MIN) return 0;
-  if (kids.some((kid) => (childrenOf.get(kid.id) || []).length > 0)) return 0;
-  return Math.min(5, Math.max(2, Math.ceil(kids.length / 5)));
+export function isLeafGroup(kids, childrenOf) {
+  return kids.length >= LEAF_GROUP_MIN && !kids.some((kid) => (childrenOf.get(kid.id) || []).length > 0);
+}
+
+// Beside managers who have teams of their own, three or more people with no reports
+// are gathered into one stack (a box of cards) instead of each taking a column.
+export const STACK_MIN = 3;
+export function splitKids(kids, childrenOf) {
+  const leaves = kids.filter((kid) => (childrenOf.get(kid.id) || []).length === 0);
+  const branches = kids.filter((kid) => (childrenOf.get(kid.id) || []).length > 0);
+  return { leaves, branches, stacked: branches.length > 0 && leaves.length >= STACK_MIN };
 }
 
 // ---- collapsing ---------------------------------------------------------------
@@ -156,7 +164,7 @@ h1 { font-size: 18px; margin: 0; }
 h2 { font-size: 15px; margin: 0; }
 .meta { color: #475569; font-size: 11px; margin: 2px 0 10px; }
 .note { color: #92400e; font-size: 11px; margin: 0 0 8px; }
-.fit { display: inline-block; transform-origin: top left; }
+.fit { display: table; margin: 0 auto; }
 .tree, .tree ul { list-style: none; margin: 0; padding: 0; display: flex; justify-content: center; }
 .tree ul { padding-top: 22px; position: relative; }
 .tree ul::before { content: ""; position: absolute; top: 0; left: 50%; height: 11px; border-left: 1.5px solid #64748b; }
@@ -169,9 +177,15 @@ h2 { font-size: 15px; margin: 0; }
 .tree li:only-child { padding-top: 0; }
 .tree li:first-child::before, .tree li:last-child::after { border-top: none; }
 .tree li:last-child::before { border-right: 1.5px solid #64748b; }
-.leaves { display: grid; gap: 6px; margin-top: 22px; position: relative; }
-.leaves::before { content: ""; position: absolute; top: -22px; left: 50%; height: 22px; border-left: 1.5px solid #64748b; }
-.node { border: 1px solid #94a3b8; border-radius: 8px; padding: 5px 8px; text-align: center; min-width: 110px; max-width: 150px; background: #fff; }
+.hang { position: relative; width: 150px; padding-top: 12px; }
+.hang::before { content: ""; position: absolute; top: 0; left: 16px; height: 12px; border-left: 1.5px solid #64748b; }
+.hang-item { position: relative; padding: 3px 0 3px 32px; }
+.hang-item::before { content: ""; position: absolute; left: 16px; top: 0; bottom: 0; border-left: 1.5px solid #64748b; }
+.hang-item:last-child::before { bottom: 50%; }
+.hang-item::after { content: ""; position: absolute; left: 16px; top: 50%; width: 16px; border-top: 1.5px solid #64748b; }
+.hang-item .node { width: 118px; }
+.stack { border: 1.5px dashed #94a3b8; border-radius: 10px; padding: 6px; display: flex; flex-direction: column; gap: 5px; align-items: center; }
+.node { border: 1px solid #94a3b8; border-radius: 8px; padding: 5px 8px; text-align: center; width: 150px; background: #fff; }
 .node.hl { border-color: #d97706; background: #fffbeb; }
 .node b { display: block; font-size: 11px; }
 .node span { display: block; font-size: 9.5px; color: #475569; }
@@ -196,34 +210,51 @@ export function treeHtml(users, allUsers = users) {
     const outside = parentId === null ? outsideManagers(user, allById, shown) : [];
     const kids = (childrenOf.get(user.id) || []).filter((k) => !ancestors.has(k.id));
     const next = new Set(ancestors).add(user.id);
-    const columns = leafColumns(kids, childrenOf);
+    const hang = isLeafGroup(kids, childrenOf);
+    const { leaves, branches, stacked } = splitKids(kids, childrenOf);
+    const kidCard = (k) => card(k, managersOf(k, byId).filter((id) => id !== user.id).map((id) => nameOf(byId.get(id))), []);
+    const row = stacked
+      ? [...branches.map((k) => node(k, user.id, next)), `<li><div class="stack">${leaves.map(kidCard).join("")}</div></li>`]
+      : kids.map((k) => node(k, user.id, next));
     return `<li>${card(user, others, outside)}`
-      + (columns
-        ? `<div class="leaves" style="grid-template-columns:repeat(${columns},auto)">${kids.map((k) => card(k, managersOf(k, byId).filter((id) => id !== user.id).map((id) => nameOf(byId.get(id))), [])).join("")}</div>`
-        : kids.length ? `<ul>${kids.map((k) => node(k, user.id, next)).join("")}</ul>` : "")
+      + (hang
+        ? `<div class="hang">${kids.map((k) => `<div class="hang-item">${kidCard(k)}</div>`).join("")}</div>`
+        : kids.length ? `<ul>${row.join("")}</ul>` : "")
       + "</li>";
   };
   return `<ul class="tree">${roots.map((r) => node(r, null, new Set())).join("")}</ul>`;
 }
 
-// Shrinks each chart to fit one landscape page (never enlarges it).
-// Usable area in CSS pixels once the 10mm margins and the heading are taken off.
-export const PAPER = { A4: { width: 1040, height: 600 }, A3: { width: 1500, height: 880 } };
+// Paper in CSS pixels (portrait). A chart is shrunk only if it has to be, and the
+// document is printed portrait or landscape - whichever lets the chart stay larger.
+export const PAPER = { A4: { width: 794, height: 1123 }, A3: { width: 1123, height: 1587 } };
 
 const fitScript = (paper) => `<script>
 (function () {
-  var MAX_W = ${paper.width}, MAX_H = ${paper.height};
-  document.querySelectorAll(".fit").forEach(function (el) {
-    var w = el.scrollWidth, h = el.scrollHeight;
-    var s = Math.min(1, MAX_W / w, MAX_H / h);
-    if (s < 1) { el.style.zoom = String(s); }
+  var PW = ${paper.width}, PH = ${paper.height}, MARGIN = 76, HEADING = 90;
+  var fits = [].slice.call(document.querySelectorAll(".fit"));
+  if (!fits.length) return;
+  var sizes = fits.map(function (el) { return { w: el.offsetWidth, h: el.offsetHeight }; });
+  function usable(o) { return o === "portrait" ? { w: PW - MARGIN, h: PH - MARGIN - HEADING } : { w: PH - MARGIN, h: PW - MARGIN - HEADING }; }
+  function worst(o) {
+    var u = usable(o);
+    return Math.min.apply(null, sizes.map(function (s) { return Math.min(1, u.w / s.w, u.h / s.h); }));
+  }
+  var orient = worst("portrait") > worst("landscape") ? "portrait" : "landscape";
+  var u = usable(orient);
+  fits.forEach(function (el, i) {
+    var s = Math.min(1, u.w / sizes[i].w, u.h / sizes[i].h);
+    if (s < 1) el.style.zoom = String(s);
   });
+  var style = document.createElement("style");
+  style.textContent = "@page { size: ${paper.name} " + orient + "; margin: 10mm; }";
+  document.head.appendChild(style);
 })();
 </script>`;
 
 function documentHtml({ title, body, paper = "A4" }) {
   const size = PAPER[paper] ? paper : "A4";
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PRINT_CSS.replace("PAPER", size)}</style></head><body>${body}${fitScript(PAPER[size])}</body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PRINT_CSS.replace("PAPER", size)}</style></head><body>${body}${fitScript({ ...PAPER[size], name: size })}</body></html>`;
 }
 
 const when = (now) => now.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -238,7 +269,7 @@ const people = (n) => `${n} ${n === 1 ? "person" : "people"}`;
 export function chartPrintHtml({ users, department = "", practiceName = "Practice", now = new Date(), paper = "A4" }) {
   const shown = usersInDepartment(users, department);
   const heading = department ? `${practiceName} - ${department}` : `${practiceName} - organisation chart`;
-  const note = !department && shown.length > SMALL_PRACTICE ? `${people(shown.length)}: this is shrunk to fit one page. For a larger print choose A3, or print each department on its own page.` : "";
+  const note = !department && shown.length > SMALL_PRACTICE ? `${people(shown.length)}: this is scaled to fit one page. For a larger print choose A3, or print each department on its own page.` : "";
   return documentHtml({
     title: heading,
     paper,

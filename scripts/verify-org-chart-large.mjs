@@ -2,8 +2,8 @@
 // with a practice-sized staff list (65 people).
 import assert from "node:assert/strict";
 import {
-  NO_DEPARTMENT, allWithReports, buildTree, chartPrintHtml, collectDescendants, defaultExpanded, departmentPagesPrintHtml,
-  departmentSummary, descendantCount, leafColumns, escapeHtml, managersOf, outsideManagers, searchPath, staffListPrintHtml, treeHtml, usersInDepartment,
+  NO_DEPARTMENT, splitKids, allWithReports, buildTree, chartPrintHtml, collectDescendants, defaultExpanded, departmentPagesPrintHtml,
+  departmentSummary, descendantCount, isLeafGroup, escapeHtml, managersOf, outsideManagers, searchPath, staffListPrintHtml, treeHtml, usersInDepartment,
 } from "../src/lib/orgChart.js";
 
 let n = 0;
@@ -118,19 +118,22 @@ t("the whole-practice print includes everyone and warns that a big chart is shru
   const html = chartPrintHtml({ users: staff, practiceName: "Test Surgery", now: new Date(2026, 9, 5) });
   assert.ok(html.includes("Test Surgery - organisation chart"));
   assert.ok(html.includes("65 people") || html.includes(`${staff.length} people`));
-  assert.ok(html.includes("shrunk to fit one page"));
+  assert.ok(html.includes("scaled to fit one page"));
   assert.ok(html.includes("5 October 2026"));
   assert.ok(html.includes("Receptionist 20"));
-  assert.ok(html.includes("@page { size: A4 landscape"));
+  // the page is set to the chosen paper, portrait or landscape by whichever keeps the chart larger
+  assert.ok(html.includes("@page { size: A4 landscape; margin: 10mm; }")); // fallback in the stylesheet
+  assert.ok(html.includes('"@page { size: A4 " + orient'));
+  assert.ok(html.includes("PW = 794, PH = 1123"));
   const a3 = chartPrintHtml({ users: staff, practiceName: "Test Surgery", paper: "A3" });
-  assert.ok(a3.includes("@page { size: A3 landscape") && a3.includes("MAX_W = 1500"));
-  assert.ok(chartPrintHtml({ users: staff, paper: "Tabloid" }).includes("size: A4 landscape")); // unknown paper falls back to A4
+  assert.ok(a3.includes('"@page { size: A3 " + orient') && a3.includes("PW = 1123, PH = 1587"));
+  assert.ok(chartPrintHtml({ users: staff, paper: "Tabloid" }).includes('"@page { size: A4 " + orient')); // unknown paper falls back to A4
 });
 
 t("a single department prints alone, with no shrink warning, and says who the branch lead reports to", () => {
   const html = chartPrintHtml({ users: staff, department: "Nursing", practiceName: "Test Surgery" });
   assert.ok(html.includes("Test Surgery - Nursing"));
-  assert.ok(!html.includes("shrunk to fit"));
+  assert.ok(!html.includes("scaled to fit"));
   assert.ok(html.includes("Nurse 8"));
   assert.ok(!html.includes("Receptionist 1<"));
   assert.ok(html.includes("Reports to Liz Howard"));
@@ -153,24 +156,41 @@ t("the staff list is grouped by department with each person's manager", () => {
   assert.ok(html.includes("<td>Orphan</td><td>User</td><td>-</td>"));
 });
 
-t("a big team with no reports of their own becomes a grid, anything else stays a row", () => {
+t("a big team with no reports of their own hangs in a column, anything else stays a row", () => {
   const { childrenOf } = buildTree(staff);
   const kids = (id) => childrenOf.get(id) || [];
-  assert.equal(leafColumns(kids("reclead"), childrenOf), 4); // 20 receptionists
-  assert.equal(leafColumns(kids("seclead"), childrenOf), 2); // 8 secretaries
-  assert.equal(leafColumns(kids("partner"), childrenOf), 0); // 6 reports but some manage others
-  assert.equal(leafColumns(kids("pm"), childrenOf), 0);
-  assert.equal(leafColumns([{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }], new Map()), 0); // under five: a row
-  assert.equal(leafColumns(Array.from({ length: 40 }, (_, i) => ({ id: `p${i}` })), new Map()), 5); // capped
+  assert.equal(isLeafGroup(kids("reclead"), childrenOf), true); // 20 receptionists
+  assert.equal(isLeafGroup(kids("seclead"), childrenOf), true); // 8 secretaries
+  assert.equal(isLeafGroup(kids("partner"), childrenOf), false); // some of them manage others
+  assert.equal(isLeafGroup(kids("pm"), childrenOf), false);
+  assert.equal(isLeafGroup([{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }], new Map()), false); // under five: a row
 });
 
-t("the printed practice chart is compact enough to read: big teams are grids, not rows", () => {
+t("the printed practice chart is a real tree: managers branch across, big teams hang down a spine", () => {
   const html = chartPrintHtml({ users: staff, practiceName: "Test Surgery" });
-  assert.equal((html.match(/class="leaves"/g) || []).length, 3); // reception, nursing, secretaries
-  assert.ok(html.includes("grid-template-columns:repeat(4,auto)"));
+  assert.equal((html.match(/class="hang"/g) || []).length, 3); // reception, nursing, secretaries
+  assert.equal((html.match(/class="hang-item"/g) || []).length, 14 + 20 + 8);
+  assert.equal((html.match(/class="stack"/g) || []).length, 2); // GPs beside the practice manager; caretaker etc. beside the team leads
+  assert.ok(html.includes('<ul class="tree">')); // the branching levels are still the tree
   assert.ok(html.includes("Receptionist 20"));
   // every person is still on the page
   staff.forEach((u) => assert.ok(html.includes(`<b>${u.displayName}</b>`), u.displayName));
+});
+
+t("people with no reports beside managers are stacked; a lone manager's team is not", () => {
+  const { childrenOf } = buildTree(staff);
+  const split = splitKids(childrenOf.get("partner"), childrenOf);
+  assert.equal(split.stacked, true);
+  assert.deepEqual(split.branches.map((u) => u.id), ["pm"]);
+  assert.equal(split.leaves.length, 5); // four GPs and the finance officer
+  assert.equal(splitKids(childrenOf.get("reclead"), childrenOf).stacked, false); // all leaves: they hang instead
+  assert.equal(splitKids([{ id: "a" }, { id: "b" }], new Map()).stacked, false);
+});
+
+t("a chart is centred on the page, and each page is fitted separately", () => {
+  const html = departmentPagesPrintHtml({ users: staff, departments: configured, practiceName: "Test Surgery" });
+  assert.ok(html.includes(".fit { display: table; margin: 0 auto; }"));
+  assert.ok(html.includes("fits.forEach"));
 });
 
 console.log(`\n${n} passed`);
