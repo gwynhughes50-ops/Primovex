@@ -51,7 +51,7 @@ export default function StockHistoryDialog({ open, onOpenChange, item }) {
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-slate-200 hover:bg-slate-700"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-slate-200 hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_14%,transparent)]"
             aria-label="Close"
           >
             <X className="h-4 w-4" />

@@ -269,7 +269,7 @@ export default function ManualAddItemDialog({
           <button
             type="button"
             onClick={() => onOpenChange(false)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-slate-200 hover:bg-slate-700"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-800 text-slate-200 hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_14%,transparent)]"
             aria-label="Close"
           >
             <X className="h-4 w-4" />
@@ -379,7 +379,7 @@ export default function ManualAddItemDialog({
                         aria-selected={index === highlight}
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => chooseExisting(item)}
-                        className={`flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-slate-800 ${index === highlight ? "bg-slate-800" : ""}`}
+                        className={`flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_14%,transparent)] ${index === highlight ? "bg-slate-800" : ""}`}
                       >
                         <PackagePlus className="mt-0.5 h-4 w-4 shrink-0 text-teal-300" />
                         <span className="min-w-0">

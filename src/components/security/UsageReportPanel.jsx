@@ -145,7 +145,7 @@ export default function UsageReportPanel({ onClose }) {
                       const isOpen = open.has(user.uid);
                       return (
                         <Fragment key={user.uid}>
-                          <tr className="cursor-pointer align-top hover:bg-slate-900/60" onClick={() => toggle(user.uid)}>
+                          <tr className="cursor-pointer align-top hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_14%,transparent)]" onClick={() => toggle(user.uid)}>
                             <td className="p-3 text-slate-500">{isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}</td>
                             <td className="p-3">
                               <span className="block font-medium">{user.name}</span>

@@ -90,7 +90,7 @@ function PersonEditor({ user, users, byId, childrenOf, departments, busy, onChan
           />
           <div className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 p-1.5">
             {candidates.length === 0 ? <p className="px-1 py-1 text-xs mt-text-secondary">Nobody matches.</p> : candidates.map((c) => (
-              <label key={c.id} className="flex items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-slate-900">
+              <label key={c.id} className="flex items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_14%,transparent)]">
                 <input type="checkbox" checked={current.has(c.id)} disabled={busy} onChange={(event) => toggle(c.id, event.target.checked)} />
                 <span className="min-w-0 flex-1 truncate">{nameOf(c)}</span>
                 <span className="shrink-0 text-[11px] mt-text-secondary">{c.role || ""}</span>
@@ -155,7 +155,7 @@ function OrgNode({ user, parentId, ancestors, ctx }) {
               type="button"
               onClick={() => toggle(user.id)}
               aria-expanded={isOpen}
-              className="mx-auto mt-1.5 flex items-center gap-1 rounded-full border border-slate-600 px-2 py-0.5 text-[11px] mt-text-secondary hover:bg-slate-800"
+              className="mx-auto mt-1.5 flex items-center gap-1 rounded-full border border-slate-600 px-2 py-0.5 text-[11px] mt-text-secondary hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_14%,transparent)]"
               title={isOpen ? "Hide this team" : "Show this team"}
             >
               {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
@@ -257,7 +257,7 @@ export default function OrgChart({ users, departments = [], practiceName = "Prac
     else printHtmlDocument(staffListPrintHtml({ ...common, departments }));
   };
 
-  const btn = "rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs font-semibold mt-text-primary hover:bg-slate-800";
+  const btn = "rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs font-semibold mt-text-primary hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_14%,transparent)]";
 
   return (
     <div>
