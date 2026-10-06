@@ -44,6 +44,7 @@ import {
   Boxes,
   Package,
   UserPlus,
+  FileUp,
   MoreVertical,
   Pin,
   BrainCircuit,
@@ -58,6 +59,7 @@ import {
 } from "lucide-react";
 
 import AddUser from "./admin/AddUser";
+import ImportStaff from "./admin/ImportStaff";
 import OrbLearningReview from "@/orb/OrbLearningReview";
 import OrbKnowledgeManager from "@/orb/OrbKnowledgeManager";
 import SpaceBuilder from "@/modules/sense/components/SpaceBuilder";
@@ -137,6 +139,7 @@ function AdminTabs({ showUsers }) {
       ? [
           { to: "users", label: "Users", icon: <Users className="h-4 w-4" /> },
           { to: "users/add", label: "Add User", icon: <UserPlus className="h-4 w-4" /> },
+          { to: "users/import", label: "Import staff", icon: <FileUp className="h-4 w-4" /> },
           { to: "orb-learning", label: "Orb Learning", icon: <BrainCircuit className="h-4 w-4" /> },
         ]
       : []),
@@ -816,6 +819,16 @@ export default function AdminDashboard() {
             element={
               <RequireAdmin isAdmin={isAdmin} loading={authLoading}>
                 <AddUser />
+              </RequireAdmin>
+            }
+          />
+
+          {/* Import staff from a spreadsheet (Admin-only). Creates accounts only; sends no email. */}
+          <Route
+            path="users/import"
+            element={
+              <RequireAdmin isAdmin={isAdmin} loading={authLoading}>
+                <ImportStaff />
               </RequireAdmin>
             }
           />
