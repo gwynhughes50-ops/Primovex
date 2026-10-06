@@ -96,6 +96,7 @@ export class OrbEngine {
       evidence: raw.evidence || providerResponse.sources,
       modulesUsed: this.knowledge.modulesForIntent(providerResponse.intent || fallbackIntent),
       explanation: raw.explanation || null,
+      followUps: Array.isArray(raw.followUps) ? raw.followUps : [],
       data: raw.data ?? null,
       freshness: raw.freshness || null,
       observedAt: raw.observedAt || null,

@@ -51,6 +51,7 @@ export function PrimovexAIProvider({ children }) {
           actions: response.actions,
           intent: response.intent,
           warnings: response.warnings,
+          followUps: response.followUps,
           modulesUsed: response.modulesUsed,
           auditId: response.auditId,
           confidenceBand: response.confidenceBand,

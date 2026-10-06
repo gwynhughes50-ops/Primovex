@@ -39,6 +39,7 @@ export const mockPrimovexProvider = {
         sources: approved.sources,
         actions: approved.actions,
         warnings: approved.warnings,
+        followUps: approved.followUps,
         data: approved.data,
         evidence: approved.evidence,
         freshness: approved.freshness,

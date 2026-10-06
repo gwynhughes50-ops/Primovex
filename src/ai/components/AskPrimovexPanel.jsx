@@ -289,7 +289,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
               <div key={message.id} className={message.role === 'user' ? 'ml-8' : 'mr-4'}>
                 <div className={`rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === 'user' ? 'primovex-ai-user-message' : message.error ? 'primovex-ai-error-message' : 'primovex-ai-assistant-message'}`}>
                   {message.role === 'assistant' && <div className="primovex-ai-accent-text mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em]"><Bot className="h-4 w-4" /> Orb</div>}
-                  <p className="primovex-ai-body">{message.content}</p>
+                  <p className="primovex-ai-body" style={{ whiteSpace: 'pre-line' }}>{message.content}</p>
                   {message.intent !== 'general.unmatched' && Number.isFinite(message.confidence) && (
                     <div className="primovex-ai-message-divider primovex-ai-muted mt-3 flex items-center justify-between pt-2 text-xs"><span>Evidence confidence</span><span>{Math.round(message.confidence * 100)}%</span></div>
                   )}
@@ -298,6 +298,13 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
                   <div className="mt-2 grid gap-2">
                     {message.sources.map((source, index) => (
                       <div key={`${message.id}-source-${index}`} className="primovex-ai-source rounded-xl px-3 py-2"><p className="text-xs font-semibold">{source.title}</p><p className="primovex-ai-faint mt-1 text-xs">{source.detail}</p></div>
+                    ))}
+                  </div>
+                )}
+                {message.followUps?.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2" aria-label="Suggested next questions">
+                    {message.followUps.map((question) => (
+                      <button key={question} type="button" onClick={() => ask(question)} disabled={busy} className="primovex-ai-suggestion inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium disabled:opacity-50">{question.charAt(0).toUpperCase() + question.slice(1)}<ArrowRight className="h-3 w-3" /></button>
                     ))}
                   </div>
                 )}

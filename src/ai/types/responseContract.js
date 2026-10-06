@@ -7,7 +7,7 @@ export const AI_STATES = Object.freeze({
   ERROR: 'error',
 });
 
-export function createMessage({ role, content, confidence = null, confidenceBand = null, sources = [], actions = [], warnings = [], modulesUsed = [], auditId = null, error = false, intent = null, clarification = null, request = null }) {
+export function createMessage({ role, content, confidence = null, confidenceBand = null, sources = [], actions = [], warnings = [], followUps = [], modulesUsed = [], auditId = null, error = false, intent = null, clarification = null, request = null }) {
   return {
     id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     role,
@@ -17,6 +17,7 @@ export function createMessage({ role, content, confidence = null, confidenceBand
     sources,
     actions,
     warnings,
+    followUps,
     modulesUsed,
     auditId,
     error,
@@ -39,6 +40,7 @@ export function assertProviderResponse(response) {
     actions: Array.isArray(response.actions) ? response.actions : [],
     intent: response.intent || 'general',
     warnings: Array.isArray(response.warnings) ? response.warnings : [],
+    followUps: Array.isArray(response.followUps) ? response.followUps : [],
     modulesUsed: Array.isArray(response.modulesUsed) ? response.modulesUsed : [],
     auditId: response.auditId || null,
     confidenceBand: response.confidenceBand || null,

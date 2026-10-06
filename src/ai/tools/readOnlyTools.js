@@ -14,11 +14,45 @@ import { SAR_COLLECTION, getSarDeadlineTone, getStatusLabel } from '@/modules/go
 import { normalizeStockItemCategory } from '@/services/stockService';
 import { STOCK_CATEGORIES, categoryLabel as taxonomyCategoryLabel, subcategoryLabel as taxonomySubcategoryLabel } from '@/data/stockCategories';
 import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
+import { daysUntilExpiry, expiryStatus, expiryWindowDays, normaliseExpirySettings, stockLevelStatus, summariseStockAlerts } from '@/lib/stockAlerts';
+import {
+  alertsAnswer, categoryAnswer, cleaningAnswer, coldChainOverview, coldChainUnitAnswer, complianceAnswer, expiryAnswer, lowStockAnswer,
+  maintenanceAnswer, operationsAnswer, quickNotesAnswer, spacesAnswer, stockOverview, stockSearchAnswer, tasksAnswer, timelineAnswer, usersAnswer,
+} from './answerWording';
 
 const nowLabel = () => new Date().toLocaleString('en-GB');
 const source = (title, detail, type = 'module') => ({ title, detail, type });
 const activeItems = (docs) => docs.map((d) => ({ id: d.id, ...d.data() })).filter((item) => !item.archived_at);
 const itemLabel = (item) => [item.name, item.strength, item.form].filter(Boolean).join(' ');
+
+// The practice's own expiry windows (Settings > Alerts), the same ones the Alerts page and
+// the stock cards use, so the Orb and the app never disagree about what is "close to expiry".
+async function readExpirySettings() {
+  try {
+    const snap = await getDoc(doc(db, 'settings', 'alerts'));
+    return normaliseExpirySettings(snap.exists() ? snap.data() : null);
+  } catch {
+    return normaliseExpirySettings(null);
+  }
+}
+
+// Stock sorted into out / low / expired / close to expiry by those shared rules.
+function stockPicture(items, settings, now = new Date()) {
+  const rows = items.map((item) => {
+    const categoryId = normalizeStockItemCategory(item).category;
+    return { item, categoryId, level: stockLevelStatus(item), expiry: expiryStatus(item, { categoryId, settings, now }), days: daysUntilExpiry(item, now) };
+  });
+  const shape = (row) => ({ label: itemLabel(row.item), current: Number(row.item.current_stock || 0), min: Number(row.item.min_stock || 0), days: row.days, expiry: row.item.expiry_date || null, status: row.level });
+  const byDays = (a, b) => (a.days ?? 0) - (b.days ?? 0);
+  return {
+    rows,
+    out: rows.filter((r) => r.level === 'out').map(shape),
+    low: rows.filter((r) => r.level === 'low').map(shape).sort((a, b) => (a.current - a.min) - (b.current - b.min)),
+    expired: rows.filter((r) => r.expiry === 'expired').map(shape).sort(byDays),
+    soon: rows.filter((r) => r.expiry === 'soon').map(shape).sort(byDays),
+    shape,
+  };
+}
 
 async function readStock() {
   const snap = await getDocs(collection(db, 'stock_items'));
@@ -112,7 +146,7 @@ export function registerApprovedReadOnlyTools() {
       const priorities = summary.priorities?.slice(0, 5) || [];
       return {
         data: summary,
-        summary: `${summary.readiness.overall == null ? 'Practice readiness is awaiting connected data' : `Practice readiness is ${summary.readiness.overall}%`}. ${priorities.length ? priorities.map((p) => p.title).join('; ') : 'No connected priorities need attention.'}`,
+        ...(() => { const answer = operationsAnswer({ readiness: summary.readiness.overall ?? null, priorities: priorities.map((p) => p.title) }); return { summary: answer.text, followUps: answer.followUps }; })(),
         confidence: summary.connectedModules ? Math.min(0.98, 0.72 + summary.connectedModules * 0.06) : 0.55,
         sources: [source('Primovex Operations Engine', `${summary.connectedModules || 0} approved contributors · generated ${nowLabel()}`, 'system')],
         actions: [{ label: 'Open Dashboard', route: '/dashboard' }],
@@ -130,7 +164,7 @@ export function registerApprovedReadOnlyTools() {
       const events = sinceYesterday ? changesSince(timeline, since) : timeline;
       return {
         data: events,
-        summary: events.length ? events.slice(0, 8).map((e) => e.title).join('; ') : 'No connected operational changes have been recorded in this period.',
+        ...(() => { const answer = timelineAnswer({ titles: events.map((e) => e.title) }); return { summary: answer.text, followUps: answer.followUps }; })(),
         confidence: 0.97,
         sources: [source('Primovex Operations Timeline', `${events.length} recorded event${events.length === 1 ? '' : 's'} · read ${nowLabel()}`, 'system')],
         actions: [{ label: 'Open Dashboard', route: '/dashboard' }],
@@ -142,21 +176,14 @@ export function registerApprovedReadOnlyTools() {
   registerTool({
     id: 'inventory.summary', label: 'Inventory summary', requiredCapability: 'inventory.read',
     async execute() {
-      const items = await readStock();
-      const low = items.filter((i) => Number(i.current_stock || 0) <= Number(i.min_stock || 0));
-      const out = items.filter((i) => Number(i.current_stock || 0) <= 0);
-      const expiring60 = items.filter((i) => isExpiringWithin(i.expiry_date, 60));
+      const [items, settings] = await Promise.all([readStock(), readExpirySettings()]);
+      const picture = stockPicture(items, settings);
       const totalUnits = items.reduce((sum, item) => sum + Math.max(0, Number(item.current_stock || 0)), 0);
-      const parts = [
-        `${items.length} active stock item${items.length === 1 ? '' : 's'}`,
-        `${totalUnits} total unit${totalUnits === 1 ? '' : 's'} recorded`,
-        `${low.length} at or below minimum`,
-        `${out.length} out of stock`,
-        `${expiring60.length} expiring within 60 days`,
-      ];
+      const answer = stockOverview({ total: items.length, units: totalUnits, out: picture.out, low: picture.low, expired: picture.expired, soon: picture.soon });
       return {
-        data: { items, counts: { active: items.length, totalUnits, low: low.length, outOfStock: out.length, expiringWithin60Days: expiring60.length } },
-        summary: `Inventory summary: ${parts.join('; ')}.`,
+        data: { items, counts: { active: items.length, totalUnits, low: picture.low.length, outOfStock: picture.out.length, expired: picture.expired.length, expiringSoon: picture.soon.length } },
+        summary: answer.text,
+        followUps: answer.followUps,
         confidence: 0.99,
         sources: [source('Inventory', `${items.length} active items checked · live read ${nowLabel()}`)],
         actions: [{ label: 'Open Inventory', route: '/inventory' }],
@@ -168,11 +195,14 @@ export function registerApprovedReadOnlyTools() {
     id: 'inventory.search', label: 'Inventory search', requiredCapability: 'inventory.read',
     async execute({ query: search = '' } = {}) {
       const term = String(search).trim().toLowerCase();
-      const items = await readStock();
+      const [items, settings] = await Promise.all([readStock(), readExpirySettings()]);
       const matches = items.filter((item) => !term || [item.name, item.strength, item.form, item.brand, item.barcode, item.location, item.site].some((v) => String(v || '').toLowerCase().includes(term))).slice(0, 20);
+      const picture = stockPicture(matches, settings);
+      const answer = stockSearchAnswer({ term: search, matches: picture.rows.map((row) => picture.shape(row)) });
       return {
         data: matches,
-        summary: matches.length ? `${matches.length} matching item${matches.length === 1 ? '' : 's'}: ${matches.slice(0, 8).map((i) => `${itemLabel(i)} (${Number(i.current_stock || 0)} in stock)`).join('; ')}.` : `No active inventory items matched “${search}”.`,
+        summary: answer.text,
+        followUps: answer.followUps,
         confidence: 0.99,
         sources: [source('Inventory', `${items.length} active items checked · live read ${nowLabel()}`)],
         actions: [{ label: 'Open Inventory', route: '/inventory' }],
@@ -183,11 +213,13 @@ export function registerApprovedReadOnlyTools() {
   registerTool({
     id: 'inventory.lowStock', label: 'Low stock', requiredCapability: 'inventory.read',
     async execute() {
-      const items = await readStock();
-      const matches = items.filter((i) => Number(i.current_stock || 0) <= Number(i.min_stock || 0)).sort((a, b) => (Number(a.current_stock || 0) - Number(a.min_stock || 0)) - (Number(b.current_stock || 0) - Number(b.min_stock || 0)));
+      const [items, settings] = await Promise.all([readStock(), readExpirySettings()]);
+      const picture = stockPicture(items, settings);
+      const answer = lowStockAnswer({ out: picture.out, low: picture.low });
       return {
-        data: matches,
-        summary: matches.length ? `${matches.length} low-stock item${matches.length === 1 ? '' : 's'}: ${matches.slice(0, 10).map((i) => `${itemLabel(i)} ${Number(i.current_stock || 0)}/${Number(i.min_stock || 0)}`).join('; ')}.` : 'No active items are at or below their minimum stock level.',
+        data: [...picture.out, ...picture.low],
+        summary: answer.text,
+        followUps: answer.followUps,
         confidence: 0.99,
         sources: [source('Inventory', `${items.length} active items checked against minimum stock · ${nowLabel()}`)],
         actions: [{ label: 'Open Inventory', route: '/inventory' }],
@@ -197,21 +229,24 @@ export function registerApprovedReadOnlyTools() {
 
   registerTool({
     id: 'inventory.expiring', label: 'Expiring stock', requiredCapability: 'inventory.read',
-    async execute({ days = 60 } = {}) {
-      const items = await readStock();
-      const matches = items.filter((i) => isExpiringWithin(i.expiry_date, days)).sort((a, b) => String(a.expiry_date).localeCompare(String(b.expiry_date)));
+    // With no number of days given, this uses the practice's own expiry windows; a
+    // number ("expiring in 14 days") overrides them.
+    async execute({ days = null } = {}) {
+      const [items, settings] = await Promise.all([readStock(), readExpirySettings()]);
+      const explicit = Number.isFinite(Number(days)) && Number(days) > 0;
+      const picture = stockPicture(items, settings);
+      let expired = picture.expired;
+      let soon = picture.soon;
+      if (explicit) {
+        const limit = Number(days);
+        soon = picture.rows.filter((r) => r.days !== null && r.days >= 0 && r.days <= limit).map((r) => picture.shape(r)).sort((a, b) => (a.days ?? 0) - (b.days ?? 0));
+      }
+      const upcoming = picture.rows.filter((r) => r.days !== null && r.days >= 0).map((r) => picture.shape(r)).sort((a, b) => a.days - b.days)[0] || null;
+      const answer = expiryAnswer({ expired, soon, windowDays: explicit ? Number(days) : 30, explicitDays: explicit, next: upcoming });
       return {
-        data: matches,
-        summary: matches.length
-          ? `${matches.length} item${matches.length === 1 ? '' : 's'} expire within ${days} days: ${matches.slice(0, 10).map((i) => `${itemLabel(i)} on ${i.expiry_date}`).join('; ')}.`
-          : (() => {
-              const future = items
-                .filter((i) => i.expiry_date && new Date(`${i.expiry_date}T23:59:59`).getTime() > Date.now())
-                .sort((a, b) => String(a.expiry_date).localeCompare(String(b.expiry_date)))[0];
-              return future
-                ? `No active stock expires within ${days} days. The next recorded expiry is ${itemLabel(future)} on ${future.expiry_date}.`
-                : `No active stock expires within ${days} days, and no later valid expiry date is recorded.`;
-            })(),
+        data: [...expired, ...soon],
+        summary: answer.text,
+        followUps: answer.followUps,
         confidence: 0.98,
         sources: [source('Inventory expiry register', `${items.length} active items checked · ${nowLabel()}`)],
         actions: [{ label: 'Open Inventory', route: '/inventory' }],
@@ -244,9 +279,9 @@ export function registerApprovedReadOnlyTools() {
 
   registerTool({
     id: 'inventory.categoryLookup', label: 'Inventory by category', requiredCapability: 'inventory.read',
-    async execute({ category = '', days = 60 } = {}) {
+    async execute({ category = '' } = {}) {
       const match = resolveCategoryQuery(category);
-      const items = await readStock();
+      const [items, settings] = await Promise.all([readStock(), readExpirySettings()]);
       if (!match) {
         const available = STOCK_CATEGORIES.filter((c) => c.id !== 'uncategorised').map((c) => c.label).join(', ');
         return {
@@ -263,23 +298,14 @@ export function registerApprovedReadOnlyTools() {
         if (match.subcategory && resolved.subcategory !== match.subcategory) return false;
         return true;
       });
-      const low = matches.filter((i) => Number(i.current_stock || 0) <= Number(i.min_stock || 0));
-      const out = matches.filter((i) => Number(i.current_stock || 0) <= 0);
-      const expiring = matches.filter((i) => isExpiringWithin(i.expiry_date, days));
+      const picture = stockPicture(matches, settings);
       const totalUnits = matches.reduce((sum, item) => sum + Math.max(0, Number(item.current_stock || 0)), 0);
       const label = match.subcategory ? taxonomySubcategoryLabel(match.category, match.subcategory) : taxonomyCategoryLabel(match.category);
-      const parts = [
-        `${matches.length} item${matches.length === 1 ? '' : 's'} in ${label}`,
-        `${totalUnits} total unit${totalUnits === 1 ? '' : 's'}`,
-        `${low.length} at or below minimum`,
-        `${out.length} out of stock`,
-        `${expiring.length} expiring within ${days} days`,
-      ];
+      const answer = categoryAnswer({ label, total: matches.length, units: totalUnits, out: picture.out, low: picture.low, expired: picture.expired, soon: picture.soon, names: matches.slice(0, 10).map(itemLabel) });
       return {
-        data: { matched: true, category: match.category, subcategory: match.subcategory, items: matches, counts: { total: matches.length, totalUnits, low: low.length, outOfStock: out.length, expiring: expiring.length } },
-        summary: matches.length
-          ? `${parts.join('; ')}.${matches.length ? ` Items: ${matches.slice(0, 10).map((i) => itemLabel(i)).join('; ')}.` : ''}`
-          : `No active stock items are currently categorised under ${label}.`,
+        data: { matched: true, category: match.category, subcategory: match.subcategory, items: matches, counts: { total: matches.length, totalUnits, low: picture.low.length, outOfStock: picture.out.length, expired: picture.expired.length, expiring: picture.soon.length } },
+        summary: answer.text,
+        followUps: answer.followUps,
         confidence: 0.97,
         sources: [source('Inventory', `${items.length} active items checked against the Category/Subcategory taxonomy · ${nowLabel()}`)],
         actions: [{ label: 'Open Inventory', route: '/inventory' }],
@@ -313,7 +339,8 @@ export function registerApprovedReadOnlyTools() {
         const lastCleanedAt = cleanedAtDate(operational[r.id]?.lastCleanedAt);
         return !lastCleanedAt || lastCleanedAt.toDateString() !== today;
       });
-      return { data: overdue, summary: overdue.length ? `${overdue.length} room${overdue.length === 1 ? '' : 's'} not marked as cleaned today: ${overdue.map((r) => r.name).join(', ')}.` : `All ${state.rooms.length} rooms are marked as cleaned today.`, confidence: 0.99, sources: [source('Facilities cleaning register', `${state.rooms.length} rooms checked · live read ${nowLabel()}`)], actions: [{ label: 'Open Facilities', route: '/facilities' }] };
+      const cleaning = cleaningAnswer({ overdue: overdue.map((r) => r.name), total: state.rooms.length });
+      return { data: overdue, summary: cleaning.text, followUps: cleaning.followUps, confidence: 0.99, sources: [source('Facilities cleaning register', `${state.rooms.length} rooms checked · live read ${nowLabel()}`)], actions: [{ label: 'Open Facilities', route: '/facilities' }] };
     },
   });
 
@@ -365,7 +392,8 @@ export function registerApprovedReadOnlyTools() {
     execute() {
       const state = getFacilitiesSnapshot();
       const open = state.maintenance.filter((m) => m.status !== 'closed');
-      return { data: open, summary: open.length ? `${open.length} open maintenance issue${open.length === 1 ? '' : 's'}: ${open.slice(0, 10).map((m) => m.title || m.issue || 'Maintenance issue').join('; ')}.` : 'There are no open maintenance issues.', confidence: 0.99, sources: [source('Facilities maintenance register', `Local read ${nowLabel()}`)], actions: [{ label: 'Open Facilities', route: '/facilities' }] };
+      const maintenance = maintenanceAnswer(open.map((m) => m.title || m.issue || 'Maintenance issue'));
+      return { data: open, summary: maintenance.text, followUps: maintenance.followUps, confidence: 0.99, sources: [source('Facilities maintenance register', `Local read ${nowLabel()}`)], actions: [{ label: 'Open Facilities', route: '/facilities' }] };
     },
   });
 
@@ -459,9 +487,8 @@ export function registerApprovedReadOnlyTools() {
           max: Number.isFinite(max) ? max : 8,
           measuredAt: measuredAt instanceof Date && !Number.isNaN(measuredAt.getTime()) ? measuredAt.toISOString() : null,
         },
-        summary: Number.isFinite(value)
-          ? `${name} is ${within ? 'operating within range' : 'outside its configured range'}. The latest reading is ${value}°C against a ${min}–${max}°C range, recorded ${freshness}.${ageMinutes != null && ageMinutes > 30 ? ' The reading is stale, so a current physical check is recommended.' : ''}`
-          : `${name} is registered, but I do not have a valid recent temperature reading. I cannot confirm that it is currently operating normally.`,
+        summary: coldChainUnitAnswer({ name, value, min, max, ageMinutes }).text,
+        followUps: coldChainUnitAnswer({ name, value, min, max, ageMinutes }).followUps,
         confidence: Number.isFinite(value) ? (ageMinutes != null && ageMinutes > 30 ? 0.76 : 0.97) : 0.58,
         warnings: [...sourceErrors, ...(!Number.isFinite(value) ? ['No valid temperature reading'] : within ? [] : ['Latest reading is outside range'])],
         sources: [
@@ -475,15 +502,40 @@ export function registerApprovedReadOnlyTools() {
 
   registerTool({
     id: 'coldChain.latestStatus', label: 'Cold-chain status', requiredCapability: 'temperature.read',
+    // The latest reading of every fridge and freezer. (This used to report the single
+    // newest reading from anywhere, so "are the fridges OK" could be answered from
+    // one unit.)
     async execute() {
-      const snap = await getDocs(query(collection(db, 'temperature_logs'), orderBy('measured_at', 'desc'), limit(1)));
-      if (snap.empty) return { data: null, summary: 'No cold-chain reading is available.', confidence: 0.72, warnings: ['No temperature reading found'], sources: [source('Temperature log', `Live read ${nowLabel()}`)], actions: [{ label: 'Open Temperatures', route: '/temperature' }] };
-      const record = { id: snap.docs[0].id, ...snap.docs[0].data() };
-      const value = Number(record.temperature ?? record.value ?? record.currentValue ?? record.current_value);
-      const min = Number(record.unitRange?.min ?? record.min_temp ?? record.min ?? 2);
-      const max = Number(record.unitRange?.max ?? record.max_temp ?? record.max ?? 8);
-      const within = Number.isFinite(value) && value >= min && value <= max;
-      return { data: record, summary: within ? `Latest cold-chain reading is ${value}°C and within the configured ${min}–${max}°C range.` : `Latest cold-chain reading is ${Number.isFinite(value) ? `${value}°C` : 'unavailable'} and requires review against the configured ${min}–${max}°C range.`, confidence: Number.isFinite(value) ? 0.98 : 0.72, warnings: within ? [] : ['Latest reading requires review'], sources: [source('Temperature log', `Latest recorded reading · live read ${nowLabel()}`)], actions: [{ label: 'Open Temperatures', route: '/temperature' }] };
+      const snap = await getDocs(query(collection(db, 'temperature_logs'), orderBy('measured_at', 'desc'), limit(200)));
+      const toMillis = (value) => { try { return value?.toMillis ? value.toMillis() : value?.toDate ? value.toDate().getTime() : value ? new Date(value).getTime() : 0; } catch { return 0; } };
+      const latest = new Map();
+      snap.docs.forEach((row) => {
+        const record = { id: row.id, ...row.data() };
+        const key = String(record.unitId || record.unit_id || record.unitName || record.unit_name || record.fridge || record.device || row.id);
+        if (!latest.has(key)) latest.set(key, record);
+      });
+      if (!latest.size) return { data: null, summary: coldChainOverview({ units: [] }).text, confidence: 0.72, warnings: ['No temperature reading found'], sources: [source('Temperature log', `Live read ${nowLabel()}`)], actions: [{ label: 'Open Temperatures', route: '/temperature' }] };
+      const units = [...latest.values()].map((record) => {
+        const at = toMillis(record.measured_at || record.created_at);
+        return {
+          name: String(record.unitName || record.unit_name || record.fridge || record.device || 'A fridge'),
+          value: Number(record.temperature ?? record.value ?? record.currentValue ?? record.current_value),
+          min: Number(record.unitRange?.min ?? record.min_temp ?? record.min ?? 2),
+          max: Number(record.unitRange?.max ?? record.max_temp ?? record.max ?? 8),
+          ageMinutes: at ? Math.max(0, Math.round((Date.now() - at) / 60000)) : null,
+        };
+      });
+      const answer = coldChainOverview({ units });
+      const outOfRange = units.filter((u) => Number.isFinite(u.value) && (u.value < u.min || u.value > u.max));
+      return {
+        data: units,
+        summary: answer.text,
+        followUps: answer.followUps,
+        confidence: units.some((u) => Number.isFinite(u.value)) ? 0.97 : 0.72,
+        warnings: outOfRange.length ? ['A unit is outside its range'] : [],
+        sources: [source('Temperature log', `Latest reading from each of ${units.length} unit${units.length === 1 ? '' : 's'} · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Temperatures', route: '/temperature' }],
+      };
     },
   });
 
@@ -496,7 +548,8 @@ export function registerApprovedReadOnlyTools() {
       return {
         domain: 'spaces',
         data: { spaces: spaces.map(({ id, spaceId, name, typeId, siteId, floorId, zoneId, status }) => ({ id, spaceId, name, typeId, siteId, floorId, zoneId, status })), counts: { active: spaces.length, attention: attention.length } },
-        summary: spaces.length ? `${spaces.length} active practice space${spaces.length === 1 ? '' : 's'} are registered. ${attention.length ? `${attention.length} ${attention.length === 1 ? 'has' : 'have'} a status requiring review: ${attention.slice(0, 6).map((space) => space.name).join(', ')}.` : 'No registered Space has a status requiring review.'}` : 'No active practice Spaces are registered, so I cannot confirm room readiness.',
+        summary: spacesAnswer({ total: spaces.length, attention: attention.map((space) => space.name) }).text,
+        followUps: spacesAnswer({ total: spaces.length, attention: attention.map((space) => space.name) }).followUps,
         confidence: spaces.length ? 0.97 : 0.45,
         knownState: spaces.length ? 'known' : 'unknown',
         observedAt: registry?.updatedAt,
@@ -523,7 +576,7 @@ export function registerApprovedReadOnlyTools() {
       return {
         domain: 'compliance',
         data: { counts: { assets: assets.length, checks: evidenceCount, failedChecks: failed.length }, failedChecks: failed.slice(0, 10).map(({ id, assetId, result, status, createdAt }) => ({ id, assetId, result, status, createdAt })) },
-        summary: known ? `${assets.length} active compliance asset${assets.length === 1 ? '' : 's'} and ${evidenceCount} recorded check${evidenceCount === 1 ? '' : 's'} were found. ${failed.length ? `${failed.length} recorded check${failed.length === 1 ? '' : 's'} require review.` : 'No failed result is present in the connected check records.'}${failures.length ? ' Some compliance sources were unavailable, so this is not a complete assurance statement.' : ''}` : 'Compliance evidence is unavailable or empty, so I cannot confirm that the practice is compliant.',
+        summary: complianceAnswer({ assets: assets.length, checks: evidenceCount, failed: failed.length, incomplete: failures.length > 0, known: Boolean(known) }).text,
         confidence: !known ? 0.35 : failures.length ? 0.68 : 0.94,
         knownState: !known ? 'unknown' : failures.length ? 'partial' : 'known',
         sources: collections.map((name) => source(name, failures.includes(name) ? 'Read unavailable' : `${rows[name].length} record${rows[name].length === 1 ? '' : 's'} checked`)),
@@ -540,7 +593,8 @@ export function registerApprovedReadOnlyTools() {
       const critical = tasks.filter((item) => ['critical', 'high'].includes(String(item.priority).toLowerCase()));
       return {
         domain: 'tasks', disclosureLevel: 'operational', data: { counts: { open: tasks.length, highPriority: critical.length }, tasks: tasks.slice(0, 15) },
-        summary: tasks.length ? `${tasks.length} open operational task${tasks.length === 1 ? '' : 's'} are recorded${critical.length ? `, including ${critical.length} high-priority item${critical.length === 1 ? '' : 's'}` : ''}. ${tasks.slice(0, 5).map((item) => item.title).join('; ')}.` : 'No open operational tasks are recorded in the connected escalation register.',
+        summary: tasksAnswer({ titles: tasks.map((item) => item.title), total: tasks.length, high: critical.length }).text,
+        followUps: tasksAnswer({ titles: tasks.map((item) => item.title), total: tasks.length, high: critical.length }).followUps,
         confidence: 0.94, freshness: { state: 'local-live', observedAt: new Date().toISOString() },
         sources: [source('Operational escalation register', `${tasks.length} open task${tasks.length === 1 ? '' : 's'} checked`)],
         actions: [{ label: 'Open Operations Centre', route: '/alerts' }],
@@ -555,13 +609,16 @@ export function registerApprovedReadOnlyTools() {
         readStock(), getDocs(query(collection(db, 'temperature_logs'), orderBy('measured_at', 'desc'), limit(50))), getDocs(collection(db, 'connect_device_alerts')),
       ]);
       const stock = stockResult.status === 'fulfilled' ? stockResult.value : [];
-      const low = stock.filter((item) => Number(item.current_stock || 0) <= Number(item.min_stock || 0));
+      const settings = await readExpirySettings();
+      const stockAlerts = summariseStockAlerts(stock, { categoryOf: (item) => normalizeStockItemCategory(item).category, settings });
+      const low = stock.filter((item) => stockLevelStatus(item));
       const deviceAlerts = deviceAlertResult.status === 'fulfilled' ? deviceAlertResult.value.docs.map((item) => ({ id: item.id, ...item.data() })).filter((item) => !['resolved', 'closed'].includes(String(item.status).toLowerCase())) : [];
       const unavailable = [stockResult, temperatureResult, deviceAlertResult].filter((item) => item.status === 'rejected').length;
-      const total = low.length + deviceAlerts.length;
+      const total = stockAlerts.total + deviceAlerts.length;
       return {
         domain: 'alerts', data: { counts: { active: total, lowStock: low.length, device: deviceAlerts.length }, lowStock: low.slice(0, 10).map(({ id, name, current_stock, min_stock }) => ({ id, name, current_stock, min_stock })), deviceAlerts: deviceAlerts.slice(0, 10) },
-        summary: total ? `${total} active operational exception${total === 1 ? '' : 's'} are visible: ${low.length} low-stock and ${deviceAlerts.length} connected-device alert${deviceAlerts.length === 1 ? '' : 's'}.${unavailable ? ' Some alert sources were unavailable.' : ''}` : unavailable ? 'No active exception was found in the available sources, but some alert sources could not be read, so I cannot confirm an all-clear.' : 'No active low-stock or connected-device alerts are currently visible.',
+        summary: alertsAnswer({ stock: stockAlerts.counts, device: deviceAlerts.length, unavailable }).text,
+        followUps: alertsAnswer({ stock: stockAlerts.counts, device: deviceAlerts.length, unavailable }).followUps,
         confidence: unavailable ? 0.64 : 0.95, knownState: unavailable ? 'partial' : 'known',
         sources: [source('Inventory alerts', `${low.length} low-stock exception${low.length === 1 ? '' : 's'}`), source('Connected-device alerts', `${deviceAlerts.length} active alert${deviceAlerts.length === 1 ? '' : 's'}`), source('Temperature evidence', temperatureResult.status === 'fulfilled' ? `${temperatureResult.value.size} recent reading${temperatureResult.value.size === 1 ? '' : 's'} available` : 'Unavailable')],
         warnings: unavailable ? [`${unavailable} alert source${unavailable === 1 ? '' : 's'} unavailable`] : [], actions: [{ label: 'Open Operations Centre', route: '/alerts' }],
@@ -585,7 +642,7 @@ export function registerApprovedReadOnlyTools() {
       open.sort((a, b) => new Date(a.dueAt || 0) - new Date(b.dueAt || 0));
       return {
         domain: 'tasks', data: { counts: { open: open.length, overdue: overdue.length }, notes: open.slice(0, 15) },
-        summary: open.length ? `${open.length} open quick note${open.length === 1 ? '' : 's'}${overdue.length ? `, ${overdue.length} overdue` : ''}: ${open.slice(0, 5).map((note) => note.text).join('; ')}.` : 'No open quick notes are recorded for you.',
+        summary: quickNotesAnswer({ notes: open.map((note) => note.text), overdue: overdue.length }).text,
         confidence: 0.95,
         sources: [source('Quick Notes', `${open.length} open note${open.length === 1 ? '' : 's'} checked · live read ${nowLabel()}`)],
         actions: [{ label: 'Open Dashboard', route: '/dashboard' }],
@@ -608,7 +665,7 @@ export function registerApprovedReadOnlyTools() {
       users.forEach((u) => { const role = u.role || 'No role'; byRole[role] = (byRole[role] || 0) + 1; });
       return {
         domain: 'admin', data: { counts: { total: users.length }, byRole, users: users.map(({ id, displayName, email, role }) => ({ id, displayName, email, role })) },
-        summary: `${users.length} account${users.length === 1 ? '' : 's'} are registered: ${Object.entries(byRole).map(([role, count]) => `${count} ${role}`).join(', ')}.`,
+        summary: usersAnswer({ total: users.length, byRole }).text,
         confidence: 0.97,
         sources: [source('Users', `${users.length} account${users.length === 1 ? '' : 's'} checked · live read ${nowLabel()}`)],
         actions: [{ label: 'Open Advanced Admin', route: '/admin/users' }],
