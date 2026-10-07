@@ -11,12 +11,13 @@ export default defineConfig({
     },
   },
 
-  // Two pages: the app, and the small corner alert window the desktop shell opens.
+  // Three pages: the app, the small corner alert window and the desktop orb window the desktop shell opens.
   build: {
     rollupOptions: {
       input: {
         main: fileURLToPath(new URL("./index.html", import.meta.url)),
         alert: fileURLToPath(new URL("./alert.html", import.meta.url)),
+        orb: fileURLToPath(new URL("./orb.html", import.meta.url)),
       },
     },
   },

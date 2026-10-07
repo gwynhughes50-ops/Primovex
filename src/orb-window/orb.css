@@ -1,0 +1,35 @@
+/* The Pulse orb as its own small window on the desktop. Transparent so only the orb shows. */
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  outline: none;
+}
+
+.stage:active { cursor: grabbing; }
+.stage:focus-visible { outline: 2px solid #9adfff; outline-offset: -6px; border-radius: 50%; }
+
+/* The artwork is drawn at 174px; the window is 132px, so scale it to leave room for the glow. */
+.stage .pvx-orb { transform: scale(0.64); }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

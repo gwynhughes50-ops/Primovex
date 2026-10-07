@@ -8,6 +8,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 #[cfg(desktop)]
 use tauri::{Emitter, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
+#[cfg(desktop)]
+use std::sync::atomic::AtomicBool;
+#[cfg(desktop)]
+use tauri::menu::{Menu, MenuItem};
+#[cfg(desktop)]
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
 fn sanitise_file_name(file_name: &str) -> String {
   let cleaned: String = file_name
@@ -273,6 +279,220 @@ async fn alert_action(app: tauri::AppHandle, action: String) -> Result<(), Strin
   app.emit_to("main", "alert-action", action).map_err(|e| e.to_string())
 }
 
+
+// ---------------------------------------------------------------------------
+// Pulse orb on the desktop
+//
+// When Primovex is minimised, or closed to the system tray, the Pulse orb sits on
+// the desktop in its own small always-on-top window, so the practice can see at a
+// glance whether anything has changed. It knows nothing about the app: the main
+// window tells this side the little it should say (a score and a short note) and
+// this side only owns the window, its place on screen, the tray icon, and the
+// "close button hides to the tray" behaviour. Double-clicking the orb (or the
+// tray icon) brings the main window back.
+//
+// Nothing here runs unless the signed-in person has it switched on, and signing
+// out removes the orb and makes the close button quit as normal.
+// ---------------------------------------------------------------------------
+#[cfg(desktop)]
+const ORB_LABEL: &str = "orb";
+#[cfg(desktop)]
+const ORB_SIZE: f64 = 132.0;
+#[cfg(desktop)]
+const ORB_MARGIN: f64 = 24.0;
+#[cfg(desktop)]
+const ORB_POSITION_FILE: &str = "orb-position.json";
+
+#[cfg(desktop)]
+#[derive(Default)]
+struct OrbState {
+  enabled: AtomicBool,
+  close_to_tray: AtomicBool,
+  signed_in: AtomicBool,
+  quitting: AtomicBool,
+  payload: Mutex<Option<serde_json::Value>>,
+  last_saved: Mutex<Option<(i32, i32)>>,
+}
+
+#[cfg(desktop)]
+fn orb_position_path(app: &tauri::AppHandle) -> Option<PathBuf> {
+  app.path().app_config_dir().ok().map(|dir| dir.join(ORB_POSITION_FILE))
+}
+
+// The last place the person left the orb, if it is still on a connected screen.
+#[cfg(desktop)]
+fn saved_orb_position(app: &tauri::AppHandle) -> Option<PhysicalPosition<i32>> {
+  let text = fs::read_to_string(orb_position_path(app)?).ok()?;
+  let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+  let x = value.get("x")?.as_i64()? as i32;
+  let y = value.get("y")?.as_i64()? as i32;
+  let on_screen = app.available_monitors().ok()?.iter().any(|m| {
+    let pos = m.position();
+    let size = m.size();
+    x >= pos.x - 20 && y >= pos.y - 20 && x < pos.x + size.width as i32 - 40 && y < pos.y + size.height as i32 - 40
+  });
+  if on_screen {
+    Some(PhysicalPosition::new(x, y))
+  } else {
+    None
+  }
+}
+
+#[cfg(desktop)]
+fn show_main_window(app: &tauri::AppHandle) {
+  if let Some(main) = app.get_webview_window("main") {
+    let _ = main.unminimize();
+    let _ = main.show();
+    let _ = main.set_focus();
+  }
+}
+
+#[cfg(desktop)]
+fn close_orb_window(app: &tauri::AppHandle) {
+  if let Some(window) = app.get_webview_window(ORB_LABEL) {
+    let _ = window.close();
+  }
+}
+
+#[cfg(desktop)]
+fn open_orb_window(app: &tauri::AppHandle) -> Result<(), String> {
+  if app.get_webview_window(ORB_LABEL).is_some() {
+    return Ok(());
+  }
+  let monitor = app
+    .primary_monitor()
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "No monitor found".to_string())?;
+  let work = monitor.work_area();
+  let scale = monitor.scale_factor();
+  // Bottom-right of the usable area (above the taskbar) unless the person has moved it.
+  let default_x = (work.position.x as f64 + work.size.width as f64) / scale - ORB_SIZE - ORB_MARGIN;
+  let default_y = (work.position.y as f64 + work.size.height as f64) / scale - ORB_SIZE - ORB_MARGIN;
+
+  let window = WebviewWindowBuilder::new(app, ORB_LABEL, WebviewUrl::App("orb.html".into()))
+    .title("Primovex orb")
+    .visible(false)
+    .inner_size(ORB_SIZE, ORB_SIZE)
+    .position(default_x, default_y)
+    .decorations(false)
+    .transparent(true)
+    .resizable(false)
+    .maximizable(false)
+    .minimizable(false)
+    .always_on_top(true)
+    .skip_taskbar(true)
+    // Never take the keyboard: someone may be typing in another program.
+    .focused(false)
+    .shadow(false)
+    .build()
+    .map_err(|e| e.to_string())?;
+
+  if let Some(position) = saved_orb_position(app) {
+    let _ = window.set_position(position);
+  }
+  let _ = window.show();
+  Ok(())
+}
+
+// Whether the orb should be on the desktop right now: it is switched on, someone is
+// signed in, and the main window is out of the way (minimised, or hidden in the tray).
+#[cfg(desktop)]
+fn orb_wanted(app: &tauri::AppHandle) -> bool {
+  let state = app.state::<OrbState>();
+  if !state.enabled.load(Ordering::SeqCst) || !state.signed_in.load(Ordering::SeqCst) || state.quitting.load(Ordering::SeqCst) {
+    return false;
+  }
+  match app.get_webview_window("main") {
+    Some(main) => main.is_minimized().unwrap_or(false) || !main.is_visible().unwrap_or(true),
+    None => false,
+  }
+}
+
+#[cfg(desktop)]
+fn start_orb_watcher(app: tauri::AppHandle) {
+  std::thread::spawn(move || loop {
+    std::thread::sleep(std::time::Duration::from_millis(600));
+    if orb_wanted(&app) {
+      if app.get_webview_window(ORB_LABEL).is_none() {
+        if let Err(err) = open_orb_window(&app) {
+          log::warn!("Could not show the Pulse orb: {err}");
+        }
+      }
+    } else if app.get_webview_window(ORB_LABEL).is_some() {
+      close_orb_window(&app);
+    }
+    remember_orb_position(&app);
+  });
+}
+
+// Writes the orb's position when it has moved, so it comes back where it was left.
+#[cfg(desktop)]
+fn remember_orb_position(app: &tauri::AppHandle) {
+  let (Some(window), Some(path)) = (app.get_webview_window(ORB_LABEL), orb_position_path(app)) else { return };
+  let Ok(position) = window.outer_position() else { return };
+  let current = (position.x, position.y);
+  let state = app.state::<OrbState>();
+  let Ok(mut saved) = state.last_saved.lock() else { return };
+  if *saved == Some(current) {
+    return;
+  }
+  *saved = Some(current);
+  if let Some(dir) = path.parent() {
+    let _ = fs::create_dir_all(dir);
+  }
+  let _ = fs::write(path, serde_json::json!({ "x": current.0, "y": current.1 }).to_string());
+}
+
+// What the main window says about itself and the person's settings. Signing out sends
+// signed_in = false, which removes the orb and makes the close button quit as normal.
+#[cfg(desktop)]
+#[tauri::command]
+fn orb_configure(app: tauri::AppHandle, enabled: bool, close_to_tray: bool, signed_in: bool) {
+  let state = app.state::<OrbState>();
+  state.enabled.store(enabled, Ordering::SeqCst);
+  state.close_to_tray.store(close_to_tray, Ordering::SeqCst);
+  state.signed_in.store(signed_in, Ordering::SeqCst);
+  if !signed_in || !enabled {
+    close_orb_window(&app);
+  }
+}
+
+// The short status the orb shows (score, whether anything changed, a line of text).
+// Counts and a sentence only, never case or patient detail.
+#[cfg(desktop)]
+#[tauri::command]
+fn orb_set_state(app: tauri::AppHandle, payload: serde_json::Value) {
+  if let Ok(mut slot) = app.state::<OrbState>().payload.lock() {
+    *slot = Some(payload.clone());
+  }
+  if let (Some(window), Ok(json)) = (app.get_webview_window(ORB_LABEL), serde_json::to_string(&payload)) {
+    let _ = window.eval(&format!("window.__setOrb && window.__setOrb({json})"));
+  }
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn orb_payload(state: tauri::State<OrbState>) -> Option<serde_json::Value> {
+  state.payload.lock().ok().and_then(|p| p.clone())
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+async fn orb_open_main(app: tauri::AppHandle) -> Result<(), String> {
+  show_main_window(&app);
+  close_orb_window(&app);
+  Ok(())
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+async fn orb_drag(app: tauri::AppHandle) -> Result<(), String> {
+  if let Some(window) = app.get_webview_window(ORB_LABEL) {
+    window.start_dragging().map_err(|e| e.to_string())?;
+  }
+  Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   let builder = tauri::Builder::default()
@@ -293,11 +513,39 @@ pub fn run() {
       #[cfg(desktop)]
       close_alert_popup,
       #[cfg(desktop)]
-      alert_action
+      alert_action,
+      #[cfg(desktop)]
+      orb_configure,
+      #[cfg(desktop)]
+      orb_set_state,
+      #[cfg(desktop)]
+      orb_payload,
+      #[cfg(desktop)]
+      orb_open_main,
+      #[cfg(desktop)]
+      orb_drag
     ]);
 
   #[cfg(desktop)]
-  let builder = builder.manage(AlertState::default());
+  let builder = builder.manage(AlertState::default()).manage(OrbState::default());
+
+  // The close button hides Primovex to the system tray (instead of quitting) when the
+  // signed-in person has that switched on. Signed out, or choosing Quit from the tray
+  // menu, it quits as normal.
+  #[cfg(desktop)]
+  let builder = builder.on_window_event(|window, event| {
+    if window.label() != "main" {
+      return;
+    }
+    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+      let app = window.app_handle();
+      let state = app.state::<OrbState>();
+      if state.signed_in.load(Ordering::SeqCst) && state.close_to_tray.load(Ordering::SeqCst) && !state.quitting.load(Ordering::SeqCst) {
+        api.prevent_close();
+        let _ = window.hide();
+      }
+    }
+  });
 
   builder
     .setup(|app| {
@@ -314,6 +562,35 @@ pub fn run() {
 
       #[cfg(desktop)]
       start_shelly_wake_listener(app.handle().clone());
+
+      #[cfg(desktop)]
+      {
+        let open_item = MenuItem::with_id(app, "open", "Open Primovex", true, None::<&str>)?;
+        let quit_item = MenuItem::with_id(app, "quit", "Quit Primovex", true, None::<&str>)?;
+        let menu = Menu::with_items(app, &[&open_item, &quit_item])?;
+        let mut tray = TrayIconBuilder::new()
+          .tooltip("Primovex")
+          .menu(&menu)
+          .show_menu_on_left_click(false)
+          .on_menu_event(|app, event| match event.id.as_ref() {
+            "open" => show_main_window(app),
+            "quit" => {
+              app.state::<OrbState>().quitting.store(true, Ordering::SeqCst);
+              app.exit(0);
+            }
+            _ => {}
+          })
+          .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+              show_main_window(tray.app_handle());
+            }
+          });
+        if let Some(icon) = app.default_window_icon() {
+          tray = tray.icon(icon.clone());
+        }
+        tray.build(app)?;
+        start_orb_watcher(app.handle().clone());
+      }
 
       Ok(())
     })

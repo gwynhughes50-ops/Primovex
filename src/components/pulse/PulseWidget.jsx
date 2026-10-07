@@ -9,6 +9,7 @@ import usePrimovexAI from '@/ai/hooks/usePrimovexAI';
 import { useAuth } from '@/contexts/AuthContext';
 import useOrbSignal from '@/hooks/useOrbSignal';
 import PulseOrbFace from './PulseOrbFace';
+import { configureDesktopOrb, isDesktopShell, pushDesktopOrbState } from '@/desktop/desktopOrb';
 
 const STORAGE_KEY = 'medtrak_pulse_nexus_v3';
 const LEGACY_STORAGE_KEY = 'medtrak_pulse_widget_v1';
@@ -21,6 +22,8 @@ const DEFAULT_STATE = {
   size: 'medium',
   snapToEdge: false,
   reducedMotion: false,
+  desktopOrb: true,
+  closeToTray: true,
   settingsOpen: false,
   hintDismissed: false,
 };
@@ -211,6 +214,24 @@ export default function PulseWidget({ variant = 'desktop' }) {
   const signal = useOrbSignal({ score, loading: pulse.loading, stockItems: pulse.stockItems, userId: user?.uid, canSeeSars: can?.('governance.read') });
   const changeNote = signal.changed ? `Substantial change: ${signal.reasons.join('; ')}.` : 'System steady.';
   const { acknowledge } = signal;
+
+  // On the Windows desktop app the orb can also sit on the desktop (its own small window) when
+  // Primovex is minimised or closed to the tray. This tells the desktop shell about the
+  // person's settings and what the orb should say; it does nothing in a browser or on a phone.
+  const desktopShell = variant !== 'mobile' && isDesktopShell();
+  useEffect(() => {
+    if (!desktopShell) return;
+    configureDesktopOrb({ enabled: state.desktopOrb, closeToTray: state.closeToTray, signedIn: true });
+  }, [desktopShell, state.desktopOrb, state.closeToTray]);
+  useEffect(() => {
+    if (!desktopShell) return undefined;
+    // Signing out (this widget going away) removes the orb and makes the close button quit as normal.
+    return () => { configureDesktopOrb({ enabled: false, closeToTray: false, signedIn: false }); };
+  }, [desktopShell]);
+  useEffect(() => {
+    if (!desktopShell || pulse.loading) return;
+    pushDesktopOrbState({ changed: signal.changed, note: changeNote, score });
+  }, [desktopShell, pulse.loading, signal.changed, changeNote, score]);
   useEffect(() => { if (state.expanded) acknowledge(); }, [state.expanded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -428,6 +449,12 @@ function PulseDrawer({ side, pulse, score, tone, band, state, updateState, reset
           <div className="space-y-2 text-sm">
             <Toggle label="Snap to screen edge" checked={state.snapToEdge} onChange={() => updateState({ snapToEdge: !state.snapToEdge })} />
             <Toggle label="Reduced motion" checked={state.reducedMotion} onChange={() => updateState({ reducedMotion: !state.reducedMotion })} />
+            {isDesktopShell() && (
+              <>
+                <Toggle label="Show the orb on my desktop when Primovex is minimised" checked={state.desktopOrb} onChange={() => updateState({ desktopOrb: !state.desktopOrb })} />
+                <Toggle label="Closing the window keeps Primovex running in the tray" checked={state.closeToTray} onChange={() => updateState({ closeToTray: !state.closeToTray })} />
+              </>
+            )}
             <div className="flex items-center justify-between rounded-xl border px-3 py-2 mt-pulse-surface">
               <span className="mt-pulse-secondary">Orb size</span>
               <div className="flex gap-1">
