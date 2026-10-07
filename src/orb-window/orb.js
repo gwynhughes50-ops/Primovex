@@ -28,6 +28,14 @@ function setOrb(state = {}) {
 
 window.__setOrb = setOrb;
 
+// Draw the orb at the window's size: 84% of the window, the artwork being 174px across.
+function fit() {
+  const side = Math.min(window.innerWidth, window.innerHeight) || 132;
+  document.documentElement.style.setProperty("--orb-scale", String((side * 0.84) / 174));
+}
+fit();
+window.addEventListener("resize", fit);
+
 function open() {
   invoke("orb_open_main").catch(() => {});
 }

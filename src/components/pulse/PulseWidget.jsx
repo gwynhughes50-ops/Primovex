@@ -221,8 +221,8 @@ export default function PulseWidget({ variant = 'desktop' }) {
   const desktopShell = variant !== 'mobile' && isDesktopShell();
   useEffect(() => {
     if (!desktopShell) return;
-    configureDesktopOrb({ enabled: state.desktopOrb, closeToTray: state.closeToTray, signedIn: true });
-  }, [desktopShell, state.desktopOrb, state.closeToTray]);
+    configureDesktopOrb({ enabled: state.desktopOrb, closeToTray: state.closeToTray, signedIn: true, boxPx: sizeSpec(state.size).box });
+  }, [desktopShell, state.desktopOrb, state.closeToTray, state.size]);
   useEffect(() => {
     if (!desktopShell) return undefined;
     // Signing out (this widget going away) removes the orb and makes the close button quit as normal.

@@ -18,7 +18,8 @@ async function call(command, args) {
 
 // enabled: show the orb when Primovex is minimised or hidden. closeToTray: the window's
 // close button hides Primovex to the tray. signedIn: false removes both.
-export const configureDesktopOrb = ({ enabled, closeToTray, signedIn }) => call("orb_configure", { enabled, closeToTray, signedIn });
+// boxPx: how big the person set the orb to be (the same size it is in the app).
+export const configureDesktopOrb = ({ enabled, closeToTray, signedIn, boxPx }) => call("orb_configure", { enabled, closeToTray, signedIn, boxPx: boxPx ?? null });
 
 // { changed, note, score } - counts and a sentence only.
 export const pushDesktopOrbState = (payload) => call("orb_set_state", { payload });

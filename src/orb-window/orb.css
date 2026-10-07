@@ -19,8 +19,9 @@ html, body {
 .stage:active { cursor: grabbing; }
 .stage:focus-visible { outline: 2px solid #9adfff; outline-offset: -6px; border-radius: 50%; }
 
-/* The artwork is drawn at 174px; the window is 132px, so scale it to leave room for the glow. */
-.stage .pvx-orb { transform: scale(0.64); }
+/* The artwork is drawn at 174px; its size on screen follows the window (which follows the person's
+   Orb size setting), leaving room for the glow. orb.js sets --orb-scale. */
+.stage .pvx-orb { transform: scale(var(--orb-scale, 0.64)); }
 
 .sr-only {
   position: absolute;

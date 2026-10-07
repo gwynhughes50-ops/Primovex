@@ -9,7 +9,7 @@ use std::sync::Mutex;
 #[cfg(desktop)]
 use tauri::{Emitter, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
 #[cfg(desktop)]
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU32};
 #[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem};
 #[cfg(desktop)]
@@ -309,6 +309,8 @@ struct OrbState {
   enabled: AtomicBool,
   close_to_tray: AtomicBool,
   signed_in: AtomicBool,
+  // The window's side in logical pixels, from the person's orb size setting (0 = not told yet).
+  size: AtomicU32,
   quitting: AtomicBool,
   payload: Mutex<Option<serde_json::Value>>,
   last_saved: Mutex<Option<(i32, i32)>>,
@@ -317,6 +319,16 @@ struct OrbState {
 #[cfg(desktop)]
 fn orb_position_path(app: &tauri::AppHandle) -> Option<PathBuf> {
   app.path().app_config_dir().ok().map(|dir| dir.join(ORB_POSITION_FILE))
+}
+
+// The orb window's side: the person's Orb size setting (small, medium or large) sets the box
+// the orb is drawn in inside the app; the desktop window is that box plus room for the glow.
+#[cfg(desktop)]
+fn orb_window_size(app: &tauri::AppHandle) -> f64 {
+  match app.state::<OrbState>().size.load(Ordering::SeqCst) {
+    0 => ORB_SIZE,
+    px => px as f64,
+  }
 }
 
 // The last place the person left the orb, if it is still on a connected screen.
@@ -366,13 +378,14 @@ fn open_orb_window(app: &tauri::AppHandle) -> Result<(), String> {
   let work = monitor.work_area();
   let scale = monitor.scale_factor();
   // Bottom-right of the usable area (above the taskbar) unless the person has moved it.
-  let default_x = (work.position.x as f64 + work.size.width as f64) / scale - ORB_SIZE - ORB_MARGIN;
-  let default_y = (work.position.y as f64 + work.size.height as f64) / scale - ORB_SIZE - ORB_MARGIN;
+  let side = orb_window_size(app);
+  let default_x = (work.position.x as f64 + work.size.width as f64) / scale - side - ORB_MARGIN;
+  let default_y = (work.position.y as f64 + work.size.height as f64) / scale - side - ORB_MARGIN;
 
   let window = WebviewWindowBuilder::new(app, ORB_LABEL, WebviewUrl::App("orb.html".into()))
     .title("Primovex orb")
     .visible(false)
-    .inner_size(ORB_SIZE, ORB_SIZE)
+    .inner_size(side, side)
     .position(default_x, default_y)
     .decorations(false)
     .transparent(true)
@@ -447,8 +460,16 @@ fn remember_orb_position(app: &tauri::AppHandle) {
 // signed_in = false, which removes the orb and makes the close button quit as normal.
 #[cfg(desktop)]
 #[tauri::command]
-fn orb_configure(app: tauri::AppHandle, enabled: bool, close_to_tray: bool, signed_in: bool) {
+fn orb_configure(app: tauri::AppHandle, enabled: bool, close_to_tray: bool, signed_in: bool, box_px: Option<u32>) {
   let state = app.state::<OrbState>();
+  if let Some(px) = box_px {
+    // The in-app orb box (70, 88 or 108) with room for the glow, kept within sensible limits.
+    let side = ((px as f64) * ORB_SIZE / 108.0).round().clamp(60.0, 200.0) as u32;
+    state.size.store(side, Ordering::SeqCst);
+    if let Some(window) = app.get_webview_window(ORB_LABEL) {
+      let _ = window.set_size(tauri::LogicalSize::new(side as f64, side as f64));
+    }
+  }
   state.enabled.store(enabled, Ordering::SeqCst);
   state.close_to_tray.store(close_to_tray, Ordering::SeqCst);
   state.signed_in.store(signed_in, Ordering::SeqCst);
