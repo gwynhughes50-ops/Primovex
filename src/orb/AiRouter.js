@@ -7,7 +7,10 @@ import { AiRouter } from "./aiRouting";
 let shared;
 export function getAiRouter() {
   if (!shared) {
-    shared = new AiRouter({ call: (payload) => httpsCallable(functions, "orbRoute", { timeout: 15000 })(payload).then((r) => r.data) });
+    shared = new AiRouter({
+      call: (payload) => httpsCallable(functions, "orbRoute", { timeout: 15000 })(payload).then((r) => r.data),
+      callPhrase: (payload) => httpsCallable(functions, "orbPhrase", { timeout: 15000 })(payload).then((r) => r.data),
+    });
   }
   return shared;
 }

@@ -57,10 +57,12 @@ const FAIL_CACHE_MS = 60 * 1000;
 // off, or has just failed, so an off switch costs nothing and a faulty service isn't
 // hammered. `call` does the actual request (injected so this can be tested).
 export class AiRouter {
-  constructor({ call, now = () => Date.now() }) {
+  constructor({ call, callPhrase = null, now = () => Date.now() }) {
     this.call = call;
+    this.callPhrase = callPhrase;
     this.now = now;
     this.pausedUntil = 0;
+    this.phrasePausedUntil = 0;
   }
 
   async route({ question }) {
@@ -79,6 +81,58 @@ export class AiRouter {
     }
   }
 
-  // Called when an administrator changes the switch, so it takes effect at once.
-  reset() { this.pausedUntil = 0; }
+  // Reworded text for an answer, or null (off, rejected, unavailable).
+  async phrase({ toolId, question, facts }) {
+    if (!this.callPhrase || this.now() < this.phrasePausedUntil) return null;
+    try {
+      const result = await this.callPhrase({ toolId, question, facts });
+      if (!result || result.enabled === false) {
+        this.phrasePausedUntil = this.now() + OFF_CACHE_MS;
+        return null;
+      }
+      return typeof result.text === 'string' && result.text ? result.text : null;
+    } catch (error) {
+      this.phrasePausedUntil = this.now() + (error?.code === 'functions/resource-exhausted' ? FAIL_CACHE_MS * 5 : FAIL_CACHE_MS);
+      return null;
+    }
+  }
+
+  // Called when an administrator changes a switch, so it takes effect at once.
+  reset() { this.pausedUntil = 0; this.phrasePausedUntil = 0; }
+}
+
+// ---- wording ---------------------------------------------------------------------
+
+export const AI_PHRASE_TIMEOUT_MS = 5000;
+
+// The lookups whose answers may be reworded (the server enforces this too). Nothing
+// with staff-typed text, staff names or patient references.
+export const PHRASABLE_TOOLS = new Set([
+  'emergency.readiness', 'anaphylaxis.readiness', 'operations.summary', 'inventory.summary', 'inventory.search', 'inventory.lowStock',
+  'inventory.expiring', 'inventory.categoryLookup', 'facilities.cleaningStatus', 'coldChain.unitStatus', 'coldChain.latestStatus',
+  'spaces.summary', 'compliance.summary', 'alerts.summary',
+]);
+
+// Puts an answer into friendlier words, when an administrator has allowed it. Never
+// throws and never delays more than the timeout: anything short of a good reworded
+// answer returns the original untouched. The facts and numbers cannot change (the
+// server throws away any reply that does), and a check or an all-clear is not reworded
+// when the evidence is incomplete.
+export async function applyAiPhrasing({ raw, toolId, question, context = {}, router, timeoutMs = AI_PHRASE_TIMEOUT_MS }) {
+  if (!router?.phrase || !context.userId || !raw?.answer || !PHRASABLE_TOOLS.has(toolId)) return raw;
+  if (raw.denied || raw.data?.proposal) return raw;
+  if (raw.knownState && raw.knownState !== 'known') return raw;
+  if (raw.answer.length > 1400) return raw;
+  let text = null;
+  try {
+    text = await withTimeout(router.phrase({ toolId, question, facts: raw.answer }), timeoutMs);
+  } catch {
+    text = null;
+  }
+  if (!text || typeof text !== 'string') return raw;
+  return {
+    ...raw,
+    answer: text,
+    sources: [...(raw.sources || []), { title: 'Orb language assistant', detail: 'Reworded in plainer language; the facts are the same as the lookup found', type: 'system' }],
+  };
 }

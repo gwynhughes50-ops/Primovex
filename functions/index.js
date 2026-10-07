@@ -21,6 +21,8 @@ const { sendDueNotifications } = require("./services/dueNotificationService");
 const { sendKitNotification, replaceKitItemBatch } = require("./services/kitCheckService");
 const { recordUsage } = require("./services/usageService");
 const { routeQuestion } = require("./services/orbRouterService");
+const { phraseAnswer } = require("./services/orbPhraseService");
+const { runRetention } = require("./services/retentionService");
 
 initializeApp();
 const db = getFirestore();
@@ -518,6 +520,66 @@ exports.orbRoute = onCall(
     const { detail, ...decision } = result;
     if (detail) console.warn("Orb language assistant unavailable", { detail });
     return decision;
+  }
+);
+
+// The Orb's wording layer: puts an answer into friendlier words. Separate switch
+// (settings/orb.aiPhrasing), off unless a System Admin turns it on. Sends the answer's
+// facts (item, room and fridge names and counts) to the model, only for lookups cleared
+// for it; any reply that changes a figure or drops a warning is discarded.
+exports.orbPhrase = onCall(
+  {
+    region: "europe-west2",
+    timeoutSeconds: 20,
+    memory: "256MiB",
+    secrets: [AZURE_OPENAI_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT],
+  },
+  async (request) => {
+    assertSignedIn(request);
+    const snapshot = await db.collection("users").doc(request.auth.uid).get();
+    if (!snapshot.exists) throw new HttpsError("failed-precondition", "A Primovex user profile is required.");
+    const profile = snapshot.data() || {};
+    const capabilities = await getEffectiveCapabilities(db, profile.role);
+    const startedAt = Date.now();
+    const result = await phraseAnswer({
+      db,
+      uid: request.auth.uid,
+      capabilities,
+      toolId: String(request.data?.toolId || ""),
+      question: request.data?.question,
+      facts: request.data?.facts,
+      azure: { endpoint: AZURE_OPENAI_ENDPOINT.value(), key: AZURE_OPENAI_KEY.value(), deployment: AZURE_OPENAI_DEPLOYMENT.value() },
+    });
+    if (result.enabled && result.reason !== "not-allowed" && result.reason !== "empty") {
+      // Which lookup and whether the wording was used; never the text.
+      appendGovernedAuditEvent({
+        db,
+        auth: request.auth,
+        profile,
+        data: {
+          action: "orb.ai.phrase",
+          module: "orb",
+          targetType: "orb_request",
+          summary: result.text ? "Orb language assistant reworded an answer" : "Orb language assistant's wording was not used",
+          classification: "operational",
+          metadata: { tool: String(request.data?.toolId || "").slice(0, 60), reason: result.reason || "reworded", redactions: result.redactions || 0, ms: Date.now() - startedAt },
+        },
+      }).catch((error) => console.error("Orb AI phrase audit failed", { message: error?.message }));
+    }
+    const { detail, ...decision } = result;
+    if (detail) console.warn("Orb language assistant wording unavailable", { detail });
+    return decision;
+  }
+);
+
+// Weekly tidy-up so records about how people use the system are not kept indefinitely:
+// sign-in sessions for 12 months, the Orb's request counters for 60 days. The audit ledger
+// is not touched.
+exports.scheduledRetention = onSchedule(
+  { region: "europe-west2", schedule: "every sunday 03:30", timeZone: "Europe/London" },
+  async () => {
+    const result = await runRetention({ db });
+    console.log("Retention clean-up", result);
   }
 );
 

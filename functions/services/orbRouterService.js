@@ -23,7 +23,7 @@ const DEFAULT_DAILY_LIMIT = 1500;
 
 // ---- the question, with anything identifying taken out ----------------------------
 
-function scrubQuestion(raw) {
+function scrubQuestion(raw, max = MAX_QUESTION) {
   let redactions = 0;
   const swap = (pattern, label) => (text) => text.replace(pattern, () => { redactions += 1; return label; });
   const steps = [
@@ -35,7 +35,7 @@ function scrubQuestion(raw) {
   ];
   let text = String(raw ?? "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
   for (const step of steps) text = step(text);
-  return { text: text.slice(0, MAX_QUESTION), redactions, truncated: String(raw ?? "").trim().length > MAX_QUESTION };
+  return { text: text.slice(0, max), redactions, truncated: String(raw ?? "").trim().length > max };
 }
 
 // ---- the lookups this person may use ----------------------------------------------
@@ -117,10 +117,10 @@ const dayKey = (d) => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.g
 // Counts this request against the person's hourly limit and the practice's daily
 // limit, in one transaction, and refuses if either is used up. Counted before the
 // model is called, so failed calls count too.
-async function countRequest({ db, uid, now, hourlyLimit, dailyLimit }) {
+async function countRequest({ db, uid, now, hourlyLimit, dailyLimit, prefix = "" }) {
   const day = dayKey(now);
-  const hourRef = db.collection("orb_ai_usage").doc(`${uid}_${day}${pad(now.getUTCHours())}`);
-  const dayRef = db.collection("orb_ai_usage").doc(`all_${day}`);
+  const hourRef = db.collection("orb_ai_usage").doc(`${prefix}${uid}_${day}${pad(now.getUTCHours())}`);
+  const dayRef = db.collection("orb_ai_usage").doc(`${prefix}all_${day}`);
   await db.runTransaction(async (tx) => {
     const [hourSnap, daySnap] = await Promise.all([tx.get(hourRef), tx.get(dayRef)]);
     const hourCount = hourSnap.exists ? Number(hourSnap.data().count) || 0 : 0;
@@ -195,5 +195,5 @@ async function routeQuestion({ db, uid, capabilities, question, azure, fetchImpl
 
 module.exports = {
   MIN_CONFIDENCE, DEFAULT_HOURLY_LIMIT, DEFAULT_DAILY_LIMIT,
-  scrubQuestion, toolsFor, buildInstructions, checkRoute, countRequest, askModel, routeQuestion,
+  scrubQuestion, toolsFor, buildInstructions, checkRoute, countRequest, askModel, routeQuestion, normaliseEndpoint,
 };

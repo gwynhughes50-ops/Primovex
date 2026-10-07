@@ -1,7 +1,7 @@
 // Covers when the Orb asks the language assistant, and that it can never make things
 // worse (src/orb/aiRouting.js).
 import assert from "node:assert/strict";
-import { AiRouter, applyAiRouting, markAiRouted } from "../src/orb/aiRouting.js";
+import { AiRouter, PHRASABLE_TOOLS, applyAiPhrasing, applyAiRouting, markAiRouted } from "../src/orb/aiRouting.js";
 
 let n = 0;
 const t = async (name, fn) => { await fn(); n++; console.log("ok  " + name); };
@@ -99,6 +99,72 @@ await t("errors (offline, over the limit, service down) are 'no answer' and back
 await t("a result with no lookup is no answer", async () => {
   const router = new AiRouter({ call: async () => ({ enabled: true, toolId: null, reason: "none-fit" }) });
   assert.equal(await router.route({ question: "q" }), null);
+});
+
+// ---- wording -----------------------------------------------------------------------
+
+const raw = (over = {}) => ({ answer: "You have 214 stock items.", knownState: "known", sources: [{ title: "Inventory", type: "module" }], data: { items: [] }, ...over });
+const phraser = (text, log = []) => ({ phrase: async (arg) => { log.push(arg); return text; } });
+
+await t("a lookup's answer is reworded when the assistant gives better wording, and it says so", async () => {
+  const log = [];
+  const r = await applyAiPhrasing({ raw: raw(), toolId: "inventory.summary", question: "how is stock?", context: ctx, router: phraser("Stock looks healthy: 214 items.", log) });
+  assert.equal(r.answer, "Stock looks healthy: 214 items.");
+  assert.equal(r.sources.at(-1).title, "Orb language assistant");
+  assert.deepEqual(log, [{ toolId: "inventory.summary", question: "how is stock?", facts: "You have 214 stock items." }]);
+});
+
+await t("no wording (off, rejected, failed or slow) leaves the original answer exactly as it was", async () => {
+  const original = raw();
+  assert.equal(await applyAiPhrasing({ raw: original, toolId: "inventory.summary", question: "q", context: ctx, router: phraser(null) }), original);
+  assert.equal(await applyAiPhrasing({ raw: original, toolId: "inventory.summary", question: "q", context: ctx, router: { phrase: async () => { throw new Error("x"); } } }), original);
+  const slow = { phrase: () => new Promise((resolve) => setTimeout(() => resolve("late"), 200)) };
+  assert.equal(await applyAiPhrasing({ raw: original, toolId: "inventory.summary", question: "q", context: ctx, router: slow, timeoutMs: 30 }), original);
+});
+
+await t("only cleared lookups are ever sent, and never denied, incomplete, or action-proposing answers", async () => {
+  const log = [];
+  const router = phraser("reworded", log);
+  for (const toolId of ["tasks.summary", "admin.users", "facilities.roomStatus", "governance.sarLookup", "operations.timeline", "tasks.quickNotes"]) {
+    await applyAiPhrasing({ raw: raw(), toolId, question: "q", context: ctx, router });
+  }
+  await applyAiPhrasing({ raw: raw({ denied: true }), toolId: "inventory.summary", question: "q", context: ctx, router });
+  await applyAiPhrasing({ raw: raw({ knownState: "partial" }), toolId: "inventory.summary", question: "q", context: ctx, router });
+  await applyAiPhrasing({ raw: raw({ data: { proposal: { id: 1 } } }), toolId: "emergency.readiness", question: "q", context: ctx, router });
+  await applyAiPhrasing({ raw: raw({ answer: "x".repeat(1500) }), toolId: "inventory.summary", question: "q", context: ctx, router });
+  await applyAiPhrasing({ raw: raw(), toolId: "inventory.summary", question: "q", context: {}, router });
+  assert.equal(log.length, 0);
+  assert.ok(PHRASABLE_TOOLS.has("coldChain.latestStatus") && !PHRASABLE_TOOLS.has("tasks.summary"));
+});
+
+await t("the wording switch is remembered separately from the lookup switch", async () => {
+  let clock = 0; let phraseCalls = 0; let routeCalls = 0;
+  const router = new AiRouter({
+    call: async () => { routeCalls += 1; return { enabled: true, toolId: null }; },
+    callPhrase: async () => { phraseCalls += 1; return { enabled: false }; },
+    now: () => clock,
+  });
+  assert.equal(await router.phrase({ toolId: "inventory.summary", question: "q", facts: "f" }), null);
+  assert.equal(await router.phrase({ toolId: "inventory.summary", question: "q", facts: "f" }), null);
+  assert.equal(phraseCalls, 1); // off: asked once, then left alone
+  await router.route({ question: "q" });
+  assert.equal(routeCalls, 1); // the other switch is unaffected
+  clock += 11 * 60 * 1000;
+  await router.phrase({ toolId: "inventory.summary", question: "q", facts: "f" });
+  assert.equal(phraseCalls, 2);
+});
+
+await t("good wording comes back as text; an error is just no wording; reset clears the pause", async () => {
+  const good = new AiRouter({ call: async () => null, callPhrase: async () => ({ enabled: true, text: "Hello" }) });
+  assert.equal(await good.phrase({ toolId: "x", question: "q", facts: "f" }), "Hello");
+  const none = new AiRouter({ call: async () => null, callPhrase: async () => ({ enabled: true, text: null, reason: "new-number" }) });
+  assert.equal(await none.phrase({ toolId: "x", question: "q", facts: "f" }), null);
+  let enabled = false;
+  const sw = new AiRouter({ call: async () => null, callPhrase: async () => (enabled ? { enabled: true, text: "On" } : { enabled: false }) });
+  assert.equal(await sw.phrase({}), null);
+  enabled = true; sw.reset();
+  assert.equal(await sw.phrase({}), "On");
+  assert.equal(await new AiRouter({ call: async () => null }).phrase({}), null); // no wording connection at all
 });
 
 console.log(`\n${n} passed`);

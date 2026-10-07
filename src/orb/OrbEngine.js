@@ -11,7 +11,7 @@ import { PermissionGateway } from './PermissionGateway';
 import { createOrbRequest, createOrbResponse, ORB_CORE_VERSION } from './types';
 import { approvedIntentChoices } from './clinicalIntentCatalog';
 import { TrustPolicy } from './TrustPolicy';
-import { applyAiRouting, markAiRouted } from './aiRouting';
+import { applyAiPhrasing, applyAiRouting, markAiRouted } from './aiRouting';
 import { getAiRouter } from './AiRouter';
 
 export class OrbEngine {
@@ -79,8 +79,11 @@ export class OrbEngine {
       const auditId = this.audit.write({ request, response, context, durationMs: Date.now() - startedAt });
       return { ...response, auditId };
     }
-    const raw = await this.provider.ask({ prompt: request.input, toolContext: context, orbIntent: classified });
-    return this._finaliseResponse({ raw: aiRouted ? markAiRouted(raw) : raw, request, context, startedAt, fallbackIntent: classified.id });
+    const asked = await this.provider.ask({ prompt: request.input, toolContext: context, orbIntent: classified });
+    // The answer's facts are fixed by the lookup; the language assistant (if allowed) may
+    // only put them in plainer words.
+    const reworded = await applyAiPhrasing({ raw: asked, toolId: classified.toolId, question: request.input, context, router: this.aiRouter });
+    return this._finaliseResponse({ raw: aiRouted ? markAiRouted(reworded) : reworded, request, context, startedAt, fallbackIntent: classified.id });
   }
 
   _finaliseResponse({ raw, request, context, startedAt, fallbackIntent }) {
