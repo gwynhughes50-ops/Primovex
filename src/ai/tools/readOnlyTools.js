@@ -14,8 +14,9 @@ import { SAR_COLLECTION, getSarDeadlineTone, getStatusLabel } from '@/modules/go
 import { normalizeStockItemCategory } from '@/services/stockService';
 import { STOCK_CATEGORIES, categoryLabel as taxonomyCategoryLabel, subcategoryLabel as taxonomySubcategoryLabel } from '@/data/stockCategories';
 import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
-import { CAPABILITY_CATALOG, hasCapability } from '@/core/identity/capabilities';
+import { CAPABILITY_CATALOG, ROLE_TEMPLATES, hasCapability } from '@/core/identity/capabilities';
 import { describeSource, findHelp, formatHelpAnswer, relatedQuestions, sampleQuestions } from '@/ai/help/helpSearch';
+import { buildLocateResult, buildReorderDraft, buildTeamDraft } from '@/ai/stock/stockTools';
 import { daysUntilExpiry, expiryStatus, expiryWindowDays, normaliseExpirySettings, stockLevelStatus, summariseStockAlerts } from '@/lib/stockAlerts';
 import {
   alertsAnswer, categoryAnswer, cleaningAnswer, coldChainOverview, coldChainUnitAnswer, complianceAnswer, expiryAnswer, lowStockAnswer,
@@ -743,6 +744,68 @@ export function registerApprovedReadOnlyTools() {
         confidence: 0.97,
         sources: [source('Governance SARs', `${matches.length} match${matches.length === 1 ? '' : 'es'} · live read ${nowLabel()}`)],
         actions: [{ label: 'Open SARs', route: '/governance/sars' }],
+      };
+    },
+  });
+
+  // ---- stock: where it is, and things the Orb can PREPARE for you to confirm ------------------------------------
+  // The two "draft" lookups only read data and return a proposal card; nothing is sent, created
+  // or changed until the person presses Confirm (see src/orb/actionProposals.js).
+  const readKits = async () => {
+    const [emergency, anaphylaxis] = await Promise.all([listEmergencyAssets().catch(() => []), listAnaphylaxisBoxes().catch(() => [])]);
+    return [
+      ...emergency.map((kit) => ({ collection: 'emergency_assets', kit })),
+      ...anaphylaxis.map((kit) => ({ collection: 'anaphylaxis_boxes', kit })),
+    ];
+  };
+  const readRoleNames = async () => {
+    const custom = await getDocs(collection(db, 'roles')).then((snap) => snap.docs.map((d) => ({ ...d.data(), name: d.data().name || d.id }))).catch(() => []);
+    return [...new Set([...Object.keys(ROLE_TEMPLATES), ...custom.filter((r) => r.active !== false).map((r) => r.name)])];
+  };
+
+  registerTool({
+    id: 'inventory.locate', label: 'Stock location', requiredCapability: 'inventory.read',
+    async execute(input = {}) {
+      const [items, kits] = await Promise.all([readStock(), readKits()]);
+      const result = buildLocateResult(input, { items, kits });
+      return {
+        domain: 'inventory', data: { ambiguous: Boolean(result.ambiguous) }, summary: result.text, followUps: result.followUps,
+        confidence: result.ambiguous ? 0.7 : 0.95,
+        sources: [source('Inventory', `${items.length} active products and ${kits.length} kit${kits.length === 1 ? '' : 's'} checked · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Inventory', route: '/inventory' }],
+      };
+    },
+  });
+
+  registerTool({
+    id: 'team.messageDraft', label: 'Message a team', requiredCapability: 'inventory.write',
+    async execute(input = {}) {
+      // Stock is only used to offer a matching reorder chip, so a failed read doesn't stop the draft.
+      const [items, roleNames] = await Promise.all([readStock().catch(() => []), readRoleNames()]);
+      const result = buildTeamDraft(input, { items, roleNames });
+      return {
+        domain: 'inventory', data: { proposed: Boolean(result.proposal) }, summary: result.text, followUps: result.followUps, proposal: result.proposal || null,
+        confidence: result.proposal ? 0.95 : 0.6,
+        sources: [source('Primovex teams', `${roleNames.length} roles known`, 'system')],
+        actions: [],
+      };
+    },
+  });
+
+  registerTool({
+    id: 'reorder.draft', label: 'Reorder or report missing stock', requiredCapability: 'inventory.write',
+    async execute(input = {}) {
+      const [items, kits, roleNames, pendingSnap] = await Promise.all([
+        readStock(), readKits(), readRoleNames(),
+        getDocs(query(collection(db, 'reorder_requests'), where('status', '==', 'pending'))).catch(() => ({ docs: [] })),
+      ]);
+      const pending = pendingSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const result = buildReorderDraft(input, { items, kits, roleNames, pending });
+      return {
+        domain: 'inventory', data: { proposed: Boolean(result.proposal) }, summary: result.text, followUps: result.followUps, proposal: result.proposal || null,
+        confidence: result.proposal ? 0.95 : result.ambiguous ? 0.7 : 0.8,
+        sources: [source('Inventory', `${items.length} active products and ${pending.length} pending reorder${pending.length === 1 ? '' : 's'} checked · live read ${nowLabel()}`)],
+        actions: result.actions || [{ label: 'Open Reorder Centre', route: '/reorder-centre' }],
       };
     },
   });

@@ -4,6 +4,8 @@ import { AI_STATES, assertProviderResponse, createMessage } from '../types/respo
 import { useAuth } from '@/contexts/AuthContext';
 import { orbIntentLearningStore } from '@/orb/IntentLearningStore';
 import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
+import { proposalProblem } from '@/orb/actionProposals';
+import { executeProposal } from '@/orb/actionExecutors';
 
 export const PrimovexAIContext = createContext(null);
 
@@ -52,6 +54,7 @@ export function PrimovexAIProvider({ children }) {
           intent: response.intent,
           warnings: response.warnings,
           followUps: response.followUps,
+          proposal: response.proposal,
           modulesUsed: response.modulesUsed,
           auditId: response.auditId,
           confidenceBand: response.confidenceBand,
@@ -87,6 +90,39 @@ export function PrimovexAIProvider({ children }) {
     return record;
   }, [orb, user?.uid]);
 
+  // Orb proposals: nothing happens until the person presses Confirm on the card. The check is made
+  // again here (permission, expiry, run once) and the real work is done by src/orb/actionExecutors.js.
+  const patchProposal = useCallback((messageId, patch) => {
+    setMessages((current) => current.map((item) => (item.id === messageId && item.proposal ? { ...item, proposal: { ...item.proposal, ...patch } } : item)));
+  }, []);
+
+  const confirmProposal = useCallback(async (messageId) => {
+    const proposal = messages.find((item) => item.id === messageId)?.proposal;
+    const problem = proposalProblem(proposal, { capabilities });
+    if (problem) {
+      if (proposal && proposal.status === 'proposed') patchProposal(messageId, { status: 'failed', result: problem });
+      return;
+    }
+    patchProposal(messageId, { status: 'working' });
+    try {
+      const actor = {
+        uid: user?.uid || null,
+        displayName: profile?.displayName || user?.displayName || profile?.email || user?.email || 'Unknown',
+        email: profile?.email || user?.email || null,
+      };
+      const result = await executeProposal(proposal, { actor });
+      patchProposal(messageId, { status: 'done', result });
+    } catch (error) {
+      console.error('Orb proposal failed:', error);
+      patchProposal(messageId, { status: 'failed', result: error?.message || 'That did not work. Nothing was changed.' });
+    }
+  }, [capabilities, messages, patchProposal, profile, user]);
+
+  const cancelProposal = useCallback((messageId) => {
+    const proposal = messages.find((item) => item.id === messageId)?.proposal;
+    if (proposal?.status === 'proposed') patchProposal(messageId, { status: 'cancelled', result: 'Cancelled. Nothing was done.' });
+  }, [messages, patchProposal]);
+
   const clearConversation = useCallback(() => {
     setMessages([]);
     setStatus(AI_STATES.IDLE);
@@ -102,8 +138,10 @@ export function PrimovexAIProvider({ children }) {
     ask,
     resolveClarification,
     recordFeedback,
+    confirmProposal,
+    cancelProposal,
     clearConversation,
-  }), [ask, clearConversation, isOpen, messages, recordFeedback, resolveClarification, status]);
+  }), [ask, cancelProposal, clearConversation, confirmProposal, isOpen, messages, recordFeedback, resolveClarification, status]);
 
   return <PrimovexAIContext.Provider value={value}>{children}</PrimovexAIContext.Provider>;
 }

@@ -9,7 +9,7 @@ approval: the DPO / Caldicott Guardian must decide whether the use is acceptable
 Staff can ask the Orb in ordinary words ("have we run out of the green needles?"). The
 Orb's own rules answer anything they recognise. Only a question the rules did **not**
 understand goes to a language model, which does one job: choose which of the Orb's
-approved read-only lookups fits, and fill in its one or two parameters. The lookup then
+approved lookups fits, and fill in its one or two parameters. The lookup then
 runs in the app with the person's own permissions, exactly as it does today.
 
 ## What is sent to the model (Azure OpenAI, same resource family as ClinFlow)
@@ -40,7 +40,8 @@ Primovex:
 - Server-side only: the Azure key never reaches the browser or app.
 - If the model is off, slow, unsure or erroring, the Orb behaves exactly as before.
 - Prompt-injection: the question is treated as untrusted; the model can only name a permitted
-  lookup, and the server rejects anything else. Lookups are read-only.
+  lookup, and the server rejects anything else. A lookup can only prepare an action; the
+  person has to confirm it (see below).
 
 ## Risks and open points for the DPO
 
@@ -76,4 +77,18 @@ counters after 60 days, by a weekly clean-up. The audit ledger is not touched.
 ## Not yet built (later phases)
 
 - Answers from the practice's taught knowledge and from Primovex's own help text.
-- Any write action. The Orb's tools are read-only and stay so.
+- Recording stock used from a kit or box ("I've used one adrenaline from box 3"), and who is told.
+
+## Actions the Orb can prepare (confirmed by the person)
+
+Two things go beyond reading: a short message to a team, and a reorder request. The language
+model never does either. It (or the Orb's own rules) only understands the sentence; the lookup
+resolves the item, place and team against real data and asks if it is ambiguous, then shows a
+card with exactly what will happen. Nothing changes until the person presses Confirm. A card
+expires after 15 minutes, runs once, and is checked against the person's permissions again.
+
+- Team message: Cloud Function `orbTeamMessage`; needs stock write; refused if it contains
+  numbers, dates, emails or phone numbers; 10 an hour and 100 a day per person; goes to people
+  with that role in Primovex only; audited as `orb.team.message` (team and count, not the text).
+- Reorder: writes a pending request to the Reorder Centre (as the Inventory page does); nothing
+  is ordered until someone approves it; audited as `orb.reorder.request`.

@@ -88,6 +88,18 @@ export const TOOL_SCHEMAS = {
     description: 'Look up a specific team member\'s role by name/email, or get a breakdown of all registered accounts by role.',
     input_schema: { type: 'object', properties: { name: { type: 'string', description: 'Name or email to search for. Omit to get a breakdown of everyone.' } } },
   },
+  'inventory.locate': {
+    description: 'Where a stock item is kept, how many are in a particular place (kit, box, room, store room), or what is in a place.',
+    input_schema: { type: 'object', properties: { item: { type: 'string', description: 'The stock item, if one is asked about.' }, place: { type: 'string', description: 'The place, if one is asked about.' } } },
+  },
+  'team.messageDraft': {
+    description: 'Prepare a short message to a team (a role such as HCA or nurses) for the person to confirm before it is sent.',
+    input_schema: { type: 'object', properties: { team: { type: 'string', description: 'The team, for example HCA or nurses.' }, message: { type: 'string', description: 'What to tell them, in the person words.' } }, required: ['team', 'message'] },
+  },
+  'reorder.draft': {
+    description: 'Prepare a reorder request for a stock item, or report that something is missing or has run out, for the person to confirm.',
+    input_schema: { type: 'object', properties: { item: { type: 'string', description: 'The stock item.' }, quantity: { type: 'number', description: 'How many to order, if said.' }, place: { type: 'string', description: 'Where it is missing from, if said.' } }, required: ['item'] },
+  },
   'help.howTo': {
     description: 'Step-by-step help for how to do something in Primovex (for example "how do I add stock", "how do I check a kit", "how do I add a user"). Static help text; reads no practice data.',
     input_schema: { type: 'object', properties: { question: { type: 'string', description: 'What they want to know how to do, in their words.' } }, required: ['question'] },

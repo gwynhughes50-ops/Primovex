@@ -61,7 +61,7 @@ function MessageFeedback({ message, onRecord }) {
 
 export default function AskPrimovexPanel({ variant = 'desktop' }) {
   const navigate = useNavigate();
-  const { isOpen, close, status, messages, ask, clearConversation, resolveClarification, recordFeedback } = usePrimovexAI();
+  const { isOpen, close, status, messages, ask, clearConversation, resolveClarification, recordFeedback, confirmProposal, cancelProposal } = usePrimovexAI();
   const [prompt, setPrompt] = useState('');
   const [voiceState, setVoiceState] = useState(VOICE_STATES.SLEEPING);
   const [voiceSupported, setVoiceSupported] = useState(true);
@@ -300,6 +300,20 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
                     {message.sources.map((source, index) => (
                       <div key={`${message.id}-source-${index}`} className="primovex-ai-source rounded-xl px-3 py-2"><p className="text-xs font-semibold">{source.title}</p><p className="primovex-ai-faint mt-1 text-xs">{source.detail}</p></div>
                     ))}
+                  </div>
+                )}
+                {message.proposal && (
+                  <div className="mt-2 rounded-xl border border-[var(--medtrak-accent)]/40 bg-[var(--medtrak-panel)] px-3 py-3 text-sm" aria-label="Action to confirm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--medtrak-accent)]">{message.proposal.status === 'done' ? 'Done' : message.proposal.status === 'proposed' || message.proposal.status === 'working' ? 'Please confirm' : 'Not done'}</p>
+                    <p className="mt-1 font-semibold">{message.proposal.title}</p>
+                    <ul className="mt-1 space-y-0.5 text-xs primovex-ai-muted">{message.proposal.lines.map((line) => <li key={line}>{line}</li>)}</ul>
+                    {message.proposal.result && <p className={`mt-2 text-xs ${message.proposal.status === 'done' ? 'text-emerald-500' : 'primovex-ai-muted'}`}>{message.proposal.result}</p>}
+                    {(message.proposal.status === 'proposed' || message.proposal.status === 'working') && (
+                      <div className="mt-3 flex gap-2">
+                        <button type="button" disabled={message.proposal.status === 'working'} onClick={() => confirmProposal(message.id)} className="rounded-lg bg-[var(--medtrak-accent)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60">{message.proposal.status === 'working' ? 'Working...' : message.proposal.confirmLabel}</button>
+                        <button type="button" disabled={message.proposal.status === 'working'} onClick={() => cancelProposal(message.id)} className="rounded-lg border border-[var(--medtrak-border)] px-3 py-1.5 text-xs">Cancel</button>
+                      </div>
+                    )}
                   </div>
                 )}
                 {message.followUps?.length > 0 && (

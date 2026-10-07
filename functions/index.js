@@ -23,6 +23,7 @@ const { recordUsage } = require("./services/usageService");
 const { routeQuestion } = require("./services/orbRouterService");
 const { phraseAnswer } = require("./services/orbPhraseService");
 const { runRetention } = require("./services/retentionService");
+const { sendTeamMessage } = require("./services/teamMessageService");
 
 initializeApp();
 const db = getFirestore();
@@ -571,6 +572,39 @@ exports.orbPhrase = onCall(
     return decision;
   }
 );
+
+// A short message to everyone with a role ("tell the HCA team BD blue needles need ordering"),
+// started from the Orb after the person confirms it. Only someone who can write stock; refuses
+// anything that looks like a patient identifier; limited per person; audited by team and count.
+exports.orbTeamMessage = onCall({ region: "europe-west2", timeoutSeconds: 30 }, async (request) => {
+  assertSignedIn(request);
+  const snapshot = await db.collection("users").doc(request.auth.uid).get();
+  if (!snapshot.exists) throw new HttpsError("failed-precondition", "A Primovex user profile is required.");
+  const profile = snapshot.data() || {};
+  const capabilities = await getEffectiveCapabilities(db, profile.role);
+  const result = await sendTeamMessage({
+    db,
+    callerUid: request.auth.uid,
+    callerName: profile.displayName || profile.email || "A colleague",
+    capabilities,
+    data: { role: request.data?.role, text: request.data?.text, actionUrl: request.data?.actionUrl },
+  });
+  appendGovernedAuditEvent({
+    db,
+    auth: request.auth,
+    profile,
+    data: {
+      action: "orb.team.message",
+      module: "inventory",
+      targetType: "team",
+      targetId: String(result.role).slice(0, 60),
+      summary: "A message was sent to a team through the Orb",
+      classification: "operational",
+      metadata: { role: result.role, recipients: result.sent },
+    },
+  }).catch((error) => console.error("Team message audit failed", { message: error?.message }));
+  return result;
+});
 
 // Weekly tidy-up so records about how people use the system are not kept indefinitely:
 // sign-in sessions for 12 months, the Orb's request counters for 60 days. The audit ledger

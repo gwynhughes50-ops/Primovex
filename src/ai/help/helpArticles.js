@@ -523,6 +523,22 @@ export const HELP_ARTICLES = [
     related: ["check-kit-phone"],
   },
   {
+    id: "orb-stock-actions",
+    title: "Can the Orb find stock, message a team or raise a reorder?",
+    topic: "The Orb",
+    asks: ["how can the orb order stock", "how do i tell the hca team something", "how do i message a team", "how do i raise a reorder with the orb", "how can the orb find stock", "how do i ask the orb where stock is"],
+    keywords: ["orb", "stock", "team", "message", "reorder", "order", "where", "needles"],
+    where: "desktop",
+    steps: [
+      "Where is it: ask \"where are the blue needles?\", \"how many adrenaline are in anaphylaxis box 3?\" or \"what's in the emergency trolley?\". This only looks, it changes nothing.",
+      "Message a team: say \"tell the HCA team BD blue needles need ordering\". A team is everyone with that role in Primovex. The Orb shows the message on a card and sends it only when you press Send message.",
+      "Reorder: say \"BD blue needles need ordering\" or \"reorder 5 chlorphenamine\". The card shows the product and quantity; Request reorder puts it in the Reorder Centre for approval. Nothing is ordered from a supplier.",
+      "You need permission to change stock for the last two. Messages can't contain numbers, dates, emails or phone numbers, so never put patient details in one. Team messages show in the desktop notifications bell.",
+    ],
+    open: { label: "Open Reorder Centre", route: "/reorder-centre" },
+    related: ["find-notifications", "what-can-orb-do"],
+  },
+  {
     id: "screen-locked",
     title: "My screen locked and asks for a PIN",
     topic: "Security",

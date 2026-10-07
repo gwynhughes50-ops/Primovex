@@ -100,6 +100,7 @@ export class OrbEngine {
       modulesUsed: this.knowledge.modulesForIntent(providerResponse.intent || fallbackIntent),
       explanation: raw.explanation || null,
       followUps: Array.isArray(raw.followUps) ? raw.followUps : [],
+      proposal: raw.proposal || null,
       data: raw.data ?? null,
       freshness: raw.freshness || null,
       observedAt: raw.observedAt || null,

@@ -11,6 +11,7 @@ import { CLINICAL_INTENTS, ORB_CLARIFY_THRESHOLD, ORB_INTENT_THRESHOLD } from '@
 import { STOCK_CATEGORIES } from '@/data/stockCategories';
 import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
 import { findHelp, isHowToQuestion } from '@/ai/help/helpSearch';
+import { looksLikePlaceQuestion, looksLikeTeamMessage, parseLocateQuestion, parseStockRequest } from '@/ai/stock/stockAsk';
 
 const INVENTORY_WORDS = ['stock', 'inventory', 'supplies', 'products', 'consumables', 'items'];
 // Longest phrases first, so "wound care" matches before a shorter "care"
@@ -62,6 +63,15 @@ export function routeApprovedTool(prompt, options = {}) {
       return { toolId: 'help.howTo', input: { question: String(prompt) }, language: { normalised: text, confidence: help.match ? 0.95 : 0.8 } };
     }
   }
+
+  // Doing something with stock, or asking where it is (before the older stock phrases below,
+  // which would otherwise treat "need ordering" as a question about low stock).
+  //   "tell the HCA team BD blue needles need ordering"  -> a message to confirm
+  //   "BD blue needles need ordering" / "reorder ..."     -> a reorder to confirm
+  //   "what's in anaphylaxis box 3"                      -> where things are
+  if (looksLikeTeamMessage(prompt)) return { toolId: 'team.messageDraft', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.95 } };
+  if (parseStockRequest(prompt)) return { toolId: 'reorder.draft', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.93 } };
+  if (looksLikePlaceQuestion(prompt)) return { toolId: 'inventory.locate', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.95 } };
 
   const clinicalCandidates = CLINICAL_INTENTS
     .map((intent) => ({ intent, score: Math.max(...intent.phrases.map((phrase) => phraseSimilarity(text, phrase))) }))
@@ -116,6 +126,11 @@ export function routeApprovedTool(prompt, options = {}) {
     && includesAny(text, ['ecg', 'machine', 'equipment', 'doppler', 'nebuliser', 'wheelchair', 'defibrillator', 'asset', 'ultrasound', 'dermatoscope', 'scanner', 'monitor'])) {
     const equipment = extractSearchSubject(text, ['where is', 'where was', 'last seen', 'locate', 'location of', 'find', 'the', 'equipment', 'machine', 'asset']);
     return { toolId: 'facilities.equipmentLocation', input: { equipment }, language: { normalised: text } };
+  }
+
+  // "Where are the blue needles?" (equipment such as an ECG machine was handled just above).
+  if (parseLocateQuestion(prompt)?.kind === 'where') {
+    return { toolId: 'inventory.locate', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.9 } };
   }
 
   if (includesAny(text, ['maintenance', 'caretaker', 'fault', 'repair', 'broken', 'jobs outstanding', 'jobs open'])) {
