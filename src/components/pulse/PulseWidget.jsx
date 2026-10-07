@@ -6,6 +6,9 @@ import usePulse from '@/hooks/usePulse';
 import { getPulseBand } from '@/services/pulseService';
 import { useMedTrakTheme } from '@/components/theme/MedTrakThemeProvider';
 import usePrimovexAI from '@/ai/hooks/usePrimovexAI';
+import { useAuth } from '@/contexts/AuthContext';
+import useOrbSignal from '@/hooks/useOrbSignal';
+import PulseOrbFace from './PulseOrbFace';
 
 const STORAGE_KEY = 'medtrak_pulse_nexus_v3';
 const LEGACY_STORAGE_KEY = 'medtrak_pulse_widget_v1';
@@ -164,6 +167,7 @@ export default function PulseWidget({ variant = 'desktop' }) {
   const { theme } = useMedTrakTheme();
   const primovexAI = usePrimovexAI();
   const pulse = usePulse();
+  const { user, can } = useAuth();
   const widgetRef = useRef(null);
   const orbRef = useRef(null);
   const dragRef = useRef({
@@ -188,9 +192,6 @@ export default function PulseWidget({ variant = 'desktop' }) {
   const tone = getTone(score, theme);
   const spec = sizeSpec(variant === 'mobile' ? 'small' : state.size);
 
-  const radius = 42;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (score / 100) * circumference;
 
   const positionStyle = useMemo(() => {
     if (variant === 'mobile') return { left: '50%', bottom: 88, transform: 'translateX(-50%)' };
@@ -205,6 +206,12 @@ export default function PulseWidget({ variant = 'desktop' }) {
   }, [state.x, variant]);
 
   const updateState = (patch) => setState((prev) => ({ ...prev, ...patch }));
+
+  // A quicker pulse when there has been a substantial change since the orb was last opened.
+  const signal = useOrbSignal({ score, loading: pulse.loading, stockItems: pulse.stockItems, userId: user?.uid, canSeeSars: can?.('governance.read') });
+  const changeNote = signal.changed ? `Substantial change: ${signal.reasons.join('; ')}.` : 'System steady.';
+  const { acknowledge } = signal;
+  useEffect(() => { if (state.expanded) acknowledge(); }, [state.expanded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     saveState(state);
@@ -325,7 +332,7 @@ export default function PulseWidget({ variant = 'desktop' }) {
         ref={orbRef}
         role="button"
         tabIndex={0}
-        aria-label="Pulse Nexus. Double click to open. Drag to move."
+        aria-label={`Primovex Orb. ${changeNote} Double click to open. Drag to move.`}
         onPointerDown={onOrbPointerDown}
         onDoubleClick={onOrbDoubleClick}
         onContextMenu={onContextMenu}
@@ -342,78 +349,10 @@ export default function PulseWidget({ variant = 'desktop' }) {
           width: spec.box,
           height: spec.box,
           cursor: dragging ? 'grabbing' : 'grab',
-          filter: `drop-shadow(0 0 22px ${tone.aura})`,
         }}
       >
-        {!state.reducedMotion && (
-          <>
-            <span
-              className="absolute inset-[-10px] rounded-full opacity-70 blur-xl"
-              style={{ background: `radial-gradient(circle, ${tone.aura}, transparent 62%)` }}
-            />
-            <span
-              className="absolute inset-[-6px] rounded-full opacity-30"
-              style={{
-                border: `1px solid ${tone.accent}`,
-                animation: 'pulseNexusBreath 6s ease-in-out infinite',
-              }}
-            />
-          </>
-        )}
-
-        <div
-          className="absolute inset-0 rounded-full border shadow-2xl backdrop-blur-xl mt-pulse-orb-core"
-          style={{
-            background: `radial-gradient(circle at 50% 38%, rgba(255,255,255,0.16), transparent 22%), radial-gradient(circle at center, var(--pulse-orb-centre) 0%, var(--pulse-orb-centre) 54%, ${tone.glass} 100%)`,
-          }}
-        />
-
-        <svg viewBox="0 0 100 100" className="absolute inset-0 h-full w-full -rotate-90">
-          <defs>
-            <linearGradient id={`pulse-nexus-${tone.id}`} x1="0" x2="1" y1="0" y2="1">
-              <stop offset="0%" stopColor={tone.accent} stopOpacity="1" />
-              <stop offset="55%" stopColor={tone.soft} stopOpacity="0.9" />
-              <stop offset="100%" stopColor={tone.deep} stopOpacity="0.75" />
-            </linearGradient>
-          </defs>
-          <circle cx="50" cy="50" r="42" fill="none" stroke="var(--pulse-orb-track)" strokeWidth="10" />
-          <circle
-            cx="50"
-            cy="50"
-            r="42"
-            fill="none"
-            stroke={`url(#pulse-nexus-${tone.id})`}
-            strokeWidth={spec.stroke}
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            style={{ transition: 'stroke-dashoffset 700ms ease' }}
-          />
-          <circle
-            cx="50"
-            cy="50"
-            r="35"
-            fill="none"
-            stroke={tone.accent}
-            strokeOpacity="0.18"
-            strokeWidth="1.5"
-            strokeDasharray="7 8"
-          />
-        </svg>
-
-        <div className="relative z-10 flex flex-col items-center justify-center text-center leading-none mt-pulse-text">
-          <Activity className={`${spec.icon} mb-1`} style={{ color: tone.accent }} />
-          <span className={`${spec.score} font-black tracking-tight drop-shadow`}>{pulse.loading ? '—' : score}</span>
-          <span className="mt-1 text-[9px] font-black uppercase tracking-[0.18em]" style={{ color: tone.accent }}>
-            Pulse
-          </span>
-        </div>
-
-        {issueCount > 0 && (
-          <span className={`absolute -right-1 -top-1 z-20 grid h-7 min-w-7 place-items-center rounded-full px-2 text-xs font-black shadow-lg ${eventSeverityClass(score)}`}>
-            {issueCount}
-          </span>
-        )}
+        <PulseOrbFace size={spec.box} active={signal.changed} still={state.reducedMotion} />
+        <span className="sr-only" role="status" aria-live="polite">{changeNote}</span>
       </div>
 
       {showHint && (

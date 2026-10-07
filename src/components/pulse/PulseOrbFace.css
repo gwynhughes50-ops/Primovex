@@ -1,0 +1,114 @@
+/* The Pulse orb's face: a quiet heartbeat while things are steady, a quicker pulse when
+   there has been a substantial change. Designed at 174px; PulseOrbFace scales it. */
+.pvx-orb {
+  --tempo: 4.8s;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 174px;
+  height: 174px;
+  margin: -87px 0 0 -87px;
+  border-radius: 50%;
+  isolation: isolate;
+  pointer-events: none;
+  transform-origin: center;
+}
+
+.pvx-orb::before,
+.pvx-orb::after,
+.pvx-orb-ring,
+.pvx-orb-core,
+.pvx-orb-light,
+.pvx-orb-spark {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.pvx-orb::before,
+.pvx-orb::after {
+  content: "";
+  inset: 9px;
+  border: 1px solid rgba(106, 215, 255, 0.28);
+  animation: pvx-orb-outward var(--tempo) ease-out infinite;
+}
+
+.pvx-orb::after {
+  animation-delay: calc(var(--tempo) * -0.5);
+}
+
+.pvx-orb-ring {
+  inset: 18px;
+  border: 1px solid rgba(121, 227, 255, 0.26);
+  box-shadow: 0 0 30px rgba(25, 166, 229, 0.13), inset 0 0 27px rgba(49, 175, 227, 0.16);
+  animation: pvx-orb-breathe var(--tempo) ease-in-out infinite;
+}
+
+.pvx-orb-core {
+  inset: 30px;
+  background: radial-gradient(circle at 34% 28%, #e7ffff 0%, #a0edff 13%, #47bee9 43%, #1873b6 69%, #102e65 100%);
+  box-shadow: inset -12px -17px 22px #10244e9c, inset 7px 8px 19px #edffff4a, 0 0 22px #3bbbe46e, 0 0 58px #1885c352;
+  animation: pvx-orb-heartbeat var(--tempo) ease-in-out infinite;
+}
+
+.pvx-orb-light {
+  inset: 34px;
+  background: radial-gradient(ellipse at 38% 23%, #ffffffb5 0%, #d5ffff45 13%, transparent 43%);
+  transform: rotate(-16deg);
+}
+
+.pvx-orb-spark {
+  width: 8px;
+  height: 8px;
+  top: 38px;
+  left: 50px;
+  background: #ecffff;
+  filter: blur(5px);
+  opacity: 0.75;
+}
+
+.pvx-orb--active {
+  --tempo: 2.7s;
+  filter: hue-rotate(-6deg);
+}
+
+.pvx-orb--active .pvx-orb-core {
+  box-shadow: inset -12px -17px 22px #10244e9c, inset 7px 8px 19px #edffff5c, 0 0 23px #55d9ff80, 0 0 58px #24a3ee55;
+}
+
+.pvx-orb--active::before,
+.pvx-orb--active::after {
+  border-color: rgba(137, 229, 255, 0.32);
+}
+
+@keyframes pvx-orb-heartbeat {
+  0%, 38%, 100% { transform: scale(0.96); filter: brightness(0.91); }
+  44% { transform: scale(1.045); filter: brightness(1.22); }
+  51% { transform: scale(0.985); filter: brightness(1); }
+  57% { transform: scale(1.026); filter: brightness(1.12); }
+  65% { transform: scale(0.96); filter: brightness(0.91); }
+}
+
+@keyframes pvx-orb-breathe {
+  0%, 100% { transform: scale(0.96); opacity: 0.55; }
+  48% { transform: scale(1.025); opacity: 1; }
+}
+
+@keyframes pvx-orb-outward {
+  0% { transform: scale(0.64); opacity: 0; }
+  38% { opacity: 0.65; }
+  82%, 100% { transform: scale(1.36); opacity: 0; }
+}
+
+/* No movement for anyone who asks for less (the system setting, or the widget's own
+   "reduced motion" option). A substantial change is then shown by a firmer ring instead. */
+@media (prefers-reduced-motion: reduce) {
+  .pvx-orb::before, .pvx-orb::after, .pvx-orb-ring, .pvx-orb-core { animation: none; }
+  .pvx-orb--active .pvx-orb-ring { border: 2px solid #9adfff; }
+  .pvx-orb--active .pvx-orb-core { filter: brightness(1.18); }
+}
+
+.pvx-orb--still::before, .pvx-orb--still::after, .pvx-orb--still .pvx-orb-ring, .pvx-orb--still .pvx-orb-core { animation: none; }
+.pvx-orb--still.pvx-orb--active .pvx-orb-ring { border: 2px solid #9adfff; }
+.pvx-orb--still.pvx-orb--active .pvx-orb-core { filter: brightness(1.18); }
+.pvx-orb--still::before, .pvx-orb--still::after { opacity: 0; }

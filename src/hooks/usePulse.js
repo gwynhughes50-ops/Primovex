@@ -105,6 +105,7 @@ export default function usePulse() {
 
     return {
       ...pulse,
+      stockItems,
       loading,
     };
   }, [stockItems, reorderRequests, purchaseOrders, temperatureIncidents, loading]);
