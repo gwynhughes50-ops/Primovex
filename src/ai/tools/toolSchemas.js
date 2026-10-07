@@ -88,6 +88,10 @@ export const TOOL_SCHEMAS = {
     description: 'Look up a specific team member\'s role by name/email, or get a breakdown of all registered accounts by role.',
     input_schema: { type: 'object', properties: { name: { type: 'string', description: 'Name or email to search for. Omit to get a breakdown of everyone.' } } },
   },
+  'help.howTo': {
+    description: 'Step-by-step help for how to do something in Primovex (for example "how do I add stock", "how do I check a kit", "how do I add a user"). Static help text; reads no practice data.',
+    input_schema: { type: 'object', properties: { question: { type: 'string', description: 'What they want to know how to do, in their words.' } }, required: ['question'] },
+  },
   'governance.concernLookup': {
     description: 'Look up a Listening to People concern/complaint by its reference (e.g. CN-2026-...) or the patient\'s EMIS number. Returns status, priority, deadline and owner.',
     input_schema: { type: 'object', properties: { reference: { type: 'string', description: 'Concern reference, e.g. CN-2026-0803141522.' }, emisNumber: { type: 'string', description: 'Patient EMIS number.' } } },

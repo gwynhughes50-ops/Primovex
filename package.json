@@ -49,6 +49,7 @@
     "test:orb-ai-routing": "esbuild scripts/verify-orb-ai-routing.mjs --bundle --platform=node --format=esm --outfile=work/verify-orb-ai-routing.bundle.mjs && node work/verify-orb-ai-routing.bundle.mjs",
     "test:orb-catalog": "esbuild scripts/verify-orb-catalog.mjs --bundle --platform=node --format=esm --outfile=work/verify-orb-catalog.bundle.mjs --banner:js=\"import { createRequire as __cr } from 'module'; const require = __cr(import.meta.url);\" && node work/verify-orb-catalog.bundle.mjs",
     "test:orb-wording": "esbuild scripts/verify-orb-wording.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-wording.bundle.mjs && node work/verify-orb-wording.bundle.mjs",
+    "test:orb-help": "esbuild scripts/verify-orb-help.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-help.bundle.mjs && node work/verify-orb-help.bundle.mjs",
     "test:kit-check-actions": "esbuild scripts/verify-kit-check-actions.mjs --bundle --platform=node --format=esm --outfile=work/verify-kit-check-actions.bundle.mjs && node work/verify-kit-check-actions.bundle.mjs",
     "test:asset-qr": "esbuild scripts/verify-asset-qr.mjs --bundle --platform=node --format=esm --alias:@=./src --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=work/verify-asset-qr.bundle.mjs && node work/verify-asset-qr.bundle.mjs"
   },

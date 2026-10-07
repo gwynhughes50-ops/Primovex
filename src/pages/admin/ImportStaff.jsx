@@ -106,7 +106,7 @@ export default function ImportStaff() {
         </div>
         <div className="flex gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-xs leading-5 text-emerald-100">
           <Mail className="mt-0.5 h-4 w-4 shrink-0" />
-          <div><b>No emails are sent.</b> This only creates the accounts. Nobody is told they have one until you send them their sign-in link yourself (Users, then Password link).</div>
+          <div><b>No emails are sent.</b> This only creates the accounts. Nobody is told they have one until you send them their sign-in link yourself (Users, then "Reset password" next to their name).</div>
         </div>
       </CardHeader>
 

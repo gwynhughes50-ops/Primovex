@@ -14,6 +14,8 @@ import { SAR_COLLECTION, getSarDeadlineTone, getStatusLabel } from '@/modules/go
 import { normalizeStockItemCategory } from '@/services/stockService';
 import { STOCK_CATEGORIES, categoryLabel as taxonomyCategoryLabel, subcategoryLabel as taxonomySubcategoryLabel } from '@/data/stockCategories';
 import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
+import { CAPABILITY_CATALOG, hasCapability } from '@/core/identity/capabilities';
+import { describeSource, findHelp, formatHelpAnswer, relatedQuestions, sampleQuestions } from '@/ai/help/helpSearch';
 import { daysUntilExpiry, expiryStatus, expiryWindowDays, normaliseExpirySettings, stockLevelStatus, summariseStockAlerts } from '@/lib/stockAlerts';
 import {
   alertsAnswer, categoryAnswer, cleaningAnswer, coldChainOverview, coldChainUnitAnswer, complianceAnswer, expiryAnswer, lowStockAnswer,
@@ -741,6 +743,48 @@ export function registerApprovedReadOnlyTools() {
         confidence: 0.97,
         sources: [source('Governance SARs', `${matches.length} match${matches.length === 1 ? '' : 'es'} · live read ${nowLabel()}`)],
         actions: [{ label: 'Open SARs', route: '/governance/sars' }],
+      };
+    },
+  });
+
+  // Step-by-step "how do I...?" help from the practice's own help articles. Static text:
+  // it reads no practice data and sends nothing anywhere.
+  registerTool({
+    id: 'help.howTo', label: 'How-to help', requiredCapability: 'dashboard.read',
+    execute({ question = '', topic = '' } = {}, context = {}) {
+      const asked = String(topic || question || '').trim();
+      const found = findHelp(asked);
+      const platform = typeof document !== 'undefined' ? document.documentElement.dataset.primovexClient || 'desktop' : 'desktop';
+      const capabilityLabel = (id) => CAPABILITY_CATALOG.find((c) => c.id === id)?.label || id;
+      const common = { domain: 'help', sources: [describeSource()] };
+      if (found.match) {
+        const article = found.match;
+        return {
+          ...common,
+          data: { id: article.id, title: article.title, topic: article.topic },
+          summary: formatHelpAnswer(article, { capabilities: context.capabilities || [], platform, hasCapability, capabilityLabel }),
+          followUps: relatedQuestions(article),
+          confidence: 0.95,
+          actions: article.open ? [article.open] : [],
+        };
+      }
+      if (found.alternatives.length) {
+        return {
+          ...common,
+          data: { options: found.alternatives.map((a) => a.id) },
+          summary: ['That could be a few different things. Which did you mean?', ...found.alternatives.map((a) => `• ${a.title}`)].join('\n'),
+          followUps: found.alternatives.map((a) => a.asks[0]).slice(0, 3),
+          confidence: 0.7,
+          actions: [],
+        };
+      }
+      return {
+        ...common,
+        data: { id: null },
+        summary: "I don't have step-by-step help for that yet. I can show you how to do things like adding stock, checking a kit, logging a temperature or adding a member of staff. A colleague or an administrator can help with anything else.",
+        followUps: sampleQuestions(3),
+        confidence: 0.5,
+        actions: [],
       };
     },
   });

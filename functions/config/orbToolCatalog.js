@@ -33,6 +33,7 @@ const TOOLS = [
   { id: "tasks.summary", capability: "operations.read", description: "Open operational tasks and escalations across the practice.", params: NONE },
   { id: "tasks.quickNotes", capability: "operations.read", description: "The signed-in person's own open quick notes plus shared practice reminders.", params: NONE },
   { id: "alerts.summary", capability: "operations.read", phrase: true, description: "Currently active alerts: low stock and connected-device alerts.", params: NONE },
+  { id: "help.howTo", capability: "dashboard.read", description: "Step-by-step help for how to do something in Primovex, for example how to add stock, check a kit or add a user. Use for any question that asks how to do something in the app.", params: { question: { type: "string", description: "What they want to know how to do, in their words." } }, required: ["question"] },
   { id: "admin.users", capability: "admin.access", description: "A team member's role by name, or a breakdown of all accounts by role.", params: { name: { type: "string", description: "Staff name to look up. Omit for everyone." } } },
 ];
 

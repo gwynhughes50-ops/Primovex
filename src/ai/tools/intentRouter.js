@@ -10,6 +10,7 @@ import {
 import { CLINICAL_INTENTS, ORB_CLARIFY_THRESHOLD, ORB_INTENT_THRESHOLD } from '@/orb/clinicalIntentCatalog';
 import { STOCK_CATEGORIES } from '@/data/stockCategories';
 import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
+import { findHelp, isHowToQuestion } from '@/ai/help/helpSearch';
 
 const INVENTORY_WORDS = ['stock', 'inventory', 'supplies', 'products', 'consumables', 'items'];
 // Longest phrases first, so "wound care" matches before a shorter "care"
@@ -51,6 +52,16 @@ export function routeApprovedTool(prompt, options = {}) {
   const context = getConversationContext(options.conversation);
   const followUp = routeFollowUp(text, context);
   if (followUp) return { ...followUp, language: { normalised: text, followUp: true } };
+
+  // "How do I...?" with a matching help article goes to the help lookup, before the data
+  // lookups (so "how do I check the anaphylaxis box" gives the steps, not the box's status).
+  // A how-to with no matching article carries on to the usual routing.
+  if (isHowToQuestion(prompt)) {
+    const help = findHelp(prompt);
+    if (help.match || help.alternatives.length) {
+      return { toolId: 'help.howTo', input: { question: String(prompt) }, language: { normalised: text, confidence: help.match ? 0.95 : 0.8 } };
+    }
+  }
 
   const clinicalCandidates = CLINICAL_INTENTS
     .map((intent) => ({ intent, score: Math.max(...intent.phrases.map((phrase) => phraseSimilarity(text, phrase))) }))

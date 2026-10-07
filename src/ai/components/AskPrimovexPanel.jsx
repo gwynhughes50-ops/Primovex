@@ -11,6 +11,7 @@ const SUGGESTIONS = [
   'What needs attention today?',
   'Which stock is low?',
   'What changed since yesterday?',
+  'How do I add a new product to stock?',
 ];
 
 const STATUS_LABELS = {
@@ -304,7 +305,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
                 {message.followUps?.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2" aria-label="Suggested next questions">
                     {message.followUps.map((question) => (
-                      <button key={question} type="button" onClick={() => ask(question)} disabled={busy} className="primovex-ai-suggestion inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium disabled:opacity-50">{question.charAt(0).toUpperCase() + question.slice(1)}<ArrowRight className="h-3 w-3" /></button>
+                      <button key={question} type="button" onClick={() => ask(question)} disabled={busy} className="primovex-ai-suggestion inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium disabled:opacity-50">{(question.charAt(0).toUpperCase() + question.slice(1)).replace(/ i /g, ' I ')}<ArrowRight className="h-3 w-3" /></button>
                     ))}
                   </div>
                 )}
