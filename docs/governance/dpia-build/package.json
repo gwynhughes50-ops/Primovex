@@ -1,0 +1,8 @@
+{
+  "name": "primovex-dpia-build",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Builds the DPIA (web page and Word file) from content.cjs",
+  "scripts": { "build": "node build.cjs" },
+  "dependencies": { "docx": "^9.0.0" }
+}

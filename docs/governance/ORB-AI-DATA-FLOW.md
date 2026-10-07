@@ -56,9 +56,24 @@ Primovex:
 4. **Accuracy.** The model can choose the wrong lookup. The answer always shows its sources and
    says when it came via the language assistant; the lookups themselves are unchanged.
 
+## Second switch: wording the answers (built, off by default)
+
+A separate switch lets the model put an answer into friendlier words. This sends more: the question
+and the answer's facts (item, room, fridge and space names, counts, dates) after the same scrubbing.
+
+- Only for lookups cleared for it (stock, expiry, cleaning status, fridges, alerts, spaces, compliance,
+  box readiness). Never tasks, notes, maintenance, the timeline, who cleaned or saw something, the team
+  list, or concerns and SARs. A test fails if a lookup with staff-typed text or names is added to the list.
+- A reply is discarded, and the original answer used, if it contains a number that was not in the facts,
+  drops a warning (out of range, expired, out of stock), contains a link, or is much longer than the facts.
+- Own limits (30 per person per hour, 1,000 per day), audited by lookup and outcome only.
+
+## Retention
+
+Sign-in and activity records (staff monitoring) are deleted after 12 months, and the Orb's request
+counters after 60 days, by a weekly clean-up. The audit ledger is not touched.
+
 ## Not yet built (later phases)
 
-- Letting the model phrase the answer from the lookup's data (would send practice data: needs its
-  own assessment).
 - Answers from the practice's taught knowledge and from Primovex's own help text.
 - Any write action. The Orb's tools are read-only and stay so.
