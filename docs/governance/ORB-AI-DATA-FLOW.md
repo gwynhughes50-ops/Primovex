@@ -48,7 +48,7 @@ Primovex:
 1. **Free-text questions can contain things people type.** Staff could type a patient's name.
    Numbers and dates are scrubbed; names cannot be reliably detected. Mitigation: a notice in
    the Orb ("don't type patient details") and the fact that nothing is stored.
-2. **Region and retention at Azure.** Confirm the resource's region (UK South or an EU region),
+2. **Region and retention at Azure.** Region: UK South (stated by the Practice Manager, 7 October 2026; verify in the portal). Still to confirm:
    whether abuse-monitoring retention applies (Azure may keep prompts for up to 30 days unless
    modified abuse monitoring is approved), and that data is not used for training. Not verifiable
    from the code; check the Azure portal (resource > Overview > Location; Microsoft's data
