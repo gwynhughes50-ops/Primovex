@@ -94,10 +94,12 @@ service cloud.firestore {
       // profile would let a stranger grant themselves a working role.
       allow create: if isAdmin();
 
-      // user can update own profile but cannot change role
+      // user can update own profile but cannot change role, or the limit an administrator has
+      // put on what the Orb answers for them (orbScope)
       allow update: if signedIn()
         && request.auth.uid == uid
-        && request.resource.data.role == resource.data.role;
+        && request.resource.data.role == resource.data.role
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['orbScope']);
 
       // admin can update/delete profiles
       allow update: if isAdmin();

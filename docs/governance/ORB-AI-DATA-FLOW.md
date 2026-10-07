@@ -92,3 +92,11 @@ expires after 15 minutes, runs once, and is checked against the person's permiss
   with that role in Primovex only; audited as `orb.team.message` (team and count, not the text).
 - Reorder: writes a pending request to the Reorder Centre (as the Inventory page does); nothing
   is ordered until someone approves it; audited as `orb.reorder.request`.
+
+## Limiting the Orb for one person
+
+An administrator can narrow the Orb (and the Pulse orb) for one person to a few topics: for
+example the IT lead only for SARs and concerns, the caretaker only for Compliance. The limit
+can only take permissions away; it is applied to the person's role permissions on the device
+and again on the server (`orbRoute`, `orbTeamMessage`). People cannot edit their own limit
+(Firestore rule on `users`, tested in the attack suite). Changes are audited (`orb.scope.update`).

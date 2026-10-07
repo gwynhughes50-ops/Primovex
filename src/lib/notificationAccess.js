@@ -74,6 +74,13 @@ export function describeNotificationAccess(profile = {}, customRoleCapabilities 
   });
 
   rows.push({
+    id: "popup-notifications",
+    label: "Desktop pop-up: a new notification for them (a message, an assigned SAR, a reminder)",
+    ok: true,
+    detail: "Yes, for everyone, until they've read it in the notification bell.",
+  });
+
+  rows.push({
     id: "bell-sar",
     label: "Notification bell: a SAR is assigned to them",
     ok: true,
@@ -96,7 +103,7 @@ export function describeNotificationAccess(profile = {}, customRoleCapabilities 
     role,
     source,
     rows,
-    popups: [sar && "SARs", concerns && "concerns", stock && "stock"].filter(Boolean),
+    popups: ["new notifications", sar && "SARs", concerns && "concerns", stock && "stock"].filter(Boolean),
   };
 }
 
@@ -105,5 +112,6 @@ export const ON_THEIR_COMPUTER = [
   "Pop-ups appear only in the installed desktop app, not in a web browser or on the phone.",
   "They're on weekdays between 8am and 6pm, then repeat hourly until snoozed or dismissed.",
   "Pop-ups can be switched off per computer (Notifications page, Desktop alerts) - check it's on.",
-  "A pop-up only appears when there is something overdue, due soon, expired, expiring, out of stock or low.",
+  "A pop-up only appears when there is something unread in their notifications, or overdue, due soon, expired, expiring, out of stock or low.",
+  "They need the latest desktop app update installed; an older install won't show the newer pop-ups.",
 ];

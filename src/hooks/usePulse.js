@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { collection, limit, onSnapshot, query } from 'firebase/firestore';
 
 import { db } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
+import { pulseModulesFor } from '@/lib/orbScope';
 import {
   calculateCompliancePulse,
   calculateInventoryPulse,
@@ -11,6 +13,10 @@ import {
 } from '@/services/pulseService';
 
 export default function usePulse() {
+  // An administrator can narrow the Pulse (and the Orb) for one person to certain topics.
+  const { profile } = useAuth();
+  const onlyModules = pulseModulesFor(profile?.orbScope);
+  const onlyKey = onlyModules ? onlyModules.join(',') : '*';
   const [stockItems, setStockItems] = useState([]);
   const [reorderRequests, setReorderRequests] = useState([]);
   const [purchaseOrders, setPurchaseOrders] = useState([]);
@@ -101,12 +107,12 @@ export default function usePulse() {
       placeholderModule('estates', 'Estates', 100),
       placeholderModule('workforce', 'Workforce', 100),
       placeholderModule('governance', 'Governance', 100),
-    ]);
+    ], { only: onlyKey === '*' ? null : onlyKey.split(',').filter(Boolean) });
 
     return {
       ...pulse,
       stockItems,
       loading,
     };
-  }, [stockItems, reorderRequests, purchaseOrders, temperatureIncidents, loading]);
+  }, [stockItems, reorderRequests, purchaseOrders, temperatureIncidents, loading, onlyKey]);
 }

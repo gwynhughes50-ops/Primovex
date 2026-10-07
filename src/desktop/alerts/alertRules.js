@@ -76,7 +76,7 @@ function dayCount(value, nowMs) {
 
 // Everything that could be shown right now. Pass only the rows the person's
 // team is allowed to see (an empty list for a team they are not in).
-export function summariseDueItems({ sars = [], concerns = [], stock = [], now = Date.now() } = {}) {
+export function summariseDueItems({ sars = [], concerns = [], stock = [], notifications = [], now = Date.now() } = {}) {
   const items = [];
   for (const sar of sars) {
     const state = sarAlertState(sar, now);
@@ -93,6 +93,13 @@ export function summariseDueItems({ sars = [], concerns = [], stock = [], now = 
     if (!alert?.id || !["expired", "soon", "out", "low"].includes(alert.state)) continue;
     items.push({ kind: "stock", id: alert.id, state: alert.state, key: `stock:${alert.id}` });
   }
+  // `notifications` is the person's own unread, not-snoozed notifications the host picked out:
+  // [{ id, priority }], priority being "critical" | "high" | "routine" | "info". A message sent to
+  // them (a team message, a reminder) shows up here, not only under the bell.
+  for (const note of notifications) {
+    if (!note?.id) continue;
+    items.push({ kind: "notification", id: note.id, state: ["critical", "high"].includes(note.priority) ? "urgent" : "new", key: `notification:${note.id}` });
+  }
   const count = (kind, state) => items.filter((i) => i.kind === kind && i.state === state).length;
   const counts = {
     sarOverdue: count("sar", "overdue"),
@@ -103,6 +110,8 @@ export function summariseDueItems({ sars = [], concerns = [], stock = [], now = 
     stockOut: count("stock", "out"),
     stockSoon: count("stock", "soon"),
     stockLow: count("stock", "low"),
+    notificationUrgent: count("notification", "urgent"),
+    notificationNew: count("notification", "new"),
   };
   return { items, keys: items.map((i) => i.key), counts, total: items.length };
 }
@@ -121,6 +130,7 @@ export function buildAlertPayload({ displayName, counts }) {
   const c = {
     sarOverdue: 0, sarSoon: 0, concernOverdue: 0, concernSoon: 0,
     stockExpired: 0, stockOut: 0, stockSoon: 0, stockLow: 0,
+    notificationUrgent: 0, notificationNew: 0,
     ...counts,
   };
   const lines = [];
@@ -128,10 +138,12 @@ export function buildAlertPayload({ displayName, counts }) {
   if (c.sarOverdue) lines.push({ tone: "danger", text: `${plural(c.sarOverdue, "SAR", "SARs")} overdue` });
   if (c.stockExpired) lines.push({ tone: "danger", text: `${plural(c.stockExpired, "stock item", "stock items")} expired` });
   if (c.stockOut) lines.push({ tone: "danger", text: `${plural(c.stockOut, "item", "items")} out of stock` });
+  if (c.notificationUrgent) lines.push({ tone: "danger", text: `${plural(c.notificationUrgent, "urgent notification", "urgent notifications")}` });
   if (c.concernSoon) lines.push({ tone: "warning", text: `${plural(c.concernSoon, "concern", "concerns")} due within ${DUE_SOON_DAYS} days` });
   if (c.sarSoon) lines.push({ tone: "warning", text: `${plural(c.sarSoon, "SAR", "SARs")} due within ${DUE_SOON_DAYS} days` });
   if (c.stockSoon) lines.push({ tone: "warning", text: `${plural(c.stockSoon, "item", "items")} expiring soon` });
   if (c.stockLow) lines.push({ tone: "warning", text: `${plural(c.stockLow, "item", "items")} low on stock` });
+  if (c.notificationNew) lines.push({ tone: "warning", text: `${plural(c.notificationNew, "new notification", "new notifications")}` });
 
   // The window only fits so many lines: keep the most urgent (they are already
   // in that order) and say how many more there are.
@@ -143,10 +155,13 @@ export function buildAlertPayload({ displayName, counts }) {
   const name = firstNameOf(displayName);
   const governance = c.concernOverdue + c.sarOverdue + c.concernSoon + c.sarSoon;
   const stock = c.stockExpired + c.stockOut + c.stockSoon + c.stockLow;
-  const urgent = c.concernOverdue + c.sarOverdue + c.stockExpired + c.stockOut > 0;
+  const notifications = c.notificationUrgent + c.notificationNew;
+  const urgent = c.concernOverdue + c.sarOverdue + c.stockExpired + c.stockOut + c.notificationUrgent > 0;
 
   // Governance-only alerts keep their original wording.
-  const title = stock === 0
+  const title = governance === 0 && stock === 0 && notifications > 0
+    ? `${name ? `Hi ${name}` : "Hi"}, you have ${urgent ? "urgent " : "new "}notifications`
+    : stock === 0
     ? `${name ? `Hi ${name}` : "Hi"}, ${urgent ? "you have overdue items" : "you have items due soon"}`
     : `${name ? `Hi ${name}` : "Hi"}, ${urgent ? "some items need attention now" : "some items need attention soon"}`;
 
@@ -158,6 +173,9 @@ export function buildAlertPayload({ displayName, counts }) {
   const stockWeight = (c.stockExpired + c.stockOut) * 2 + c.stockSoon + c.stockLow;
   let openPath = concernWeight > sarWeight ? "/governance/concerns" : "/governance/sars";
   if (governance === 0 || stockWeight > Math.max(sarWeight, concernWeight)) openPath = "/alerts";
+  // Only notifications (or mostly): open the notifications page.
+  const notificationWeight = c.notificationUrgent * 2 + c.notificationNew;
+  if (notificationWeight > Math.max(sarWeight, concernWeight, stockWeight)) openPath = "/notifications";
   return { title, lines: shown, openPath };
 }
 

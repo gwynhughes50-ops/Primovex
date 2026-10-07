@@ -190,6 +190,10 @@ async function main() {
     assertFails(setDoc(doc(partner, "stock_items", "item-1"), { current_stock: 999 }, { merge: true })));
   await check("Partner CANNOT change their own role field", () =>
     assertFails(updateDoc(doc(partner, "users", "partner-uid"), { role: "System Admin" })));
+  await check("Partner CANNOT remove or change the Orb limit an administrator set on them (orbScope)", () =>
+    assertFails(updateDoc(doc(partner, "users", "partner-uid"), { orbScope: null })));
+  await check("Partner CAN still update other things on their own profile (e.g. department)", () =>
+    assertSucceeds(updateDoc(doc(partner, "users", "partner-uid"), { department: "Clinical" })));
 
   console.log("\n=== 3. IDOR on governance_concerns ===");
   await check("Uninvolved ReadOnly user CANNOT read concern-1", () =>

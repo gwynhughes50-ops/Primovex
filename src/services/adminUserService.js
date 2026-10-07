@@ -48,6 +48,21 @@ export async function updateUserDepartment(uid, department) {
   await updateDoc(doc(db, "users", uid), { department: String(department || "").trim() });
 }
 
+// What the Orb and the Pulse orb will talk about for this person: null = everything their role
+// allows, otherwise a list of topic ids (see src/lib/orbScope.js). It can only narrow what their
+// role already allows. Admin-only (the rules stop people changing their own).
+export async function updateUserOrbScope(uid, scope) {
+  const value = Array.isArray(scope) ? scope : null;
+  await updateDoc(doc(db, "users", uid), { orbScope: value });
+  try {
+    globalThis.dispatchEvent?.(new CustomEvent("primovex:governed-audit", { detail: {
+      action: "orb.scope.update", module: "admin", targetType: "user", targetId: uid,
+      summary: value ? "An administrator limited what the Orb answers for a user" : "An administrator removed a user's Orb limit",
+      classification: "operational", metadata: { topics: value ? value.length : "all" },
+    } }));
+  } catch { /* an audit hiccup must not undo the change */ }
+}
+
 // A purely visual marker for the organisation chart - e.g. picking out a
 // senior partner among several partners who all sit at the same level (same
 // manager or none). Deliberately separate from reportsTo/role: it changes

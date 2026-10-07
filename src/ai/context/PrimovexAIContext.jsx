@@ -5,12 +5,16 @@ import { useAuth } from '@/contexts/AuthContext';
 import { orbIntentLearningStore } from '@/orb/IntentLearningStore';
 import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
 import { proposalProblem } from '@/orb/actionProposals';
+import { applyOrbScope } from '@/lib/orbScope';
 import { executeProposal } from '@/orb/actionExecutors';
 
 export const PrimovexAIContext = createContext(null);
 
 export function PrimovexAIProvider({ children }) {
-  const { capabilities, role, user, profile } = useAuth();
+  const { capabilities: roleCapabilities, role, user, profile } = useAuth();
+  // What the Orb may use for this person: their role's permissions, limited to the topics an
+  // administrator has ticked for them (everything, if none were set).
+  const capabilities = useMemo(() => applyOrbScope(roleCapabilities, profile?.orbScope), [roleCapabilities, profile?.orbScope]);
   const [isOpen, setIsOpen] = useState(false);
   const [status, setStatus] = useState(AI_STATES.IDLE);
   const [messages, setMessages] = useState([]);

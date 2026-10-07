@@ -24,6 +24,7 @@ const { routeQuestion } = require("./services/orbRouterService");
 const { phraseAnswer } = require("./services/orbPhraseService");
 const { runRetention } = require("./services/retentionService");
 const { sendTeamMessage } = require("./services/teamMessageService");
+const { getOrbCapabilities } = require("./services/orbScope");
 
 initializeApp();
 const db = getFirestore();
@@ -492,7 +493,7 @@ exports.orbRoute = onCall(
     const snapshot = await db.collection("users").doc(request.auth.uid).get();
     if (!snapshot.exists) throw new HttpsError("failed-precondition", "A Primovex user profile is required.");
     const profile = snapshot.data() || {};
-    const capabilities = await getEffectiveCapabilities(db, profile.role);
+    const capabilities = await getOrbCapabilities(db, profile);
     const startedAt = Date.now();
     const result = await routeQuestion({
       db,
@@ -581,7 +582,7 @@ exports.orbTeamMessage = onCall({ region: "europe-west2", timeoutSeconds: 30 }, 
   const snapshot = await db.collection("users").doc(request.auth.uid).get();
   if (!snapshot.exists) throw new HttpsError("failed-precondition", "A Primovex user profile is required.");
   const profile = snapshot.data() || {};
-  const capabilities = await getEffectiveCapabilities(db, profile.role);
+  const capabilities = await getOrbCapabilities(db, profile);
   const result = await sendTeamMessage({
     db,
     callerUid: request.auth.uid,

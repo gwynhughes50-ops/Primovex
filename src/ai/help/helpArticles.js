@@ -539,6 +539,22 @@ export const HELP_ARTICLES = [
     related: ["find-notifications", "what-can-orb-do"],
   },
   {
+    id: "limit-orb-topics",
+    title: "How do I limit what the Orb and Pulse orb show a person?",
+    topic: "Admin",
+    asks: ["how do i limit what the orb shows someone", "how do i restrict the orb for a user", "how do i stop someone asking the orb about stock", "how do i set what the pulse orb shows a person", "how do i make the orb only answer about sars"],
+    keywords: ["orb", "pulse", "limit", "restrict", "topics", "only", "user", "scope"],
+    where: "desktop",
+    steps: [
+      "Go to Admin, then Users, and press \"Orb\" next to the person's name.",
+      "Choose \"Only these topics\" and tick what they should have, for example just SARs and concerns, or just Compliance. Press Save.",
+      "From then on the Orb only answers questions about those topics for them, and their Pulse orb only shows and scores those areas. \"How do I...?\" help always stays.",
+      "This only narrows what their role allows; it never gives anyone more. To give them more access, change their role instead. Choose \"Everything their role allows\" to remove the limit.",
+    ],
+    open: { label: "Open Users", route: "/admin/users" },
+    related: ["what-can-orb-do"],
+  },
+  {
     id: "screen-locked",
     title: "My screen locked and asks for a PIN",
     topic: "Security",

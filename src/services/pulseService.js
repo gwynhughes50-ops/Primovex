@@ -154,21 +154,23 @@ export function placeholderModule(key, label, score = 100) {
   };
 }
 
-export function calculateOverallPulse(modules = []) {
+export function calculateOverallPulse(modules = [], { only = null } = {}) {
+  // `only`: the module keys one person is allowed to see (null = all). The score then reflects just those.
+  const catalog = Array.isArray(only) ? PULSE_MODULES.filter((m) => only.includes(m.key)) : PULSE_MODULES;
   const scoreMap = modules.reduce((acc, module) => {
     acc[module.key] = module;
     return acc;
   }, {});
 
-  const weightedTotal = PULSE_MODULES.reduce((sum, module) => {
+  const weightedTotal = catalog.reduce((sum, module) => {
     const row = scoreMap[module.key] || placeholderModule(module.key, module.label, 100);
     return sum + clampScore(row.score) * module.weight;
   }, 0);
 
-  const totalWeight = PULSE_MODULES.reduce((sum, module) => sum + module.weight, 0) || 1;
-  const overall = clampScore(weightedTotal / totalWeight);
+  const totalWeight = catalog.reduce((sum, module) => sum + module.weight, 0) || 1;
+  const overall = catalog.length ? clampScore(weightedTotal / totalWeight) : 100;
 
-  const moduleRows = PULSE_MODULES.map((module) => ({
+  const moduleRows = catalog.map((module) => ({
     ...module,
     ...(scoreMap[module.key] || placeholderModule(module.key, module.label, 100)),
   }));

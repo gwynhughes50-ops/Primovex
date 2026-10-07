@@ -21,30 +21,30 @@ t("a custom role with Manage SARs gets the SAR pop-up and nothing else", () => {
   assert.equal(row(r, "popup-sars").ok, true);
   assert.equal(row(r, "popup-concerns").ok, false);
   assert.equal(row(r, "popup-stock").ok, false);
-  assert.deepEqual(r.popups, ["SARs"]);
+  assert.deepEqual(r.popups, ["new notifications", "SARs"]);
   assert.match(row(r, "role").detail, /custom role with 3 permissions/);
   assert.match(row(r, "popup-concerns").detail, /governance\.concernsTeam/);
 });
 
 t("Practice Manager gets every pop-up and the cleaning-issue fallback", () => {
   const r = describeNotificationAccess({ role: "Practice Manager" });
-  assert.deepEqual(r.popups, ["SARs", "concerns", "stock"]);
+  assert.deepEqual(r.popups, ["new notifications", "SARs", "concerns", "stock"]);
   assert.equal(row(r, "bell-cleaning").ok, true);
   assert.match(row(r, "bell-cleaning").detail, /no Caretaker/);
 });
 
 t("System Admin gets everything", () => {
-  assert.deepEqual(describeNotificationAccess({ role: "System Admin" }).popups, ["SARs", "concerns", "stock"]);
+  assert.deepEqual(describeNotificationAccess({ role: "System Admin" }).popups, ["new notifications", "SARs", "concerns", "stock"]);
 });
 
 t("a nurse gets the stock pop-up only; Reception is on the concerns team and can view inventory", () => {
-  assert.deepEqual(describeNotificationAccess({ role: "Nurse" }).popups, ["stock"]);
-  assert.deepEqual(describeNotificationAccess({ role: "Reception" }).popups, ["concerns", "stock"]);
+  assert.deepEqual(describeNotificationAccess({ role: "Nurse" }).popups, ["new notifications", "stock"]);
+  assert.deepEqual(describeNotificationAccess({ role: "Reception" }).popups, ["new notifications", "concerns", "stock"]);
 });
 
-t("a role with no inventory or governance rights gets no pop-up at all", () => {
+t("a role with no inventory or governance rights gets only the new-notification pop-up", () => {
   const r = describeNotificationAccess({ role: "Cleaner" });
-  assert.deepEqual(r.popups, []);
+  assert.deepEqual(r.popups, ["new notifications"]);
   assert.equal(row(r, "bell-cleaning").ok, false);
 });
 

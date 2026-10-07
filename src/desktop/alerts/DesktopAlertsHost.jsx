@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { collection, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { summariseNotifications } from "@/services/notificationCentreService";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useAuth } from "@/contexts/AuthContext";
@@ -51,11 +52,12 @@ export default function DesktopAlertsHost() {
   const inSarTeam = can("governance.manageSars");
   const inConcernsTeam = can("governance.concernsTeam");
   const canSeeStock = can("inventory.read");
-  const active = isTauriRuntime() && Boolean(uid) && (inSarTeam || inConcernsTeam || canSeeStock);
+  // Everyone signed in gets the pop-up for their own new notifications; the teams add their lists.
+  const active = isTauriRuntime() && Boolean(uid);
   // Keeps the practice's "expiring soon" windows live for the checks below.
   useExpirySettings();
 
-  const rows = useRef({ sars: [], concerns: [], stock: [], resolved: {} });
+  const rows = useRef({ sars: [], concerns: [], stock: [], resolved: {}, notifications: [] });
   const ready = useRef({ sars: true, concerns: true, stock: true });
   const lastPayload = useRef(null);
   const latest = useRef({});
@@ -72,7 +74,7 @@ export default function DesktopAlertsHost() {
           resolved: rows.current.resolved,
         }).alerts
       : [];
-    return summariseDueItems({ sars: rows.current.sars, concerns: rows.current.concerns, stock, now: Date.now() });
+    return summariseDueItems({ sars: rows.current.sars, concerns: rows.current.concerns, stock, notifications: rows.current.notifications, now: Date.now() });
   };
 
   function evaluate() {
@@ -98,7 +100,7 @@ export default function DesktopAlertsHost() {
   // Live lists of the open items this person's team can see.
   useEffect(() => {
     if (!active) return undefined;
-    rows.current = { sars: [], concerns: [], stock: [], resolved: {} };
+    rows.current = { sars: [], concerns: [], stock: [], resolved: {}, notifications: [] };
     ready.current = { sars: !inSarTeam, concerns: !inConcernsTeam, stock: !canSeeStock };
     const unsubs = [];
 
@@ -123,6 +125,19 @@ export default function DesktopAlertsHost() {
     };
     watch("sars", inSarTeam, "governance_sars", OPEN_SAR_STATUSES);
     watch("concerns", inConcernsTeam, "governance_concerns", OPEN_CONCERN_STATUSES);
+
+    // This person's own unread notifications (messages from colleagues, reminders).
+    unsubs.push(
+      onSnapshot(
+        query(collection(db, "users", uid, "notifications"), orderBy("createdAt", "desc"), limit(50)),
+        (snap) => {
+          const unread = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((row) => row.read !== true);
+          rows.current.notifications = summariseNotifications(unread).active.map((row) => ({ id: row.id, priority: row.priority }));
+          evaluateRef.current();
+        },
+        (err) => console.warn("Desktop alerts: could not read notifications.", err)
+      )
+    );
 
     // Stock for everyone who can view inventory, and the alerts already marked
     // resolved on the Alerts page (so those aren't nagged about again).

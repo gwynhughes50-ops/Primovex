@@ -60,7 +60,7 @@ const sars = [
 const concerns = [c({ id: "c1", finalResponseDueAt: day(-1) }), c({ id: "c2", finalResponseDueAt: day(40) })];
 const both = R.summariseDueItems({ sars, concerns, now: NOW });
 t("summary counts the right things", () => {
-  assert.deepEqual(both.counts, { sarOverdue: 2, sarSoon: 1, concernOverdue: 1, concernSoon: 0, stockExpired: 0, stockOut: 0, stockSoon: 0, stockLow: 0 });
+  assert.deepEqual(both.counts, { sarOverdue: 2, sarSoon: 1, concernOverdue: 1, concernSoon: 0, stockExpired: 0, stockOut: 0, stockSoon: 0, stockLow: 0, notificationUrgent: 0, notificationNew: 0 });
   assert.equal(both.total, 4);
   assert.deepEqual(both.keys.sort(), ["concern:c1:overdue", "sar:s1:overdue", "sar:s2:overdue", "sar:s3:soon"]);
 });
@@ -219,7 +219,7 @@ const stockList = [
 ];
 t("stock only: counted by kind, keyed per item and state, with no governance rows", () => {
   const s = R.summariseDueItems({ stock: stockList, now: NOW });
-  assert.deepEqual(s.counts, { sarOverdue: 0, sarSoon: 0, concernOverdue: 0, concernSoon: 0, stockExpired: 1, stockOut: 1, stockSoon: 1, stockLow: 2 });
+  assert.deepEqual(s.counts, { sarOverdue: 0, sarSoon: 0, concernOverdue: 0, concernSoon: 0, stockExpired: 1, stockOut: 1, stockSoon: 1, stockLow: 2, notificationUrgent: 0, notificationNew: 0 });
   assert.equal(s.total, 5);
   assert.deepEqual(s.keys.sort(), ["stock:expired-stock-a", "stock:expiring-stock-c", "stock:lowstock-stock-d", "stock:lowstock-stock-e", "stock:outofstock-stock-b"]);
 });
@@ -289,7 +289,7 @@ t("end to end: real-looking stock rows become the right pop-up, resolved alerts 
   ];
   const alerts = summariseStockAlerts(rows, { categoryOf: (i) => i.category, now: today }).alerts;
   const summary = R.summariseDueItems({ stock: alerts, now: NOW });
-  assert.deepEqual(summary.counts, { sarOverdue: 0, sarSoon: 0, concernOverdue: 0, concernSoon: 0, stockExpired: 1, stockOut: 1, stockSoon: 1, stockLow: 1 });
+  assert.deepEqual(summary.counts, { sarOverdue: 0, sarSoon: 0, concernOverdue: 0, concernSoon: 0, stockExpired: 1, stockOut: 1, stockSoon: 1, stockLow: 1, notificationUrgent: 0, notificationNew: 0 });
   const p = R.buildAlertPayload({ displayName: "Gwyn Hughes", counts: summary.counts });
   assert.equal(p.title, "Hi Gwyn, some items need attention now");
   assert.deepEqual(p.lines.map((l) => l.text), ["1 stock item expired", "1 item out of stock", "1 item expiring soon", "1 item low on stock"]);
@@ -301,6 +301,17 @@ t("end to end: real-looking stock rows become the right pop-up, resolved alerts 
   const counts2 = R.summariseDueItems({ stock: after, now: NOW }).counts;
   assert.equal(counts2.stockOut, 0);
   assert.equal(counts2.stockExpired, 1);
+});
+
+t("new notifications sent to the person show on the pop-up", () => {
+  const summary = R.summariseDueItems({ notifications: [{ id: "n1", priority: "high" }, { id: "n2", priority: "info" }, { id: "n3", priority: "routine" }], now: NOW });
+  assert.equal(summary.counts.notificationUrgent, 1);
+  assert.equal(summary.counts.notificationNew, 2);
+  const p = R.buildAlertPayload({ displayName: "Craig Smith", counts: summary.counts });
+  assert.equal(p.title, "Hi Craig, you have urgent notifications");
+  assert.deepEqual(p.lines.map((l) => l.text), ["1 urgent notification", "2 new notifications"]);
+  assert.equal(p.openPath, "/notifications");
+  assert.equal(R.summariseDueItems({ notifications: [], now: NOW }).total, 0);
 });
 
 console.log(`\n${n} passed`);

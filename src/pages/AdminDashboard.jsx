@@ -56,6 +56,7 @@ import {
   BellRing,
   CheckCircle2,
   XCircle,
+  Sparkles,
 } from "lucide-react";
 
 import AddUser from "./admin/AddUser";
@@ -75,7 +76,8 @@ import { describeNotificationAccess, ON_THEIR_COMPUTER } from "@/lib/notificatio
 import { sendDueNotificationsNow } from "@/services/dueNotificationsService";
 import { describeDueRun } from "@/lib/dueNotificationsText";
 import { useAuth } from "@/contexts/AuthContext";
-import { subscribeUsers, updateUserRole, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa } from "@/services/adminUserService";
+import { subscribeUsers, updateUserRole, updateUserOrbScope, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa } from "@/services/adminUserService";
+import { ORB_TOPICS, describeOrbScope, normaliseOrbScope } from "@/lib/orbScope";
 
 // --------------------------
 // ✅ Route Guard (Admin only)
@@ -419,6 +421,25 @@ export default function AdminDashboard() {
   // "Why isn't this person getting notifications?" - what a login's role will
   // and won't receive (src/lib/notificationAccess.js).
   const [notifCheckTarget, setNotifCheckTarget] = useState(null);
+
+  // What the Orb answers for one person (src/lib/orbScope.js).
+  const [orbScopeTarget, setOrbScopeTarget] = useState(null);
+  const [orbScopeDraft, setOrbScopeDraft] = useState(null); // null = everything their role allows
+  const [orbScopeBusy, setOrbScopeBusy] = useState(false);
+  const [orbScopeError, setOrbScopeError] = useState("");
+  const openOrbScope = (u) => { setOrbScopeTarget(u); setOrbScopeDraft(normaliseOrbScope(u.orbScope)); setOrbScopeError(""); };
+  const saveOrbScope = async () => {
+    try {
+      setOrbScopeBusy(true);
+      setOrbScopeError("");
+      await updateUserOrbScope(orbScopeTarget.id, orbScopeDraft);
+      setOrbScopeTarget(null);
+    } catch (err) {
+      setOrbScopeError(err?.message || "Could not save that.");
+    } finally {
+      setOrbScopeBusy(false);
+    }
+  };
   const notifCheck = useMemo(() => {
     if (!notifCheckTarget) return null;
     const customCaps = Object.fromEntries((liveCustomRoles || []).map((r) => [r.name, r.capabilities || []]));
@@ -756,6 +777,14 @@ export default function AdminDashboard() {
                                       onClick={() => setResetLinkTarget(u)}
                                     >
                                       <Link2 className="h-4 w-4 mr-2" /> Reset password
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
+                                      title={`What the Orb and Pulse orb show for them: ${describeOrbScope(u.orbScope)}`}
+                                      onClick={() => openOrbScope(u)}
+                                    >
+                                      <Sparkles className="h-4 w-4 mr-2" /> Orb{normaliseOrbScope(u.orbScope) ? " (limited)" : ""}
                                     </Button>
                                     <Button
                                       variant="outline"
@@ -1265,6 +1294,42 @@ export default function AdminDashboard() {
                   {resetLinkBusy ? "Generating…" : "Generate link"}
                 </Button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* What the Orb answers for one person */}
+      {orbScopeTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur p-4" role="dialog" aria-modal="true" aria-label="Orb topics">
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col rounded-2xl border border-slate-800/70 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
+            <div className="flex items-center gap-2 text-lg font-semibold text-slate-50"><Sparkles className="h-5 w-5" /> Orb for {orbScopeTarget.displayName || orbScopeTarget.email}</div>
+            <p className="mt-1 text-xs text-slate-400">Choose what the Orb and the Pulse orb will answer and show for this person. This only narrows what their role ({orbScopeTarget.role || "no role"}) already allows; it never gives them more.</p>
+            <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+              <label className="flex items-start gap-3 rounded-xl border border-slate-800/70 bg-slate-950/40 p-3 text-sm">
+                <input type="radio" name="orb-scope" className="mt-1" checked={orbScopeDraft === null} onChange={() => setOrbScopeDraft(null)} />
+                <span><b className="block text-slate-100">Everything their role allows</b><span className="text-xs text-slate-300">The default.</span></span>
+              </label>
+              <label className="flex items-start gap-3 rounded-xl border border-slate-800/70 bg-slate-950/40 p-3 text-sm">
+                <input type="radio" name="orb-scope" className="mt-1" checked={orbScopeDraft !== null} onChange={() => setOrbScopeDraft(orbScopeDraft || [])} />
+                <span className="min-w-0"><b className="block text-slate-100">Only these topics</b>
+                  <span className="mt-2 block space-y-2">
+                    {ORB_TOPICS.map((topic) => (
+                      <span key={topic.id} className="flex items-start gap-2">
+                        <input type="checkbox" className="mt-1" disabled={orbScopeDraft === null} checked={Boolean(orbScopeDraft?.includes(topic.id))}
+                          onChange={(e) => setOrbScopeDraft((current) => (e.target.checked ? [...(current || []), topic.id] : (current || []).filter((id) => id !== topic.id)))} />
+                        <span><span className="block text-slate-100">{topic.label}</span><span className="text-xs text-slate-400">{topic.description}</span></span>
+                      </span>
+                    ))}
+                  </span>
+                  <span className="mt-2 block text-xs text-slate-400">How-to help is always available. With none ticked the Orb only answers "how do I...?" questions.</span>
+                </span>
+              </label>
+            </div>
+            {orbScopeError && <p className="mt-2 text-xs text-rose-300">{orbScopeError}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button variant="outline" className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60" onClick={() => setOrbScopeTarget(null)} disabled={orbScopeBusy}>Cancel</Button>
+              <Button className="rounded-full" onClick={saveOrbScope} disabled={orbScopeBusy}>{orbScopeBusy ? "Saving…" : "Save"}</Button>
             </div>
           </div>
         </div>
