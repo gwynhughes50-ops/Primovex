@@ -87,9 +87,12 @@ export function guessCategory(text) {
   return "other";
 }
 
-const EMIS = /\bemis\s*(?:number|no\.?|#)?\s*[:#]?\s*(\d{5,})\b|\b(\d{6,})\b/i;
+const EMIS = /\bemis\s*(?:number|no\.?|#)?\s*[:#]?\s*(\d{4,})\b|\b(\d{6,})\b/i;
 
-const LEAD_IN = new RegExp(`^\\s*(?:please\\s+|can you\\s+|could you\\s+|i(?:'d| would) like to\\s+|i need to\\s+|i want to\\s+|help me\\s+)*${VERB}\\s+(?:a\\s+|an\\s+|the\\s+|this\\s+)?${THING}\\s*(?:for me\\s*)?(?:[:\\-]|that|about|where|when|which|involving)?\\s*`, "i");
+// The whole phrase to swap for "the patient": "patient EMIS number 1234" or a bare long number.
+const EMIS_PHRASE = /(?:\bthe\s+)?(?:\bpatient\s+)?(?:\bemis\s*(?:number|no\.?|#)?\s*[:#]?\s*\d{4,}\b|\b\d{6,}\b)/i;
+
+const LEAD_IN = new RegExp(`^\\s*(?:please\\s+|can you\\s+|could you\\s+|i(?:'d| would) like to\\s+|i need to\\s+|i want to\\s+|help me\\s+)*${VERB}\\s+(?:a\\s+|an\\s+|the\\s+|this\\s+)?${THING}\\s*(?:please\\s*)?(?:for me\\s*)?(?:please\\s*)?(?:[:\\-]|that|about|where|when|which|involving)?\\s*`, "i");
 
 // The "what happened" part of the sentence.
 export function extractDescription(text) {
@@ -118,7 +121,7 @@ export function parseSeReport(text, { spaces = [], now = new Date() } = {}) {
   const original = String(text || "");
   const emisMatch = original.match(EMIS);
   const emisNumber = emisMatch ? (emisMatch[1] || emisMatch[2]) : "";
-  const withoutEmis = emisNumber ? original.replace(EMIS, "the patient") : original;
+  const withoutEmis = emisNumber ? original.replace(EMIS_PHRASE, "the patient") : original;
   // A harm level tapped or typed at the end is kept in its own field, not repeated in the description.
   const description = extractDescription(withoutEmis).replace(/[,;]?\s*(?:no|low|minor|moderate|severe|serious)\s+harm\.?\s*$/i, "").trim();
   const harmSource = extractDescription(withoutEmis);

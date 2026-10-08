@@ -38,7 +38,7 @@ export function createDataFabricResult(tool, result = {}) {
     actions: Array.isArray(result.actions) ? result.actions : [],
     warnings: Array.isArray(result.warnings) ? result.warnings : [],
     proposal: result.proposal && typeof result.proposal === 'object' ? result.proposal : null,
-    followUps: Array.isArray(result.followUps) ? result.followUps.filter((q) => typeof q === 'string').slice(0, 3) : [],
+    followUps: Array.isArray(result.followUps) ? result.followUps.filter((q) => typeof q === 'string').slice(0, 4) : [],
     freshness: result.freshness || { state: 'live', observedAt },
     observedAt,
     knownState,

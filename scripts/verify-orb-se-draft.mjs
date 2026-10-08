@@ -60,6 +60,13 @@ t("where, what kind, and the EMIS number", () => {
   assert.equal(p.patientInvolved, true);
 });
 
+t("an EMIS number after the word EMIS is taken even when short, and kept out of the description", () => {
+  const p = parseSeReport("submit a significant event please patient emis number 0000 was seen today and given the wrong injection, no harm", { spaces, now: NOW });
+  assert.equal(p.emisNumber, "0000");
+  assert.equal(p.patientInvolved, true);
+  assert.ok(!p.description.includes("0000"));
+});
+
 t("without a harm level it asks, with the answers ready to tap", () => {
   const r = buildSeReportDraft("report a significant event: the wrong vaccine was drawn up in treatment room 1 yesterday", { spaces, now: NOW });
   assert.equal(r.proposal, undefined);
