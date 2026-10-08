@@ -158,8 +158,9 @@ export function buildSeReportDraft(question, { spaces = [], now = new Date() } =
   // Never guess how much harm was caused: ask, with the answers as one-tap replies.
   if (!parsed.harm) {
     const base = String(question).trim().replace(/[.\s]+$/, "");
-    const chips = base.length <= 220 ? SE_HARM_LEVELS.map((h) => `${base}, ${h.label.toLowerCase()}`) : [];
-    return { text: "How much harm did it cause? Choose one (a near miss is \"no harm\").", followUps: chips };
+    // A traffic light of choices (green to red). Each carries the whole sentence plus the harm level.
+    const chips = base.length <= 400 ? SE_HARM_LEVELS.map((h) => ({ label: h.label, hint: h.hint, color: h.color, ask: `${base}, ${h.label.toLowerCase()}` })) : [];
+    return { text: "How much harm did it cause? Tap one. A near miss is \"no harm\".", followUps: chips };
   }
   const form = {
     title: parsed.title,

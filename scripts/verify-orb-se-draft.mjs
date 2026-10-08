@@ -72,10 +72,11 @@ t("without a harm level it asks, with the answers ready to tap", () => {
   assert.equal(r.proposal, undefined);
   assert.match(r.text, /How much harm/);
   assert.equal(r.followUps.length, 4);
-  assert.match(r.followUps[0], /, no harm$/);
+  assert.deepEqual(r.followUps.map((c) => c.label), ["No harm", "Low harm", "Moderate harm", "Severe harm"]);
+  assert.deepEqual(r.followUps.map((c) => c.color), ["#16a34a", "#eab308", "#f97316", "#dc2626"], "a traffic light, green to red");
+  assert.ok(r.followUps.every((c) => c.hint && /, (no|low|moderate|severe) harm$/.test(c.ask)));
   // tapping one gives a card
-  const again = buildSeReportDraft(r.followUps[0], { spaces, now: NOW });
-  assert.ok(again.proposal);
+  for (const choice of r.followUps) assert.ok(buildSeReportDraft(choice.ask, { spaces, now: NOW }).proposal, choice.label);
 });
 
 t("with everything it prepares a card and nothing is sent", () => {

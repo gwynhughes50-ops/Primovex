@@ -59,8 +59,12 @@ export function harmTone(harm) {
 }
 
 export function HarmPill({ harm }) {
-  const level = SE_HARM_LEVELS.find((h) => h.key === harm);
-  return <Pill tone={harmTone(harm)}>{level?.label || "No harm"}</Pill>;
+  const level = SE_HARM_LEVELS.find((h) => h.key === harm) || SE_HARM_LEVELS[0];
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold" style={{ borderColor: level.color, background: `${level.color}22` }}>
+      <span className="h-2 w-2 rounded-full" style={{ background: level.color }} aria-hidden="true" />{level.label}
+    </span>
+  );
 }
 
 export function StagePill({ status }) {

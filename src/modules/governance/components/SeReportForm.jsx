@@ -66,9 +66,9 @@ export default function SeReportForm({ actor, onClose, onReported }) {
           <legend className="text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Harm caused</legend>
           <div className="mt-1 grid gap-1.5 sm:grid-cols-2">
             {SE_HARM_LEVELS.map((level) => (
-              <label key={level.key} className={`flex items-start gap-3 rounded-xl border px-3 py-2.5 text-sm ${form.harm === level.key ? "border-[var(--medtrak-accent)] bg-[var(--medtrak-accent)]/10" : "border-[var(--medtrak-border)]"}`}>
-                <input type="radio" name="harm" className="mt-1" checked={form.harm === level.key} onChange={() => update({ harm: level.key })} />
-                <span><b className="block">{level.label}</b><span className="text-xs text-[var(--medtrak-muted)]">{level.hint}</span></span>
+              <label key={level.key} className="flex items-start gap-3 rounded-xl border-2 px-3 py-2.5 text-sm" style={{ borderColor: form.harm === level.key ? level.color : `${level.color}55`, background: form.harm === level.key ? `${level.color}26` : `${level.color}0f` }}>
+                <input type="radio" name="harm" className="mt-1" style={{ accentColor: level.color }} checked={form.harm === level.key} onChange={() => update({ harm: level.key })} />
+                <span><b className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full" style={{ background: level.color }} aria-hidden="true" />{level.label}</b><span className="text-xs text-[var(--medtrak-muted)]">{level.hint}</span></span>
               </label>
             ))}
           </div>

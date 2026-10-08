@@ -36,12 +36,17 @@ export const SE_CATEGORIES = [
   "information_governance", "safeguarding", "infection_control", "equipment_or_premises", "staffing", "other",
 ];
 
+// A traffic light: green (nobody harmed), yellow (minor), orange (moderate), red (severe).
 export const SE_HARM_LEVELS = [
-  { key: "none", label: "No harm", hint: "Happened but nobody was harmed (a near miss)" },
-  { key: "low", label: "Low harm", hint: "Minor harm, needed no more than simple treatment or reassurance" },
-  { key: "moderate", label: "Moderate harm", hint: "Needed extra treatment or caused more than short-term harm" },
-  { key: "severe", label: "Severe harm", hint: "Serious or permanent harm, or a death" },
+  { key: "none", label: "No harm", hint: "Happened but nobody was harmed (a near miss)", color: "#16a34a" },
+  { key: "low", label: "Low harm", hint: "Minor harm, needed no more than simple treatment or reassurance", color: "#eab308" },
+  { key: "moderate", label: "Moderate harm", hint: "Needed extra treatment or caused more than short-term harm", color: "#f97316" },
+  { key: "severe", label: "Severe harm", hint: "Serious or permanent harm, or a death", color: "#dc2626" },
 ];
+
+export function harmColor(key) {
+  return SE_HARM_LEVELS.find((h) => h.key === key)?.color || SE_HARM_LEVELS[0].color;
+}
 
 export const SE_INVESTIGATION = { pending: "pending", required: "required", not_required: "not_required" };
 export const REVIEW_STATUSES = { requested: "requested", submitted: "submitted" };

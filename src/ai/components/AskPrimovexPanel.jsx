@@ -319,7 +319,19 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
                 )}
                 {message.followUps?.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2" aria-label="Suggested next questions">
-                    {message.followUps.map((question) => (
+                    {message.followUps.filter((q) => typeof q === 'object').length > 0 && (
+                      <div className="grid w-full grid-cols-2 gap-2" role="group" aria-label="Choose one">
+                        {message.followUps.filter((q) => typeof q === 'object').map((choice) => (
+                          <button key={choice.label} type="button" onClick={() => ask(choice.ask)} disabled={busy} title={choice.hint}
+                            className="rounded-xl border-2 px-3 py-2 text-left text-xs disabled:opacity-50"
+                            style={{ borderColor: choice.color, background: `${choice.color}24`, color: 'var(--medtrak-text)' }}>
+                            <span className="flex items-center gap-1.5 font-bold"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: choice.color }} aria-hidden="true" />{choice.label}</span>
+                            <span className="mt-0.5 block text-[11px] leading-4" style={{ color: 'var(--medtrak-muted)' }}>{choice.hint}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {message.followUps.filter((q) => typeof q === 'string').map((question) => (
                       <button key={question} type="button" onClick={() => ask(question)} disabled={busy} className="primovex-ai-suggestion inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium disabled:opacity-50">{(question.charAt(0).toUpperCase() + question.slice(1)).replace(/ i /g, ' I ')}<ArrowRight className="h-3 w-3" /></button>
                     ))}
                   </div>
