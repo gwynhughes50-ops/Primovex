@@ -353,6 +353,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) submit(event); }} rows={1} placeholder="Ask Orb…" className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none" />
           <button type="submit" disabled={!prompt.trim() || busy} className="primovex-ai-submit grid h-10 w-10 place-items-center rounded-xl disabled:cursor-not-allowed disabled:opacity-30"><ArrowRight className="h-4 w-4" /></button>
         </div>
+        <p className="primovex-ai-muted mt-2 flex items-start gap-1.5 text-[11px] leading-4"><ShieldCheck className="mt-px h-3.5 w-3.5 shrink-0" /><span><strong>Please do not add any patient names to the Orb.</strong> Use EMIS numbers only.</span></p>
       </form>
 
       <style>{`

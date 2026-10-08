@@ -12,6 +12,7 @@ import { STOCK_CATEGORIES } from '@/data/stockCategories';
 import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
 import { findHelp, isHowToQuestion } from '@/ai/help/helpSearch';
 import { SE_REFERENCE } from '@/ai/governance/seAnswers';
+import { looksLikeSeReport } from '@/ai/governance/seDraft';
 import { looksLikePlaceQuestion, looksLikeTeamMessage, parseLocateQuestion, parseStockRequest } from '@/ai/stock/stockAsk';
 
 const INVENTORY_WORDS = ['stock', 'inventory', 'supplies', 'products', 'consumables', 'items'];
@@ -63,6 +64,11 @@ export function routeApprovedTool(prompt, options = {}) {
     if (help.match || help.alternatives.length) {
       return { toolId: 'help.howTo', input: { question: String(prompt) }, language: { normalised: text, confidence: help.match ? 0.95 : 0.8 } };
     }
+  }
+
+  // "Report a significant event: ..." helps them report one (before the lookups below).
+  if (looksLikeSeReport(prompt)) {
+    return { toolId: 'se.reportDraft', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.95 } };
   }
 
   // Significant events (the practice's own incident learning), not to be confused with a SAR or concern.

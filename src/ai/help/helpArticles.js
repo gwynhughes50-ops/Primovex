@@ -565,6 +565,7 @@ export const HELP_ARTICLES = [
       "Anyone can do this. On a computer: Significant events in the left menu, then Report. On the phone: Significant events on the Home screen, then Report.",
       "Give it a short title, the date, where it happened (pick the room) and how much harm it caused. Say what happened and what was done straight away.",
       "Never use anyone's name. Use roles (the nurse, a receptionist). If a patient was involved, give their EMIS number, or initials and date of birth if there isn't one.",
+      "Or tell the Orb: say \"report a significant event: the wrong vaccine was drawn up in Treatment Room 1 yesterday, no harm\". It sets the report up for you to check, and nothing is sent until you press Report event. No names, and use an EMIS number for any patient.",
       "The significant events team is told. You can follow what happens to it under \"Reported by me\", and add notes.",
     ],
     open: { label: "Open Significant events", route: "/governance/significant-events" },

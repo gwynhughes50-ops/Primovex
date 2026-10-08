@@ -2,16 +2,17 @@ import { doc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase";
 import { createReorderRequest } from "@/services/stockService";
+import { reportEvent } from "@/modules/governance/services/seService";
 
 // What actually happens when a person presses Confirm on an Orb proposal. Each executor takes the
 // proposal's own params (fixed when the proposal was prepared, never anything typed afterwards),
 // does exactly one thing, and returns a short sentence for the person. Permission is checked before
 // this runs (proposalProblem) and again by Firestore rules / the Cloud Function.
 
-const audit = (action, summary, targetType, targetId, metadata) => {
+const audit = (action, summary, targetType, targetId, metadata, module = "inventory") => {
   try {
     globalThis.dispatchEvent?.(new CustomEvent("primovex:governed-audit", { detail: {
-      action, module: "inventory", targetType, targetId, summary, classification: "operational", metadata,
+      action, module, targetType, targetId, summary, classification: "operational", metadata,
     } }));
   } catch { /* an audit hiccup must not undo the action */ }
 };
@@ -23,6 +24,13 @@ const EXECUTORS = {
     return sent > 0
       ? `Sent to ${sent} ${sent === 1 ? "person" : "people"} in the ${params.role} team. They'll see it in their Primovex notifications on the desktop app.`
       : `Nobody currently has the ${params.role} role, so no one received it.`;
+  },
+
+  // Anyone can report one; the rules let a person report only as themselves.
+  "significant-event": async (params, { actor }) => {
+    const id = await reportEvent(params.form, actor);
+    audit("orb.se.report", "A significant event was reported through the Orb", "significant_event", id, { harm: params.form.harm, category: params.form.category }, "governance");
+    return "Reported. The significant events team has been told. You can follow it, and add more detail, under Significant events.";
   },
 
   reorder: async (params, { actor }) => {

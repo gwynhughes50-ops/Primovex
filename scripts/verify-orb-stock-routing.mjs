@@ -20,6 +20,9 @@ route("do I have any significant event reviews to do", "governance.seLookup");
 route("what is the status of SE-2026-10081405", "governance.seLookup");
 route("when is the next SE meeting", "governance.seLookup");
 route("what is the SAR status for SAR-2026-0803141522", "governance.sarLookup");
+route("report a significant event: the wrong vaccine was drawn up, no harm", "se.reportDraft");
+route("I need to report a near miss", "se.reportDraft");
+route("how do I report a significant event", "help.howTo");
 // existing behaviour must not change
 route("which stock items are low", "inventory.lowStock");
 route("what is expiring soon", "inventory.expiring");

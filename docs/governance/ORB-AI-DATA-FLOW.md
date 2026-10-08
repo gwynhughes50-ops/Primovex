@@ -108,3 +108,11 @@ actions, the next meeting, one event by its reference) from the events the perso
 the SAR and concern lookups, it is never offered to the language model and its answers are never sent to
 it for rewording: it is answered by the Orb's own rules in the app. An administrator's Orb limit for the
 person (the SARs, concerns and significant events topic) applies.
+
+### Reporting a significant event through the Orb
+
+"Report a significant event: ..." is understood by the Orb's own rules in the app and never sent to the
+language model. The Orb works out the date, room, kind and harm (it never guesses harm: it asks), shows
+a card, and reports the event only when the person presses Report event, as themselves, through the same
+rules as the form. Text that looks like a person's name (a title and surname, or "called X") is refused.
+A permanent notice in the Orb says: Please do not add any patient names to the Orb. Use EMIS numbers only.

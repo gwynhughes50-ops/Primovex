@@ -19,6 +19,7 @@ import { describeSource, findHelp, formatHelpAnswer, relatedQuestions, sampleQue
 import { buildLocateResult, buildReorderDraft, buildTeamDraft } from '@/ai/stock/stockTools';
 import { needsCleaning } from '@/lib/cleaningFrequency';
 import { buildSeAnswer } from '@/ai/governance/seAnswers';
+import { buildSeReportDraft } from '@/ai/governance/seDraft';
 import { loadVisibleSe } from '@/modules/governance/services/seService';
 import { normaliseOrbScope } from '@/lib/orbScope';
 import { daysUntilExpiry, expiryStatus, expiryWindowDays, normaliseExpirySettings, stockLevelStatus, summariseStockAlerts } from '@/lib/stockAlerts';
@@ -834,6 +835,24 @@ export function registerApprovedReadOnlyTools() {
       return {
         domain: 'governance', data: { kind: answer.kind }, summary: answer.text, followUps: answer.followUps, confidence: 0.95,
         sources: [source('Significant events', `${data.events.length} event${data.events.length === 1 ? '' : 's'} you can see · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Significant events', route: '/governance/significant-events' }],
+      };
+    },
+  });
+
+  // Helping someone report a significant event. Only prepares a card; nothing is reported until they
+  // confirm. Anyone can report one, so this needs no permission, and an administrator's Orb limit does
+  // not stop it (reporting something that went wrong should never be blocked).
+  registerTool({
+    id: 'se.reportDraft', label: 'Report a significant event', requiredCapability: 'dashboard.read',
+    async execute(input = {}) {
+      let spaces = [];
+      try { spaces = (loadSpaceRegistry()?.spaces || []).filter((s) => !s.archivedAt && s.status !== 'archived').map((s) => ({ id: s.id, name: s.name })); } catch { /* the room is optional */ }
+      const result = buildSeReportDraft(input.question, { spaces });
+      return {
+        domain: 'governance', data: { proposed: Boolean(result.proposal) }, summary: result.text, followUps: result.followUps, proposal: result.proposal || null,
+        confidence: result.proposal ? 0.95 : 0.8,
+        sources: [source('Significant events', 'Drafted from what you said; nothing sent yet', 'system')],
         actions: [{ label: 'Open Significant events', route: '/governance/significant-events' }],
       };
     },
