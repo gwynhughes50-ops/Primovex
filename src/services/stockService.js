@@ -615,7 +615,7 @@ export async function applyStockMovement(itemId, movement) {
           }),
         };
       } else if (type === "use") {
-        result = useFromBatches(item, -delta);
+        result = useFromBatches(item, -delta, { prefer: movement?.batch_number });
         batchAllocations = result.allocations;
       } else if (type === "adjust") {
         result = adjustBatches(item, after);

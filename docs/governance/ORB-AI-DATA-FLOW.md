@@ -81,7 +81,7 @@ counters after 60 days, by a weekly clean-up. The audit ledger is not touched.
 
 ## Actions the Orb can prepare (confirmed by the person)
 
-Two things go beyond reading: a short message to a team, and a reorder request. The language
+Four things go beyond reading: a short message to a team, a reorder request, stock used, and a significant event report. The language
 model never does either. It (or the Orb's own rules) only understands the sentence; the lookup
 resolves the item, place and team against real data and asks if it is ambiguous, then shows a
 card with exactly what will happen. Nothing changes until the person presses Confirm. A card
@@ -92,6 +92,12 @@ expires after 15 minutes, runs once, and is checked against the person's permiss
   with that role in Primovex only; audited as `orb.team.message` (team and count, not the text).
 - Reorder: writes a pending request to the Reorder Centre (as the Inventory page does); nothing
   is ordered until someone approves it; audited as `orb.reorder.request`.
+- Stock used ("I've just taken one adrenaline from room D62"): rules-only (never sent to the
+  language model). Works out the product, how many, which of the item's places it came from and
+  which batch (asked for by the end of the batch number, one tap per batch in stock). The card shows
+  the stock left afterwards; confirming records the use through the same movement code as the
+  Inventory page, taking from the chosen batch first, and it is audited as a normal stock use with
+  source `orb`. Needs stock write. Taking from a kit does not yet tell anyone.
 
 ## Limiting the Orb for one person
 

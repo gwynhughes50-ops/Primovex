@@ -94,8 +94,19 @@ export function receiveIntoBatches(item, { qty: amount, batch_number, expiry_dat
 }
 
 // Stock is used: the soonest-expiring batch goes first. { batches, allocations }.
-export function useFromBatches(item, amount) {
-  return takeSoonest(currentBatches(item), Math.floor(qty(amount)));
+//   prefer: a batch number to take from first (someone says which pack the stock came from); any
+//   shortfall then comes off the soonest-expiring as usual.
+export function useFromBatches(item, amount, { prefer = "" } = {}) {
+  const list = currentBatches(item);
+  const want = Math.floor(qty(amount));
+  const key = clean(prefer).toLowerCase();
+  if (!key) return takeSoonest(list, want);
+  const first = list.filter((b) => b.batch_number.toLowerCase() === key);
+  const rest = list.filter((b) => b.batch_number.toLowerCase() !== key);
+  const a = takeSoonest(first, want);
+  const taken = sum(a.allocations);
+  const c = takeSoonest(rest, want - taken);
+  return { batches: [...a.batches, ...c.batches].sort(byExpiry), allocations: [...a.allocations, ...c.allocations] };
 }
 
 // A use is undone: put back what was taken, batch by batch.

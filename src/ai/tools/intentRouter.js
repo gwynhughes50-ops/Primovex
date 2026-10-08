@@ -13,6 +13,7 @@ import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
 import { findHelp, isHowToQuestion } from '@/ai/help/helpSearch';
 import { SE_REFERENCE } from '@/ai/governance/seAnswers';
 import { looksLikeSeReport } from '@/ai/governance/seDraft';
+import { parseUseRequest } from '@/ai/stock/stockUse';
 import { looksLikePlaceQuestion, looksLikeTeamMessage, parseLocateQuestion, parseStockRequest } from '@/ai/stock/stockAsk';
 
 const INVENTORY_WORDS = ['stock', 'inventory', 'supplies', 'products', 'consumables', 'items'];
@@ -82,6 +83,7 @@ export function routeApprovedTool(prompt, options = {}) {
   //   "BD blue needles need ordering" / "reorder ..."     -> a reorder to confirm
   //   "what's in anaphylaxis box 3"                      -> where things are
   if (looksLikeTeamMessage(prompt)) return { toolId: 'team.messageDraft', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.95 } };
+  if (parseUseRequest(prompt)) return { toolId: 'stock.useDraft', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.93 } };
   if (parseStockRequest(prompt)) return { toolId: 'reorder.draft', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.93 } };
   if (looksLikePlaceQuestion(prompt)) return { toolId: 'inventory.locate', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.95 } };
 

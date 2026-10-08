@@ -108,6 +108,10 @@ export const TOOL_SCHEMAS = {
     description: 'Help someone report a significant event: set up the report from what they said, for them to confirm.',
     input_schema: { type: 'object', properties: { question: { type: 'string', description: 'What they said.' } } },
   },
+  'stock.useDraft': {
+    description: 'Record that someone has used or taken stock (for example one adrenaline ampoule from the store cupboard), asking which place and batch if not said, for them to confirm.',
+    input_schema: { type: 'object', properties: { question: { type: 'string', description: 'What they said.' } } },
+  },
   'help.howTo': {
     description: 'Step-by-step help for how to do something in Primovex (for example "how do I add stock", "how do I check a kit", "how do I add a user"). Static help text; reads no practice data.',
     input_schema: { type: 'object', properties: { question: { type: 'string', description: 'What they want to know how to do, in their words.' } }, required: ['question'] },

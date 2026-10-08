@@ -20,6 +20,7 @@ import { buildLocateResult, buildReorderDraft, buildTeamDraft } from '@/ai/stock
 import { needsCleaning } from '@/lib/cleaningFrequency';
 import { buildSeAnswer } from '@/ai/governance/seAnswers';
 import { buildSeReportDraft } from '@/ai/governance/seDraft';
+import { buildUseDraft } from '@/ai/stock/stockUse';
 import { loadVisibleSe } from '@/modules/governance/services/seService';
 import { normaliseOrbScope } from '@/lib/orbScope';
 import { daysUntilExpiry, expiryStatus, expiryWindowDays, normaliseExpirySettings, stockLevelStatus, summariseStockAlerts } from '@/lib/stockAlerts';
@@ -813,6 +814,22 @@ export function registerApprovedReadOnlyTools() {
         confidence: result.proposal ? 0.95 : result.ambiguous ? 0.7 : 0.8,
         sources: [source('Inventory', `${items.length} active products and ${pending.length} pending reorder${pending.length === 1 ? '' : 's'} checked · live read ${nowLabel()}`)],
         actions: result.actions || [{ label: 'Open Reorder Centre', route: '/reorder-centre' }],
+      };
+    },
+  });
+
+  // "I've just taken one adrenaline from the store cupboard": works out the product, place and batch
+  // (asking about whatever is missing) and prepares a card. The stock only changes when they confirm.
+  registerTool({
+    id: 'stock.useDraft', label: 'Record stock used', requiredCapability: 'inventory.write',
+    async execute(input = {}) {
+      const items = await readStock();
+      const result = buildUseDraft(input, { items });
+      return {
+        domain: 'inventory', data: { proposed: Boolean(result.proposal) }, summary: result.text, followUps: result.followUps, proposal: result.proposal || null,
+        confidence: result.proposal ? 0.95 : 0.8,
+        sources: [source('Inventory', `${items.length} active products checked · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Inventory', route: '/inventory' }],
       };
     },
   });

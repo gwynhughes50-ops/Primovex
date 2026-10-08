@@ -555,6 +555,22 @@ export const HELP_ARTICLES = [
     related: ["what-can-orb-do"],
   },
   {
+    id: "orb-record-stock-used",
+    title: "How do I record stock I've used with the Orb?",
+    topic: "The Orb",
+    asks: ["how do i record stock i have used with the orb", "how do i tell the orb i took an ampoule", "how do i take stock off using the orb", "how do i tell the orb which batch i took"],
+    keywords: ["orb", "ampoule", "batch", "taken", "took"],
+    where: "both",
+    steps: [
+      "Tell the Orb what you took, for example \"I've just taken one adrenaline from room D62\" or \"one adrenaline ampoule from the store cupboard\". You need permission to change stock.",
+      "If you haven't said where from, it lists the places that have it. If there is more than one batch, it asks which: tap the one whose batch number ends the same as the pack in your hand.",
+      "It shows a card: the product, how many, where from, the batch and the stock left afterwards. Press Take it off stock to record it. Nothing changes until you do.",
+      "It's recorded the same as using stock on the Inventory page, with the batch you chose, and shows in the stock history.",
+    ],
+    open: { label: "Open Inventory", route: "/inventory" },
+    related: ["orb-stock-actions"],
+  },
+  {
     id: "report-significant-event",
     title: "How do I report a significant event?",
     topic: "Governance",

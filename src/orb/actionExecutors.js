@@ -1,7 +1,7 @@
 import { doc, getDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase";
-import { createReorderRequest } from "@/services/stockService";
+import { applyStockMovement, createReorderRequest } from "@/services/stockService";
 import { reportEvent } from "@/modules/governance/services/seService";
 
 // What actually happens when a person presses Confirm on an Orb proposal. Each executor takes the
@@ -31,6 +31,23 @@ const EXECUTORS = {
     const id = await reportEvent(params.form, actor);
     audit("orb.se.report", "A significant event was reported through the Orb", "significant_event", id, { harm: params.form.harm, category: params.form.category }, "governance");
     return "Reported. The significant events team has been told. You can follow it, and add more detail, under Significant events.";
+  },
+
+  // Stock used: the place and the batch are the ones the person chose on the card. applyStockMovement
+  // re-checks the quantity inside its transaction and writes the movement and the audit entry.
+  "stock-use": async (params, { actor }) => {
+    const result = await applyStockMovement(params.itemId, {
+      type: "use",
+      qty: params.quantity,
+      locationId: params.locationId || null,
+      locationName: params.locationName,
+      locationType: params.locationType,
+      batch_number: params.batchNumber || "",
+      reason: "Used (recorded through the Orb)",
+      actor,
+      source: "orb",
+    });
+    return `Done. Removed ${params.quantity} ${params.itemLabel}${params.batchNumber ? ` (batch ${params.batchNumber})` : ""} from ${params.locationName}. ${result.after} left in total.`;
   },
 
   reorder: async (params, { actor }) => {
