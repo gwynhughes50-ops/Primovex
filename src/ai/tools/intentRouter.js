@@ -11,6 +11,7 @@ import { CLINICAL_INTENTS, ORB_CLARIFY_THRESHOLD, ORB_INTENT_THRESHOLD } from '@
 import { STOCK_CATEGORIES } from '@/data/stockCategories';
 import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
 import { findHelp, isHowToQuestion } from '@/ai/help/helpSearch';
+import { SE_REFERENCE } from '@/ai/governance/seAnswers';
 import { looksLikePlaceQuestion, looksLikeTeamMessage, parseLocateQuestion, parseStockRequest } from '@/ai/stock/stockAsk';
 
 const INVENTORY_WORDS = ['stock', 'inventory', 'supplies', 'products', 'consumables', 'items'];
@@ -62,6 +63,11 @@ export function routeApprovedTool(prompt, options = {}) {
     if (help.match || help.alternatives.length) {
       return { toolId: 'help.howTo', input: { question: String(prompt) }, language: { normalised: text, confidence: help.match ? 0.95 : 0.8 } };
     }
+  }
+
+  // Significant events (the practice's own incident learning), not to be confused with a SAR or concern.
+  if (SE_REFERENCE.test(text) || /\b(significant events?|near miss(?:es)?|se meetings?|se actions?|se reviews?)\b/.test(text)) {
+    return { toolId: 'governance.seLookup', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.95 } };
   }
 
   // Doing something with stock, or asking where it is (before the older stock phrases below,

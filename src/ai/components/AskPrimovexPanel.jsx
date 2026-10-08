@@ -12,6 +12,7 @@ const SUGGESTIONS = [
   'Which stock is low?',
   'What changed since yesterday?',
   'How do I add a new product to stock?',
+  'How many significant events are open?',
 ];
 
 const STATUS_LABELS = {

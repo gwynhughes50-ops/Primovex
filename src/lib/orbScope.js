@@ -13,7 +13,7 @@ import { CAPABILITY_CATALOG } from "@/core/identity/capabilities";
 
 export const ORB_TOPICS = [
   { id: "stock", label: "Stock and ordering", description: "Stock levels, where things are, expiry, reorders, suppliers, purchasing", domains: ["inventory", "purchasing", "suppliers"], pulse: ["inventory", "purchasing"] },
-  { id: "governance", label: "SARs and concerns", description: "Subject access requests and concerns", domains: ["governance"], pulse: ["governance"] },
+  { id: "governance", label: "SARs, concerns and significant events", description: "Subject access requests, concerns and significant events", domains: ["governance"], pulse: ["governance"] },
   { id: "compliance", label: "Compliance", description: "Compliance checks, assets and everything in the Compliance area", domains: ["compliance"], pulse: ["compliance"] },
   { id: "rooms", label: "Rooms, cleaning and tasks", description: "Rooms, cleaning, equipment, maintenance, tasks and alerts", domains: ["operations"], pulse: ["assets", "estates"] },
   { id: "fridges", label: "Fridges and temperature", description: "Fridge and temperature monitoring", domains: ["temperature", "connect"], pulse: ["compliance"] },

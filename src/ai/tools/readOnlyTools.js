@@ -18,6 +18,9 @@ import { CAPABILITY_CATALOG, ROLE_TEMPLATES, hasCapability } from '@/core/identi
 import { describeSource, findHelp, formatHelpAnswer, relatedQuestions, sampleQuestions } from '@/ai/help/helpSearch';
 import { buildLocateResult, buildReorderDraft, buildTeamDraft } from '@/ai/stock/stockTools';
 import { needsCleaning } from '@/lib/cleaningFrequency';
+import { buildSeAnswer } from '@/ai/governance/seAnswers';
+import { loadVisibleSe } from '@/modules/governance/services/seService';
+import { normaliseOrbScope } from '@/lib/orbScope';
 import { daysUntilExpiry, expiryStatus, expiryWindowDays, normaliseExpirySettings, stockLevelStatus, summariseStockAlerts } from '@/lib/stockAlerts';
 import {
   alertsAnswer, categoryAnswer, cleaningAnswer, coldChainOverview, coldChainUnitAnswer, complianceAnswer, expiryAnswer, lowStockAnswer,
@@ -809,6 +812,29 @@ export function registerApprovedReadOnlyTools() {
         confidence: result.proposal ? 0.95 : result.ambiguous ? 0.7 : 0.8,
         sources: [source('Inventory', `${items.length} active products and ${pending.length} pending reorder${pending.length === 1 ? '' : 's'} checked · live read ${nowLabel()}`)],
         actions: result.actions || [{ label: 'Open Reorder Centre', route: '/reorder-centre' }],
+      };
+    },
+  });
+
+  // Significant events: what the person can already open, summarised. Everyone can report and follow
+  // their own, so this needs no special permission; the database rules decide what comes back, and an
+  // administrator's Orb limit for the person (SARs and concerns topic) is respected here.
+  registerTool({
+    id: 'governance.seLookup', label: 'Significant events', requiredCapability: 'dashboard.read',
+    async execute(input = {}, context = {}) {
+      const scope = normaliseOrbScope(context.profile?.orbScope);
+      if (scope && !scope.includes('governance')) {
+        return { domain: 'governance', data: null, summary: 'Significant events are not one of the topics your Orb has been set up for.', confidence: 1, sources: [source('Orb topics', 'Limited by an administrator', 'system')], actions: [] };
+      }
+      const capabilities = context.capabilities || [];
+      const seesAll = hasCapability(capabilities, 'governance.seTeam') || hasCapability(capabilities, 'governance.partnerAccess');
+      const uid = context.userId || null;
+      const data = await loadVisibleSe({ seesAll, uid });
+      const answer = buildSeAnswer(input.question, { ...data, uid, seesAll });
+      return {
+        domain: 'governance', data: { kind: answer.kind }, summary: answer.text, followUps: answer.followUps, confidence: 0.95,
+        sources: [source('Significant events', `${data.events.length} event${data.events.length === 1 ? '' : 's'} you can see · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Significant events', route: '/governance/significant-events' }],
       };
     },
   });

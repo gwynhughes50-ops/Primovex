@@ -3,8 +3,8 @@ import { routeApprovedTool } from "../src/ai/tools/intentRouter.js";
 
 let n = 0;
 const route = (prompt, expected) => {
-  const got = routeApprovedTool(prompt, {})?.toolId;
-  assert.equal(got, expected, `"${prompt}" routed to ${got}, expected ${expected}`);
+  const routed = routeApprovedTool(prompt, {}); const got = routed?.toolId;
+  assert.equal(got, expected, `"${prompt}" routed to ${got}, expected ${expected} (${JSON.stringify(routed)})`);
   n += 1;
 };
 
@@ -15,6 +15,11 @@ route("reorder 5 chlorphenamine ampoules", "reorder.draft");
 route("what's in anaphylaxis box 3", "inventory.locate");
 route("how many adrenaline are in anaphylaxis box 3", "inventory.locate");
 route("where are the blue needles", "inventory.locate");
+route("how many significant events are open", "governance.seLookup");
+route("do I have any significant event reviews to do", "governance.seLookup");
+route("what is the status of SE-2026-10081405", "governance.seLookup");
+route("when is the next SE meeting", "governance.seLookup");
+route("what is the SAR status for SAR-2026-0803141522", "governance.sarLookup");
 // existing behaviour must not change
 route("which stock items are low", "inventory.lowStock");
 route("what is expiring soon", "inventory.expiring");

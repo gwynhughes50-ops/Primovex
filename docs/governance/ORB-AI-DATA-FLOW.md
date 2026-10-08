@@ -100,3 +100,11 @@ example the IT lead only for SARs and concerns, the caretaker only for Complianc
 can only take permissions away; it is applied to the person's role permissions on the device
 and again on the server (`orbRoute`, `orbTeamMessage`). People cannot edit their own limit
 (Firestore rule on `users`, tested in the attack suite). Changes are audited (`orb.scope.update`).
+
+## Significant events
+
+The Orb answers questions about significant events (how many are open, what needs your review, overdue
+actions, the next meeting, one event by its reference) from the events the person can already open. Like
+the SAR and concern lookups, it is never offered to the language model and its answers are never sent to
+it for rewording: it is answered by the Orb's own rules in the app. An administrator's Orb limit for the
+person (the SARs, concerns and significant events topic) applies.

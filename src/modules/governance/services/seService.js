@@ -1,5 +1,5 @@
 import {
-  Timestamp, addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where,
+  Timestamp, addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase";
@@ -157,6 +157,27 @@ export function subscribeActions({ seesAll, uid }, callback, onError) {
     ? query(collection(db, SE_ACTIONS_COLLECTION), orderBy("createdAt", "desc"), limit(500))
     : query(collection(db, SE_ACTIONS_COLLECTION), where("ownerUid", "==", uid));
   return onSnapshot(q, (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), onError);
+}
+
+// One read of everything this person can see, for the Orb. Same queries as the screens, so the
+// database rules decide what comes back.
+export async function loadVisibleSe({ seesAll, uid }) {
+  const rows = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const merge = (lists) => [...new Map(lists.flat().map((r) => [r.id, r])).values()];
+  const events = seesAll
+    ? rows(await getDocs(query(collection(db, SE_COLLECTION), orderBy("createdAt", "desc"), limit(500))))
+    : merge(await Promise.all([
+        getDocs(query(collection(db, SE_COLLECTION), where("reportedByUid", "==", uid))),
+        getDocs(query(collection(db, SE_COLLECTION), where("leadUid", "==", uid))),
+        getDocs(query(collection(db, SE_COLLECTION), where("involvedUserIds", "array-contains", uid))),
+        getDocs(query(collection(db, SE_COLLECTION), where("reviewerUids", "array-contains", uid))),
+      ]).then((snaps) => snaps.map(rows)));
+  const [actions, reviews, meetings] = await Promise.all([
+    getDocs(seesAll ? query(collection(db, SE_ACTIONS_COLLECTION), limit(500)) : query(collection(db, SE_ACTIONS_COLLECTION), where("ownerUid", "==", uid))).then(rows),
+    getDocs(query(collection(db, SE_REVIEWS_COLLECTION), where("reviewerUid", "==", uid))).then(rows),
+    getDocs(seesAll ? query(collection(db, SE_MEETINGS_COLLECTION), orderBy("meetingDate", "desc"), limit(50)) : query(collection(db, SE_MEETINGS_COLLECTION), where("attendeeUids", "array-contains", uid))).then(rows),
+  ]);
+  return { events, actions, reviews, meetings };
 }
 
 // ---- running an event (the team) ------------------------------------------------------------------------------------------

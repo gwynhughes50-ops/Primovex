@@ -100,6 +100,10 @@ export const TOOL_SCHEMAS = {
     description: 'Prepare a reorder request for a stock item, or report that something is missing or has run out, for the person to confirm.',
     input_schema: { type: 'object', properties: { item: { type: 'string', description: 'The stock item.' }, quantity: { type: 'number', description: 'How many to order, if said.' }, place: { type: 'string', description: 'Where it is missing from, if said.' } }, required: ['item'] },
   },
+  'governance.seLookup': {
+    description: 'Significant events the person can see: how many are open, what needs their review, their overdue actions, the next meeting, or the status of one event by its reference (SE-2026-...).',
+    input_schema: { type: 'object', properties: { question: { type: 'string', description: 'What they asked, in their words.' } } },
+  },
   'help.howTo': {
     description: 'Step-by-step help for how to do something in Primovex (for example "how do I add stock", "how do I check a kit", "how do I add a user"). Static help text; reads no practice data.',
     input_schema: { type: 'object', properties: { question: { type: 'string', description: 'What they want to know how to do, in their words.' } }, required: ['question'] },
