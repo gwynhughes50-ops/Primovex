@@ -12,6 +12,7 @@ import SpaceBuilder from '@/modules/sense/components/SpaceBuilder';
 import { loadSenseState, saveSenseState } from '@/modules/sense/services/senseStore';
 import EquipmentRegistrationWizard from '@/modules/equipment/components/EquipmentRegistrationWizard';
 import useConnectedDevices from '@/hooks/useConnectedDevices';
+import { cleaningFrequencyHours, cleaningFrequencyLabel, isCleaningOverdue, needsCleaning, nextCleanDue } from '@/lib/cleaningFrequency';
 
 const panel = 'rounded-2xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] shadow-xl shadow-black/10';
 const muted = 'text-[color:var(--medtrak-muted)]';
@@ -41,19 +42,16 @@ function formatShort(value) {
 }
 
 function getNextCleanAt(room) {
-  const cleaned = toDate(room.lastCleanedAt);
-  if (!cleaned) return null;
-  return new Date(cleaned.getTime() + (room.cleaningFrequencyHours || 24) * 3600000);
+  return nextCleanDue(room, toDate(room.lastCleanedAt));
 }
 
-const FREQUENCY_LABELS = { 8: 'Every 8 hours', 12: 'Every 12 hours', 24: 'Daily', 168: 'Weekly', 720: 'Monthly', 4320: 'Every 6 months', 8760: 'Yearly' };
 function formatCleaningFrequency(hours) {
-  return FREQUENCY_LABELS[hours] || `Every ${hours} hours`;
+  return cleaningFrequencyLabel(hours);
 }
 
 function getRoomOperationalStatus(room, maintenance) {
-  const next = getNextCleanAt(room);
-  const overdue = !next || next.getTime() < Date.now();
+  // A space set to "Never" isn't on a cleaning schedule, so it is never overdue.
+  const overdue = isCleaningOverdue(room, toDate(room.lastCleanedAt));
   const hasOpenIssue = maintenance.some((item) => item.roomId === room.id && item.status !== 'closed');
   if (hasOpenIssue || overdue || room.status === 'attention') return overdue ? 'overdue' : 'attention';
   return 'ready';
@@ -116,7 +114,7 @@ export default function Facilities() {
       lastCleanedBy: operational.lastCleanedBy || '',
       lastStockedAt: operational.lastStockedAt || null,
       lastStockedBy: operational.lastStockedBy || '',
-      cleaningFrequencyHours: operational.cleaningFrequencyHours || room.cleaningFrequencyHours || 24,
+      cleaningFrequencyHours: cleaningFrequencyHours(operational.cleaningFrequencyHours ?? room.cleaningFrequencyHours),
     };
     return {
       ...merged,
@@ -240,7 +238,7 @@ export default function Facilities() {
             {filteredRooms.map((room) => (
               <button key={room.id} onClick={() => setSelectedRoomId(room.id)} className="group rounded-2xl border border-[color:var(--medtrak-border)] p-4 text-left transition hover:-translate-y-0.5 hover:bg-white/5">
                 <div className="flex items-start justify-between gap-3"><div><p className={`text-[11px] font-semibold tracking-wide ${muted}`}>{room.id}</p><h3 className="mt-1 font-semibold">{room.name}</h3><p className={`mt-1 text-xs ${muted}`}>{room.floor} • {room.zone}</p></div><StatusPill status={room.operationalStatus} /></div>
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><span className={`block text-xs ${muted}`}>Last cleaned</span><span className="mt-1 block font-medium">{room.lastCleanedAt ? formatDate(room.lastCleanedAt) : 'Not recorded'}</span></div><div><span className={`block text-xs ${muted}`}>Next clean</span><span className="mt-1 block font-medium">{room.nextCleanAt ? formatDate(room.nextCleanAt) : 'Due now'}</span></div><div><span className={`block text-xs ${muted}`}>Last stocked</span><span className="mt-1 block font-medium">{room.lastStockedAt ? formatDate(room.lastStockedAt) : 'Not recorded'}</span></div></div>
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm"><div><span className={`block text-xs ${muted}`}>Last cleaned</span><span className="mt-1 block font-medium">{room.lastCleanedAt ? formatDate(room.lastCleanedAt) : 'Not recorded'}</span></div><div><span className={`block text-xs ${muted}`}>Next clean</span><span className="mt-1 block font-medium">{!needsCleaning(room) ? 'Not scheduled' : room.nextCleanAt ? formatDate(room.nextCleanAt) : 'Due now'}</span></div><div><span className={`block text-xs ${muted}`}>Last stocked</span><span className="mt-1 block font-medium">{room.lastStockedAt ? formatDate(room.lastStockedAt) : 'Not recorded'}</span></div></div>
                 <div className={`mt-4 flex items-center justify-between border-t border-[color:var(--medtrak-border)] pt-3 text-xs ${muted}`}><span>{room.equipmentCount} equipment • {room.openIssues} issues</span><span className="flex items-center gap-1 text-[color:var(--medtrak-accent)]">Open <ChevronRight className="h-3.5 w-3.5 transition group-hover:translate-x-0.5" /></span></div>
               </button>
             ))}
@@ -253,7 +251,7 @@ export default function Facilities() {
       )}
 
       {selectedRoom && <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-6" onClick={()=>setSelectedRoomId(null)}><div className={`${panel} max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-b-none p-5 sm:rounded-2xl`} onClick={(e)=>e.stopPropagation()}><div className="flex items-start justify-between"><div><p className="text-xs font-semibold uppercase tracking-wider text-[color:var(--medtrak-accent)]">Digital room • {selectedRoom.id}</p><h2 className="mt-1 text-2xl font-semibold">{selectedRoom.name}</h2><p className={`mt-1 text-sm ${muted}`}>{selectedRoom.site} • {selectedRoom.floor} • {selectedRoom.zone}</p></div><button onClick={()=>setSelectedRoomId(null)} className="rounded-full p-2 hover:bg-white/5"><X className="h-5 w-5"/></button></div>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><div className={`rounded-2xl p-4 ${soft}`}><span className={`text-xs ${muted}`}>Room status</span><div className="mt-2"><StatusPill status={selectedRoom.operationalStatus} /></div></div><div className="rounded-2xl border border-[color:var(--medtrak-border)] p-4"><span className={`text-xs ${muted}`}>Last cleaned</span><div className="mt-1 font-semibold">{formatDate(selectedRoom.lastCleanedAt)}</div><div className={`text-xs ${muted}`}>{selectedRoom.lastCleanedBy || 'No cleaner recorded'}</div></div><div className="rounded-2xl border border-[color:var(--medtrak-border)] p-4"><span className={`text-xs ${muted}`}>Next clean due</span><div className="mt-1 font-semibold">{selectedRoom.nextCleanAt ? formatDate(selectedRoom.nextCleanAt) : 'Due now'}</div><div className={`text-xs ${muted}`}>{formatCleaningFrequency(selectedRoom.cleaningFrequencyHours)}</div></div><div className="rounded-2xl border border-[color:var(--medtrak-border)] p-4"><span className={`text-xs ${muted}`}>Last stocked</span><div className="mt-1 font-semibold">{formatDate(selectedRoom.lastStockedAt)}</div><div className={`text-xs ${muted}`}>{selectedRoom.lastStockedBy || 'No record yet'}</div></div></div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><div className={`rounded-2xl p-4 ${soft}`}><span className={`text-xs ${muted}`}>Room status</span><div className="mt-2"><StatusPill status={selectedRoom.operationalStatus} /></div></div><div className="rounded-2xl border border-[color:var(--medtrak-border)] p-4"><span className={`text-xs ${muted}`}>Last cleaned</span><div className="mt-1 font-semibold">{formatDate(selectedRoom.lastCleanedAt)}</div><div className={`text-xs ${muted}`}>{selectedRoom.lastCleanedBy || 'No cleaner recorded'}</div></div><div className="rounded-2xl border border-[color:var(--medtrak-border)] p-4"><span className={`text-xs ${muted}`}>Next clean due</span><div className="mt-1 font-semibold">{!needsCleaning(selectedRoom) ? 'Not scheduled' : selectedRoom.nextCleanAt ? formatDate(selectedRoom.nextCleanAt) : 'Due now'}</div><div className={`text-xs ${muted}`}>{formatCleaningFrequency(selectedRoom.cleaningFrequencyHours)}</div></div><div className="rounded-2xl border border-[color:var(--medtrak-border)] p-4"><span className={`text-xs ${muted}`}>Last stocked</span><div className="mt-1 font-semibold">{formatDate(selectedRoom.lastStockedAt)}</div><div className={`text-xs ${muted}`}>{selectedRoom.lastStockedBy || 'No record yet'}</div></div></div>
 
         {activeCleaningSession && <div className="mt-4 flex items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4"><Sparkles className="h-5 w-5 text-amber-500" /><div><div className="font-semibold">Cleaning in progress</div><p className={`text-sm ${muted}`}>Started by {activeCleaningSession.startedBy} at {formatDate(activeCleaningSession.startedAt)}. This finishes automatically when they scan the room's tag again on the way out, or you can confirm it manually below.</p></div></div>}
 

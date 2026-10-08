@@ -1,4 +1,5 @@
 import { getFacilitiesSnapshot } from '@/modules/facilities/services/facilitiesStore';
+import { isCleaningOverdue, nextCleanDue } from '@/lib/cleaningFrequency';
 
 function toDate(value) {
   if (!value) return null;
@@ -15,7 +16,7 @@ function nextCleanAt(room, operational) {
   const lastCleanedAt = operational?.[room.id]?.lastCleanedAt;
   const date = toDate(lastCleanedAt);
   if (!date) return null;
-  return new Date(date.getTime() + (room.cleaningFrequencyHours || 24) * 3600000);
+  return nextCleanDue(room, date);
 }
 
 export const facilitiesContributor = {
@@ -31,10 +32,8 @@ export const facilitiesContributor = {
     const operational = context.rooms?.operational || {};
     const now = Date.now();
     const openIssues = state.maintenance.filter((item) => item.status !== 'closed');
-    const overdueRooms = state.rooms.filter((room) => {
-      const next = nextCleanAt(room, operational);
-      return !next || next.getTime() < now;
-    });
+    // Spaces set to "Never" aren't on a cleaning schedule, so they are never overdue.
+    const overdueRooms = state.rooms.filter((room) => isCleaningOverdue(room, toDate(operational?.[room.id]?.lastCleanedAt), now));
     const readyRooms = state.rooms.length - overdueRooms.length;
     const cleaningScore = state.rooms.length ? (readyRooms / state.rooms.length) * 100 : 100;
     const maintenancePenalty = Math.min(30, openIssues.reduce((sum, item) => sum + ({ high: 12, medium: 7, low: 3 }[item.priority] || 5), 0));

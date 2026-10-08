@@ -1,4 +1,5 @@
 import { defaultEquipment, defaultMaintenance } from '../data/defaultFacilities';
+import { cleaningFrequencyHours } from '@/lib/cleaningFrequency';
 import { loadSpaceRegistry, resetSpaceRegistry, saveSpaceRegistry } from '@/modules/sense/services/sharedSpaceRegistry';
 import {
   equipmentToFacilitiesItem,
@@ -55,7 +56,7 @@ function spaceToRoom(space, registry) {
     floor: floor?.name || space.floorName || space.floor || '',
     zone: zone?.name || space.zoneName || space.zone || '',
     status: space.status || 'ready',
-    cleaningFrequencyHours: space.cleaningFrequencyHours || 24,
+    cleaningFrequencyHours: cleaningFrequencyHours(space.cleaningFrequencyHours),
     notes: space.notes ?? '',
   };
 }

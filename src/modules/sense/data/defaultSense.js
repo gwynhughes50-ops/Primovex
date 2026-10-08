@@ -1,4 +1,5 @@
 import { defaultEquipment, defaultRooms } from '@/modules/facilities/data/defaultFacilities';
+import { cleaningFrequencyHours } from '@/lib/cleaningFrequency';
 import { DEFAULT_FLOORS, DEFAULT_SITES, DEFAULT_ZONES, getSpaceTemplate } from './spaceTemplates';
 
 const now = new Date();
@@ -49,7 +50,7 @@ export const defaultSpaces = defaultRooms.map((room, index) => {
   },
   nfcTagId: room.nfcTagId || '',
   expectedAssetIds: defaultEquipment.filter((item) => item.roomId === room.id).map((item) => item.id),
-  cleaningFrequencyHours: room.cleaningFrequencyHours || 24,
+  cleaningFrequencyHours: cleaningFrequencyHours(room.cleaningFrequencyHours),
   notes: room.notes || '',
   archivedAt: null,
   createdAt: now.toISOString(),

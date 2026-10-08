@@ -17,6 +17,7 @@ import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
 import { CAPABILITY_CATALOG, ROLE_TEMPLATES, hasCapability } from '@/core/identity/capabilities';
 import { describeSource, findHelp, formatHelpAnswer, relatedQuestions, sampleQuestions } from '@/ai/help/helpSearch';
 import { buildLocateResult, buildReorderDraft, buildTeamDraft } from '@/ai/stock/stockTools';
+import { needsCleaning } from '@/lib/cleaningFrequency';
 import { daysUntilExpiry, expiryStatus, expiryWindowDays, normaliseExpirySettings, stockLevelStatus, summariseStockAlerts } from '@/lib/stockAlerts';
 import {
   alertsAnswer, categoryAnswer, cleaningAnswer, coldChainOverview, coldChainUnitAnswer, complianceAnswer, expiryAnswer, lowStockAnswer,
@@ -338,11 +339,13 @@ export function registerApprovedReadOnlyTools() {
       const state = getFacilitiesSnapshot();
       const operational = await readRoomOperational();
       const today = new Date().toDateString();
-      const overdue = state.rooms.filter((r) => {
+      // Spaces set to "Never" aren't on a cleaning schedule, so they aren't counted.
+      const scheduled = state.rooms.filter((r) => needsCleaning(r));
+      const overdue = scheduled.filter((r) => {
         const lastCleanedAt = cleanedAtDate(operational[r.id]?.lastCleanedAt);
         return !lastCleanedAt || lastCleanedAt.toDateString() !== today;
       });
-      const cleaning = cleaningAnswer({ overdue: overdue.map((r) => r.name), total: state.rooms.length });
+      const cleaning = cleaningAnswer({ overdue: overdue.map((r) => r.name), total: scheduled.length });
       return { data: overdue, summary: cleaning.text, followUps: cleaning.followUps, confidence: 0.99, sources: [source('Facilities cleaning register', `${state.rooms.length} rooms checked · live read ${nowLabel()}`)], actions: [{ label: 'Open Facilities', route: '/facilities' }] };
     },
   });

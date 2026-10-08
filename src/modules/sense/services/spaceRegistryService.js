@@ -1,5 +1,6 @@
 import { loadSpaceRegistry, saveSpaceRegistry } from './sharedSpaceRegistry';
 import { getSpaceTemplate } from '../data/spaceTemplates';
+import { cleaningFrequencyHours } from '@/lib/cleaningFrequency';
 
 function slugify(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -26,7 +27,7 @@ export function createSpaceRecord(input) {
     parentSpaceId: input.parentSpaceId || null,
     status: input.status || 'ready',
     capabilities: Array.isArray(input.capabilities) && input.capabilities.length ? input.capabilities : [...template.capabilities],
-    cleaningFrequencyHours: Number(input.cleaningFrequencyHours || 24),
+    cleaningFrequencyHours: cleaningFrequencyHours(input.cleaningFrequencyHours),
     notes: String(input.notes || '').trim(),
     nfcTagId: input.nfcTagId || '',
     qrCode: input.qrCode || '',

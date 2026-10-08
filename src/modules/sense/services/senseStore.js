@@ -1,4 +1,5 @@
 import { defaultAssetPassports, defaultSenseTimeline } from '../data/defaultSense';
+import { cleaningFrequencyHours, needsCleaning } from '@/lib/cleaningFrequency';
 import { loadSpaceRegistry, replaceRegistryStructure, resetSpaceRegistry } from './sharedSpaceRegistry';
 import {
   equipmentToSenseAsset,
@@ -68,7 +69,8 @@ export function calculateSpaceReadiness(space, senseState, facilitiesState = {})
   const openMaintenance = (facilitiesState.maintenance || []).filter((item) => item.roomId === space.id && item.status !== 'closed');
   const expectedAssets = space.expectedAssetIds || [];
   const presentAssets = senseState.assets.filter((asset) => asset.currentSpaceId === space.id && expectedAssets.includes(asset.id));
-  const cleaningFresh = facilityRoom?.lastCleanedAt ? Date.now() - new Date(facilityRoom.lastCleanedAt).getTime() <= (facilityRoom.cleaningFrequencyHours || 24) * 3600000 : false;
+  // A space set to "Never" isn't on a cleaning schedule, so it counts as fine.
+  const cleaningFresh = !needsCleaning(facilityRoom || space) ? true : facilityRoom?.lastCleanedAt ? Date.now() - new Date(facilityRoom.lastCleanedAt).getTime() <= cleaningFrequencyHours(facilityRoom.cleaningFrequencyHours) * 3600000 : false;
   const equipmentScore = expectedAssets.length ? Math.round((presentAssets.length / expectedAssets.length) * 100) : 100;
   const cleaningScore = cleaningFresh ? 100 : 40;
   const maintenanceScore = openMaintenance.length ? Math.max(20, 100 - openMaintenance.length * 35) : 100;

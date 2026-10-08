@@ -4,6 +4,7 @@ import { SPACE_TYPES, getSpaceTemplate } from '../data/spaceTemplates';
 import { addHierarchyItem, addSpace, archiveSpace, deleteHierarchyItem, updateSpace } from '../services/spaceRegistryService';
 import { createLinkedSite, linkSite, planSiteLinks } from '../services/siteLink';
 import { renameHierarchyItem } from '../services/hierarchyEdit';
+import { CLEANING_FREQUENCY_OPTIONS, cleaningFrequencyHours } from '@/lib/cleaningFrequency';
 
 const field = 'mt-1 w-full rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] px-3 py-2.5 text-sm text-[color:var(--medtrak-text)]';
 const button = 'rounded-xl border border-[color:var(--medtrak-border)] px-3 py-2 text-sm font-semibold transition hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_8%,var(--medtrak-panel))]';
@@ -56,7 +57,7 @@ export default function SpaceBuilder({ state, commit, actor, onSelect, practiceS
       zoneId: space.zoneId || '',
       parentSpaceId: space.parentSpaceId || '',
       linkedFloorIds: space.linkedFloorIds || [],
-      cleaningFrequencyHours: space.cleaningFrequencyHours || 24,
+      cleaningFrequencyHours: cleaningFrequencyHours(space.cleaningFrequencyHours),
       notes: space.notes || '',
       capabilities: space.capabilities || [],
     });
@@ -209,7 +210,7 @@ export default function SpaceBuilder({ state, commit, actor, onSelect, practiceS
               <label className="text-sm font-semibold">Primary floor<select value={form.floorId} onChange={(e)=>setForm({...form,floorId:e.target.value})} className={field}><option value="">No single floor</option>{floorsForSite.map((floor)=><option key={floor.id} value={floor.id}>{floor.name}</option>)}</select></label>
               <label className="text-sm font-semibold">Zone<select value={form.zoneId} onChange={(e)=>setForm({...form,zoneId:e.target.value})} className={field}><option value="">No zone</option>{zonesForSite.map((zone)=><option key={zone.id} value={zone.id}>{zone.name}</option>)}</select></label>
               <label className="text-sm font-semibold">Parent space<select value={form.parentSpaceId} onChange={(e)=>setForm({...form,parentSpaceId:e.target.value})} className={field}><option value="">None</option>{parentOptions.map((space)=><option key={space.id} value={space.id}>{space.name}</option>)}</select></label>
-              <label className="text-sm font-semibold">Cleaning frequency<select value={form.cleaningFrequencyHours} onChange={(e)=>setForm({...form,cleaningFrequencyHours:Number(e.target.value)})} className={field}><option value="8">Every 8 hours</option><option value="12">Every 12 hours</option><option value="24">Daily</option><option value="168">Weekly</option><option value="720">Monthly</option><option value="4320">Every 6 months</option><option value="8760">Yearly</option></select></label>
+              <label className="text-sm font-semibold">Cleaning frequency<select value={form.cleaningFrequencyHours} onChange={(e)=>setForm({...form,cleaningFrequencyHours:Number(e.target.value)})} className={field}>{CLEANING_FREQUENCY_OPTIONS.map((option) => <option key={option.hours} value={option.hours}>{option.label}</option>)}</select></label>
             </div>
 
             {form.typeId === 'stairwell' && <div className="mt-4 rounded-2xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-bg)] p-4"><p className="font-semibold">Floors linked by this stairwell</p><div className="mt-2 flex flex-wrap gap-2">{floorsForSite.map((floor)=><label key={floor.id} className="flex items-center gap-2 rounded-xl border border-[color:var(--medtrak-border)] px-3 py-2 text-sm"><input type="checkbox" checked={form.linkedFloorIds.includes(floor.id)} onChange={(e)=>setForm({...form,linkedFloorIds:e.target.checked?[...form.linkedFloorIds,floor.id]:form.linkedFloorIds.filter(id=>id!==floor.id)})}/>{floor.name}</label>)}</div></div>}
