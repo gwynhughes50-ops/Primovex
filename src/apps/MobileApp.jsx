@@ -4,6 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import MobileLayout from "@/mobile/MobileLayout";
 import MobileSessionShell from "@/mobile/MobileSessionShell";
 import MobileGovernanceConcerns from "@/mobile/MobileGovernanceConcerns";
+import MobileGovernanceSARs from "@/mobile/MobileGovernanceSARs";
+import MobileSignificantEvents from "@/mobile/MobileSignificantEvents";
 import SenseNfcOpen from "@/pages/SenseNfcOpen";
 import MobileBootSplash from "@/mobile/auth/MobileBootSplash";
 import MobileAccountLogin from "@/mobile/auth/MobileAccountLogin";
@@ -65,11 +67,31 @@ function MobileGovernanceConcernsRoute() {
   return <MobileSessionShell><MobileGovernanceConcerns /></MobileSessionShell>;
 }
 
+function MobileGovernanceSARsRoute() {
+  const { user, loading, can } = useAuth();
+  if (loading) return <MobileBootSplash message="Opening SARs" />;
+  if (!user) return <MobileAccountLogin />;
+  if (!can("mobile.access")) return <MobileAccessDenied />;
+  // Behind the same PIN / biometric lock as Concerns: SAR records are patient governance data.
+  return <MobileSessionShell><MobileGovernanceSARs /></MobileSessionShell>;
+}
+
+function MobileSignificantEventsRoute() {
+  const { user, loading, can } = useAuth();
+  if (loading) return <MobileBootSplash message="Opening Significant events" />;
+  if (!user) return <MobileAccountLogin />;
+  if (!can("mobile.access")) return <MobileAccessDenied />;
+  // Behind the same PIN / biometric lock: events can carry a patient's EMIS number.
+  return <MobileSessionShell><MobileSignificantEvents /></MobileSessionShell>;
+}
+
 export default function MobileApp() {
   return (
     <Routes>
       <Route path="/sense/open/:entityType/:entityId" element={<MobileSenseRoute />} />
       <Route path="/governance/concerns" element={<MobileGovernanceConcernsRoute />} />
+      <Route path="/governance/sars" element={<MobileGovernanceSARsRoute />} />
+      <Route path="/governance/significant-events" element={<MobileSignificantEventsRoute />} />
       <Route path="/spaces" element={<MobileBootController initialTab="sense" />} />
       <Route path="/dashboard" element={<MobileBootController initialTab="home" />} />
       <Route path="*" element={<MobileBootController />} />

@@ -25,6 +25,7 @@ const { phraseAnswer } = require("./services/orbPhraseService");
 const { runRetention } = require("./services/retentionService");
 const { sendTeamMessage } = require("./services/teamMessageService");
 const { getOrbCapabilities } = require("./services/orbScope");
+const { notifySignificantEvent } = require("./services/significantEventNotify");
 
 initializeApp();
 const db = getFirestore();
@@ -431,6 +432,26 @@ exports.notifySarAssignment = onCall({ region: "europe-west2" }, async (request)
   });
 });
 
+// Tells people about a significant event: the team when one is reported, a lead when assigned,
+// reviewers when asked, an action's owner. The content is built here from the real records; the
+// caller only names the event and the kind (see services/significantEventNotify.js).
+exports.notifySignificantEvent = onCall({ region: "europe-west2", timeoutSeconds: 30 }, async (request) => {
+  assertSignedIn(request);
+  const callerProfile = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
+  const capabilities = await getEffectiveCapabilities(db, callerProfile.role);
+  const data = request.data || {};
+  return notifySignificantEvent({
+    db,
+    callerUid: request.auth.uid,
+    callerName: callerProfile.displayName || callerProfile.email || "Primovex",
+    callerIsTeam: hasCapability(capabilities, "governance.seTeam"),
+    seId: data.seId,
+    kind: data.kind,
+    targetUids: data.targetUids,
+    actionId: data.actionId,
+  });
+});
+
 // The staff list behind the SAR "Assigned To" / "Manager for Escalation"
 // pickers. A SAR team member who isn't an administrator can't read the users
 // collection directly (the rules keep email addresses and roles private), so
@@ -443,6 +464,7 @@ exports.listStaffDirectory = onCall({ region: "europe-west2" }, async (request) 
     const capabilities = await getEffectiveCapabilities(db, profile.role);
     const allowed = hasCapability(capabilities, "governance.manageSars")
       || hasCapability(capabilities, "governance.concernsTeam")
+      || hasCapability(capabilities, "governance.seTeam") // picking leads, reviewers and action owners for a significant event
       || hasCapability(capabilities, "admin.access")
       || hasCapability(capabilities, "inventory.verify"); // choosing a colleague to message from a kit check
     if (!allowed) throw new HttpsError("permission-denied", "You need SAR, concerns, admin or stock-verification access to list staff.");

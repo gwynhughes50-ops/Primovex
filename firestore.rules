@@ -267,6 +267,20 @@ function isGovernancePartner() {
 function isSarsTeam() {
   return isAdmin() || hasPermission("governance", "manageSars");
 }
+function isSeTeam() {
+  return isAdmin() || hasPermission("governance", "seTeam");
+}
+// Who can open a significant event: the team, oversight (partners), the person who reported it,
+// whoever leads the investigation, people named on it and the reviewers asked to look at it.
+function canSeeSe(eventData) {
+  return signedIn() && (
+    isSeTeam() || isGovernancePartner()
+    || eventData.reportedByUid == request.auth.uid
+    || eventData.get("leadUid", "") == request.auth.uid
+    || request.auth.uid in eventData.get("involvedUserIds", [])
+    || request.auth.uid in eventData.get("reviewerUids", [])
+  );
+}
 function isInvolvedInConcern(concernData) {
   return signedIn() && request.auth.uid in (concernData.involvedUserIds != null ? concernData.involvedUserIds : []);
 }
@@ -322,6 +336,86 @@ match /governance_concern_meetings/{meetingId} {
   );
   allow create, update: if isConcernsTeam();
   allow delete: if isAdmin();
+}
+
+// -------------------------
+// SIGNIFICANT EVENTS
+// -------------------------
+// Anyone signed in can REPORT one (only as themselves, at the first stage, with no team fields).
+// After that the significant events team runs it; the person leading the investigation can record
+// findings; reviewers write their own review; everyone who can see it can add notes.
+match /governance_significant_events/{eventId} {
+  allow get, list: if canSeeSe(resource.data);
+  allow create: if signedIn()
+    && request.resource.data.reportedByUid == request.auth.uid
+    && request.resource.data.status == "reported"
+    && request.resource.data.investigation == "pending"
+    && request.resource.data.keys().hasOnly([
+      "reference", "status", "investigation", "title", "description", "immediateAction", "eventDate",
+      "category", "harm", "locationId", "locationName", "patientInvolved", "emisNumber", "patientInitials",
+      "dateOfBirth", "reportedByUid", "reportedByName", "reportedAt", "createdAt", "updatedAt"
+    ]);
+  allow update: if isSeTeam()
+    || (
+      resource.data.get("leadUid", "") == request.auth.uid
+      && resource.data.status == "investigating"
+      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["findings", "status", "updatedAt"])
+      && request.resource.data.status in ["investigating", "in_review"]
+    );
+  allow delete: if isAdmin();
+}
+
+match /governance_se_timeline/{timelineId} {
+  allow get, list: if signedIn() && (
+    isSeTeam() || isGovernancePartner()
+    || canSeeSe(get(/databases/$(database)/documents/governance_significant_events/$(resource.data.seId)).data)
+  );
+  allow create: if signedIn() && (
+    isSeTeam()
+    || get(/databases/$(database)/documents/governance_significant_events/$(request.resource.data.seId)).data.get("leadUid", "") == request.auth.uid
+    || (
+      request.resource.data.type in ["note", "reported"]
+      && canSeeSe(get(/databases/$(database)/documents/governance_significant_events/$(request.resource.data.seId)).data)
+    )
+  );
+  allow update, delete: if false;
+}
+
+// One review per reviewer per event (id = eventId_reviewerUid). The team asks for it; the
+// reviewer fills in their own and can't touch anyone else's.
+match /governance_se_reviews/{reviewId} {
+  allow get, list: if signedIn() && (isSeTeam() || isGovernancePartner() || resource.data.reviewerUid == request.auth.uid);
+  allow create: if isSeTeam();
+  allow update: if isSeTeam() || (
+    resource.data.reviewerUid == request.auth.uid
+    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["summary", "learning", "recommendation", "status", "submittedAt", "updatedAt"])
+    && request.resource.data.status in ["requested", "submitted"]
+  );
+  allow delete: if isSeTeam();
+}
+
+// Significant event meetings and their minutes. One meeting can cover several events.
+match /governance_se_meetings/{meetingId} {
+  allow get, list: if signedIn() && (isSeTeam() || isGovernancePartner() || request.auth.uid in resource.data.get("attendeeUids", []));
+  allow create, update: if isSeTeam();
+  allow delete: if isAdmin();
+}
+
+// Actions agreed at a meeting (or afterwards). The person they are given to can mark them done.
+match /governance_se_actions/{actionId} {
+  allow get, list: if signedIn() && (isSeTeam() || isGovernancePartner() || resource.data.ownerUid == request.auth.uid);
+  allow create: if isSeTeam();
+  allow update: if isSeTeam() || (
+    resource.data.ownerUid == request.auth.uid
+    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "completedAt", "completedByName", "completionNote", "updatedAt"])
+  );
+  allow delete: if isSeTeam();
+}
+
+// The practice's default reviewer roles. Settings are admin-only to change; the SE team may also
+// change this one document.
+match /settings/significantEvents {
+  allow create, update: if isSeTeam();
 }
 
 // -------------------------
@@ -493,7 +587,7 @@ match /subject_access_requests/{requestId} {
           "purchasing.read", "purchasing.write", "purchasing.approve",
           "suppliers.read", "suppliers.write",
           "governance.read", "governance.write", "governance.manageSars", "governance.manageComplaints",
-          "governance.manageConcerns", "governance.concernsTeam",
+          "governance.manageConcerns", "governance.concernsTeam", "governance.seTeam",
           "connect.view", "connect.manageDevices", "connect.acknowledgeAlerts",
           "temperature.read", "temperature.write", "temperature.resolveIncident",
           "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets",

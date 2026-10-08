@@ -13,7 +13,7 @@ const BUILT_IN_ROLE_CAPABILITIES = {
     "purchasing.read", "purchasing.write", "purchasing.approve",
     "suppliers.read", "suppliers.write",
     "governance.read", "governance.write", "governance.manageSars", "governance.manageComplaints",
-    "governance.manageConcerns", "governance.concernsTeam",
+    "governance.manageConcerns", "governance.concernsTeam", "governance.seTeam",
     "connect.view", "connect.manageDevices", "connect.acknowledgeAlerts",
     "temperature.read", "temperature.write", "temperature.resolveIncident",
     "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets",

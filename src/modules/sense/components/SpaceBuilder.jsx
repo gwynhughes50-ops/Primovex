@@ -43,7 +43,8 @@ export default function SpaceBuilder({ state, commit, actor, onSelect, practiceS
 
   function startCreate() {
     setEditingId(null);
-    setForm({ ...emptyForm, siteId: state.sites[0]?.id || '', floorId: state.floors[0]?.id || '', zoneId: state.zones[0]?.id || '' });
+    const firstSite = state.sites[0]?.id || '';
+    setForm({ ...emptyForm, siteId: firstSite, floorId: state.floors.find((f) => f.siteId === firstSite)?.id || '', zoneId: state.zones.find((z) => z.siteId === firstSite)?.id || '' });
     setOpen(true);
   }
 
@@ -177,6 +178,19 @@ export default function SpaceBuilder({ state, commit, actor, onSelect, practiceS
                     <div className="mt-1 flex flex-wrap gap-1">{activeSpaces.filter((space) => space.siteId === site.id && (space.floorId === floor.id || space.linkedFloorIds?.includes(floor.id))).map((space) => <button key={space.id} onClick={() => onSelect?.(space.id)} className="rounded-full border border-[color:var(--medtrak-border)] px-2 py-1 text-xs hover:border-[color:var(--medtrak-accent)]">{space.name}</button>)}</div>
                   </div>
                 ))}
+                {(() => {
+                  // A space whose floor isn't one of this site's floors (none chosen, or the site has no floors yet)
+                  // would otherwise be missing from this list altogether.
+                  const floorIds = new Set(state.floors.filter((floor) => floor.siteId === site.id).map((floor) => floor.id));
+                  const loose = activeSpaces.filter((space) => space.siteId === site.id && !floorIds.has(space.floorId) && !(space.linkedFloorIds || []).some((id) => floorIds.has(id)));
+                  if (!loose.length) return null;
+                  return (
+                    <div className="ml-3 mt-2 border-l border-[color:var(--medtrak-border)] pl-3">
+                      <div className="text-sm font-semibold">{floorIds.size ? 'No floor set' : 'Spaces'}</div>
+                      <div className="mt-1 flex flex-wrap gap-1">{loose.map((space) => <button key={space.id} onClick={() => onSelect?.(space.id)} className="rounded-full border border-[color:var(--medtrak-border)] px-2 py-1 text-xs hover:border-[color:var(--medtrak-accent)]">{space.name}</button>)}</div>
+                    </div>
+                  );
+                })()}
                 {state.zones.filter((zone) => zone.siteId === site.id).length > 0 && (
                   <div className="ml-3 mt-3 border-l border-[color:var(--medtrak-border)] pl-3">
                     <div className="mb-1 text-[11px] font-bold uppercase tracking-[.12em] text-[color:var(--medtrak-muted)]">Zones</div>

@@ -334,6 +334,12 @@ export default function MobileLayout({ initialTab = "home" }) {
       case "concerns":
         navigate("/governance/concerns");
         break;
+      case "sars":
+        navigate("/governance/sars");
+        break;
+      case "significant-events":
+        navigate("/governance/significant-events");
+        break;
       case "clean":
         setActiveTab("facilities");
         break;

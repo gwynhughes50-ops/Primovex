@@ -14,6 +14,7 @@ import SupplierDirectory from "@/pages/SupplierDirectory";
 import Purchasing from "@/pages/Purchasing";
 import PracticeAdministration from "@/pages/PracticeAdministration";
 import GovernanceSARs from "@/pages/GovernanceSARs";
+import GovernanceSignificantEvents from "@/pages/GovernanceSignificantEvents";
 import GovernanceConcerns from "@/pages/GovernanceConcerns";
 import Connect from "@/pages/Connect";
 import ThemeLab from "@/pages/ThemeLab";
@@ -78,6 +79,7 @@ export default function DesktopApp() {
         <Route path="practice-admin" element={<PermissionGate capability="practiceAdmin.read"><PracticeAdministration /></PermissionGate>} />
         <Route path="governance/concerns" element={<PermissionGate capability="governance.read"><GovernanceConcerns /></PermissionGate>} />
         <Route path="governance/sars" element={<PermissionGate capability="governance.read"><GovernanceSARs /></PermissionGate>} />
+        <Route path="governance/significant-events" element={<GovernanceSignificantEvents />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="connect" element={<PermissionGate capability="connect.view"><Connect /></PermissionGate>} />
         <Route path="theme-lab" element={<ThemeLab />} />

@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, ArrowRight, Building2, CheckCircle2, Clock3, Package, Search, ShieldCheck, UserRound, FileWarning, ClipboardCheck, MessageSquarePlus, UsersRound, Nfc } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowRight, Building2, CheckCircle2, Clock3, Package, Search, ShieldCheck, UserRound, FileWarning, ClipboardCheck, MessageSquarePlus, UsersRound, Nfc, FileText } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import useStock from "@/hooks/useStock";
 import { useAuth } from "@/contexts/AuthContext";
@@ -250,6 +250,8 @@ export default function MobileHome({ mode="home", onNavigate, onScan, onSearch, 
         <Quick icon={MessageSquarePlus} label={`Quick note${quickNoteCount ? ` (${quickNoteCount})` : ""}`} onClick={onQuickNote}/><Quick icon={Nfc} label="Scan NFC tag" onClick={onScanNfc}/>
         <Quick icon={MessageSquarePlus} label="Raise issue" onClick={() => onRaiseIssue?.({})}/>
         <Quick icon={FileWarning} label="Review concerns" onClick={() => onNavigate?.("concerns")}/>
+        {(capabilities.includes("*") || capabilities.includes("governance.read")) && <Quick icon={FileText} label="SARs" onClick={() => onNavigate?.("sars")}/>}
+        <Quick icon={AlertTriangle} label="Significant events" onClick={() => onNavigate?.("significant-events")}/>
         <Quick icon={Building2} label="Open Facilities" onClick={() => onNavigate?.("facilities")}/>
       </div>
 

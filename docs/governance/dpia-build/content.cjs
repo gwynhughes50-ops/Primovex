@@ -22,7 +22,7 @@ module.exports = {
     ] },
 
     { type: "callout", title: "What has changed since version 0.1", lines: [
-      "Version 0.1 covered Concerns, SARs, Inventory and Temperature. Primovex has since gained four things that process personal data in new ways. Each is described below and has its own risks and measures.",
+      "Version 0.1 covered Concerns, SARs, Inventory and Temperature. Primovex has since gained four things that process personal data in new ways, and a fifth, Significant events, added on 8 October 2026. Each is described below and has its own risks and measures.",
       "1. Staff accounts, departments and the organisation chart (Step 2B).",
       "2. Sign-in and activity records: a report of when staff signed in, which areas of the app they used and for how long (Step 2C). This is a form of monitoring of staff.",
       "3. The Orb's AI language assistant, which uses Microsoft Azure OpenAI (Step 2D). Two separate switches, both off by default.",
@@ -34,7 +34,7 @@ module.exports = {
     { type: "p", text: "Primovex is a practice management system used for stock and medicines inventory, cold-chain temperature monitoring, compliance recording, staff administration and governance case management, specifically Patient Safety Concerns (following the NHS Wales \"Listening to People\" pathway) and Subject Access Requests. It is introduced alongside the practice's core national systems (EMIS, Docman), not as a replacement for them." },
     { type: "p", text: "At least one ICO screening trigger applies, which is enough on its own to require a DPIA. Four now apply:" },
     { type: "bullets", items: [
-      "Special category data. Concerns and SARs relate to patient care and, even pseudonymised, fall within Article 9 health data by association.",
+      "Special category data. Concerns, SARs and Significant events relate to patient care and, even pseudonymised, fall within Article 9 health data by association.",
       "New technology. Governance case management in a dedicated tool, and now the use of generative AI (Azure OpenAI) inside the app, have not previously been assessed.",
       "Systematic monitoring of employees. The sign-in and activity records (Step 2C) record, for every member of staff, when they used the system and which areas they used.",
       "Systematic, practice-wide processing, used continuously by multiple staff roles.",
@@ -44,7 +44,8 @@ module.exports = {
     { type: "h1", step: "STEP 2", text: "Describe the processing" },
     { type: "h2", text: "A. Governance and operations (unchanged from version 0.1)" },
     { type: "table", head: ["Item", "Detail"], widths: [2200, 7438], rows: [
-      ["Collection", "Manually entered by practice staff on desktop or mobile at the point a concern, SAR, stock movement or temperature reading occurs."],
+      ["Collection", "Manually entered by practice staff on desktop or mobile at the point a concern, SAR, significant event, stock movement or temperature reading occurs."],
+      ["Significant events (added 8 October 2026)", "Any member of staff can report a significant event. It records what happened (in words that name no one), the date, room, kind of event, level of harm and, if a patient was involved, their EMIS number (or initials and date of birth if there is none), never a name. Staff are referred to by role; the team can link staff by account to follow or review an event. Investigation findings, each reviewer's own review, the notes of significant event meetings (who attended, what was said about each event) and agreed actions are stored. People see only events they reported, lead, are named on or were asked to review; a Significant events team and partners (oversight) see all. Reviews and notes are kept for the life of the record like Concerns; the timeline cannot be edited or deleted. Notifications carry the reference and title only."],
       ["Use", "Case tracking against statutory and pathway deadlines, correspondence logging, stock and cold-chain safety monitoring, staff-facing reporting (including annual category and outcome breakdowns for external returns such as the Welsh Risk Pool)."],
       ["Storage", "Google Cloud Firestore, EU multi-region (eur3). Application server logic (Cloud Functions) runs in europe-west2 (London, UK)."],
       ["Deletion", "Governance timeline, correspondence and stock-movement entries are immutable audit records. Stock items are archived (recoverable); permanently deleting a stock item needs a specific permission that only a System Admin or a role granted it holds. Concern cases and user accounts can be hard-deleted, restricted to System Admin, behind a confirmation step."],
@@ -147,7 +148,9 @@ module.exports = {
       ["NEW: the activity report is visible to more people than intended (Practice Manager role can read it by default)", "Possible", "Moderate", "Medium"],
       ["NEW: a member of staff types patient-identifying detail into the Orb or a staff message", "Possible", "Significant", "Medium"],
       ["NEW: the AI chooses the wrong lookup, or rewords an answer misleadingly", "Possible", "Moderate", "Low to Medium"],
+      ["NEW: a significant event report names a patient or a colleague in free text, or is seen by people who shouldn't", "Possible", "Significant", "Medium"],
       ["NEW: personal data sent to Azure is retained or processed outside the intended region", "Possible (region stated as UK South, retention not yet confirmed)", "Significant", "Medium"],
+      ["NEW: a significant event names someone, or is seen by the wrong people", "The report form says never to use names and to refer to roles; patients are identified by EMIS number (or initials and date of birth) only. Only the reporter, the investigation lead, people named on it, reviewers asked to look at it, the Significant events team and partners (oversight) can open an event: this is enforced by the database rules and tested. Reviewers see only their own review. Notes and the history cannot be edited or deleted. Notifications carry the reference and title only.", "Low to Medium (free text can still contain a name, so practice guidance should say not to)", "☐"],
       ["NEW: a team message carries patient details, or goes to the wrong people", "Messages with numbers, dates, email addresses or phone numbers are refused, and the card shows the team and the words before anything is sent. A team means everyone with that role in Primovex, never an outside address. Sending is limited per person per hour and day. Each send is recorded (who, which team, how many people), not the message text.", "Low", "☐"],
       ["NEW: a malicious question tries to make the AI reveal or do something else (prompt injection)", "Possible", "Low (it can only name a lookup; it cannot confirm an action)", "Low"],
       ["NEW: password-only sign-in. A stolen password gives access (two-step sign-in is built but not yet switched on)", "Possible", "Significant", "Medium"],

@@ -40,6 +40,7 @@ export const CAPABILITIES = {
     manageComplaints: "governance.manageComplaints",
     manageConcerns: "governance.manageConcerns",
     concernsTeam: "governance.concernsTeam",
+    seTeam: "governance.seTeam",
     partnerAccess: "governance.partnerAccess",
   },
   connect: {
@@ -144,6 +145,7 @@ export const CAPABILITY_CATALOG = [
   { id: "governance.manageComplaints", label: "Manage complaints", group: "Governance" },
   { id: "governance.manageConcerns", label: "Manage Listening to People concerns", group: "Governance" },
   { id: "governance.concernsTeam", label: "Concerns team — full access to every concern", group: "Governance" },
+  { id: "governance.seTeam", label: "Significant events team — full access to every significant event", group: "Governance" },
   { id: "governance.partnerAccess", label: "Partner — read-only visibility across all governance records", group: "Governance" },
 
   { id: "connect.view", label: "View Primovex Connect", group: "Connect" },
@@ -207,6 +209,7 @@ export const ROLE_TEMPLATES = {
     "governance.manageComplaints",
     "governance.manageConcerns",
     "governance.concernsTeam",
+    "governance.seTeam",
     "connect.view",
     "connect.manageDevices",
     "connect.acknowledgeAlerts",

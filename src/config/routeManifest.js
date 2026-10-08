@@ -8,6 +8,8 @@ export const ROUTE_MANIFEST = [
   { path: "/alerts", label: "Operations", section: "core", iconKey: "alerts", capability: "operations.read" },
   { path: "/governance/concerns", label: "Concerns", section: "core", iconKey: "governance", capability: "governance.manageConcerns" },
   { path: "/governance/sars", label: "SARs", section: "core", iconKey: "sar", capability: "governance.manageSars" },
+  // Anyone can report a significant event, so there is no permission to see this one.
+  { path: "/governance/significant-events", label: "Significant events", section: "core", iconKey: "governance" },
 
   { path: "/reorder-centre", label: "Reorder Centre", section: "operations", iconKey: "reorder", capability: "purchasing.read", children: ["Pending", "Approved", "Ordered", "Rejected"] },
   { path: "/purchasing", label: "Purchasing", section: "operations", iconKey: "purchasing", capability: "purchasing.read", children: ["Basket", "Purchase Orders", "Deliveries", "Supplier Performance"] },

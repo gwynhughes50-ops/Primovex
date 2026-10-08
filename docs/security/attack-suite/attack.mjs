@@ -10,7 +10,7 @@ import {
   assertSucceeds,
 } from "@firebase/rules-unit-testing";
 import {
-  doc, getDoc, setDoc, updateDoc, addDoc, collection, deleteDoc, serverTimestamp,
+  doc, getDoc, getDocs, setDoc, updateDoc, addDoc, collection, deleteDoc, serverTimestamp, query, where,
 } from "firebase/firestore";
 import { ref, uploadBytes, getBytes, deleteObject } from "firebase/storage";
 
@@ -104,6 +104,20 @@ async function main() {
     await setDoc(doc(db, "clinflow_workflow_records", "rec-siteB"), {
       dataMode: "synthetic", practiceId: "site-b", siteId: "SITE-B",
     });
+    // significant events
+    await setDoc(doc(db, "users", "lead-uid"), { role: "Nurse", displayName: "Lead" });
+    await setDoc(doc(db, "users", "reviewer-uid"), { role: "Nurse", displayName: "Reviewer" });
+    await setDoc(doc(db, "users", "reporter-uid"), { role: "HCA", displayName: "Reporter" });
+    await setDoc(doc(db, "users", "bystander-uid"), { role: "HCA", displayName: "Bystander" });
+    await setDoc(doc(db, "governance_significant_events", "se-1"), {
+      reference: "SE-1", status: "investigating", investigation: "required", title: "Test", reportedByUid: "reporter-uid",
+      leadUid: "lead-uid", reviewerUids: ["reviewer-uid"], involvedUserIds: [], harm: "low",
+    });
+    await setDoc(doc(db, "governance_se_reviews", "se-1_reviewer-uid"), { seId: "se-1", reviewerUid: "reviewer-uid", status: "requested", summary: "" });
+    await setDoc(doc(db, "governance_se_reviews", "se-1_other-uid"), { seId: "se-1", reviewerUid: "other-uid", status: "requested", summary: "" });
+    await setDoc(doc(db, "governance_se_meetings", "meet-1"), { title: "M", attendeeUids: ["reviewer-uid"], eventIds: ["se-1"], status: "planned" });
+    await setDoc(doc(db, "governance_se_actions", "act-1"), { seId: "se-1", title: "Do it", ownerUid: "reviewer-uid", status: "open" });
+    await setDoc(doc(db, "governance_se_actions", "act-2"), { seId: "se-1", title: "Other", ownerUid: "lead-uid", status: "open" });
     await setDoc(doc(db, "users", "sitea-uid"), { role: "User", practiceId: "site-a" });
     // compliance checks / cleaning notes
     await setDoc(doc(db, "users", "caretaker-uid"), { role: "Caretaker", displayName: "Caretaker" });
@@ -129,6 +143,10 @@ async function main() {
   const nurse = testEnv.authenticatedContext("nurse-uid").firestore();
   const cleaner = testEnv.authenticatedContext("cleaner-uid").firestore();
   const cleaner2 = testEnv.authenticatedContext("cleaner2-uid").firestore();
+  const lead = testEnv.authenticatedContext("lead-uid").firestore();
+  const reviewer = testEnv.authenticatedContext("reviewer-uid").firestore();
+  const reporter = testEnv.authenticatedContext("reporter-uid").firestore();
+  const bystander = testEnv.authenticatedContext("bystander-uid").firestore();
   const anon = testEnv.unauthenticatedContext().firestore();
   const auditor = testEnv.authenticatedContext("auditor-uid").firestore();
 
@@ -463,6 +481,107 @@ async function main() {
   await check("Admin CAN turn the language assistant on", () => assertSucceeds(setDoc(doc(admin, "settings", "orb"), { aiRouting: true }, { merge: true })));
   await check("A normal user CANNOT turn it on", () => assertFails(setDoc(doc(user, "settings", "orb"), { aiRouting: true }, { merge: true })));
   await check("Practice Manager (not System Admin) CANNOT turn it on", () => assertFails(setDoc(doc(pm, "settings", "orb"), { aiRouting: true }, { merge: true })));
+
+  console.log("\n=== 14. Significant events ===");
+  const newEvent = (uid, extra = {}) => ({
+    reference: "SE-NEW", status: "reported", investigation: "pending", title: "T", description: "d", eventDate: "2026-10-01",
+    category: "other", harm: "none", patientInvolved: false, reportedByUid: uid, reportedByName: "X", ...extra,
+  });
+  await check("Anyone signed in can report an event as themselves", () =>
+    assertSucceeds(setDoc(doc(bystander, "governance_significant_events", "se-new-1"), newEvent("bystander-uid"))));
+  await check("...but not as someone else", () =>
+    assertFails(setDoc(doc(bystander, "governance_significant_events", "se-new-2"), newEvent("reporter-uid"))));
+  await check("...not already at a later stage", () =>
+    assertFails(setDoc(doc(bystander, "governance_significant_events", "se-new-3"), newEvent("bystander-uid", { status: "closed" }))));
+  await check("...not giving themselves a lead", () =>
+    assertFails(setDoc(doc(bystander, "governance_significant_events", "se-new-4"), newEvent("bystander-uid", { leadUid: "bystander-uid" }))));
+  await check("...not with reviewers or other fields the form does not have", () =>
+    assertFails(setDoc(doc(bystander, "governance_significant_events", "se-new-5"), newEvent("bystander-uid", { reviewerUids: ["bystander-uid"] }))));
+  await check("Signed-out people cannot report", () =>
+    assertFails(setDoc(doc(anon, "governance_significant_events", "se-new-6"), newEvent("anon"))));
+  await check("The reporter can read their own event", () =>
+    assertSucceeds(getDoc(doc(reporter, "governance_significant_events", "se-1"))));
+  await check("A bystander cannot read someone else's event", () =>
+    assertFails(getDoc(doc(bystander, "governance_significant_events", "se-1"))));
+  await check("A bystander can list only their own (query by reporter)", () =>
+    assertSucceeds(getDocs(query(collection(bystander, "governance_significant_events"), where("reportedByUid", "==", "bystander-uid")))));
+  await check("A bystander cannot list everything", () =>
+    assertFails(getDocs(collection(bystander, "governance_significant_events"))));
+  await check("The investigation lead and a named reviewer can read it", async () => {
+    await assertSucceeds(getDoc(doc(lead, "governance_significant_events", "se-1")));
+    await assertSucceeds(getDoc(doc(reviewer, "governance_significant_events", "se-1")));
+  });
+  await check("Practice Manager (SE team) and a partner (oversight) can read it", async () => {
+    await assertSucceeds(getDoc(doc(pm, "governance_significant_events", "se-1")));
+    await assertSucceeds(getDoc(doc(partner, "governance_significant_events", "se-1")));
+  });
+  await check("The reporter cannot change the event after reporting", () =>
+    assertFails(updateDoc(doc(reporter, "governance_significant_events", "se-1"), { harm: "none" })));
+  await check("A reviewer cannot change the event", () =>
+    assertFails(updateDoc(doc(reviewer, "governance_significant_events", "se-1"), { status: "closed" })));
+  await check("The lead cannot jump to closed or re-assign the lead", async () => {
+    await assertFails(updateDoc(doc(lead, "governance_significant_events", "se-1"), { status: "closed" }));
+    await assertFails(updateDoc(doc(lead, "governance_significant_events", "se-1"), { leadUid: "bystander-uid" }));
+  });
+  await check("The lead can record findings and finish the investigation", () =>
+    assertSucceeds(updateDoc(doc(lead, "governance_significant_events", "se-1"), { findings: { cause: "x" }, status: "in_review" })));
+  await check("The SE team can move it on", () =>
+    assertSucceeds(updateDoc(doc(pm, "governance_significant_events", "se-1"), { status: "awaiting_meeting" })));
+  await check("Only an administrator can delete an event", async () => {
+    await assertFails(deleteDoc(doc(pm, "governance_significant_events", "se-1")));
+    await assertSucceeds(deleteDoc(doc(admin, "governance_significant_events", "se-new-1")));
+  });
+
+  await check("A reviewer can read and complete their own review, but not anyone else's", async () => {
+    await assertSucceeds(getDoc(doc(reviewer, "governance_se_reviews", "se-1_reviewer-uid")));
+    await assertFails(getDoc(doc(reviewer, "governance_se_reviews", "se-1_other-uid")));
+    await assertSucceeds(updateDoc(doc(reviewer, "governance_se_reviews", "se-1_reviewer-uid"), { summary: "My view", status: "submitted" }));
+    await assertFails(updateDoc(doc(reviewer, "governance_se_reviews", "se-1_other-uid"), { summary: "Not mine", status: "submitted" }));
+  });
+  await check("A reviewer cannot change who the review is for", () =>
+    assertFails(updateDoc(doc(reviewer, "governance_se_reviews", "se-1_reviewer-uid"), { reviewerUid: "other-uid" })));
+  await check("Only the SE team can ask for reviews", async () => {
+    await assertFails(setDoc(doc(bystander, "governance_se_reviews", "se-1_bystander-uid"), { seId: "se-1", reviewerUid: "bystander-uid", status: "requested" }));
+    await assertSucceeds(setDoc(doc(pm, "governance_se_reviews", "se-1_lead-uid"), { seId: "se-1", reviewerUid: "lead-uid", status: "requested" }));
+  });
+
+  await check("Meeting minutes: team and attendees can read them; others cannot", async () => {
+    await assertSucceeds(getDoc(doc(pm, "governance_se_meetings", "meet-1")));
+    await assertSucceeds(getDoc(doc(reviewer, "governance_se_meetings", "meet-1")));
+    await assertFails(getDoc(doc(bystander, "governance_se_meetings", "meet-1")));
+  });
+  await check("Only the SE team can write minutes", async () => {
+    await assertFails(updateDoc(doc(reviewer, "governance_se_meetings", "meet-1"), { minutes: "edited" }));
+    await assertSucceeds(updateDoc(doc(pm, "governance_se_meetings", "meet-1"), { minutes: "Agreed." }));
+  });
+
+  await check("An action's owner can mark it done, and only that", async () => {
+    await assertSucceeds(updateDoc(doc(reviewer, "governance_se_actions", "act-1"), { status: "done", completedByName: "Reviewer" }));
+    await assertFails(updateDoc(doc(reviewer, "governance_se_actions", "act-1"), { ownerUid: "bystander-uid" }));
+    await assertFails(updateDoc(doc(reviewer, "governance_se_actions", "act-2"), { status: "done" }));
+  });
+  await check("Others cannot read or create actions", async () => {
+    await assertFails(getDoc(doc(bystander, "governance_se_actions", "act-1")));
+    await assertFails(setDoc(doc(bystander, "governance_se_actions", "act-x"), { title: "x", ownerUid: "bystander-uid" }));
+    await assertSucceeds(setDoc(doc(pm, "governance_se_actions", "act-y"), { seId: "se-1", title: "y", ownerUid: "lead-uid", status: "open" }));
+  });
+
+  await check("Timeline: the reporter can add a note to their own event; a bystander cannot; no forged stage changes", async () => {
+    await assertSucceeds(addDoc(collection(reporter, "governance_se_timeline"), { seId: "se-1", type: "note", title: "Note", message: "more detail" }));
+    await assertFails(addDoc(collection(bystander, "governance_se_timeline"), { seId: "se-1", type: "note", title: "Note", message: "x" }));
+    await assertFails(addDoc(collection(reporter, "governance_se_timeline"), { seId: "se-1", type: "stage", title: "Forged stage change" }));
+  });
+  await check("Timeline entries can never be edited or removed", async () => {
+    await seed(async (db) => setDoc(doc(db, "governance_se_timeline", "tl-1"), { seId: "se-1", type: "note" }));
+    await assertFails(updateDoc(doc(pm, "governance_se_timeline", "tl-1"), { message: "changed" }));
+    await assertFails(deleteDoc(doc(admin, "governance_se_timeline", "tl-1")));
+  });
+
+  await check("The SE team can set the default reviewer roles; an ordinary user cannot; the team cannot touch other settings", async () => {
+    await assertSucceeds(setDoc(doc(pm, "settings", "significantEvents"), { reviewerRoles: ["Practice Manager"] }));
+    await assertFails(setDoc(doc(bystander, "settings", "significantEvents"), { reviewerRoles: [] }));
+    await assertFails(setDoc(doc(pm, "settings", "orb"), { aiRouting: true }));
+  });
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
