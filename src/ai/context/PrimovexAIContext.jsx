@@ -6,6 +6,7 @@ import { orbIntentLearningStore } from '@/orb/IntentLearningStore';
 import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
 import { proposalProblem } from '@/orb/actionProposals';
 import { applyOrbScope } from '@/lib/orbScope';
+import { mergeUseSentence } from '@/ai/stock/stockUse';
 import { executeProposal } from '@/orb/actionExecutors';
 
 export const PrimovexAIContext = createContext(null);
@@ -32,12 +33,23 @@ export function PrimovexAIProvider({ children }) {
     const cleanPrompt = String(prompt || '').trim();
     if (!cleanPrompt || status === AI_STATES.SEARCHING || status === AI_STATES.REASONING) return;
 
-    setMessages((current) => [...current, createMessage({ role: 'user', content: cleanPrompt })]);
+    // A card is waiting for a yes and they name more stock ("and two more gloves"): it all goes on one card.
+    let engineInput = cleanPrompt;
+    const lastAssistant = [...messages].reverse().find((item) => item.role === 'assistant');
+    if (lastAssistant?.proposal?.status === 'proposed') {
+      const merged = mergeUseSentence(lastAssistant.proposal, cleanPrompt);
+      if (merged) {
+        engineInput = merged;
+        setMessages((current) => current.map((item) => (item.id === lastAssistant.id ? { ...item, proposal: { ...item.proposal, status: 'cancelled', result: 'Added to the next card.' } } : item)));
+      }
+    }
+
+    setMessages((current) => [...current, createMessage({ role: 'user', content: options.displayText || cleanPrompt })]);
     setStatus(AI_STATES.SEARCHING);
 
     try {
       const providerRequest = orb.ask({
-        input: cleanPrompt,
+        input: engineInput,
         inputType: 'text',
         context: { capabilities, role, userId: user?.uid || null, profile, forcedIntent: options.forcedIntent || null },
         conversation: messages,
@@ -77,6 +89,12 @@ export function PrimovexAIProvider({ children }) {
       setStatus(AI_STATES.ERROR);
     }
   }, [capabilities, messages, orb, profile, role, status, user?.uid]);
+
+  // Something they said that isn't a question (yes, cancel, a choice), kept in the conversation.
+  const addUserMessage = useCallback((text) => {
+    const clean = String(text || '').trim();
+    if (clean) setMessages((current) => [...current, createMessage({ role: 'user', content: clean })]);
+  }, []);
 
   const resolveClarification = useCallback(async (messageId, selectedIntent) => {
     const message = messages.find((item) => item.id === messageId);
@@ -140,12 +158,13 @@ export function PrimovexAIProvider({ children }) {
     status,
     messages,
     ask,
+    addUserMessage,
     resolveClarification,
     recordFeedback,
     confirmProposal,
     cancelProposal,
     clearConversation,
-  }), [ask, cancelProposal, clearConversation, confirmProposal, isOpen, messages, recordFeedback, resolveClarification, status]);
+  }), [ask, addUserMessage, cancelProposal, clearConversation, confirmProposal, isOpen, messages, recordFeedback, resolveClarification, status]);
 
   return <PrimovexAIContext.Provider value={value}>{children}</PrimovexAIContext.Provider>;
 }

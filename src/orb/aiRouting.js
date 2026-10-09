@@ -22,7 +22,7 @@ const withTimeout = (promise, ms) => Promise.race([
 export function isWeakRoute(classified, input) {
   if (classified?.toolId !== "inventory.search") return false;
   const queryWords = String(classified.input?.query || "").trim().split(/\s+/).filter(Boolean).length;
-  const statement = /(?:i|we|ive|weve|i've|we've|just|nearly|finished|used|taken|took|removed|opened|ran|run|need|needs|needed|forgot|forgotten|left)/i.test(String(input || ""));
+  const statement = /\b(?:(?:i|we)(?:'ve|\s+have)?|ive|weve)\s+(?:(?:just|also|nearly|now|already)\s+)*(?:finished|used|taken|took|removed|opened|ran|run|need|needed|forgot|forgotten|left)\b|\b(?:nearly|just)\s+(?:finished|ran|run)\b/i.test(String(input || ""));
   // a long "product name", or a short one inside a statement about what someone did or needs
   return queryWords >= 4 || (queryWords >= 2 && statement);
 }

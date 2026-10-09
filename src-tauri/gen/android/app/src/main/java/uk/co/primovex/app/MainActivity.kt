@@ -107,6 +107,7 @@ class MainActivity : TauriActivity() {
     nfcAdapter?.disableReaderMode(this)
     stopBleScanInternal()
     stopNativeRecognition(true, "activity-paused")
+    setRecogniserBeepsMuted(false)
     super.onPause()
   }
 
@@ -618,7 +619,31 @@ class MainActivity : TauriActivity() {
       Log.i(TAG, "cancelListening-called")
       mainHandler.post { stopNativeRecognition(true, "web-cancel") }
     }
+
+    // During a conversation the recogniser re-opens after every reply; its start/stop beeps are muted
+    // for that time only, and always given back when the conversation ends or the app is closed.
+    @JavascriptInterface
+    fun muteBeeps(muted: Boolean) {
+      mainHandler.post { setRecogniserBeepsMuted(muted) }
+    }
   }
+
+  private var beepsMuted = false
+
+  private fun setRecogniserBeepsMuted(muted: Boolean) {
+    if (muted == beepsMuted) return
+    try {
+      val audio = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+      val direction = if (muted) android.media.AudioManager.ADJUST_MUTE else android.media.AudioManager.ADJUST_UNMUTE
+      audio.adjustStreamVolume(android.media.AudioManager.STREAM_NOTIFICATION, direction, 0)
+      audio.adjustStreamVolume(android.media.AudioManager.STREAM_SYSTEM, direction, 0)
+      beepsMuted = muted
+    } catch (error: Exception) {
+      // Some devices refuse this (do-not-disturb rules); the beeps are then simply left as they are.
+      Log.w(TAG, "muteBeeps-failed", error)
+    }
+  }
+
 
   private fun diagnosticsJson(): String = JSONObject().apply {
     put("available", SpeechRecognizer.isRecognitionAvailable(this@MainActivity))
@@ -776,8 +801,8 @@ class MainActivity : TauriActivity() {
         putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
         putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
         putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, packageName)
-        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1300L)
-        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 800L)
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 2000L)
+        putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
         putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 500L)
       }
       Log.i(TAG, "startListening-dispatched session=$session")

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import usePrimovexAI from '../hooks/usePrimovexAI';
 import PulseOrbFace from '@/components/pulse/PulseOrbFace';
 import { AI_STATES } from '../types/responseContract';
+import { interpretSpoken, spokenReply } from '../voice/spokenCommands';
 import { cancelNativeListening, nativeVoiceAvailable, requestNativeMicrophonePermission, startNativeListening, stopNativeListening, subscribeNativeOrbVoice } from '../voice/nativeOrbVoice';
 
 const SUGGESTIONS = [
@@ -61,21 +62,55 @@ function MessageFeedback({ message, onRecord }) {
   </div>;
 }
 
+// How long the Orb keeps listening when nobody speaks, and how it waits between listens.
+const SESSION_SILENCE_MS = 15000;
+const RESTART_DELAY_MS = 250;
+// Android's speech recogniser codes that mean "nothing was said / try again" rather than "this can't work".
+const FATAL_VOICE_CODES = new Set(['not-allowed', 'service-not-allowed', '9']);
+
+function speakText(text) {
+  return new Promise((resolve) => {
+    try {
+      const synth = window.speechSynthesis;
+      if (!synth || !text) { resolve(); return; }
+      synth.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'en-GB';
+      utterance.rate = 1.05;
+      utterance.onend = resolve;
+      utterance.onerror = resolve;
+      synth.speak(utterance);
+      window.setTimeout(resolve, 12000);
+    } catch { resolve(); }
+  });
+}
+
 export default function AskPrimovexPanel({ variant = 'desktop' }) {
   const navigate = useNavigate();
-  const { isOpen, close, status, messages, ask, clearConversation, resolveClarification, recordFeedback, confirmProposal, cancelProposal } = usePrimovexAI();
+  const { isOpen, close, status, messages, ask, addUserMessage, clearConversation, resolveClarification, recordFeedback, confirmProposal, cancelProposal } = usePrimovexAI();
   const [prompt, setPrompt] = useState('');
   const [voiceState, setVoiceState] = useState(VOICE_STATES.SLEEPING);
   const [voiceSupported, setVoiceSupported] = useState(true);
   const [voiceError, setVoiceError] = useState('');
   const [partialTranscript, setPartialTranscript] = useState('');
+  const [speakAnswers, setSpeakAnswers] = useState(() => { try { return window.localStorage.getItem('primovex.orb.speak') === '1'; } catch { return false; } });
   const recognitionRef = useRef(null);
   const voiceStateRef = useRef(VOICE_STATES.SLEEPING);
-  const followUpTimerRef = useRef(null);
-  const listenAgainRef = useRef(() => {});
+  // One conversation: the microphone is opened again after every reply until they finish, or go quiet.
+  const sessionRef = useRef({ active: false, lastActivity: 0, errors: 0, lastCode: '' });
+  const timerRef = useRef(null);
+  const messagesRef = useRef(messages);
+  const speakRef = useRef(speakAnswers);
+  const listenOnceRef = useRef(() => {});
+  const listenFailedRef = useRef(() => {});
+  const utteranceRef = useRef(() => {});
+  const startSessionRef = useRef(() => {});
+  const processTextRef = useRef(async () => 'done');
   const endRef = useRef(null);
   const busy = status === AI_STATES.SEARCHING || status === AI_STATES.REASONING;
   const isMobile = variant === 'mobile';
+  messagesRef.current = messages;
+  speakRef.current = speakAnswers;
 
   useEffect(() => {
     voiceStateRef.current = voiceState;
@@ -87,11 +122,45 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     try { stopNativeListening(); } catch { /* native listener may already be stopped */ }
   }, []);
 
-  const sleepOrb = useCallback(() => {
-    window.clearTimeout(followUpTimerRef.current);
+  // Beeps from the phone's recogniser every time it re-opens would be maddening in a clinic.
+  const muteBeeps = useCallback((muted) => {
+    try { window.PrimovexOrbVoice?.muteBeeps?.(muted); } catch { /* optional */ }
+  }, []);
+
+  const endSession = useCallback((message = '') => {
+    window.clearTimeout(timerRef.current);
+    sessionRef.current.active = false;
     stopRecognition();
+    muteBeeps(false);
+    try { window.speechSynthesis?.cancel(); } catch { /* optional */ }
+    if (message) setVoiceError(message);
+    setPartialTranscript('');
     setVoiceState(VOICE_STATES.SLEEPING);
-  }, [stopRecognition]);
+  }, [muteBeeps, stopRecognition]);
+  const sleepOrb = endSession;
+
+  // A listen has finished (with words, or without): open the microphone again, or finish if it has been quiet.
+  const afterTurn = useCallback(() => {
+    const session = sessionRef.current;
+    if (!session.active) return;
+    if (Date.now() - session.lastActivity >= SESSION_SILENCE_MS) { endSession(); return; }
+    window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => listenOnceRef.current(), RESTART_DELAY_MS + Math.min(session.errors, 6) * 250);
+  }, [endSession]);
+
+  const listenFailed = useCallback((code) => {
+    const session = sessionRef.current;
+    if (!session.active) return;
+    if (FATAL_VOICE_CODES.has(String(code))) {
+      setVoiceSupported(false);
+      endSession('Microphone permission was denied. Enable it in Android Settings to use Orb voice.');
+      return;
+    }
+    session.errors += 1;
+    if (session.errors >= 12) { endSession('Voice is not working right now. Tap the Orb to try again.'); return; }
+    setVoiceState(VOICE_STATES.FOLLOW_UP);
+    afterTurn();
+  }, [afterTurn, endSession]);
 
   const beginListening = useCallback((wakeOnly = false) => {
     const SpeechRecognition = getSpeechRecognition();
@@ -106,6 +175,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     recognition.interimResults = true;
     recognition.lang = 'en-GB';
     let finalText = '';
+    let errored = false;
 
     recognition.onstart = () => setVoiceState(wakeOnly ? VOICE_STATES.SLEEPING : VOICE_STATES.LISTENING);
     recognition.onresult = (event) => {
@@ -116,74 +186,112 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
         else interim += transcript;
       }
       const heard = `${finalText} ${interim}`.trim();
+      if (!wakeOnly) setPartialTranscript(heard);
       if (wakeOnly && /\borb\b/i.test(heard)) {
         setVoiceState(VOICE_STATES.WAKING);
         recognition.stop();
       }
     };
     recognition.onerror = (event) => {
+      errored = true;
       if (!['no-speech', 'aborted'].includes(event.error)) console.warn('Orb voice recognition:', event.error);
       if (event.error === 'not-allowed' || event.error === 'service-not-allowed') setVoiceSupported(false);
+      if (sessionRef.current.active && !wakeOnly) { listenFailedRef.current(event.error); return; }
       setVoiceState(VOICE_STATES.SLEEPING);
     };
-    recognition.onend = async () => {
+    recognition.onend = () => {
       recognitionRef.current = null;
       if (wakeOnly) {
         if (voiceStateRef.current === VOICE_STATES.WAKING || /\borb\b/i.test(finalText)) {
-          window.setTimeout(() => beginListening(false), 220);
+          window.setTimeout(() => startSessionRef.current(), 220);
         }
         return;
       }
-
       const clean = finalText.trim().replace(/^orb[,.]?\s*/i, '');
-      window.clearTimeout(followUpTimerRef.current);
-      if (clean) {
-        setVoiceState(VOICE_STATES.THINKING);
-        await ask(clean);
-        // Stay open for the next thing they say: the answer may need a reply, or it may not have understood.
-        setVoiceState(VOICE_STATES.FOLLOW_UP);
-        followUpTimerRef.current = window.setTimeout(sleepOrb, 20000);
-        listenAgainRef.current();
-      } else {
-        sleepOrb();
-      }
+      setPartialTranscript('');
+      if (!sessionRef.current.active) return;
+      if (clean) utteranceRef.current(clean);
+      else if (!errored) listenFailedRef.current('no-speech');
     };
     recognitionRef.current = recognition;
     recognition.start();
-  }, [ask, sleepOrb, stopRecognition]);
+  }, [stopRecognition]);
 
-  // After an answer: listen again (the microphone used to stop while the screen still said "Anything else?").
-  useEffect(() => {
-    listenAgainRef.current = () => {
-      window.setTimeout(() => {
-        if (voiceStateRef.current !== VOICE_STATES.FOLLOW_UP) return;
-        if (nativeVoiceAvailable()) startNativeListening(); else beginListening(false);
-      }, 700);
-    };
-  }, [beginListening]);
+  // Every spoken or typed line is understood against what is on screen: a card waiting for a yes, or
+  // the choices just offered. Anything else is a normal request. Returns 'end' if they said they're done.
+  const processText = useCallback(async (text) => {
+    const list = messagesRef.current;
+    const last = [...list].reverse().find((item) => item.role === 'assistant');
+    const waiting = last?.proposal?.status === 'proposed' ? last : null;
+    const options = Array.isArray(last?.followUps) ? last.followUps : [];
+    const heard = interpretSpoken(text, { options, hasProposal: Boolean(waiting) });
+    if (heard.type === 'end') return 'end';
+    if (heard.type === 'empty') return 'done';
+    if (heard.type === 'confirm') { addUserMessage(text); await confirmProposal(waiting.id); return 'done'; }
+    if (heard.type === 'cancel') { addUserMessage(text); cancelProposal(waiting.id); return 'done'; }
+    if (heard.type === 'choice') {
+      const option = options[heard.index];
+      await ask(typeof option === 'string' ? option : option.ask, { displayText: text });
+      return 'done';
+    }
+    await ask(text);
+    return 'done';
+  }, [addUserMessage, ask, cancelProposal, confirmProposal]);
+  processTextRef.current = processText;
 
-  const wakeOrb = useCallback(() => {
-    window.clearTimeout(followUpTimerRef.current);
+  // Something was said during a conversation.
+  const handleUtterance = useCallback(async (text) => {
+    const session = sessionRef.current;
+    session.lastActivity = Date.now();
+    session.errors = 0;
+    setVoiceState(VOICE_STATES.THINKING);
+    let outcome = 'done';
+    try { outcome = await processTextRef.current(text); } catch (error) { console.error('Orb voice request failed:', error); }
+    if (!session.active) return;
+    if (outcome === 'end') { endSession(); return; }
+    setVoiceState(VOICE_STATES.FOLLOW_UP);
+    if (speakRef.current) {
+      await new Promise((resolve) => window.setTimeout(resolve, 400)); // let the reply appear first
+      const latest = [...messagesRef.current].reverse().find((item) => item.role === 'assistant');
+      await speakText(spokenReply(latest));
+    }
+    session.lastActivity = Date.now();
+    afterTurn();
+  }, [afterTurn, endSession]);
+
+  const startSession = useCallback(() => {
+    window.clearTimeout(timerRef.current);
     setVoiceError('');
     setPartialTranscript('');
+    sessionRef.current = { active: true, lastActivity: Date.now(), errors: 0, lastCode: '' };
+    muteBeeps(true);
     setVoiceState(VOICE_STATES.WAKING);
-    if (nativeVoiceAvailable()) {
-      requestNativeMicrophonePermission();
-      window.setTimeout(() => startNativeListening(), 240);
-      return;
-    }
-    window.setTimeout(() => beginListening(false), 240);
-  }, [beginListening]);
+    if (nativeVoiceAvailable()) requestNativeMicrophonePermission();
+    timerRef.current = window.setTimeout(() => listenOnceRef.current(), 240);
+  }, [muteBeeps]);
+  const wakeOrb = startSession;
 
-  useEffect(() => subscribeNativeOrbVoice(async ({ type, value }) => {
+  useEffect(() => {
+    utteranceRef.current = handleUtterance;
+    listenFailedRef.current = listenFailed;
+    startSessionRef.current = startSession;
+    listenOnceRef.current = () => {
+      if (!sessionRef.current.active) return;
+      if (nativeVoiceAvailable()) startNativeListening();
+      else beginListening(false);
+    };
+  }, [beginListening, handleUtterance, listenFailed, startSession]);
+
+  useEffect(() => subscribeNativeOrbVoice(({ type, value }) => {
+    const active = sessionRef.current.active;
     if (type === 'permission') {
       if (value === 'denied') {
         setVoiceSupported(false);
-        setVoiceError('Microphone permission was denied. Enable it in Android Settings to use Orb voice.');
-        setVoiceState(VOICE_STATES.SLEEPING);
+        endSession('Microphone permission was denied. Enable it in Android Settings to use Orb voice.');
       }
       return;
     }
+    if (!active) return;
     if (type === 'started' || type === 'speech-begin') {
       setVoiceError('');
       setPartialTranscript('');
@@ -194,30 +302,23 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
       setPartialTranscript(value || '');
       return;
     }
+    if (type === 'error-code') {
+      sessionRef.current.lastCode = String(value || '');
+      return;
+    }
     if (type === 'error') {
-      // Nothing said while waiting for a follow-up is not an error: just go quiet.
-      if (voiceStateRef.current === VOICE_STATES.FOLLOW_UP) { sleepOrb(); return; }
-      setVoiceError(value || 'Voice recognition could not start.');
-      setVoiceState(VOICE_STATES.SLEEPING);
+      const code = sessionRef.current.lastCode || value;
+      sessionRef.current.lastCode = '';
+      listenFailedRef.current(code);
       return;
     }
     if (type === 'final') {
       const clean = String(value || '').trim().replace(/^orb[,.]?\s*/i, '');
-      const wasFollowUp = voiceStateRef.current === VOICE_STATES.FOLLOW_UP;
-      window.clearTimeout(followUpTimerRef.current);
       setPartialTranscript('');
-      if (!clean) {
-        if (!wasFollowUp) setVoiceError('I did not catch that. Tap the Orb and try again.');
-        setVoiceState(VOICE_STATES.SLEEPING);
-        return;
-      }
-      setVoiceState(VOICE_STATES.THINKING);
-      await ask(clean);
-      setVoiceState(VOICE_STATES.FOLLOW_UP);
-      followUpTimerRef.current = window.setTimeout(sleepOrb, 20000);
-      listenAgainRef.current();
+      if (!clean) listenFailedRef.current('empty');
+      else utteranceRef.current(clean);
     }
-  }), [ask, sleepOrb]);
+  }), [endSession]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -230,16 +331,22 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     if (isMobile && !nativeVoiceAvailable() && getSpeechRecognition()) beginListening(true);
     return () => {
       window.removeEventListener('keydown', closeOnEscape);
-      window.clearTimeout(followUpTimerRef.current);
-      stopRecognition();
+      endSession();
       try { cancelNativeListening(); } catch { /* no-op */ }
     };
-  }, [beginListening, close, isMobile, isOpen, stopRecognition]);
+  }, [beginListening, close, endSession, isMobile, isOpen]);
 
   useEffect(() => {
     if (!isMobile || voiceState === VOICE_STATES.SLEEPING) return;
     if (busy) setVoiceState(VOICE_STATES.THINKING);
   }, [busy, isMobile, voiceState]);
+
+  const toggleSpeak = () => {
+    const next = !speakAnswers;
+    setSpeakAnswers(next);
+    try { window.localStorage.setItem('primovex.orb.speak', next ? '1' : '0'); } catch { /* optional */ }
+    if (!next) { try { window.speechSynthesis?.cancel(); } catch { /* optional */ } }
+  };
 
   if (!isOpen) return null;
 
@@ -248,7 +355,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     const next = prompt.trim();
     if (!next || busy) return;
     setPrompt('');
-    await ask(next);
+    await processText(next);
   };
 
   const panelClass = isMobile
@@ -284,7 +391,12 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
               <PulseOrbFace size={150} active={voiceState === VOICE_STATES.LISTENING || voiceState === VOICE_STATES.THINKING || voiceState === VOICE_STATES.WAKING} still={voiceState === VOICE_STATES.SLEEPING} />
             </button>
             <strong>{orbLabel}</strong>
-            <span>{voiceError || partialTranscript || (voiceSupported ? (orbAwake ? 'Speak naturally. Orb waits for a pause before responding.' : 'Tap the Orb to begin. Wake-word listening follows once native capture is proven.') : 'Voice recognition is unavailable on this device. You can still type below.')}</span>
+            <span>{voiceError || partialTranscript || (voiceSupported ? (orbAwake ? 'Keep talking. Say “that’s all” when you are finished.' : 'Tap the Orb and talk. It keeps listening until you say “that’s all” or go quiet.') : 'Voice recognition is unavailable on this device. You can still type below.')}</span>
+            {voiceSupported && (
+              <button type="button" onClick={toggleSpeak} className="primovex-ai-muted mt-2 text-xs underline" aria-pressed={speakAnswers}>
+                {speakAnswers ? 'Spoken answers: on' : 'Spoken answers: off'}
+              </button>
+            )}
           </section>
         )}
 

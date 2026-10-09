@@ -50,6 +50,26 @@ const EXECUTORS = {
     return `Done. Removed ${params.quantity} ${params.itemLabel}${params.batchNumber ? ` (batch ${params.batchNumber})` : ""} from ${params.locationName}. ${result.after} left in total.`;
   },
 
+  // Several items in one go: each is taken off by itself (so one that fails doesn't stop the rest), and
+  // what was done and what wasn't is said plainly.
+  "stock-use-multi": async (params, { actor }) => {
+    const done = [];
+    const failed = [];
+    for (const line of params.lines || []) {
+      try {
+        const result = await applyStockMovement(line.itemId, {
+          type: "use", qty: line.quantity, locationId: line.locationId || null, locationName: line.locationName, locationType: line.locationType,
+          batch_number: line.batchNumber || "", reason: "Used (recorded through the Orb)", actor, source: "orb",
+        });
+        done.push(`${line.quantity} ${line.itemLabel} (${result.after} left)`);
+      } catch (error) {
+        failed.push(`${line.itemLabel}: ${error?.message || "could not be taken off"}`);
+      }
+    }
+    if (!done.length) throw new Error(`Nothing was taken off stock. ${failed.join("; ")}`);
+    return `Done. Taken off stock: ${done.join("; ")}.${failed.length ? ` Not done: ${failed.join("; ")}.` : ""}`;
+  },
+
   reorder: async (params, { actor }) => {
     const snap = await getDoc(doc(db, "stock_items", params.itemId));
     if (!snap.exists()) throw new Error("That product no longer exists.");

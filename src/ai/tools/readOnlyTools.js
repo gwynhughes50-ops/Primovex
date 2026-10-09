@@ -20,7 +20,7 @@ import { buildLocateResult, buildReorderDraft, buildTeamDraft } from '@/ai/stock
 import { needsCleaning } from '@/lib/cleaningFrequency';
 import { buildSeAnswer } from '@/ai/governance/seAnswers';
 import { buildSeReportDraft } from '@/ai/governance/seDraft';
-import { buildUseDraft } from '@/ai/stock/stockUse';
+import { buildAnyUseDraft } from '@/ai/stock/stockUse';
 import { ensureMedicineNames } from '@/ai/stock/medicineNamesLoader';
 import { setProtectedWords } from '@/ai/stock/medicineNames';
 import { loadVisibleSe } from '@/modules/governance/services/seService';
@@ -832,7 +832,7 @@ export function registerApprovedReadOnlyTools() {
     async execute(input = {}) {
       await ensureMedicineNames();
       const items = await readStock();
-      const result = buildUseDraft(input, { items });
+      const result = buildAnyUseDraft(input, { items });
       return {
         domain: 'inventory', data: { proposed: Boolean(result.proposal) }, summary: result.text, followUps: result.followUps, proposal: result.proposal || null,
         confidence: result.proposal ? 0.95 : 0.8,
