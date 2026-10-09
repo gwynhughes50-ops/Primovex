@@ -2,7 +2,7 @@ import { tokens } from "../help/helpSearch";
 import { createProposal } from "../../orb/actionProposals";
 import { currentBatches } from "../../lib/stockBatches";
 import { toNumber } from "../../lib/stockLocations";
-import { itemLabel, itemPlacements, resolveStockItem } from "./stockAsk";
+import { itemLabel, itemPlacements, resolveStockItem, suggestStockItems } from "./stockAsk";
 import { plural } from "../tools/answerWording";
 
 // "I've just taken one adrenaline from room D62" -> the Orb works out the product, how many, where it
@@ -10,8 +10,8 @@ import { plural } from "../tools/answerWording";
 // person confirms. The batch is asked for by the end of its number (it's printed on the pack), as
 // one tap per batch that still has stock. Pure, so it can be tested.
 
-const NUMBER_WORDS = { one: 1, a: 1, an: 1, single: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
-const NUM = "\\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|a|an|single";
+const NUMBER_WORDS = { one: 1, on: 1, a: 1, an: 1, single: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+const NUM = "\\d{1,3}|one|on|two|three|four|five|six|seven|eight|nine|ten|a|an|single"; // "on" is a common slip for "one"
 const UNITS = "ampoules?|ampules?|ampuoles?|ampouls?|vials?|boxes|box|packs?|packets?|tablets?|syringes?|pens?|doses?|bottles?|tubes?|units?|bags?|strips?|sachets?|inhalers?";
 const VERBS = "taken|took|removed|used|opened|dispensed|administered|given out|pulled|signed out|grabbed|got out";
 const QUESTION_START = /^(?:what|which|who|how|is|are|do|does|did|can|could|where|when|why|show|list|tell me)\b/i;
@@ -24,6 +24,8 @@ const toNumberWord = (word) => (/^\d+$/.test(word) ? Number(word) : NUMBER_WORDS
 // telling the Orb they took something.
 export function parseUseRequest(text) {
   let t = String(text || "").trim().replace(/\s+/g, " ").replace(/[.!?]+$/g, "");
+  // "ive", "i've", "i ve" and "iv" all mean "I have"
+  t = t.replace(/\b(i|we)\s*['’]?\s*ve\b/gi, "$1 have").replace(/\bive\b/gi, "i have").replace(/\biv\b/gi, "i have");
   t = t.replace(/^(?:(?:ok|okay|right|so|hi|hello|orb|please|just|also|and)[,\s]+)+/i, "");
   if (!t || QUESTION_START.test(t)) return null;
 
@@ -46,6 +48,8 @@ export function parseUseRequest(text) {
   let place = null;
   const pm = rest.match(/^(.*)\s+(?:from|out of|off|in|at|inside)\s+(?:the\s+)?(.+)$/i);
   if (pm) { rest = pm[1].trim(); place = pm[2].trim(); }
+  // "from stock" is not a place, just "off the stock"
+  if (place && /^(?:stock|the stock|stocks|our stock|primovex)$/i.test(place)) place = null;
 
   // how many, and what
   let quantity = null;
@@ -105,8 +109,19 @@ export function buildUseDraft(input = {}, { items = [], now = new Date() } = {})
   if (!parsed.item) return { text: "Which product did you take? For example \"I've taken one adrenaline ampoule from the store cupboard\".", followUps: [] };
 
   const found = resolveStockItem(parsed.item, items);
-  if (found.status === "none") return { text: `I couldn't find any stock matching “${parsed.item}”, so I haven't changed anything.`, followUps: [] };
   const base = { qty: parsed.quantity, placeName: null, tail: null };
+  if (found.status === "none") {
+    // a spelling slip: offer what it nearly is, but never pick for them
+    const near = suggestStockItems(parsed.item, items);
+    if (near.length) {
+      return {
+        text: lines(`I couldn't find “${parsed.item}”. Did you mean:`, ...near.map((i) => `• ${itemLabel(i)}`)),
+        followUps: near.map((i) => sentence({ ...base, label: itemLabel(i), placeName: parsed.place })),
+        ambiguous: true,
+      };
+    }
+    return { text: `I couldn't find any stock matching “${parsed.item}”, so I haven't changed anything.`, followUps: [] };
+  }
   if (found.status === "many") {
     return {
       text: lines(`More than one product fits “${parsed.item}”. Which did you take?`, ...found.items.map((i) => `• ${itemLabel(i)}`)),

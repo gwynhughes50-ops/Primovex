@@ -9,12 +9,21 @@ const QUESTION_FILLER = new Set(["many", "much", "stock", "item", "items", "prod
 
 // ---- products ----------------------------------------------------------------------------------
 
-const itemTokens = (item) => new Set(tokens([item?.name, item?.strength, item?.form, item?.brand].filter(Boolean).join(" ")));
+// The same medicine goes by different names: the stock may say chlorphenamine and a person say
+// chlorpheniramine (its US name), adrenaline or epinephrine. Everything is compared by the UK name.
+const DRUG_NAMES = [
+  [/\bchlorpheniramine\b/gi, "chlorphenamine"], [/\bepinephrine\b/gi, "adrenaline"], [/\bacetaminophen\b/gi, "paracetamol"],
+  [/\balbuterol\b/gi, "salbutamol"], [/\bglyceryl trinitrate\b/gi, "gtn"], [/\bnitroglycerin\b/gi, "gtn"], [/\bparacetemol\b/gi, "paracetamol"],
+  [/\bhydrocortisone\b/gi, "hydrocortisone"],
+];
+export const ukDrugNames = (text) => DRUG_NAMES.reduce((t, [pattern, uk]) => t.replace(pattern, uk), String(text || ""));
+
+const itemTokens = (item) => new Set(tokens(ukDrugNames([item?.name, item?.strength, item?.form, item?.brand].filter(Boolean).join(" "))));
 
 // How well a product fits what was said: most of the words said must be in its name, and
 // shorter, more exact names beat longer ones.
 export function rankStockItems(query, items = []) {
-  const q = tokens(query).filter((t) => !QUESTION_FILLER.has(t));
+  const q = tokens(ukDrugNames(query)).filter((t) => !QUESTION_FILLER.has(t));
   if (!q.length) return [];
   return items
     .filter((item) => item && !item.archived_at)
@@ -27,6 +36,39 @@ export function rankStockItems(query, items = []) {
     })
     .filter((row) => row.coverage >= 0.66 && row.hits > 0)
     .sort((a, b) => b.score - a.score);
+}
+
+// How different two words are (the number of single-letter changes), for spelling slips.
+function editDistance(a, b) {
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i += 1) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const temp = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = temp;
+    }
+  }
+  return row[b.length];
+}
+
+// Products that nearly fit what was said (a spelling slip such as "chlorphenaimne"): never chosen
+// automatically, only offered back ("did you mean...?").
+export function suggestStockItems(query, items = [], limit = 3) {
+  const q = tokens(ukDrugNames(query)).filter((t) => !QUESTION_FILLER.has(t) && t.length > 2);
+  if (!q.length) return [];
+  return items
+    .filter((item) => item && !item.archived_at)
+    .map((item) => {
+      const have = [...itemTokens(item)];
+      const close = q.filter((t) => have.some((h) => h === t || (t.length >= 5 && h.length >= 4 && editDistance(t, h) <= (t.length >= 8 ? 3 : 2)))).length;
+      return { item, coverage: close / q.length };
+    })
+    .filter((row) => row.coverage >= 0.66)
+    .sort((a, b) => b.coverage - a.coverage)
+    .slice(0, limit)
+    .map((row) => row.item);
 }
 
 // { status: 'one' | 'many' | 'none', item?, items? }

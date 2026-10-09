@@ -97,6 +97,31 @@ t("things that don't add up are refused", () => {
   assert.match(buildUseDraft({ question: "I've taken one adrenaline" }, { items: [{ ...adrenaline, current_stock: 0, batches: [], locations: [] }] }).text, /none is recorded/);
 });
 
+t("the sentence as it was really typed, with the US drug name, slips and 'from stock'", () => {
+  const chlor = { id: "chl", name: "Chlorphenamine", strength: "10mg/1ml", form: "ampoule", site: "Main Surgery", location: "Store", current_stock: 12, locations: [], batches: [{ batch_number: "CH-5521", expiry_date: "2027-06-30", quantity: 12 }] };
+  const typed = "ive just used on ampoule of chlorpheniramine from stock";
+  const p = parseUseRequest(typed);
+  assert.equal(p.quantity, 1);
+  assert.equal(p.item.toLowerCase(), "chlorpheniramine");
+  assert.equal(p.place, null, "from stock is not a place");
+  const r = buildUseDraft({ question: typed }, { items: [chlor, gloves] });
+  assert.ok(r.proposal, r.text);
+  assert.equal(r.proposal.params.itemId, "chl");
+  assert.equal(r.proposal.params.batchNumber, "CH-5521");
+  assert.match(r.proposal.lines.join(" | "), /Stock after: 11 in total/);
+  for (const s of ["I've just used one ampoule of chlorphenamine", "i have used 1 chlorpheniramine", "ive taken a chlorpheniramine ampoule from the store cupboard"]) assert.ok(buildUseDraft({ question: s }, { items: [chlor] }).proposal, s);
+});
+
+t("a spelling slip is offered back, never chosen", () => {
+  const chlor = { id: "chl", name: "Chlorphenamine", strength: "10mg/1ml", form: "ampoule", site: "Main Surgery", location: "Store", current_stock: 12, locations: [] };
+  const r = buildUseDraft({ question: "I've just used one chlorphenaimne" }, { items: [chlor, gloves] });
+  assert.equal(r.proposal, undefined);
+  assert.match(r.text, /Did you mean/);
+  assert.match(r.text, /Chlorphenamine/);
+  assert.ok(buildUseDraft({ question: r.followUps[0] }, { items: [chlor, gloves] }).proposal, "tapping it carries on");
+  assert.match(buildUseDraft({ question: "I've just used one zzzzzz" }, { items: [chlor] }).text, /couldn't find any stock/);
+});
+
 t("two products that fit are asked about", () => {
   const r = buildUseDraft({ question: "I've taken one adrenaline" }, { items: [adrenaline, adrenalinePen] });
   assert.equal(r.ambiguous, true);

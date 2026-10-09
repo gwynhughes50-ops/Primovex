@@ -1,7 +1,7 @@
 import { createProposal } from "../../orb/actionProposals";
 import {
   itemLabel, itemPlacements, kitGaps, looksIdentifying, parseLocateQuestion, parseStockRequest, parseTeamMessage,
-  placeContents, resolvePlace, resolveStockItem, resolveTeam, buildPlaces,
+  placeContents, resolvePlace, resolveStockItem, resolveTeam, buildPlaces, suggestStockItems,
 } from "./stockAsk";
 import { joinList, plural } from "../tools/answerWording";
 import { unassignedQty, mainStoreName } from "../../lib/stockLocations";
@@ -27,7 +27,11 @@ export function buildLocateResult(input = {}, { items = [], kits = [] } = {}) {
   let item = null;
   if (itemQuery) {
     const found = resolveStockItem(itemQuery, items);
-    if (found.status === "none") return { text: `I couldn't find any stock matching “${itemQuery}”. Try a different name, or part of it.`, followUps: [] };
+    if (found.status === "none") {
+      const near = suggestStockItems(itemQuery, items);
+      if (near.length) return { text: lines(`I couldn't find “${itemQuery}”. Did you mean:`, ...near.map((i) => `• ${itemLabel(i)}`)), followUps: near.map((i) => (placeQuery ? `how many ${itemLabel(i)} are in ${placeQuery}` : `where is ${itemLabel(i)}`)), ambiguous: true };
+      return { text: `I couldn't find any stock matching “${itemQuery}”. Try a different name, or part of it.`, followUps: [] };
+    }
     if (found.status === "many") {
       const where = placeQuery ? ` in ${placeQuery}` : "";
       return {
@@ -144,7 +148,11 @@ export function buildReorderDraft(input = {}, { items = [], pending = [], roleNa
   if (!parsed || !parsed.item) return { text: "Tell me what's needed, for example \"BD blue needles need ordering\" or \"box 3 is missing a chlorphenamine\".", followUps: [] };
 
   const found = resolveStockItem(parsed.item, items);
-  if (found.status === "none") return { text: `I couldn't find any stock matching “${parsed.item}”, so I haven't raised anything. Try a different name, or part of it.`, followUps: [] };
+  if (found.status === "none") {
+    const near = suggestStockItems(parsed.item, items);
+    if (near.length) return { text: lines(`I couldn't find “${parsed.item}”. Did you mean:`, ...near.map((i) => `• ${itemLabel(i)}`)), followUps: near.map((i) => `reorder ${itemLabel(i)}`), ambiguous: true };
+    return { text: `I couldn't find any stock matching “${parsed.item}”, so I haven't raised anything. Try a different name, or part of it.`, followUps: [] };
+  }
   if (found.status === "many") {
     return {
       text: lines(`More than one product fits “${parsed.item}”. Which did you mean?`, ...found.items.map((i) => `• ${itemLabel(i)}`)),

@@ -28,6 +28,7 @@ route("adrenaline 1 ampoule taken from store cupboard", "stock.useDraft");
 route("we used 2 vials of adrenaline from anaphylaxis box 3, batch ending 4821", "stock.useDraft");
 route("tell the HCA team I used the last adrenaline", "team.messageDraft");
 route("we are out of adrenaline", "reorder.draft");
+route("ive just used on ampoule of chlorpheniramine from stock", "stock.useDraft");
 // existing behaviour must not change
 route("which stock items are low", "inventory.lowStock");
 route("what is expiring soon", "inventory.expiring");
