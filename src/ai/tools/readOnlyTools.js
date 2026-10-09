@@ -22,6 +22,7 @@ import { buildSeAnswer } from '@/ai/governance/seAnswers';
 import { buildSeReportDraft } from '@/ai/governance/seDraft';
 import { buildUseDraft } from '@/ai/stock/stockUse';
 import { ensureMedicineNames } from '@/ai/stock/medicineNamesLoader';
+import { setProtectedWords } from '@/ai/stock/medicineNames';
 import { loadVisibleSe } from '@/modules/governance/services/seService';
 import { normaliseOrbScope } from '@/lib/orbScope';
 import { daysUntilExpiry, expiryStatus, expiryWindowDays, normaliseExpirySettings, stockLevelStatus, summariseStockAlerts } from '@/lib/stockAlerts';
@@ -66,7 +67,9 @@ function stockPicture(items, settings, now = new Date()) {
 
 async function readStock() {
   const snap = await getDocs(collection(db, 'stock_items'));
-  return activeItems(snap.docs);
+  const items = activeItems(snap.docs);
+  setProtectedWords(items); // the shelf's own words are never second-guessed when matching medicine names
+  return items;
 }
 
 // Cleaning/stocking status lives in room_operational/cleaning_logs now (see

@@ -24,3 +24,13 @@ to "NHS dm+d" under NHSBSA). The BNF itself is licensed content and is not used.
 The importer reads the VTM (substance), VMP (generic product) and AMP (branded product) files, drops
 anything marked invalid, and maps each brand to its substance through its generic product.
 Re-run it when a new release is downloaded (the Orb works fine on an older list).
+
+## What the importer does with the list
+- Brand names come from the AMP files and lead to their substance (AMP -> VMP -> VTM). Vaccines have no
+  substance in dm+d, so they are named from their generic product ("pneumococcal vaccine").
+- The first word of a longer brand ("calpol" from "Calpol Six Plus") is added when it means one substance only.
+- `scripts/dmd/curated-names.json` holds brands dm+d has no substance for (for example Hypostop); edit it and re-run.
+- `src/ai/stock/medicineStoplist.js` lists ordinary words and stock words that must never be treated as a
+  brand ("the", "gloves", "nitrile"...). Matching also never "corrects" a word the practice's own stock
+  names already use.
+- Release used for the committed list: NHS dm+d 10.0.0 (5 October 2026): 3,160 substances, 8,343 brand names.

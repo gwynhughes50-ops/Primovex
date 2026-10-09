@@ -7,6 +7,8 @@
 //   - names this practice has taught the Orb (Admin > Orb)
 // Pure and synchronous once the data is set, so it can be tested. Nothing here is sent anywhere.
 
+import { NEVER_BRAND } from "./medicineStoplist";
+
 const US_UK = [
   [/\bchlorpheniramine\b/gi, "chlorphenamine"], [/\bepinephrine\b/gi, "adrenaline"], [/\bacetaminophen\b/gi, "paracetamol"],
   [/\balbuterol\b/gi, "salbutamol"], [/\bglyceryl trinitrate\b/gi, "gtn"], [/\bnitroglycerin\b/gi, "gtn"], [/\bparacetemol\b/gi, "paracetamol"],
@@ -31,7 +33,8 @@ function editDistance(a, b) {
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // data: { generics: [name], brands: { brand: genericIndexOrName } }, aliases: [{ say, means }]
-export function createMedicineNormaliser({ generics = [], brands = {}, aliases = [] } = {}) {
+// protect: words already used in the practice's own stock names are never "corrected" (nitrile is not nitrite)
+export function createMedicineNormaliser({ generics = [], brands = {}, aliases = [], protect = new Set() } = {}) {
   const genericList = generics.map((g) => String(g).toLowerCase());
   const genericSet = new Set(genericList);
   const brandMap = new Map();
@@ -57,10 +60,11 @@ export function createMedicineNormaliser({ generics = [], brands = {}, aliases =
   const cache = new Map();
 
   const fix = (word) => {
-    if (word.length < 7 || knownWords.has(word) || genericSet.has(word)) return word;
+    if (word.length < 7 || knownWords.has(word) || genericSet.has(word) || protect.has(word) || NEVER_BRAND.has(word)) return word;
     const pool = wordsByFirst.get(word[0]);
     if (!pool) return word;
-    const limit = word.length >= 11 ? 3 : 2;
+    // the longer the word, the more slips it can take and still be unmistakable
+    const limit = word.length >= 12 ? 3 : word.length >= 9 ? 2 : 1;
     let best = null;
     let bestDistance = limit + 1;
     let tie = false;
@@ -90,7 +94,7 @@ export function createMedicineNormaliser({ generics = [], brands = {}, aliases =
           const between = [];
           for (let k = 0; k < span - 1; k += 1) between.push(parts[i + 2 * k + 1]);
           if (between.some((b) => b !== " ")) continue;
-          const brand = brandMap.get(words.join(" "));
+          const brand = NEVER_BRAND.has(words.join(" ")) ? null : brandMap.get(words.join(" "));
           if (brand && !genericSet.has(words.join(" "))) {
             out.push(brand, parts[i + 2 * (span - 1) + 1] ?? "");
             i += 2 * (span - 1);
@@ -113,8 +117,16 @@ export function createMedicineNormaliser({ generics = [], brands = {}, aliases =
 let normaliser = createMedicineNormaliser();
 let data = { generics: [], brands: {} };
 let taught = [];
+let protectedWords = new Set();
 
-const rebuild = () => { normaliser = createMedicineNormaliser({ ...data, aliases: taught }); };
+const rebuild = () => { normaliser = createMedicineNormaliser({ ...data, aliases: taught, protect: protectedWords }); };
+// The words in this practice's own stock names: what the shelf calls things is not second-guessed.
+export function setProtectedWords(items = []) {
+  const next = new Set(items.filter(Boolean).flatMap((i) => [i.name, i.strength, i.form, i.brand].filter(Boolean).join(" ").toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 5)));
+  if (next.size === protectedWords.size && [...next].every((w) => protectedWords.has(w))) return;
+  protectedWords = next;
+  rebuild();
+}
 export function setMedicineData(next) { data = { generics: next?.generics || [], brands: next?.brands || {} }; rebuild(); }
 export function setStockAliases(list) { taught = Array.isArray(list) ? list : []; rebuild(); }
 export const normaliseMedicineText = (text) => normaliser(text);

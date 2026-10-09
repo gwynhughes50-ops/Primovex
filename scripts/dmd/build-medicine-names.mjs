@@ -54,7 +54,8 @@ if (!vtmFiles.length || !vmpFiles.length || !ampFiles.length) {
   process.exit(1);
 }
 
-const names = buildMedicineNames({ vtms: parseVtms(read(vtmFiles)), vmps: parseVmps(read(vmpFiles)), amps: parseAmps(read(ampFiles)) });
+const curated = JSON.parse(readFileSync(new URL("./curated-names.json", import.meta.url), "utf8")).brands || {};
+const names = buildMedicineNames({ vtms: parseVtms(read(vtmFiles)), vmps: parseVmps(read(vmpFiles)), amps: parseAmps(read(ampFiles)), curated });
 const release = (basename(input).match(/(\d+\.\d+\.\d+_\d{8})/) || [])[1] || basename(input);
 const payload = { v: 1, source: `NHS dm+d ${release}`, builtAt: new Date().toISOString().slice(0, 10), ...names };
 mkdirSync(resolve(out, ".."), { recursive: true });

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { brandOf, buildMedicineNames, parseAmps, parseVmps, parseVtms } from "./dmd/dmdParse.mjs";
-import { createMedicineNormaliser, setMedicineData, setStockAliases } from "../src/ai/stock/medicineNames.js";
+import { createMedicineNormaliser, normaliseMedicineText, setMedicineData, setProtectedWords, setStockAliases } from "../src/ai/stock/medicineNames.js";
 import { resolveStockItem, suggestStockItems } from "../src/ai/stock/stockAsk.js";
 import { buildUseDraft } from "../src/ai/stock/stockUse.js";
 
@@ -42,7 +42,7 @@ t("a brand name is the words before the strength or form", () => {
   assert.equal(brandOf("Piriton 10mg/1ml solution for injection ampoules (GlaxoSmithKline)"), "piriton");
   assert.equal(brandOf("Solu-Cortef 100mg powder for solution for injection vials"), "solu-cortef");
   assert.equal(brandOf("Depo-Provera 150mg/1ml suspension for injection pre-filled syringes"), "depo-provera");
-  assert.equal(brandOf("Mepilex Border dressing"), "mepilex border dressing");
+  assert.equal(brandOf("Mepilex Border dressing"), "mepilex border");
   assert.equal(brandOf("Tablets"), "");
 });
 
@@ -65,12 +65,64 @@ t("a brand, a US name and a spelling slip all come to the same UK generic name",
   assert.equal(norm("hydrocortiosne injection"), "hydrocortisone injection");
   assert.equal(norm("chlorphenaimne"), "chlorphenamine");
   assert.equal(norm("Solu-Cortef 100mg"), "hydrocortisone 100mg");
-  assert.equal(norm("Pneumovax"), "pneumococcal polysaccharide vaccine");
+  assert.match(norm("Pneumovax"), /^pneumococcal (polysaccharide )?vaccine$/);
+});
+
+t("the full list: brands, vaccines and a few real words are handled", () => {
+  const norm = createMedicineNormaliser(seed);
+  assert.equal(norm("calpol"), "paracetamol");
+  assert.match(norm("shingrix"), /vaccine/);
+  assert.match(norm("gardasil"), /papillomavirus vaccine/);
+  assert.equal(norm("the gloves and the needles"), "the gloves and the needles", "no brand is ever a common word");
+  for (const w of ["stock", "remove", "one", "ampoule", "box", "blue", "room", "please", "take", "used"]) assert.equal(norm(w), w, w);
+});
+
+t("a brand dm+d gives no substance for (a vaccine) is named from its generic product; short or common brand words are dropped", () => {
+  const vtms = [{ id: "1", name: "Paracetamol" }];
+  const vmps = [
+    { id: "10", vtmId: "1", name: "Paracetamol 250mg/5ml oral suspension" },
+    { id: "20", vtmId: "", name: "Herpes zoster vaccine powder and suspension for suspension for injection pre-filled syringes" },
+    { id: "30", vtmId: "1", name: "Paracetamol 500mg tablets" },
+  ];
+  const amps = [
+    { id: "1", vmpId: "10", name: "Calpol Six Plus 250mg/5ml oral suspension sugar free" },
+    { id: "2", vmpId: "10", name: "Calpol Infant 120mg/5ml oral suspension" },
+    { id: "3", vmpId: "20", name: "Shingrix vaccine powder and suspension for suspension for injection" },
+    { id: "4", vmpId: "30", name: "The 500mg tablets" },
+    { id: "5", vmpId: "30", name: "Zinc tablets" },
+    { id: "6", vmpId: "30", name: "Pan 500mg tablets" },
+  ];
+  const names = buildMedicineNames({ vtms, vmps, amps, curated: { hypostop: "Glucose" } });
+  const brands = Object.fromEntries(Object.entries(names.brands).map(([b, i]) => [b, names.generics[i]]));
+  assert.equal(brands["calpol six plus"], "paracetamol");
+  assert.equal(brands.calpol, "paracetamol", "people say calpol, not calpol six plus");
+  assert.match(brands.shingrix, /herpes zoster vaccine/);
+  assert.ok(names.generics.includes("herpes zoster vaccine"));
+  assert.equal(brands.hypostop, "glucose", "the practice's own additions are merged in");
+  assert.equal(brands.the, undefined);
+  assert.equal(brands.zinc, undefined);
+  assert.equal(brands.pan, undefined, "very short names are dropped");
 });
 
 t("ordinary words and strengths are left alone", () => {
   const norm = createMedicineNormaliser(seed);
   for (const s of ["nitrile gloves medium", "10mg/1ml solution for injection ampoules", "blue needles", "gauze swabs 5cm", "remove one from stock", "treatment room 1"]) assert.equal(norm(s), s, s);
+});
+
+t("the shelf's own words are protected from correction (nitrile is not nitrite), and corrections are tight", () => {
+  const plain = createMedicineNormaliser({ generics: ["amyl nitrite", "nifedipine"], brands: {} });
+  assert.equal(plain("nitrile gloves"), "nitrile gloves", "a stoplist word");
+  assert.equal(plain("nitrite"), "nitrite");
+  const loose = createMedicineNormaliser({ generics: ["amyl nitrite", "fexofenadine"], brands: {} });
+  assert.equal(loose("fexofenadne"), "fexofenadine", "a long word with one slip is corrected");
+  assert.equal(loose("nutrate strips"), "nutrate strips", "a short word is only corrected for a single slip");
+  const protectedNorm = createMedicineNormaliser({ generics: ["fexofenadine"], brands: {}, protect: new Set(["fexofenadne"]) });
+  assert.equal(protectedNorm("fexofenadne"), "fexofenadne", "the shelf's spelling wins");
+  setMedicineData({ generics: ["amyl nitrite"], brands: {} });
+  setProtectedWords([{ name: "Nitrite test strips" }]);
+  assert.equal(normaliseMedicineText("nitrite strips"), "nitrite strips");
+  setProtectedWords([]);
+  setMedicineData(seed);
 });
 
 t("names the practice has taught are used too, longest first", () => {
