@@ -120,6 +120,19 @@ service cloud.firestore {
       }
     }
 
+    // The daily stock review (stock nobody has touched, too much, too little): written only by the
+    // scheduled function, read by anyone who can see stock.
+    match /stock_reviews/{reviewId} {
+      allow get, list: if signedIn() && (hasPermission("inventory", "read") || isAdmin());
+      allow create, update, delete: if false;
+    }
+
+    // How long is "a long time" and what counts as too much or too little: people who can verify
+    // stock may change this one settings document (the rest of settings stays admin-only).
+    match /settings/stockReview {
+      allow create, update: if hasPermission("inventory", "verify") || isAdmin();
+    }
+
     // -------------------------
     // STOCK MOVEMENTS
     // -------------------------

@@ -39,6 +39,7 @@ import { db, auth } from "../lib/firebase";
 
 import { buildOperationsIntelligence } from "../services/medAiOperationsService";
 import StockVerificationWidget from "../components/stock/StockVerificationWidget";
+import StockReviewPanel from "../components/stock/StockReviewPanel";
 import useConnectedDevices from "@/hooks/useConnectedDevices";
 import { normalizeStockItemCategory } from "@/services/stockService";
 import {
@@ -962,6 +963,12 @@ export default function Alerts() {
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
         <div className="xl:col-span-12">
           <StockVerificationWidget items={stockItems} actor={authUser} />
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <div className="xl:col-span-12">
+          <StockReviewPanel />
         </div>
       </section>
 

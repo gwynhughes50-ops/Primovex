@@ -577,6 +577,15 @@ async function main() {
     await assertFails(deleteDoc(doc(admin, "governance_se_timeline", "tl-1")));
   });
 
+  await check("Stock review: anyone who can see stock reads it, nobody writes it; people who verify stock set its thresholds", async () => {
+    await seed(async (db) => setDoc(doc(db, "stock_reviews", "latest"), { dormant: [], overstocked: [], understocked: [] }));
+    await assertSucceeds(getDoc(doc(nurse, "stock_reviews", "latest")));
+    await assertFails(getDoc(doc(caretaker, "stock_reviews", "latest")));
+    await assertFails(setDoc(doc(pm, "stock_reviews", "latest"), { dormant: [] }));
+    await assertFails(setDoc(doc(admin, "stock_reviews", "latest"), { dormant: [] }));
+    await assertSucceeds(setDoc(doc(pm, "settings", "stockReview"), { dormantDays: 120 }));
+    await assertFails(setDoc(doc(reception, "settings", "stockReview"), { dormantDays: 1 }));
+  });
   await check("The SE team can set the default reviewer roles; an ordinary user cannot; the team cannot touch other settings", async () => {
     await assertSucceeds(setDoc(doc(pm, "settings", "significantEvents"), { reviewerRoles: ["Practice Manager"] }));
     await assertFails(setDoc(doc(bystander, "settings", "significantEvents"), { reviewerRoles: [] }));

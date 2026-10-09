@@ -555,6 +555,22 @@ export const HELP_ARTICLES = [
     related: ["what-can-orb-do"],
   },
   {
+    id: "stock-review-alerts",
+    title: "How do I see stock that is not being used, or that we have too much or too little of?",
+    topic: "Stock",
+    asks: ["how do i see stock that has not been used for a long time", "how do i find out if we have too much stock", "how do i see which stock may run short", "how do i do a stock take on an item that has not been used"],
+    keywords: ["stock", "review", "unused", "overstocked", "too much", "too little", "stock take", "dormant", "short"],
+    where: "desktop",
+    steps: [
+      "Open Alerts and scroll to Stock review. It is checked every morning against how fast each item has really been used over the past year.",
+      "Needs a stock take: nothing has been recorded for six months or more. The person who last handled it gets a message asking them to count what is on the shelf and update Primovex. Open the item and set the count.",
+      "Looks like too much: it would last more than a year at the usual rate. Around that many would do. May run short: it would last under three weeks, or the minimum is too low for how fast it goes.",
+      "Stock controllers also get a short summary every Monday. Emergency drugs, emergency equipment and kit stock are left out because they are meant to sit unused.",
+    ],
+    open: { label: "Open Alerts", route: "/alerts" },
+    related: ["orb-record-stock-used"],
+  },
+  {
     id: "orb-record-stock-used",
     title: "How do I record stock I've used with the Orb?",
     topic: "The Orb",

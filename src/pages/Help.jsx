@@ -127,6 +127,19 @@ const HELP_ARTICLES = [
     ],
   },
   {
+    id: "stock-review",
+    title: "Stock review: not used, too much, too little",
+    category: "Inventory",
+    keywords: ["stock", "review", "unused", "not used", "overstock", "too much", "too little", "short", "stock take", "dormant", "alerts"],
+    steps: [
+      "Go to Alerts and scroll to Stock review. It is worked out every morning from how fast each item has really been used over the past year.",
+      "Needs a stock take: nothing recorded for six months or more. The person who last used or counted it is sent a message. Count what is on the shelf, then set the count in Inventory so Primovex matches.",
+      "Looks like too much: at the usual rate it would last over a year; the list shows about how many would do. May run short: it would last under three weeks, or its minimum is too low for how fast it goes. Consider raising the minimum or reordering.",
+      "Stock controllers get a short summary every Monday. A stock controller can change the thresholds under Settings (the months and days above).",
+    ],
+    notes: ["Emergency drugs, emergency equipment and anything held only in a kit are left out, because they are meant to sit unused.", "An item needs about two months of history and some use before it is judged too much or too little."],
+  },
+  {
     id: "se-report",
     title: "Significant events: report one",
     category: "Significant events",

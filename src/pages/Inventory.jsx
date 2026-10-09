@@ -110,6 +110,8 @@ export default function Inventory() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (['stock', 'emergency', 'anaphylaxis'].includes(params.get('tab'))) setTab(params.get('tab'));
+    // A message can open the list already searched for one item (?find=Tongue%20depressors)
+    if (params.get("find")) setSearch(params.get("find"));
     if (params.get("add") === "1") {
       setManualAddOpen(true);
       const barcode = params.get("barcode");

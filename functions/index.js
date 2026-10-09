@@ -26,6 +26,7 @@ const { runRetention } = require("./services/retentionService");
 const { sendTeamMessage } = require("./services/teamMessageService");
 const { getOrbCapabilities } = require("./services/orbScope");
 const { notifySignificantEvent } = require("./services/significantEventNotify");
+const { runStockReview } = require("./services/stockReviewService");
 
 initializeApp();
 const db = getFirestore();
@@ -697,6 +698,35 @@ exports.deleteUserAccount = onCall({ region: "europe-west2" }, async (request) =
 // overdue; a SAR's escalation manager is told only once it is overdue. Each
 // notification is created once (a fixed id per record, person and due date), so
 // running every day never repeats one. See services/dueNotificationService.js.
+// A daily look at the stock: items nobody has touched for six months (the person who last handled
+// each is asked to do a stock take), and items that look like too much or too little for how fast
+// they are really used (a summary to the stock controllers on Mondays). Writes the result the
+// Alerts page shows. See services/stockReviewService.js.
+exports.scheduledStockReview = onSchedule(
+  {
+    region: "europe-west2",
+    schedule: "45 6 * * *",
+    timeZone: "Europe/London",
+    timeoutSeconds: 300,
+    memory: "512MiB",
+  },
+  async () => {
+    const result = await runStockReview({ db });
+    console.log("Stock review", result);
+  }
+);
+
+// "Refresh" on the Alerts page: re-works the list now. Sends no messages (the daily run does that).
+exports.runStockReviewNow = onCall({ region: "europe-west2", timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+  assertSignedIn(request);
+  const profile = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
+  const capabilities = await getEffectiveCapabilities(db, profile.role);
+  if (!hasCapability(capabilities, "inventory.write") && !hasCapability(capabilities, "inventory.verify")) {
+    throw new HttpsError("permission-denied", "Stock permission is required.");
+  }
+  return runStockReview({ db, notify: false });
+});
+
 exports.scheduledDueNotifications = onSchedule(
   {
     region: "europe-west2",
