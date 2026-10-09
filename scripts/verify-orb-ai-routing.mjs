@@ -27,6 +27,28 @@ await t("a question the rules did not understand is routed by the assistant", as
   assert.deepEqual(log, [{ question: "have we run out of the green needles" }]);
 });
 
+await t("a catch-all stock search of a whole sentence is not understanding: the assistant gets a go", async () => {
+  const weak = { id: "inventory.search", toolId: "inventory.search", input: { query: "ive nearly finished green needles nurses room" }, confidence: 0.8 };
+  const log = [];
+  const r = await applyAiRouting({ classified: weak, input: "ive nearly finished the green needles in the nurses room", context: ctx, router: routerReturning({ toolId: "reorder.draft", input: { item: "green needles" }, confidence: 0.9 }, log) });
+  assert.equal(r.aiRouted, true);
+  assert.equal(r.classified.toolId, "reorder.draft");
+  assert.equal(log.length, 1);
+  // nothing better from the assistant: the rules' answer stands
+  const same = await applyAiRouting({ classified: weak, input: "ive nearly finished the green needles in the nurses room", context: ctx, router: routerReturning(null) });
+  assert.equal(same.aiRouted, false);
+  assert.equal(same.classified, weak);
+  // a short, plain search is left to the rules, even a four-word one
+  const fourWord = { id: "inventory.search", toolId: "inventory.search", input: { query: "blue needles" }, confidence: 0.9 };
+  const spare = [];
+  assert.equal((await applyAiRouting({ classified: fourWord, input: "do we have blue needles", context: ctx, router: routerReturning({ toolId: "x" }, spare) })).aiRouted, false);
+  assert.equal(spare.length, 0);
+  const plain = { id: "inventory.search", toolId: "inventory.search", input: { query: "paracetamol" }, confidence: 0.9 };
+  const none = [];
+  assert.equal((await applyAiRouting({ classified: plain, input: "do we have paracetamol", context: ctx, router: routerReturning({ toolId: "x" }, none) })).aiRouted, false);
+  assert.equal(none.length, 0);
+});
+
 await t("no answer from the assistant leaves the Orb exactly as it was (it asks what they meant)", async () => {
   for (const result of [null, undefined, { toolId: null, reason: "unsure" }]) {
     const r = await applyAiRouting({ classified: unmatched, input: "something odd", context: ctx, router: routerReturning(result) });

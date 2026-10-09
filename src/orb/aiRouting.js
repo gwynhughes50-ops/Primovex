@@ -15,11 +15,23 @@ const withTimeout = (promise, ms) => Promise.race([
   new Promise((resolve) => setTimeout(() => resolve(null), ms)),
 ]);
 
+// The rules sometimes land on a catch-all rather than understanding: a whole sentence squeezed into a
+// stock search ("I've nearly finished the green needles in the nurses room" -> look up a product
+// called "nearly finished green needles nurses room"). That isn't understanding, so the language
+// assistant gets a go at it too. If it has nothing better, the rules' answer stands.
+export function isWeakRoute(classified, input) {
+  if (classified?.toolId !== "inventory.search") return false;
+  const queryWords = String(classified.input?.query || "").trim().split(/\s+/).filter(Boolean).length;
+  const statement = /(?:i|we|ive|weve|i've|we've|just|nearly|finished|used|taken|took|removed|opened|ran|run|need|needs|needed|forgot|forgotten|left)/i.test(String(input || ""));
+  // a long "product name", or a short one inside a statement about what someone did or needs
+  return queryWords >= 4 || (queryWords >= 2 && statement);
+}
+
 // Returns { classified, aiRouted }: the rules engine's answer, or, when it found no
 // lookup and the assistant found one, the assistant's.
 export async function applyAiRouting({ classified, input, context = {}, router, timeoutMs = AI_ROUTE_TIMEOUT_MS }) {
   const text = String(input || "").trim();
-  if (classified?.toolId || !router || !context.userId || text.length < MIN_QUESTION_CHARS || context.forcedIntent) {
+  if ((classified?.toolId && !isWeakRoute(classified, text)) || !router || !context.userId || text.length < MIN_QUESTION_CHARS || context.forcedIntent) {
     return { classified, aiRouted: false };
   }
   let routed = null;
