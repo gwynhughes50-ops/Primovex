@@ -92,8 +92,10 @@ expires after 15 minutes, runs once, and is checked against the person's permiss
   with that role in Primovex only; audited as `orb.team.message` (team and count, not the text).
 - Reorder: writes a pending request to the Reorder Centre (as the Inventory page does); nothing
   is ordered until someone approves it; audited as `orb.reorder.request`.
-- Stock used ("I've just taken one adrenaline from room D62"): rules-only (never sent to the
-  language model). Works out the product, how many, which of the item's places it came from and
+- Stock used ("I've just taken one adrenaline from room D62"): understood by the Orb's own rules
+  first; if they don't recognise the sentence and the language assistant is on, the scrubbed
+  sentence may go to it, which only picks out the product, number, place and batch (it can then do
+  nothing but show the card). Works out the product, how many, which of the item's places it came from and
   which batch (asked for by the end of the batch number, one tap per batch in stock). The card shows
   the stock left afterwards; confirming records the use through the same movement code as the
   Inventory page, taking from the chosen batch first, and it is audited as a normal stock use with

@@ -60,6 +60,7 @@
     "test:orb-significant-events": "esbuild scripts/verify-orb-significant-events.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-significant-events.bundle.mjs && node work/verify-orb-significant-events.bundle.mjs",
     "test:orb-se-draft": "esbuild scripts/verify-orb-se-draft.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-se-draft.bundle.mjs && node work/verify-orb-se-draft.bundle.mjs",
     "test:orb-stock-use": "esbuild scripts/verify-orb-stock-use.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-stock-use.bundle.mjs && node work/verify-orb-stock-use.bundle.mjs",
+    "test:orb-unmatched": "esbuild scripts/verify-orb-unmatched.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-unmatched.bundle.mjs && node work/verify-orb-unmatched.bundle.mjs",
     "test:kit-check-actions": "esbuild scripts/verify-kit-check-actions.mjs --bundle --platform=node --format=esm --outfile=work/verify-kit-check-actions.bundle.mjs && node work/verify-kit-check-actions.bundle.mjs",
     "test:asset-qr": "esbuild scripts/verify-asset-qr.mjs --bundle --platform=node --format=esm --alias:@=./src --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=work/verify-asset-qr.bundle.mjs && node work/verify-asset-qr.bundle.mjs"
   },

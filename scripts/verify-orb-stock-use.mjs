@@ -112,6 +112,17 @@ t("the sentence as it was really typed, with the US drug name, slips and 'from s
   for (const s of ["I've just used one ampoule of chlorphenamine", "i have used 1 chlorpheniramine", "ive taken a chlorpheniramine ampoule from the store cupboard"]) assert.ok(buildUseDraft({ question: s }, { items: [chlor] }).proposal, s);
 });
 
+t("what the language assistant heard goes straight into the same card", () => {
+  const chlor = { id: "chl", name: "Chlorphenamine", strength: "10mg/1ml", form: "ampoule", site: "Main Surgery", location: "Store", current_stock: 12, locations: [], batches: [{ batch_number: "CH-5521", expiry_date: "2027-06-30", quantity: 12 }] };
+  const r = buildUseDraft({ item: "chlorpheniramine", quantity: 1, place: "store cupboard" }, { items: [chlor, gloves] });
+  assert.ok(r.proposal, r.text);
+  assert.equal(r.proposal.params.itemId, "chl");
+  assert.equal(r.proposal.params.quantity, 1);
+  assert.equal(buildUseDraft({ item: "gloves" }, { items: [chlor, gloves] }).proposal.params.quantity, 1, "no number heard: one, and the card says so");
+  assert.match(buildUseDraft({ item: "gloves" }, { items: [chlor, gloves] }).proposal.lines.join(" | "), /assumed one/);
+  assert.match(buildUseDraft({ item: "paracetamol", quantity: 2 }, { items: [chlor] }).text, /couldn't find any stock/);
+});
+
 t("a spelling slip is offered back, never chosen", () => {
   const chlor = { id: "chl", name: "Chlorphenamine", strength: "10mg/1ml", form: "ampoule", site: "Main Surgery", location: "Store", current_stock: 12, locations: [] };
   const r = buildUseDraft({ question: "I've just used one chlorphenaimne" }, { items: [chlor, gloves] });

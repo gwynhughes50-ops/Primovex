@@ -1,4 +1,5 @@
 import { runApprovedToolForPrompt } from '@/ai/tools';
+import { buildUnmatchedHelp } from '@/ai/tools/unmatchedHelp';
 
 const UNCONNECTED_RESPONSES = [
   {
@@ -55,8 +56,10 @@ export const mockPrimovexProvider = {
     const pending = UNCONNECTED_RESPONSES.find((item) => item.match.test(prompt));
     if (pending) return pending;
 
+    const help = buildUnmatchedHelp(toolContext.capabilities || []);
     return {
-      answer: 'I could not confidently match that request to an approved Primovex tool. Try asking about stock, expiry dates, room cleaning, equipment location, maintenance, fridge temperature, practice readiness, or recent operational changes.',
+      answer: help.answer,
+      followUps: help.followUps,
       confidence: null,
       intent: 'general.unmatched',
       sources: [{ title: 'Primovex language engine', detail: 'No approved tool matched with sufficient confidence', type: 'system' }],

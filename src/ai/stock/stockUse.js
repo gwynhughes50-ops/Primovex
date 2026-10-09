@@ -104,7 +104,11 @@ const formatExpiry = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${i
 const sentence = ({ qty, label, placeName, tail }) => `I've taken ${qty} ${label}${placeName ? ` from ${placeName}` : ""}${tail ? `, batch ending ${tail}` : ""}`;
 
 export function buildUseDraft(input = {}, { items = [], now = new Date() } = {}) {
-  const parsed = parseUseRequest(input.question);
+  // from the language assistant: the product, number, place and batch it picked out
+  const heard = input.item
+    ? { quantity: Math.max(1, Math.round(Number(input.quantity) || 1)), quantityAssumed: !Number(input.quantity), item: String(input.item).trim(), place: input.place ? String(input.place).trim() : null, batch: input.batch ? String(input.batch).trim() : null }
+    : null;
+  const parsed = heard || parseUseRequest(input.question);
   if (!parsed) return { text: "Tell me what you took, for example \"I've just taken one adrenaline from the store cupboard\".", followUps: [] };
   if (!parsed.item) return { text: "Which product did you take? For example \"I've taken one adrenaline ampoule from the store cupboard\".", followUps: [] };
 
