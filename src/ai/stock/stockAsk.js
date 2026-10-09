@@ -62,7 +62,7 @@ export function suggestStockItems(query, items = [], limit = 3) {
     .filter((item) => item && !item.archived_at)
     .map((item) => {
       const have = [...itemTokens(item)];
-      const close = q.filter((t) => have.some((h) => h === t || (t.length >= 5 && h.length >= 4 && editDistance(t, h) <= (t.length >= 8 ? 3 : 2)))).length;
+      const close = q.filter((t) => have.some((h) => h === t || (t.length >= 5 && h.length >= 4 && editDistance(t, h) <= Math.max(2, Math.floor(t.length * 0.3))))).length;
       return { item, coverage: close / q.length };
     })
     .filter((row) => row.coverage >= 0.66)

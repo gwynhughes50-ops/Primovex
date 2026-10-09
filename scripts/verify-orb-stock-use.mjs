@@ -112,6 +112,21 @@ t("the sentence as it was really typed, with the US drug name, slips and 'from s
   for (const s of ["I've just used one ampoule of chlorphenamine", "i have used 1 chlorpheniramine", "ive taken a chlorpheniramine ampoule from the store cupboard"]) assert.ok(buildUseDraft({ question: s }, { items: [chlor] }).proposal, s);
 });
 
+t("a request, as said to the phone: 'please remove one chlorpheniramine from stock'", () => {
+  const chlor = { id: "chl", name: "Chlorphenamine", strength: "10mg/1ml", form: "ampoule", site: "Main Surgery", location: "Store", current_stock: 12, locations: [], batches: [{ batch_number: "CH-5521", expiry_date: "2027-06-30", quantity: 12 }] };
+  for (const s of ["please remove one chlorpheniramine from stock", "Remove one chlorpheniramine from stock", "can you remove 1 chlorpheniramine ampoule from stock", "could you take off one chlorphenamine from the store cupboard", "take 2 chlorpheniramine ampoules"]) {
+    const p = parseUseRequest(s);
+    assert.ok(p && /chlor/i.test(p.item), s);
+    assert.ok(buildUseDraft({ question: s }, { items: [chlor, gloves] }).proposal, s);
+  }
+  // the person's own spelling slip of the US name is offered back
+  const slip = buildUseDraft({ question: "please remove one chlorpehniramine from stock" }, { items: [chlor, gloves] });
+  assert.match(slip.text, /Did you mean/);
+  assert.ok(buildUseDraft({ question: slip.followUps[0] }, { items: [chlor, gloves] }).proposal);
+  // ordinary requests and questions are not mistaken for it
+  for (const s of ["take me to the inventory", "use the stock page", "can you tell me how many gloves we have", "remove the filter", "take a look at the fridges"]) assert.equal(parseUseRequest(s), null, s);
+});
+
 t("what the language assistant heard goes straight into the same card", () => {
   const chlor = { id: "chl", name: "Chlorphenamine", strength: "10mg/1ml", form: "ampoule", site: "Main Surgery", location: "Store", current_stock: 12, locations: [], batches: [{ batch_number: "CH-5521", expiry_date: "2027-06-30", quantity: 12 }] };
   const r = buildUseDraft({ item: "chlorpheniramine", quantity: 1, place: "store cupboard" }, { items: [chlor, gloves] });

@@ -1,4 +1,5 @@
-import { Building2, Home, Package, Sparkles, UserRound } from "lucide-react";
+import { Building2, Home, Package, UserRound } from "lucide-react";
+import PulseOrbFace from "@/components/pulse/PulseOrbFace";
 import { AI_STATES } from "@/ai/types/responseContract";
 import usePrimovexAI from "@/ai/hooks/usePrimovexAI";
 
@@ -17,8 +18,8 @@ export default function MobileBottomNav({ activeKey = "home", onNavigate, onOpen
     <nav className="fixed inset-x-0 bottom-0 z-[90] min-h-[calc(var(--pvx-mobile-nav-height)+var(--pvx-mobile-safe-bottom))] border-t border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 pb-[var(--pvx-mobile-safe-bottom)] pt-2 shadow-[0_-10px_30px_rgba(15,23,42,.10)]">
       <div className="mx-auto grid h-[var(--pvx-mobile-nav-height)] max-w-lg grid-cols-5 items-end">
         {ITEMS.slice(0, 2).map(({ key, label, Icon }) => <NavButton key={key} {...{ keyName:key,label,Icon,activeKey,onNavigate }} />)}
-        <button type="button" onClick={onOpenAI} className="relative mx-auto -mt-8 grid h-14 w-14 place-items-center rounded-full border-4 border-[var(--medtrak-bg)] bg-[var(--medtrak-accent)] text-white shadow-xl" aria-label="Primovex AI actions">
-          <Sparkles className={`h-6 w-6 ${busy ? "animate-pulse" : ""}`} />
+        <button type="button" onClick={onOpenAI} className="relative mx-auto -mt-9 h-[4.5rem] w-[4.5rem] rounded-full" aria-label="Primovex AI actions">
+          <PulseOrbFace size={72} active={busy} />
           <span className="sr-only">Primovex AI</span>
         </button>
         {ITEMS.slice(2).map(({ key, label, Icon }) => <NavButton key={key} {...{ keyName:key,label,Icon,activeKey,onNavigate }} />)}

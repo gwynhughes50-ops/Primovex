@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Bot, CheckCircle2, ExternalLink, Meh, Mic, MicOff, RotateCcw, ShieldCheck, Sparkles, TriangleAlert, X, XCircle } from 'lucide-react';
+import { ArrowRight, Bot, CheckCircle2, ExternalLink, Meh, Mic, MicOff, RotateCcw, ShieldCheck, TriangleAlert, X, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import usePrimovexAI from '../hooks/usePrimovexAI';
+import PulseOrbFace from '@/components/pulse/PulseOrbFace';
 import { AI_STATES } from '../types/responseContract';
 import { cancelNativeListening, nativeVoiceAvailable, requestNativeMicrophonePermission, startNativeListening, stopNativeListening, subscribeNativeOrbVoice } from '../voice/nativeOrbVoice';
 
@@ -71,6 +72,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
   const recognitionRef = useRef(null);
   const voiceStateRef = useRef(VOICE_STATES.SLEEPING);
   const followUpTimerRef = useRef(null);
+  const listenAgainRef = useRef(() => {});
   const endRef = useRef(null);
   const busy = status === AI_STATES.SEARCHING || status === AI_STATES.REASONING;
   const isMobile = variant === 'mobile';
@@ -134,11 +136,14 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
       }
 
       const clean = finalText.trim().replace(/^orb[,.]?\s*/i, '');
+      window.clearTimeout(followUpTimerRef.current);
       if (clean) {
         setVoiceState(VOICE_STATES.THINKING);
         await ask(clean);
+        // Stay open for the next thing they say: the answer may need a reply, or it may not have understood.
         setVoiceState(VOICE_STATES.FOLLOW_UP);
-        followUpTimerRef.current = window.setTimeout(sleepOrb, 12000);
+        followUpTimerRef.current = window.setTimeout(sleepOrb, 20000);
+        listenAgainRef.current();
       } else {
         sleepOrb();
       }
@@ -146,6 +151,16 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     recognitionRef.current = recognition;
     recognition.start();
   }, [ask, sleepOrb, stopRecognition]);
+
+  // After an answer: listen again (the microphone used to stop while the screen still said "Anything else?").
+  useEffect(() => {
+    listenAgainRef.current = () => {
+      window.setTimeout(() => {
+        if (voiceStateRef.current !== VOICE_STATES.FOLLOW_UP) return;
+        if (nativeVoiceAvailable()) startNativeListening(); else beginListening(false);
+      }, 700);
+    };
+  }, [beginListening]);
 
   const wakeOrb = useCallback(() => {
     window.clearTimeout(followUpTimerRef.current);
@@ -180,22 +195,27 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
       return;
     }
     if (type === 'error') {
+      // Nothing said while waiting for a follow-up is not an error: just go quiet.
+      if (voiceStateRef.current === VOICE_STATES.FOLLOW_UP) { sleepOrb(); return; }
       setVoiceError(value || 'Voice recognition could not start.');
       setVoiceState(VOICE_STATES.SLEEPING);
       return;
     }
     if (type === 'final') {
       const clean = String(value || '').trim().replace(/^orb[,.]?\s*/i, '');
+      const wasFollowUp = voiceStateRef.current === VOICE_STATES.FOLLOW_UP;
+      window.clearTimeout(followUpTimerRef.current);
       setPartialTranscript('');
       if (!clean) {
-        setVoiceError('I did not catch that. Tap the Orb and try again.');
+        if (!wasFollowUp) setVoiceError('I did not catch that. Tap the Orb and try again.');
         setVoiceState(VOICE_STATES.SLEEPING);
         return;
       }
       setVoiceState(VOICE_STATES.THINKING);
       await ask(clean);
       setVoiceState(VOICE_STATES.FOLLOW_UP);
-      followUpTimerRef.current = window.setTimeout(sleepOrb, 12000);
+      followUpTimerRef.current = window.setTimeout(sleepOrb, 20000);
+      listenAgainRef.current();
     }
   }), [ask, sleepOrb]);
 
@@ -245,7 +265,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     >
       <header className="primovex-ai-divider flex items-center justify-between px-4 py-4">
         <div className="flex items-center gap-3">
-          <div className={`primovex-ai-orb grid h-10 w-10 place-items-center rounded-2xl ${busy ? 'primovex-ai-breathe' : ''}`}><Sparkles className="h-5 w-5" /></div>
+          <div className={`relative h-10 w-10 shrink-0 ${busy ? 'primovex-ai-breathe' : ''}`} aria-hidden="true"><PulseOrbFace size={40} active={busy} /></div>
           <div>
             <h2 className="font-bold">Orb</h2>
             <p className="primovex-ai-muted text-xs">{STATUS_LABELS[status]} · Operational intelligence</p>
@@ -260,8 +280,8 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {isMobile && (
           <section className={`primovex-voice-stage ${orbAwake ? 'is-awake' : 'is-sleeping'}`} aria-live="polite">
-            <button type="button" onClick={orbAwake ? sleepOrb : wakeOrb} className={`primovex-voice-orb state-${voiceState}`} aria-label={orbAwake ? 'Put Orb to sleep' : 'Wake Orb'}>
-              <span className="primovex-voice-core"><Sparkles className="h-10 w-10" /></span>
+            <button type="button" onClick={orbAwake ? sleepOrb : wakeOrb} className={`primovex-pulse-voice-orb state-${voiceState}`} aria-label={orbAwake ? 'Put Orb to sleep' : 'Wake Orb'}>
+              <PulseOrbFace size={150} active={voiceState === VOICE_STATES.LISTENING || voiceState === VOICE_STATES.THINKING || voiceState === VOICE_STATES.WAKING} still={voiceState === VOICE_STATES.SLEEPING} />
             </button>
             <strong>{orbLabel}</strong>
             <span>{voiceError || partialTranscript || (voiceSupported ? (orbAwake ? 'Speak naturally. Orb waits for a pause before responding.' : 'Tap the Orb to begin. Wake-word listening follows once native capture is proven.') : 'Voice recognition is unavailable on this device. You can still type below.')}</span>
@@ -382,6 +402,9 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
         .primovex-ai-error-message { border:1px solid rgba(244,63,94,.35); background:rgba(244,63,94,.10); }.primovex-ai-message-divider { border-top:1px solid var(--medtrak-border); }.primovex-ai-action { color:var(--medtrak-accent); }
         .primovex-ai-composer:focus-within { border-color:color-mix(in srgb,var(--medtrak-accent) 58%,var(--medtrak-border)); box-shadow:0 0 0 3px color-mix(in srgb,var(--medtrak-accent) 12%,transparent); }.primovex-ai-composer textarea { color:var(--medtrak-text)!important; background:transparent!important; border:0!important; }.primovex-ai-composer textarea::placeholder { color:var(--medtrak-muted); }
         .primovex-ai-submit { color:white; background:var(--medtrak-accent); }.primovex-ai-mic { color:var(--medtrak-accent); background:color-mix(in srgb,var(--medtrak-accent) 10%,var(--medtrak-panel)); }
+        .primovex-pulse-voice-orb { position:relative; width:9.5rem; height:9.5rem; padding:0; border:0; border-radius:999px; background:transparent; cursor:pointer; transition:opacity .4s ease, transform .4s ease; }
+        .primovex-pulse-voice-orb.state-sleeping { opacity:.7; transform:scale(.86); }
+        .primovex-pulse-voice-orb:focus-visible { outline:2px solid var(--medtrak-accent); outline-offset:4px; }
         .primovex-voice-stage { display:grid; justify-items:center; gap:.55rem; padding:.4rem 0 1.1rem; text-align:center; }.primovex-voice-stage strong { font-size:1rem; }.primovex-voice-stage>span { max-width:17rem; color:var(--medtrak-muted); font-size:.75rem; line-height:1.45; }
         .primovex-voice-orb { position:relative; display:grid; place-items:center; width:9.5rem; height:9.5rem; border-radius:999px; background:radial-gradient(circle at 36% 28%,color-mix(in srgb,var(--medtrak-accent) 42%,white),var(--medtrak-accent) 48%,color-mix(in srgb,var(--medtrak-accent) 72%,#082f5f)); color:white; box-shadow:0 0 0 10px color-mix(in srgb,var(--medtrak-accent) 8%,transparent),0 22px 46px color-mix(in srgb,var(--medtrak-accent) 30%,transparent); transition:transform .35s ease,opacity .35s ease,filter .35s ease; }
         .primovex-voice-orb::before,.primovex-voice-orb::after { content:''; position:absolute; inset:-.75rem; border:1px solid color-mix(in srgb,var(--medtrak-accent) 30%,transparent); border-radius:inherit; opacity:0; }.primovex-voice-orb::after { inset:-1.5rem; }

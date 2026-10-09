@@ -27,10 +27,22 @@ export function parseUseRequest(text) {
   // "ive", "i've", "i ve" and "iv" all mean "I have"
   t = t.replace(/\b(i|we)\s*['’]?\s*ve\b/gi, "$1 have").replace(/\bive\b/gi, "i have").replace(/\biv\b/gi, "i have");
   t = t.replace(/^(?:(?:ok|okay|right|so|hi|hello|orb|please|just|also|and)[,\s]+)+/i, "");
-  if (!t || QUESTION_START.test(t)) return null;
+  if (!t) return null;
 
   let rest = null;
-  let m = t.match(new RegExp(`^(?:i|we)(?:'ve|\\s+have)?\\s+(?:just\\s+)?(?:${VERBS})\\s+(.+)$`, "i"));
+  // A request rather than a statement: "remove one chlorpheniramine from stock", "can you take off 2 gloves".
+  // Needs a number plus a place or "from stock", or a unit word, so ordinary requests aren't mistaken for it.
+  const ask = t.match(/^(?:(?:can|could|would|will) you\s+|i(?:'d| would) like (?:you )?to\s+|i want (?:you )?to\s+)?(?:please\s+)?(?:remove|take off|take|deduct|book out|sign out|use|mark off)\s+(.+)$/i);
+  if (ask) {
+    const body = ask[1];
+    const hasNumber = new RegExp(`^(?:${NUM})\\b`, "i").test(body);
+    const hasUnit = new RegExp(`\\b(?:${UNITS})\\b`, "i").test(body);
+    const fromStock = /\b(?:from|off|out of)\s+(?:the\s+)?(?:stock|stocks)\b/i.test(body);
+    const fromSomewhere = /\b(?:from|off|out of)\b/i.test(body);
+    if (fromStock || hasUnit || (hasNumber && fromSomewhere)) rest = body;
+  }
+  if (!rest && QUESTION_START.test(t)) return null;
+  let m = rest ? null : t.match(new RegExp(`^(?:i|we)(?:'ve|\\s+have)?\\s+(?:just\\s+)?(?:${VERBS})\\s+(.+)$`, "i"));
   if (m) rest = m[1];
   if (!rest) {
     // "one adrenaline ampoule taken from room D62": needs a number or a unit, so ordinary sentences don't count
