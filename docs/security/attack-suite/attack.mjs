@@ -586,6 +586,11 @@ async function main() {
     await assertSucceeds(setDoc(doc(pm, "settings", "stockReview"), { dormantDays: 120 }));
     await assertFails(setDoc(doc(reception, "settings", "stockReview"), { dormantDays: 1 }));
   });
+  await check("Names taught to the Orb: people who verify stock can set them, others cannot", async () => {
+    await assertSucceeds(setDoc(doc(pm, "settings", "orbAliases"), { aliases: [{ say: "emergency injector", means: "adrenaline" }] }));
+    await assertFails(setDoc(doc(reception, "settings", "orbAliases"), { aliases: [] }));
+    await assertSucceeds(getDoc(doc(reception, "settings", "orbAliases")));
+  });
   await check("The SE team can set the default reviewer roles; an ordinary user cannot; the team cannot touch other settings", async () => {
     await assertSucceeds(setDoc(doc(pm, "settings", "significantEvents"), { reviewerRoles: ["Practice Manager"] }));
     await assertFails(setDoc(doc(bystander, "settings", "significantEvents"), { reviewerRoles: [] }));

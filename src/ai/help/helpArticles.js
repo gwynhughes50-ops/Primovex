@@ -571,6 +571,22 @@ export const HELP_ARTICLES = [
     related: ["orb-record-stock-used"],
   },
   {
+    id: "orb-teach-names",
+    title: "How do I teach the Orb the names we use for our stock?",
+    topic: "The Orb",
+    asks: ["how do i teach the orb a name for a product", "how do i teach the orb our nicknames for stock", "how do i make the orb understand a medicine name", "how do i add a name the orb should recognise"],
+    keywords: ["orb", "teach", "name", "nickname", "alias", "product", "medicine", "brand"],
+    where: "desktop",
+    steps: [
+      "The Orb already knows common medicine names: generic and brand names (for example Piriton for chlorphenamine), US spellings and small spelling slips.",
+      "For names only your practice uses, go to Admin, then Orb, and find Names for your stock.",
+      "Type what people say (for example \"emergency injector\"), pick the product it means from the list, and press Teach it. You need permission to verify stock.",
+      "From then on the Orb treats that phrase as that product when someone asks about it or records using it.",
+    ],
+    open: { label: "Open Orb settings", route: "/admin/orb-learning" },
+    related: ["orb-record-stock-used"],
+  },
+  {
     id: "orb-record-stock-used",
     title: "How do I record stock I've used with the Orb?",
     topic: "The Orb",

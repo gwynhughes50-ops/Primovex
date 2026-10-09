@@ -1,4 +1,5 @@
 import { tokens } from "../help/helpSearch";
+import { normaliseMedicineText } from "./medicineNames";
 import { kitLocationId, mainStoreName, toNumber, unassignedQty } from "../../lib/stockLocations";
 
 // Understanding a spoken or typed stock request: which product, which place, which team, what to
@@ -9,14 +10,10 @@ const QUESTION_FILLER = new Set(["many", "much", "stock", "item", "items", "prod
 
 // ---- products ----------------------------------------------------------------------------------
 
-// The same medicine goes by different names: the stock may say chlorphenamine and a person say
-// chlorpheniramine (its US name), adrenaline or epinephrine. Everything is compared by the UK name.
-const DRUG_NAMES = [
-  [/\bchlorpheniramine\b/gi, "chlorphenamine"], [/\bepinephrine\b/gi, "adrenaline"], [/\bacetaminophen\b/gi, "paracetamol"],
-  [/\balbuterol\b/gi, "salbutamol"], [/\bglyceryl trinitrate\b/gi, "gtn"], [/\bnitroglycerin\b/gi, "gtn"], [/\bparacetemol\b/gi, "paracetamol"],
-  [/\bhydrocortisone\b/gi, "hydrocortisone"],
-];
-export const ukDrugNames = (text) => DRUG_NAMES.reduce((t, [pattern, uk]) => t.replace(pattern, uk), String(text || ""));
+// The same medicine goes by different names (chlorphenamine / chlorpheniramine / Piriton, adrenaline /
+// epinephrine / EpiPen) and people slip when spelling them. Everything is compared by one name: the UK
+// generic name. See medicineNames.js for where the names come from.
+export const ukDrugNames = normaliseMedicineText;
 
 const itemTokens = (item) => new Set(tokens(ukDrugNames([item?.name, item?.strength, item?.form, item?.brand].filter(Boolean).join(" "))));
 

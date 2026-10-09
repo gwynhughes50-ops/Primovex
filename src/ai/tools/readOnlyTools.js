@@ -21,6 +21,7 @@ import { needsCleaning } from '@/lib/cleaningFrequency';
 import { buildSeAnswer } from '@/ai/governance/seAnswers';
 import { buildSeReportDraft } from '@/ai/governance/seDraft';
 import { buildUseDraft } from '@/ai/stock/stockUse';
+import { ensureMedicineNames } from '@/ai/stock/medicineNamesLoader';
 import { loadVisibleSe } from '@/modules/governance/services/seService';
 import { normaliseOrbScope } from '@/lib/orbScope';
 import { daysUntilExpiry, expiryStatus, expiryWindowDays, normaliseExpirySettings, stockLevelStatus, summariseStockAlerts } from '@/lib/stockAlerts';
@@ -774,6 +775,7 @@ export function registerApprovedReadOnlyTools() {
   registerTool({
     id: 'inventory.locate', label: 'Stock location', requiredCapability: 'inventory.read',
     async execute(input = {}) {
+      await ensureMedicineNames();
       const [items, kits] = await Promise.all([readStock(), readKits()]);
       const result = buildLocateResult(input, { items, kits });
       return {
@@ -788,6 +790,7 @@ export function registerApprovedReadOnlyTools() {
   registerTool({
     id: 'team.messageDraft', label: 'Message a team', requiredCapability: 'inventory.write',
     async execute(input = {}) {
+      await ensureMedicineNames();
       // Stock is only used to offer a matching reorder chip, so a failed read doesn't stop the draft.
       const [items, roleNames] = await Promise.all([readStock().catch(() => []), readRoleNames()]);
       const result = buildTeamDraft(input, { items, roleNames });
@@ -803,6 +806,7 @@ export function registerApprovedReadOnlyTools() {
   registerTool({
     id: 'reorder.draft', label: 'Reorder or report missing stock', requiredCapability: 'inventory.write',
     async execute(input = {}) {
+      await ensureMedicineNames();
       const [items, kits, roleNames, pendingSnap] = await Promise.all([
         readStock(), readKits(), readRoleNames(),
         getDocs(query(collection(db, 'reorder_requests'), where('status', '==', 'pending'))).catch(() => ({ docs: [] })),
@@ -823,6 +827,7 @@ export function registerApprovedReadOnlyTools() {
   registerTool({
     id: 'stock.useDraft', label: 'Record stock used', requiredCapability: 'inventory.write',
     async execute(input = {}) {
+      await ensureMedicineNames();
       const items = await readStock();
       const result = buildUseDraft(input, { items });
       return {

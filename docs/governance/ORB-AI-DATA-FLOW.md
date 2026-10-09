@@ -101,6 +101,14 @@ expires after 15 minutes, runs once, and is checked against the person's permiss
   Inventory page, taking from the chosen batch first, and it is audited as a normal stock use with
   source `orb`. Needs stock write. Taking from a kit does not yet tell anyone.
 
+## Medicine names
+
+The Orb matches the product a person names to the stock by the UK generic name. The name list
+(generic and brand names from the NHS dm+d) is part of the app and is used on the device; nothing is
+sent to the language model or anywhere else for it. A practice can also teach the Orb its own names for
+products (`settings/orbAliases`: the words people say, and the stock item they mean, picked from the
+real stock list). See docs/governance/MEDICINE-NAMES.md.
+
 ## Limiting the Orb for one person
 
 An administrator can narrow the Orb (and the Pulse orb) for one person to a few topics: for

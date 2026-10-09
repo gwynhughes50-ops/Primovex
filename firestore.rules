@@ -133,6 +133,11 @@ service cloud.firestore {
       allow create, update: if hasPermission("inventory", "verify") || isAdmin();
     }
 
+    // The names this practice uses for its stock, taught to the Orb (Admin > Orb): same people.
+    match /settings/orbAliases {
+      allow create, update: if hasPermission("inventory", "verify") || isAdmin();
+    }
+
     // -------------------------
     // STOCK MOVEMENTS
     // -------------------------
