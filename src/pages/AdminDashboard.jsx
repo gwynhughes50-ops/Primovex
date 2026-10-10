@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/alert-dialog";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Search as SearchIcon, X as ClearIcon } from "lucide-react";
+import { searchUsers } from "@/lib/userSearch";
 
 import {
   Shield,
@@ -233,6 +235,9 @@ export default function AdminDashboard() {
 
   const [users, setUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(true);
+  // typing a name brings that person to the top, and narrows as the surname is typed
+  const [userQuery, setUserQuery] = useState("");
+  const shownUsers = useMemo(() => searchUsers(users, userQuery), [users, userQuery]);
 
   // Sites & Locations now reads/writes the real Sense space registry (same
   // data as Facilities/Spaces/ClinFlow) via SpaceBuilder, instead of the old
@@ -725,6 +730,25 @@ export default function AdminDashboard() {
                     </CardHeader>
 
                     <CardContent>
+                      <div className="mb-3">
+                        <div className="relative">
+                          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                          <Input
+                            value={userQuery}
+                            onChange={(e) => setUserQuery(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Escape") setUserQuery(""); }}
+                            placeholder="Search for someone: first name, then surname"
+                            aria-label="Search users by name"
+                            autoComplete="off"
+                            className="h-11 rounded-xl border-slate-800/70 bg-slate-950/40 pl-9 pr-10 text-slate-100"
+                          />
+                          {userQuery && (
+                            <button type="button" onClick={() => setUserQuery("")} className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full text-slate-400 hover:bg-slate-800/60" aria-label="Clear the search"><ClearIcon className="h-4 w-4" aria-hidden="true" /></button>
+                          )}
+                        </div>
+                        <p className="mt-1 min-h-4 text-xs text-slate-400" aria-live="polite">{userQuery.trim() ? `${shownUsers.length} of ${users.length} people` : ""}</p>
+                      </div>
+
                       <div className="rounded-xl border border-slate-800/70 bg-slate-950/40 overflow-hidden">
                         <Table>
                           <TableHeader>
@@ -742,7 +766,9 @@ export default function AdminDashboard() {
                               <TableRow><TableCell colSpan={6} className="text-center text-slate-400">Loading…</TableCell></TableRow>
                             ) : users.length === 0 ? (
                               <TableRow><TableCell colSpan={6} className="text-center text-slate-400">No users found.</TableCell></TableRow>
-                            ) : users.map((u) => {
+                            ) : shownUsers.length === 0 ? (
+                              <TableRow><TableCell colSpan={6} className="text-center text-slate-400">No one matches “{userQuery.trim()}”. Try the first letters of their first name or surname.</TableCell></TableRow>
+                            ) : shownUsers.map((u) => {
                               const isInactive = u.active === false;
                               return (
                               <TableRow key={u.id} className="border-slate-800/70">

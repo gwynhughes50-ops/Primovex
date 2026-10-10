@@ -75,6 +75,7 @@
     "test:fridge-check": "esbuild scripts/verify-fridge-check.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-fridge-check.bundle.mjs && node work/verify-fridge-check.bundle.mjs",
     "test:fridge-incidents": "esbuild scripts/verify-fridge-incidents.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-fridge-incidents.bundle.mjs && node work/verify-fridge-incidents.bundle.mjs",
     "test:fridge-setup": "esbuild scripts/verify-fridge-setup.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-fridge-setup.bundle.mjs && node work/verify-fridge-setup.bundle.mjs",
+    "test:user-search": "esbuild scripts/verify-user-search.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-user-search.bundle.mjs && node work/verify-user-search.bundle.mjs",
     "test:message-card": "esbuild scripts/verify-message-card.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-message-card.bundle.mjs && node work/verify-message-card.bundle.mjs",
     "test:orb-management": "esbuild scripts/verify-orb-management.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-management.bundle.mjs && node work/verify-orb-management.bundle.mjs",
     "test:spoken-commands": "esbuild scripts/verify-spoken-commands.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-spoken-commands.bundle.mjs && node work/verify-spoken-commands.bundle.mjs",
