@@ -626,6 +626,7 @@ match /subject_access_requests/{requestId} {
           "connect.view", "connect.manageDevices", "connect.acknowledgeAlerts",
           "temperature.read", "temperature.write", "temperature.resolveIncident",
           "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets",
+          "coshh.read", "coshh.manage",
           "practiceAdmin.read", "practiceAdmin.write", "reports.read", "theme.lab",
           "mobile.access", "mobile.biometricUnlock",
           "admin.access", "admin.manageUsers", "admin.manageRoles", "admin.manageSettings",
@@ -661,14 +662,16 @@ match /subject_access_requests/{requestId} {
           "dashboard.read", "operations.read", "connect.view",
           "temperature.read", "temperature.write",
           "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets",
+          "coshh.read", "coshh.manage",
           "mobile.access"
         ] :
         role == "Cleaner" ? [
           "dashboard.read", "operations.read",
+          "coshh.read",
           "mobile.access"
         ] :
         role == "Partner" ? [
-          "dashboard.read", "governance.read", "governance.partnerAccess", "mobile.access"
+          "dashboard.read", "governance.read", "governance.partnerAccess", "coshh.read", "mobile.access"
         ] :
         role == "ReadOnly" ? [
           "clinflow.read", "dashboard.read", "operations.read", "inventory.read", "purchasing.read",
@@ -958,6 +961,20 @@ match /subject_access_requests/{requestId} {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lastCheckAt", "lastCheckResult", "lastCheckedByUid", "lastCheckedByName", "updatedAt"])
         )
       );
+      allow delete: if isAdmin();
+    }
+
+    // COSHH register: the hazardous substances the practice keeps, with PPE, first aid, where they are stored and
+    // when the assessment is next reviewed. The caretaker and practice manager keep it up to date; cleaners and
+    // partners can read it. Products are archived (active:false) rather than deleted, so only an admin deletes.
+    match /coshh_substances/{substanceId} {
+      allow get, list: if signedIn() && hasPermission("coshh", "read");
+      allow create: if signedIn() && hasPermission("coshh", "manage")
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() < 200
+        && request.resource.data.hazards is list && request.resource.data.ppe is list && request.resource.data.firstAid is list;
+      allow update: if signedIn() && hasPermission("coshh", "manage")
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() < 200
+        && request.resource.data.hazards is list && request.resource.data.ppe is list && request.resource.data.firstAid is list;
       allow delete: if isAdmin();
     }
 

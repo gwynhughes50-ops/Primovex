@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Nfc, SprayCan, TriangleAlert } from "lucide-react";
+import { CheckCircle2, FlaskConical, Nfc, SprayCan, TriangleAlert } from "lucide-react";
+import MobileCoshh from "./MobileCoshh";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSenseSession } from "@/contexts/SenseSessionContext";
 import { addCleaningNote, getActiveCleaningSession, subscribeRoomOperational } from "@/modules/facilities/services/cleaningRecordService";
@@ -21,6 +22,7 @@ export default function MobileCleanerHome({ onScanRoom, finished = null, onFinis
   const { activeSenseSession } = useSenseSession();
   const [roomOperational, setRoomOperational] = useState({});
   const [issueOpen, setIssueOpen] = useState(false);
+  const [coshhOpen, setCoshhOpen] = useState(false);
   const [issueNote, setIssueNote] = useState("");
   const [issueStatus, setIssueStatus] = useState("idle");
   const [issueMessage, setIssueMessage] = useState("");
@@ -140,6 +142,11 @@ export default function MobileCleanerHome({ onScanRoom, finished = null, onFinis
       <button type="button" onClick={() => setIssueOpen(true)} className="flex w-full max-w-sm items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-6 py-4 text-base font-bold">
         <TriangleAlert className="h-5 w-5" /> Report an issue with this room
       </button>
+
+      <button type="button" onClick={() => setCoshhOpen(true)} className="flex w-full max-w-sm items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-6 py-4 text-base font-bold">
+        <FlaskConical className="h-5 w-5" /> Chemicals: what to wear, first aid
+      </button>
+      {coshhOpen && <MobileCoshh onClose={() => setCoshhOpen(false)} />}
 
       {issueOpen && (
         <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/55 sm:items-center">

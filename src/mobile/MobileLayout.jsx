@@ -39,6 +39,7 @@ import ActiveSenseBanner from "@/modules/sense/components/ActiveSenseBanner";
 import { useSenseSession } from "@/contexts/SenseSessionContext";
 import MobileDeveloperIssueRecorder from "@/developer/MobileDeveloperIssueRecorder";
 import MobileCleanerHome from "./MobileCleanerHome";
+import MobileCoshh from "./MobileCoshh";
 import "./mobileLayout.css";
 import { formatProductSubtitle } from "@/utils/productDisplay";
 
@@ -77,6 +78,7 @@ export default function MobileLayout({ initialTab = "home" }) {
   const [showBleScanner, setShowBleScanner] = useState(false);
   const [spaceScanError, setSpaceScanError] = useState("");
   const [showQuickNotes, setShowQuickNotes] = useState(false);
+  const [showCoshh, setShowCoshh] = useState(false);
   const [showAIActionSheet, setShowAIActionSheet] = useState(false);
   // "Go to compliance" said to the Orb: it asks this screen to switch tab.
   useEffect(() => {
@@ -199,7 +201,7 @@ export default function MobileLayout({ initialTab = "home" }) {
     let entityId = code;
     try {
       const url = new URL(code, window.location.origin);
-      const match = url.pathname.match(/^\/sense\/open\/(space|asset|fridge)\/([^/]+)\/?$/i);
+      const match = url.pathname.match(/^\/sense\/open\/(space|asset|fridge|coshh)\/([^/]+)\/?$/i);
       if (match) {
         entityType = match[1].toLowerCase();
         entityId = decodeURIComponent(match[2]);
@@ -209,6 +211,12 @@ export default function MobileLayout({ initialTab = "home" }) {
     // a fridge's own QR code: straight to its temperature check
     if (entityType === "fridge") {
       navigate(`/sense/open/fridge/${encodeURIComponent(entityId)}`);
+      return;
+    }
+
+    // a cupboard's COSHH code: the list of what is kept in it
+    if (entityType === "coshh") {
+      navigate(`/sense/open/coshh/${encodeURIComponent(entityId)}`);
       return;
     }
 
@@ -370,6 +378,9 @@ export default function MobileLayout({ initialTab = "home" }) {
         break;
       case "fridge-check":
         openSpaceScanner(); // the fridge's QR code; an NFC tag is just tapped
+        break;
+      case "coshh":
+        setShowCoshh(true);
         break;
       case "kits":
         navigate("/inventory?tab=emergency");
@@ -912,6 +923,7 @@ export default function MobileLayout({ initialTab = "home" }) {
       <MobileBleScanner open={showBleScanner} onClose={() => setShowBleScanner(false)} />
 
       <QuickNotesSheet open={showQuickNotes} onClose={() => setShowQuickNotes(false)} />
+      {showCoshh && <MobileCoshh onClose={() => setShowCoshh(false)} />}
 
       <MobileAIActionSheet
         open={showAIActionSheet}

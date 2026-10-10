@@ -15,7 +15,7 @@ export const ROUTE_MANIFEST = [
   { path: "/purchasing", label: "Purchasing", section: "operations", iconKey: "purchasing", capability: "purchasing.read", children: ["Basket", "Purchase Orders", "Deliveries", "Supplier Performance"] },
   { path: "/suppliers", label: "Suppliers", section: "operations", iconKey: "suppliers", capability: "suppliers.read" },
   { path: "/facilities", label: "Facilities", section: "operations", iconKey: "facilities", children: ["Overview", "Spaces", "Equipment"] },
-  { path: "/compliance", label: "Compliance", section: "operations", iconKey: "compliance", capability: "compliance.read", children: ["Overview", "Checks history", "Cleaning", "Maintenance", "Assets and tags", "PAT Testing"] },
+  { path: "/compliance", label: "Compliance", section: "operations", iconKey: "compliance", capability: "compliance.read", anyOf: ["compliance.read", "coshh.read"], children: ["Overview", "Checks history", "Cleaning", "Maintenance", "Assets and tags", "PAT Testing", "COSHH"] },
 
   { path: "/clinflow", label: "ClinFlow", section: "intelligence", iconKey: "clinflow", capability: "clinflow.read", children: ["Workflow", "NFWF", "QAIF", "Coding"] },
   { path: "/reports", label: "Reports", section: "intelligence", iconKey: "reports", capability: "reports.read", children: ["Stock Levels", "Expiry Report", "Transactions", "Temperature", "Concerns", "SARs"] },
@@ -43,12 +43,19 @@ export const SIDEBAR_SECTIONS = [
   { key: "system", label: "System" },
 ];
 
+// a route can list several capabilities (anyOf), any one of which opens it: the Compliance page also opens for
+// someone who can only see the COSHH register
+function routeAllowed(route, capabilities) {
+  if (Array.isArray(route.anyOf) && route.anyOf.length) return route.anyOf.some((c) => hasCapability(capabilities, c));
+  return !route.capability || hasCapability(capabilities, route.capability);
+}
+
 export function getVisibleRouteManifest({ isAdmin = false, capabilities = [], developer = false } = {}) {
   return ROUTE_MANIFEST.filter((route) => {
     if (route.alias || route.supportRoute || route.hiddenFromSidebar) return false;
     if (route.adminOnly && !isAdmin) return false;
     if (route.developerOnly && !developer) return false;
-    return !route.capability || hasCapability(capabilities, route.capability);
+    return routeAllowed(route, capabilities);
   });
 }
 
@@ -58,6 +65,6 @@ export function getRouteAuditRows({ isAdmin = false, capabilities = [], develope
     accessible:
       (!route.adminOnly || isAdmin) &&
       (!route.developerOnly || developer) &&
-      (!route.capability || hasCapability(capabilities, route.capability)),
+      routeAllowed(route, capabilities),
   }));
 }

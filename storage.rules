@@ -1,7 +1,7 @@
 rules_version = '2';
 
-// Firebase Storage holds practice-owned photos only (currently: stock item
-// photos). Nothing here is patient data. The capability check below is a
+// Firebase Storage holds practice-owned files only: stock item photos and
+// COSHH safety data sheets (PDFs). Nothing here is patient data. The capability check below is a
 // direct copy of firestore.rules' hasPermission()/effectiveRoleCapabilities()
 // — Storage Security Rules use the same rules language as Firestore's and can
 // read Firestore documents the same way, so this is kept identical on purpose
@@ -52,6 +52,7 @@ service firebase.storage {
           "connect.view", "connect.manageDevices", "connect.acknowledgeAlerts",
           "temperature.read", "temperature.write", "temperature.resolveIncident",
           "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets",
+          "coshh.read", "coshh.manage",
           "practiceAdmin.read", "practiceAdmin.write", "reports.read", "theme.lab",
           "mobile.access", "mobile.biometricUnlock",
           "admin.access", "admin.manageUsers", "admin.manageRoles", "admin.manageSettings",
@@ -87,14 +88,16 @@ service firebase.storage {
           "dashboard.read", "operations.read", "connect.view",
           "temperature.read", "temperature.write",
           "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets",
+          "coshh.read", "coshh.manage",
           "mobile.access"
         ] :
         role == "Cleaner" ? [
           "dashboard.read", "operations.read",
+          "coshh.read",
           "mobile.access"
         ] :
         role == "Partner" ? [
-          "dashboard.read", "governance.read", "governance.partnerAccess", "mobile.access"
+          "dashboard.read", "governance.read", "governance.partnerAccess", "coshh.read", "mobile.access"
         ] :
         role == "ReadOnly" ? [
           "clinflow.read", "dashboard.read", "operations.read", "inventory.read", "purchasing.read",
@@ -136,6 +139,17 @@ service firebase.storage {
         && request.resource.contentType.matches("image/.*");
       // Also removable by whoever may permanently delete the item itself.
       allow delete: if hasPermission("inventory", "write") || hasPermission("inventory", "purge") || isAdmin();
+    }
+
+    // COSHH safety data sheets (PDF), one folder per substance: coshh_sds/{substanceId}/{fileName}.
+    // Read is the same as the register itself (coshh.read: caretaker, practice manager, partners, cleaners);
+    // write is coshh.manage. PDFs only, up to 15MB.
+    match /coshh_sds/{substanceId}/{fileName} {
+      allow read: if hasPermission("coshh", "read");
+      allow write: if hasPermission("coshh", "manage")
+        && request.resource.size < 15 * 1024 * 1024
+        && request.resource.contentType == "application/pdf";
+      allow delete: if hasPermission("coshh", "manage");
     }
 
     // Everything else is closed by default.

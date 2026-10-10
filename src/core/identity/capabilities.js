@@ -59,6 +59,10 @@ export const CAPABILITIES = {
     recordChecks: "compliance.recordChecks",
     manageAssets: "compliance.manageAssets",
   },
+  coshh: {
+    read: "coshh.read",
+    manage: "coshh.manage",
+  },
   practiceAdmin: {
     read: "practiceAdmin.read",
     write: "practiceAdmin.write",
@@ -159,6 +163,8 @@ export const CAPABILITY_CATALOG = [
   { id: "compliance.write", label: "Update compliance", group: "Compliance" },
   { id: "compliance.recordChecks", label: "Record QR/NFC compliance checks", group: "Compliance" },
   { id: "compliance.manageAssets", label: "Manage QR/NFC compliance assets", group: "Compliance" },
+  { id: "coshh.read", label: "View the COSHH register (hazardous substances, PPE, first aid)", group: "Compliance" },
+  { id: "coshh.manage", label: "Maintain the COSHH register and upload safety data sheets", group: "Compliance" },
 
   { id: "practiceAdmin.read", label: "View practice admin", group: "Administration" },
   { id: "practiceAdmin.write", label: "Update practice admin", group: "Administration" },
@@ -220,6 +226,8 @@ export const ROLE_TEMPLATES = {
     "compliance.write",
     "compliance.recordChecks",
     "compliance.manageAssets",
+    "coshh.read",
+    "coshh.manage",
     "practiceAdmin.read",
     "practiceAdmin.write",
     "reports.read",
@@ -309,11 +317,14 @@ export const ROLE_TEMPLATES = {
     "compliance.write",
     "compliance.recordChecks",
     "compliance.manageAssets",
+    "coshh.read",
+    "coshh.manage",
     "mobile.access",
   ],
   "Cleaner": [
     "dashboard.read",
     "operations.read",
+    "coshh.read",
     "mobile.access",
   ],
   // Practice partners: read-only visibility across every governance record
@@ -325,6 +336,7 @@ export const ROLE_TEMPLATES = {
     "dashboard.read",
     "governance.read",
     "governance.partnerAccess",
+    "coshh.read",
     "mobile.access",
   ],
   "ReadOnly": [

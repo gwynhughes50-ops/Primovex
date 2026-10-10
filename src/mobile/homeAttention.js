@@ -8,8 +8,9 @@ const ORDER = { critical: 0, warning: 1, info: 2, ok: 3 };
 
 // sars / concerns / stockAlerts are the records (or null when this person can't see them);
 // stockAlerts are [{ state: 'expired' | 'out' | 'low' | 'soon' }]; messages is a count of unread messages;
-// fridgeIncidents and fridgesUnchecked are counts (null when this person can't see temperatures).
-export function buildAttention({ sars = null, concerns = null, stockAlerts = null, messages = 0, fridgeIncidents = null, fridgeQuarantined = null, fridgesUnchecked = null, now = new Date() } = {}) {
+// fridgeIncidents and fridgesUnchecked are counts (null when this person can't see temperatures);
+// coshh is { overdue, dueSoon } review counts from the COSHH register (null when this person can't see it).
+export function buildAttention({ sars = null, concerns = null, stockAlerts = null, messages = 0, fridgeIncidents = null, fridgeQuarantined = null, fridgesUnchecked = null, coshh = null, now = new Date() } = {}) {
   const chips = [];
 
   if (Array.isArray(sars)) {
@@ -38,6 +39,9 @@ export function buildAttention({ sars = null, concerns = null, stockAlerts = nul
   if (typeof fridgeQuarantined === "number" && fridgeQuarantined > 0) chips.push({ key: "fridges-quarantined", tone: "critical", label: `${plural(fridgeQuarantined, "fridge")} quarantined`, action: "temperature" });
   if (typeof fridgeIncidents === "number" && fridgeIncidents > 0) chips.push({ key: "fridge-incidents", tone: "critical", label: `${plural(fridgeIncidents, "fridge incident")} open`, action: "temperature" });
   if (typeof fridgesUnchecked === "number" && fridgesUnchecked > 0) chips.push({ key: "fridges-unchecked", tone: "warning", label: `${plural(fridgesUnchecked, "fridge")} not checked today`, action: "fridge-check" });
+
+  if (coshh && coshh.overdue > 0) chips.push({ key: "coshh-overdue", tone: "critical", label: `${plural(coshh.overdue, "COSHH review")} overdue`, action: "coshh" });
+  if (coshh && coshh.dueSoon > 0) chips.push({ key: "coshh-soon", tone: "warning", label: `${plural(coshh.dueSoon, "COSHH review")} due soon`, action: "coshh" });
 
   if (messages > 0) chips.push({ key: "messages", tone: "info", label: plural(messages, "unread message"), action: "messages" });
 

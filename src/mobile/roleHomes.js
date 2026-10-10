@@ -1,4 +1,4 @@
-import { ClipboardCheck, FileText, ListChecks, MessageSquare, Mic, NotebookPen, Package, ScanLine, ShieldAlert, Sparkles, SprayCan, Stethoscope, Thermometer, TriangleAlert, Wrench } from "lucide-react";
+import { ClipboardCheck, FileText, FlaskConical, ListChecks, MessageSquare, Mic, NotebookPen, Package, ScanLine, ShieldAlert, Sparkles, SprayCan, Stethoscope, Thermometer, TriangleAlert, Wrench } from "lucide-react";
 
 // What each kind of person sees on the phone: the home screen's tiles and the bottom bar. Pure data, so
 // it can be tested. A tile marked with a capability is only shown to people who hold it, and a bottom-bar
@@ -37,6 +37,7 @@ export function getRoleHome(role, capabilities = []) {
         { key: "concerns", label: "Concerns", helper: "Listening to People", Icon: ShieldAlert, capability: "governance.read" },
         { key: "sars", label: "SARs", helper: "View, add and chase", Icon: FileText, capability: "governance.read" },
         { key: "significant-events", label: "Significant events", helper: "Report and review", Icon: TriangleAlert },
+        { key: "coshh", label: "Chemicals (COSHH)", helper: "What to wear, first aid, reviews", Icon: FlaskConical, capability: "coshh.read" },
         { key: "briefing", label: "What needs attention?", helper: "Your briefing from the Orb", Icon: ListChecks },
       ],
       nav: ["home", "stock", "facilities", "me"],
@@ -63,13 +64,14 @@ export function getRoleHome(role, capabilities = []) {
 
   if (key.includes("caretaker") || key.includes("maintenance") || key.includes("estates")) {
     return {
-      id: "caretaker", eyebrow: "Facilities", headline: "Identify the space and act immediately", attention: false,
+      id: "caretaker", eyebrow: "Facilities", headline: "Identify the space and act immediately", attention: true,
       primary: { key: "scan-room", label: "Scan space or asset", helper: "NFC, QR or barcode", Icon: ScanLine },
       actions: [
         { key: "checks", label: "Fire and water checks", helper: "Record checks", Icon: ClipboardCheck },
         { key: "room", label: "Space context", helper: "Open the right passport", Icon: Wrench },
         { key: "issue", label: "Report an issue", helper: "Photo and priority", Icon: TriangleAlert },
         { key: "clean", label: "Cleaning status", helper: "Which rooms are done", Icon: SprayCan },
+        { key: "coshh", label: "Chemicals (COSHH)", helper: "What to wear, first aid, reviews", Icon: FlaskConical, capability: "coshh.read" },
         { key: "quick-note", label: "Quick note", helper: "A reminder for yourself", Icon: NotebookPen },
         { key: "messages", label: "Messages", helper: "From colleagues", Icon: MessageSquare },
       ],
@@ -98,6 +100,7 @@ export function getRoleHome(role, capabilities = []) {
         { key: "sars", label: "SARs", helper: "Where they are up to", Icon: FileText, capability: "governance.read" },
         { key: "concerns", label: "Concerns", helper: "Listening to People", Icon: ShieldAlert, capability: "governance.read" },
         { key: "significant-events", label: "Significant events", helper: "Review and learn", Icon: TriangleAlert },
+        { key: "coshh", label: "Chemicals (COSHH)", helper: "What to wear, first aid, reviews", Icon: FlaskConical, capability: "coshh.read" },
         { key: "briefing", label: "What needs attention?", helper: "Your briefing from the Orb", Icon: ListChecks },
         { key: "messages", label: "Messages", helper: "From colleagues", Icon: MessageSquare },
       ],

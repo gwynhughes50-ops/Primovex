@@ -24,6 +24,7 @@ import {
   History,
   SprayCan,
   Wrench,
+  FlaskConical,
 } from "lucide-react";
 import { db } from "../lib/firebase";
 import {
@@ -42,6 +43,8 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import ComplianceQrEngine from "@/components/compliance/ComplianceQrEngine";
 import ComplianceOverview from "@/components/compliance/ComplianceOverview";
 import ChecksHistory from "@/components/compliance/ChecksHistory";
+import CoshhRegister from "@/components/compliance/CoshhRegister";
+import { useAuth } from "@/contexts/AuthContext";
 import CleaningPanel from "@/modules/facilities/components/CleaningPanel";
 import MaintenancePanel from "@/modules/facilities/components/MaintenancePanel";
 import { checkPerson, checkTime, localDateInput } from "@/components/compliance/complianceView";
@@ -185,9 +188,27 @@ function isValidEmail(email) {
 }
 
 // ---------- Page ----------
+// Whoever can see compliance gets the full page (with the COSHH register as one more tab). Someone who can only
+// see the COSHH register (a partner, say) gets a page with just that, and none of the compliance data loads.
 export default function Compliance() {
+  const { can } = useAuth();
+  if (!can("compliance.read")) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-100">Compliance</h1>
+          <p className="text-sm text-slate-400">COSHH register</p>
+        </div>
+        <CoshhRegister />
+      </div>
+    );
+  }
+  return <ComplianceFull canCoshh={can("coshh.read")} />;
+}
+
+function ComplianceFull({ canCoshh }) {
   const SITE_ID = "main_branch";
-  const [tab, setTab] = useState("overview"); // overview | history | cleaning | maintenance | assets | pat
+  const [tab, setTab] = useState("overview"); // overview | history | cleaning | maintenance | assets | pat | coshh
 
   // For printing we keep our own “recent” datasets at page level
   const [printFireChecks, setPrintFireChecks] = useState([]);
@@ -657,7 +678,7 @@ export default function Compliance() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-100">Compliance</h1>
-          <p className="text-sm text-slate-400">Fire • Water • Cleaning • Maintenance • PAT</p>
+          <p className="text-sm text-slate-400">Fire • Water • Cleaning • Maintenance • PAT • COSHH</p>
         </div>
 
         <Button
@@ -678,6 +699,7 @@ export default function Compliance() {
           <TabButton active={tab === "maintenance"} onClick={() => setTab("maintenance")} icon={Wrench} label="Maintenance" />
           <TabButton active={tab === "assets"} onClick={() => setTab("assets")} icon={QrCode} label="Assets and tags" />
           <TabButton active={tab === "pat"} onClick={() => setTab("pat")} icon={PlugZap} label="PAT Testing" />
+          {canCoshh && <TabButton active={tab === "coshh"} onClick={() => setTab("coshh")} icon={FlaskConical} label="COSHH" />}
         </div>
       </Card>
 
@@ -687,6 +709,7 @@ export default function Compliance() {
       {tab === "maintenance" && <MaintenancePanel />}
       {tab === "assets" && <ComplianceQrEngine />}
       {tab === "pat" && <PatTestingTab />}
+      {tab === "coshh" && canCoshh && <CoshhRegister />}
 
       {/* PRINT MODAL */}
       {printOpen && (

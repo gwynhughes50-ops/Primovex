@@ -8,6 +8,7 @@ import MobileGovernanceSARs from "@/mobile/MobileGovernanceSARs";
 import MobileSignificantEvents from "@/mobile/MobileSignificantEvents";
 import SenseNfcOpen from "@/pages/SenseNfcOpen";
 import FridgeCheckLanding from "@/mobile/FridgeCheckLanding";
+import CoshhLanding from "@/mobile/CoshhLanding";
 import MobileBootSplash from "@/mobile/auth/MobileBootSplash";
 import MobileAccountLogin from "@/mobile/auth/MobileAccountLogin";
 import FirstRunSetupGate from "@/setup/FirstRunSetupGate";
@@ -56,6 +57,8 @@ function MobileSenseRoute() {
   if (!can("mobile.access")) return <MobileAccessDenied />;
   // a fridge's own tag or QR code goes straight to that fridge's temperature check
   if (entityType === "fridge") return <FridgeCheckLanding unitId={entityId} />;
+  // a storage cupboard's QR code lists what is kept in it (COSHH)
+  if (entityType === "coshh") return <CoshhLanding placeKey={entityId} />;
   return <SenseNfcOpen />;
 }
 

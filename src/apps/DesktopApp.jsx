@@ -89,7 +89,7 @@ export default function DesktopApp() {
         <Route path="facilities" element={<PermissionGate capability="operations.read"><Facilities /></PermissionGate>} />
         <Route path="spaces" element={<PermissionGate capability="operations.read"><Spaces /></PermissionGate>} />
         <Route path="temperature" element={<PermissionGate capability="temperature.read"><TemperatureLog /></PermissionGate>} />
-        <Route path="compliance" element={<PermissionGate capability="compliance.read"><Compliance /></PermissionGate>} />
+        <Route path="compliance" element={<PermissionGate anyOf={["compliance.read", "coshh.read"]}><Compliance /></PermissionGate>} />
         <Route path="admin/*" element={<PermissionGate capability="admin.access"><AdminDashboard /></PermissionGate>} />
         <Route path="reports" element={<PermissionGate capability="reports.read"><Reports /></PermissionGate>} />
         <Route path="clinflow" element={<PermissionGate capability="clinflow.read"><ClinFlowWorkspace /></PermissionGate>} />

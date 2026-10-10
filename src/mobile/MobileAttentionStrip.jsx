@@ -14,6 +14,8 @@ import { SAR_COLLECTION } from "@/modules/governance/services/sarService";
 import { messageQueue } from "@/messaging/messageCard";
 import useSenseContext from "@/modules/sense/hooks/useSenseContext";
 import { isQuarantined } from "@/modules/temperature/fridgeIncidents";
+import { reviewSummary } from "@/modules/coshh/coshh";
+import { useCoshhSubstances } from "@/modules/coshh/coshhService";
 import { buildAttention } from "./homeAttention";
 import { dateKeyOf, expectedFridges, normaliseUnit, notCheckedToday } from "./fridgeCheck";
 
@@ -32,6 +34,7 @@ export default function MobileAttentionStrip({ onAction }) {
   const seesConcerns = can("governance.concernsTeam") || can("governance.partnerAccess");
   const seesStock = can("inventory.read");
   const seesFridges = can("temperature.read");
+  const seesCoshh = can("coshh.read");
   const { state: senseState } = useSenseContext();
   const [units, setUnits] = useState(null);
   const [todaysLogs, setTodaysLogs] = useState(null);
@@ -41,6 +44,7 @@ export default function MobileAttentionStrip({ onAction }) {
   const { allItems = [] } = useStock({ includeArchived: false });
   useExpirySettings();
   const { rows } = useNotifications(uid);
+  const { list: coshhList } = useCoshhSubstances(seesCoshh && !!uid && !isSafeSyntheticMode());
 
   useEffect(() => {
     if (!seesSars || !uid || isSafeSyntheticMode()) return undefined;
@@ -69,8 +73,8 @@ export default function MobileAttentionStrip({ onAction }) {
       ? summariseStockAlerts(allItems, { categoryOf: (item) => normalizeStockItemCategory(item).category, settings: getExpirySettings(), now, resolved: {} }).alerts
       : null;
     const fridgesUnchecked = seesFridges && units && todaysLogs ? notCheckedToday({ fridges: expectedFridges({ units, assets: senseState?.assets || [] }), logs: todaysLogs, now }).length : null;
-    return buildAttention({ sars: seesSars ? sars : null, concerns: seesConcerns ? concerns : null, stockAlerts, messages: messageQueue(rows, { now, everything: true }).length, fridgeIncidents: seesFridges && openIncidents ? openIncidents.length : null, fridgeQuarantined: seesFridges && openIncidents ? openIncidents.filter(isQuarantined).length : null, fridgesUnchecked, now });
-  }, [allItems, concerns, openIncidents, rows, sars, seesConcerns, seesFridges, seesSars, seesStock, senseState?.assets, todaysLogs, units]);
+    return buildAttention({ sars: seesSars ? sars : null, concerns: seesConcerns ? concerns : null, stockAlerts, messages: messageQueue(rows, { now, everything: true }).length, fridgeIncidents: seesFridges && openIncidents ? openIncidents.length : null, fridgeQuarantined: seesFridges && openIncidents ? openIncidents.filter(isQuarantined).length : null, fridgesUnchecked, coshh: seesCoshh && coshhList ? reviewSummary(coshhList, now) : null, now });
+  }, [allItems, coshhList, concerns, openIncidents, rows, sars, seesCoshh, seesConcerns, seesFridges, seesSars, seesStock, senseState?.assets, todaysLogs, units]);
 
   return (
     <section aria-label="What needs attention" className="flex flex-wrap gap-2">

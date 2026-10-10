@@ -128,4 +128,20 @@ t("an area the person can't see is left out, and a clear day says so", () => {
   assert.equal(buildAttention({ messages: 1, now })[0].label, "1 unread message");
 });
 
+t("COSHH: managers, the caretaker and partners get the tile only if they may read the register, and overdue reviews head the strip", () => {
+  const read = ["coshh.read"];
+  for (const role of ["Practice Manager", "Caretaker", "Partner"]) {
+    assert.ok(visibleActions(getRoleHome(role, read), read).some((a) => a.key === "coshh"), `${role} sees the COSHH tile`);
+    assert.ok(!visibleActions(getRoleHome(role, []), []).some((a) => a.key === "coshh"), `${role} without the permission doesn't`);
+  }
+  assert.ok(!getRoleHome("Nurse", read).actions.some((a) => a.key === "coshh"), "nurse and HCA are not given it");
+  assert.equal(getRoleHome("Caretaker", read).attention, true, "the caretaker keeps the register, so sees the strip");
+  const chips = buildAttention({ coshh: { overdue: 2, dueSoon: 1 }, stockAlerts: [{ state: "low" }], now });
+  assert.deepEqual(chips.map((c) => c.key), ["coshh-overdue", "stock-low", "coshh-soon"]);
+  assert.equal(chips[0].label, "2 COSHH reviews overdue");
+  assert.equal(chips[0].action, "coshh");
+  assert.equal(buildAttention({ coshh: { overdue: 0, dueSoon: 0 }, now })[0].key, "clear");
+  assert.equal(buildAttention({ coshh: null, now })[0].key, "clear");
+});
+
 console.log(`\n${n} passed`);

@@ -10,6 +10,7 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.nfc.FormatException
 import android.nfc.NdefMessage
 import android.nfc.NdefRecord
@@ -301,9 +302,27 @@ class MainActivity : TauriActivity() {
     webView.addJavascriptInterface(NfcBridge(), "PrimovexNfc")
     webView.addJavascriptInterface(BleBridge(), "PrimovexBle")
     webView.addJavascriptInterface(AuthBridge(), "PrimovexAuth")
+    webView.addJavascriptInterface(DocumentBridge(), "PrimovexDocs")
 
     Log.i(TAG, "javascript-bridge-installed")
     dispatchVoiceEvent("native-ready", diagnosticsJson())
+  }
+
+  // Opens a practice document (a COSHH safety data sheet) in whatever app the phone uses for PDFs. Only links to the
+  // practice's own Firebase Storage are opened; anything else is refused.
+  inner class DocumentBridge {
+    @JavascriptInterface
+    fun openUrl(url: String): Boolean {
+      if (!url.startsWith("https://firebasestorage.googleapis.com/")) return false
+      return try {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        startActivity(intent)
+        true
+      } catch (e: Exception) {
+        Log.w(TAG, "document-open-failed")
+        false
+      }
+    }
   }
 
   inner class NfcBridge {

@@ -635,6 +635,73 @@ async function main() {
     await assertFails(deleteDoc(doc(nursemgr, "temperature_incidents", "inc-1")));
   });
 
+  console.log("\n=== 15. COSHH register (coshh_substances and coshh_sds safety data sheets) ===");
+  const substance = (extra = {}) => ({ name: "Domestos", supplier: "Bunzl", hazards: ["corrosive"], ppe: ["gloves"], firstAid: ["skin"], site: "Main Surgery", location: "Cleaners cupboard", reviewDate: "2027-01-01", active: true, ...extra });
+  await check("Caretaker CAN add a substance", () => assertSucceeds(setDoc(doc(caretaker, "coshh_substances", "s-care"), substance())));
+  await check("Practice Manager CAN add a substance", () => assertSucceeds(setDoc(doc(pm, "coshh_substances", "s-pm"), substance({ name: "Zoflora" }))));
+  await check("Cleaner CANNOT add or change a substance (read-only)", async () => {
+    await assertFails(setDoc(doc(cleaner, "coshh_substances", "s-clean"), substance()));
+    await assertFails(updateDoc(doc(cleaner, "coshh_substances", "s-care"), { ppe: ["none"] }));
+  });
+  await check("Partner CANNOT add or change a substance (read-only oversight)", async () => {
+    await assertFails(setDoc(doc(partner, "coshh_substances", "s-part"), substance()));
+    await assertFails(updateDoc(doc(partner, "coshh_substances", "s-care"), { reviewDate: "2099-01-01" }));
+  });
+  await check("Nurse and reception CANNOT read or write the register", async () => {
+    await assertFails(getDoc(doc(nurse, "coshh_substances", "s-care")));
+    await assertFails(setDoc(doc(nurse, "coshh_substances", "s-nurse"), substance()));
+    await assertFails(getDoc(doc(reception, "coshh_substances", "s-care")));
+  });
+  await check("Cleaner, partner, caretaker and practice manager CAN read the register", async () => {
+    for (const who of [cleaner, partner, caretaker, pm]) await assertSucceeds(getDoc(doc(who, "coshh_substances", "s-care")));
+    await assertSucceeds(getDocs(collection(cleaner, "coshh_substances")));
+  });
+  await check("Anonymous CANNOT read or write the register", async () => {
+    await assertFails(getDoc(doc(anon, "coshh_substances", "s-care")));
+    await assertFails(setDoc(doc(anon, "coshh_substances", "s-anon"), substance()));
+  });
+  await check("A substance must have a name and real lists (no junk records)", async () => {
+    await assertFails(setDoc(doc(caretaker, "coshh_substances", "s-bad1"), substance({ name: "" })));
+    await assertFails(setDoc(doc(caretaker, "coshh_substances", "s-bad2"), substance({ hazards: "corrosive" })));
+    await assertFails(updateDoc(doc(caretaker, "coshh_substances", "s-care"), { name: "" }));
+  });
+  await check("Caretaker can mark a review done and archive a product, but nobody except an admin deletes one", async () => {
+    await assertSucceeds(updateDoc(doc(caretaker, "coshh_substances", "s-care"), { reviewDate: "2027-10-10", lastReviewedAt: "2026-10-10" }));
+    await assertSucceeds(updateDoc(doc(pm, "coshh_substances", "s-pm"), { active: false }));
+    await assertFails(deleteDoc(doc(caretaker, "coshh_substances", "s-care")));
+    await assertFails(deleteDoc(doc(pm, "coshh_substances", "s-pm")));
+    await assertSucceeds(deleteDoc(doc(admin, "coshh_substances", "s-pm")));
+  });
+
+  const caretakerStorage = testEnv.authenticatedContext("caretaker-uid").storage();
+  const cleanerStorage = testEnv.authenticatedContext("cleaner-uid").storage();
+  const partnerStorage = testEnv.authenticatedContext("partner-uid").storage();
+  const pmStorage = testEnv.authenticatedContext("pm-uid").storage();
+  const pdf = new TextEncoder().encode("%PDF-1.4 test");
+  await check("Caretaker and Practice Manager CAN upload a safety data sheet (PDF)", async () => {
+    await assertSucceeds(uploadBytes(ref(caretakerStorage, "coshh_sds/s-care/a.pdf"), pdf, { contentType: "application/pdf" }));
+    await assertSucceeds(uploadBytes(ref(pmStorage, "coshh_sds/s-care/b.pdf"), pdf, { contentType: "application/pdf" }));
+  });
+  await check("Cleaner, partner and nurse CANNOT upload a safety data sheet", async () => {
+    await assertFails(uploadBytes(ref(cleanerStorage, "coshh_sds/s-care/c.pdf"), pdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(partnerStorage, "coshh_sds/s-care/c.pdf"), pdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(nurseStorage, "coshh_sds/s-care/c.pdf"), pdf, { contentType: "application/pdf" }));
+  });
+  await check("Only PDFs, and not over 15MB, even for the caretaker", async () => {
+    await assertFails(uploadBytes(ref(caretakerStorage, "coshh_sds/s-care/d.png"), new Uint8Array([1, 2, 3]), { contentType: "image/png" }));
+    await assertFails(uploadBytes(ref(caretakerStorage, "coshh_sds/s-care/e.pdf"), new Uint8Array(16 * 1024 * 1024), { contentType: "application/pdf" }));
+  });
+  await check("Cleaner, partner, caretaker and practice manager CAN read a safety data sheet; nurse and anonymous cannot", async () => {
+    for (const who of [cleanerStorage, partnerStorage, caretakerStorage, pmStorage]) await assertSucceeds(getBytes(ref(who, "coshh_sds/s-care/a.pdf")));
+    await assertFails(getBytes(ref(nurseStorage, "coshh_sds/s-care/a.pdf")));
+    await assertFails(getBytes(ref(anonStorage, "coshh_sds/s-care/a.pdf")));
+  });
+  await check("Cleaner and partner CANNOT delete a safety data sheet; the caretaker can", async () => {
+    await assertFails(deleteObject(ref(cleanerStorage, "coshh_sds/s-care/a.pdf")));
+    await assertFails(deleteObject(ref(partnerStorage, "coshh_sds/s-care/a.pdf")));
+    await assertSucceeds(deleteObject(ref(caretakerStorage, "coshh_sds/s-care/a.pdf")));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);
