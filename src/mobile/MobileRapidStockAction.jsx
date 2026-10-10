@@ -27,6 +27,9 @@ export default function MobileRapidStockAction({
   const [showCapture, setShowCapture] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState("");
+  // every hook comes before the "no item" return below: React needs the same hooks on every render, and the
+  // sheet starts with no item (and gets one when a stock row is tapped), so a hook after the return crashes it
+  const expirySettings = useExpirySettings();
   const stock = Number(item?.current_stock || 0);
   const boxSize = Number(item?.units_per_box || 0);
 
@@ -65,7 +68,6 @@ export default function MobileRapidStockAction({
     }
   }
 
-  const expirySettings = useExpirySettings();
   const expiryStatus = getExpiryStatus(item, new Date(), expirySettings);
   const expiryDays = daysUntilExpiry(item);
 
