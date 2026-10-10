@@ -8,7 +8,7 @@ import { VISITS, buildReport, visitById } from "@/modules/inspection/inspectionR
 import { STATUS_LABEL, inspectionHtml } from "@/modules/inspection/inspectionHtml";
 import { loadInspectionData } from "@/modules/inspection/inspectionLoader";
 
-// Inspection pack (Reports > Inspection pack): one summary sheet of the evidence Primovex holds for a visit (a HIW
+// Inspection pack (Reports > Inspection pack): one summary sheet of the evidence Primovex holds for a visit (a HEIW
 // inspection, a Health and Safety visit), with the gaps to put right at the top, ready to print or save as a PDF.
 // The Practice Manager and anyone given "Prepare inspection evidence reports" can open it; it only reads what they
 // can already read, and says "Not shown" for anything their role can't open.
@@ -24,7 +24,7 @@ const STATUS_ICON = { ok: CheckCircle2, attention: AlertTriangle, none: CircleSl
 export default function InspectionPack() {
   const { user } = useAuth();
   const [params, setParams] = useSearchParams();
-  const visitId = visitById(params.get("visit") || "hiw").id;
+  const visitId = visitById(params.get("visit") || "heiw").id;
   const [data, setData] = useState(null);
   const [loadedAt, setLoadedAt] = useState(null);
   const [error, setError] = useState("");

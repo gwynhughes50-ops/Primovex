@@ -176,7 +176,7 @@ export const CAPABILITY_CATALOG = [
   { id: "practiceAdmin.read", label: "View practice admin", group: "Administration" },
   { id: "practiceAdmin.write", label: "Update practice admin", group: "Administration" },
   { id: "reports.read", label: "View reports", group: "Insight" },
-  { id: "reports.inspection", label: "Prepare inspection evidence reports (HIW, Health and Safety)", group: "Insight" },
+  { id: "reports.inspection", label: "Prepare inspection evidence reports (HEIW, Health and Safety)", group: "Insight" },
   { id: "clinflow.read", label: "View ClinFlow", group: "ClinFlow" },
   { id: "clinflow.capture", label: "Capture ClinFlow documents", group: "ClinFlow" },
   { id: "clinflow.workflow", label: "Process ClinFlow workflow", group: "ClinFlow" },

@@ -40,19 +40,20 @@ t("on the phone it switches tab, opens a page, or says it is desktop only", () =
 
 t("getting ready for a visit opens the inspection pack for that visit, for people allowed to prepare it", () => {
   for (const [s, id] of [
-    ["we have a HIW inspection, print off a report ready", "inspection-hiw"],
-    ["Get the HIW evidence ready", "inspection-hiw"],
+    ["we have a HEIW visit, print off a report ready", "inspection-heiw"],
+    ["we have a HIW inspection, print off a report ready", "inspection-heiw"],
+    ["Get the HEIW evidence ready", "inspection-heiw"],
     ["we have a health and safety visit, can you prepare a report", "inspection-hs"],
     ["print the H&S inspection pack", "inspection-hs"],
     ["we have an inspection coming, get a report ready", "inspection"],
     ["the inspectors are in, print me a summary", "inspection"],
   ]) assert.equal(parseNavigation(s)?.id, id, s);
-  for (const s of ["how do I prepare for an inspection", "what is a HIW inspection", "when was the last fire alarm", "print the stock report", "we had an inspection last year", "show me the alerts for the health and safety room"]) {
-    assert.ok(!["inspection", "inspection-hiw", "inspection-hs"].includes(parseNavigation(s)?.id), s);
+  for (const s of ["how do I prepare for an inspection", "what is a HEIW inspection", "when was the last fire alarm", "print the stock report", "we had an inspection last year", "show me the alerts for the health and safety room"]) {
+    assert.ok(!["inspection", "inspection-heiw", "inspection-hs"].includes(parseNavigation(s)?.id), s);
   }
-  const allowed = resolveNavigation({ id: "inspection-hiw" }, { capabilities: ["reports.inspection"] });
-  assert.equal(allowed.action.route, "/inspection?visit=hiw");
-  assert.match(allowed.text, /HIW inspection pack/);
+  const allowed = resolveNavigation({ id: "inspection-heiw" }, { capabilities: ["reports.inspection"] });
+  assert.equal(allowed.action.route, "/inspection?visit=heiw");
+  assert.match(allowed.text, /HEIW visit pack/);
   assert.match(resolveNavigation({ id: "inspection-hs" }, { capabilities: ["reports.read"] }).text, /don't have access/);
   assert.match(resolveNavigation({ id: "inspection" }, { capabilities: ["*"], platform: "mobile" }).text, /only on the desktop app/);
 });

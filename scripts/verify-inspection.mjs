@@ -95,21 +95,22 @@ t("an area this person can't read is marked as not shown, not as empty", () => {
 });
 
 t("each visit sheet lists its own areas, and the gaps are gathered at the top", () => {
-  assert.deepEqual(VISITS.map((v) => v.id), ["hiw", "hs"]);
-  assert.equal(visitById("nope").id, "hiw");
+  assert.deepEqual(VISITS.map((v) => v.id), ["heiw", "hs"]);
+  assert.equal(visitById("nope").id, "heiw");
+  assert.equal(visitById("hiw").id, "heiw", "an old link still opens the sheet");
   const data = { checks: [check("fire_point", 40)], coshh: [] };
   const hs = buildReport({ visitId: "hs", data: { ...base, ...data }, now });
-  const hiw = buildReport({ visitId: "hiw", data: { ...base, ...data }, now });
+  const heiw = buildReport({ visitId: "heiw", data: { ...base, ...data }, now });
   assert.deepEqual(hs.sections.map((s) => s.id), ["fire", "water", "pat", "emergency", "cleaning", "coshh"]);
-  assert.equal(hiw.sections.length, 9);
-  assert.ok(hiw.sections.some((s) => s.id === "governance") && !hs.sections.some((s) => s.id === "governance"), "governance is for the HIW sheet only");
+  assert.equal(heiw.sections.length, 9);
+  assert.ok(heiw.sections.some((s) => s.id === "governance") && !hs.sections.some((s) => s.id === "governance"), "governance is for the HEIW sheet only");
   assert.match(hs.gaps[0].text, /fire check was 40 days ago/);
 });
 
 t("the printed sheet carries the sections, the gaps and what is held elsewhere, and escapes what it is given", () => {
-  const report = buildReport({ visitId: "hiw", data: { ...base, checks: [check("fire_point", 3, { actor: { displayName: "<b>Bob</b>" } })] }, preparedBy: "Gwyn <Hughes>", now });
+  const report = buildReport({ visitId: "heiw", data: { ...base, checks: [check("fire_point", 3, { actor: { displayName: "<b>Bob</b>" } })] }, preparedBy: "Gwyn <Hughes>", now });
   const html = inspectionHtml(report, { practiceName: "Test & Co" });
-  assert.ok(html.includes("HIW inspection: evidence summary") && html.includes("At a glance") && html.includes("To put right before the visit"));
+  assert.ok(html.includes("HEIW visit: evidence summary") && html.includes("At a glance") && html.includes("To put right before the visit"));
   assert.ok(html.includes("Fire safety") && html.includes("Held outside Primovex") && html.includes("Croner"));
   assert.ok(html.includes("Gwyn &lt;Hughes&gt;") && html.includes("Test &amp; Co") && html.includes("&lt;b&gt;Bob&lt;/b&gt;"));
   assert.ok(!html.includes("<b>Bob") && !html.includes("<Hughes>"));

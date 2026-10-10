@@ -5,9 +5,9 @@ import { allGaps, buildSections } from "./inspectionSummary.js";
 
 export const VISITS = [
   {
-    id: "hiw",
-    label: "HIW inspection",
-    long: "Healthcare Inspectorate Wales inspection",
+    id: "heiw",
+    label: "HEIW visit",
+    long: "Health Education and Improvement Wales visit",
     sections: ["fire", "water", "pat", "emergency", "cleaning", "coldchain", "stock", "coshh", "governance"],
     outside: ["Risk assessments (held in Croner)", "Staff training matrix (to be added to Primovex)", "Policies and procedures", "Infection prevention and control audits"],
   },
@@ -20,7 +20,8 @@ export const VISITS = [
   },
 ];
 
-export const visitById = (id) => VISITS.find((v) => v.id === id) || VISITS[0];
+// an older link or habit of "hiw" opens the HEIW sheet
+export const visitById = (id) => VISITS.find((v) => v.id === (id === "hiw" ? "heiw" : id)) || VISITS[0];
 
 // the report for one visit: its sections (in order), the gaps to put right, and when/how it was prepared
 export function buildReport({ visitId, data, preparedBy = "", now = new Date() }) {

@@ -569,14 +569,14 @@ export const HELP_ARTICLES = [
   },
   {
     id: "inspection-pack",
-    title: "Get ready for a HIW inspection or a Health and Safety visit",
+    title: "Get ready for a HEIW visit or a Health and Safety visit",
     topic: "Reports",
-    asks: ["how do i prepare for a hiw inspection", "print a report for the inspection", "health and safety visit report", "evidence pack for inspectors", "how do i save the inspection report as a pdf", "what do i need for an inspection"],
-    keywords: ["inspection", "hiw", "health and safety", "evidence", "pack", "pdf", "visit", "inspector", "report", "summary"],
+    asks: ["how do i prepare for a heiw visit", "print a report for the inspection", "health and safety visit report", "evidence pack for inspectors", "how do i save the inspection report as a pdf", "what do i need for an inspection"],
+    keywords: ["inspection", "heiw", "health and safety", "evidence", "pack", "pdf", "visit", "inspector", "report", "summary"],
     needs: "reports.inspection",
     where: "desktop",
     steps: [
-      "Ask the Orb on the desktop: \"We have a HIW inspection, print off a report ready\". It opens the Inspection pack for that visit. Or open Inspection pack from the menu and choose the visit.",
+      "Ask the Orb on the desktop: \"We have a HEIW visit, print off a report ready\". It opens the Inspection pack for that visit. Or open Inspection pack from the menu and choose the visit.",
       "Read \"To put right before the visit\" at the top. Each line says what is out of date or missing, such as a fire check that is overdue, a fridge incident still open, or a COSHH review that is overdue.",
       "Each area below shows the evidence Primovex holds: how many checks, when the last one was, and anything that failed. An area marked \"Not shown\" is one your role can't read; ask the Practice Manager to run it.",
       "Press \"Print or save as PDF\". In the print window choose \"Save as PDF\" as the printer to keep a copy, or your printer to print it.",
