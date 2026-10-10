@@ -7,6 +7,7 @@ import Alerts from "@/pages/Alerts";
 import TemperatureLog from "@/pages/TemperatureLog";
 import AdminDashboard from "@/pages/AdminDashboard";
 import Reports from "@/pages/Reports";
+import InspectionPack from "@/pages/InspectionPack";
 import Compliance from "@/pages/Compliance";
 import Notifications from "@/pages/Notifications";
 import ReorderCentre from "@/pages/ReorderCentre";
@@ -92,6 +93,7 @@ export default function DesktopApp() {
         <Route path="compliance" element={<PermissionGate anyOf={["compliance.read", "coshh.read"]}><Compliance /></PermissionGate>} />
         <Route path="admin/*" element={<PermissionGate capability="admin.access"><AdminDashboard /></PermissionGate>} />
         <Route path="reports" element={<PermissionGate capability="reports.read"><Reports /></PermissionGate>} />
+        <Route path="inspection" element={<PermissionGate capability="reports.inspection"><InspectionPack /></PermissionGate>} />
         <Route path="clinflow" element={<PermissionGate capability="clinflow.read"><ClinFlowWorkspace /></PermissionGate>} />
         <Route path="help" element={<Help />} />
         <Route path="developer-centre" element={<DeveloperCentre />} />

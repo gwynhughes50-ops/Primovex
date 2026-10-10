@@ -23,6 +23,9 @@ export const DESTINATIONS = [
   { id: "sars", label: "SARs", path: "/governance/sars", mobile: { path: "/governance/sars" }, capability: "governance.read", phrases: ["sars", "sar", "subject access requests", "subject access"] },
   { id: "significant-events", label: "Significant events", path: "/governance/significant-events", mobile: { path: "/governance/significant-events" }, phrases: ["significant events", "significant event"] },
   { id: "reports", label: "Reports", path: "/reports", mobile: null, capability: "reports.read", phrases: ["reports", "report", "reporting"] },
+  { id: "inspection", label: "the inspection pack", path: "/inspection", mobile: null, capability: "reports.inspection", phrases: ["inspection pack", "inspection report", "inspection evidence", "inspection summary"] },
+  { id: "inspection-hiw", label: "the HIW inspection pack", path: "/inspection?visit=hiw", mobile: null, capability: "reports.inspection", phrases: ["hiw pack", "hiw report", "hiw inspection pack", "hiw inspection report"] },
+  { id: "inspection-hs", label: "the Health and Safety visit pack", path: "/inspection?visit=hs", mobile: null, capability: "reports.inspection", phrases: ["health and safety pack", "health and safety report", "health and safety visit pack"] },
   { id: "clinflow", label: "ClinFlow", path: "/clinflow", mobile: null, capability: "clinflow.read", phrases: ["clinflow", "clin flow"] },
   { id: "security", label: "the Security Centre", path: "/security-centre", mobile: null, capability: "security.read", phrases: ["security centre", "security center", "sign in records", "usage report"] },
   { id: "practice-admin", label: "Practice Admin", path: "/practice-admin", mobile: null, capability: "practiceAdmin.read", phrases: ["practice admin", "practice administration", "practice settings"] },
@@ -36,7 +39,23 @@ const FILLER = /\b(?:the|my|our|page|screen|tab|section|area|module|please|now|f
 const clean = (text) => String(text || "").toLowerCase().replace(/[’‘']/g, "").replace(/[^a-z0-9\s]/g, " ").replace(FILLER, " ").replace(/\s+/g, " ").trim();
 
 // The destination a sentence names, if the whole of it is "<go to> <place>".
+// "We have a HIW inspection, print off a report", "get the evidence ready for the health and safety visit": the
+// Practice Manager is preparing for a visit, so open the inspection pack for it. Needs both a visit word and a word
+// for the paperwork, and a "how do I..." question goes to the help instead.
+export function parseInspectionRequest(text) {
+  const t = ` ${String(text || "").toLowerCase().replace(/[’‘']/g, "").replace(/&/g, " and ").replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim()} `;
+  if (/^ (?:how do i|how to|how can i|what is|what are|whats|explain|tell me about) /.test(t)) return null;
+  const hiw = /\bhiw\b/.test(t);
+  const hs = /\bhealth and safety\b/.test(t) || /\bh and s\b/.test(t);
+  const visit = hiw || hs || /\binspections?\b|\binspectors?\b/.test(t);
+  const paperwork = /\b(report|print|printout|pack|summary|evidence|ready|prepare|paperwork)\b/.test(t);
+  if (!visit || !paperwork) return null;
+  return { id: hiw ? "inspection-hiw" : hs ? "inspection-hs" : "inspection" };
+}
+
 export function parseNavigation(text) {
+  const inspection = parseInspectionRequest(text);
+  if (inspection) return inspection;
   const t = String(text || "").trim().replace(/[.!?]+$/g, "");
   const verb = t.match(VERB);
   if (!verb) return null;
