@@ -96,6 +96,8 @@ export function getSnoozeDate(option) {
   const date = new Date(now);
 
   switch (option) {
+    case "one_hour":
+      return new Date(now.getTime() + 60 * 60 * 1000);
     case "later_today":
       date.setHours(Math.max(date.getHours() + 3, 15), 0, 0, 0);
       return date;

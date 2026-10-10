@@ -8,6 +8,7 @@ import MobileBarcodeScanner from "@/components/ui/MobileBarcodeScanner";
 import MobileConnect from "./MobileConnect";
 import MobileCompliance from "./MobileCompliance";
 import MobileSessionShell from "./MobileSessionShell";
+import MessageCardHost from "@/messaging/MessageCardHost";
 import AskPrimovexPanel from "@/ai/components/AskPrimovexPanel";
 import usePrimovexAI from "@/ai/hooks/usePrimovexAI";
 import OperationalEscalationSheet from "./OperationalEscalationSheet";
@@ -908,6 +909,7 @@ export default function MobileLayout({ initialTab = "home" }) {
         </div>
       )}
 
+      <MessageCardHost />
       <AskPrimovexPanel variant="mobile" />
 
       <MobileBottomNav

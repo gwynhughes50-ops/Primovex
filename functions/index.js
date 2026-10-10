@@ -24,6 +24,7 @@ const { routeQuestion } = require("./services/orbRouterService");
 const { phraseAnswer } = require("./services/orbPhraseService");
 const { runRetention } = require("./services/retentionService");
 const { sendTeamMessage, findColleagues } = require("./services/teamMessageService");
+const { replyToMessage } = require("./services/messageReplyService");
 const { getOrbCapabilities } = require("./services/orbScope");
 const { notifySignificantEvent } = require("./services/significantEventNotify");
 const { runStockReview } = require("./services/stockReviewService");
@@ -627,6 +628,37 @@ exports.orbTeamMessage = onCall({ region: "europe-west2", timeoutSeconds: 30 }, 
       metadata: { role: result.role || null, recipients: result.sent },
     },
   }).catch((error) => console.error("Team message audit failed", { message: error?.message }));
+  return result;
+});
+
+// A reply to a message from a colleague, sent from the message card. Goes back to whoever sent that message;
+// refuses patient details; limited per person; audited without the words.
+exports.replyToMessage = onCall({ region: "europe-west2", timeoutSeconds: 20 }, async (request) => {
+  assertSignedIn(request);
+  const snapshot = await db.collection("users").doc(request.auth.uid).get();
+  if (!snapshot.exists) throw new HttpsError("failed-precondition", "A Primovex user profile is required.");
+  const profile = snapshot.data() || {};
+  if (profile.active === false) throw new HttpsError("permission-denied", "This account is not active.");
+  const result = await replyToMessage({
+    db,
+    callerUid: request.auth.uid,
+    callerName: profile.displayName || profile.email || "A colleague",
+    data: { notificationId: request.data?.notificationId, quick: request.data?.quick, text: request.data?.text },
+  });
+  appendGovernedAuditEvent({
+    db,
+    auth: request.auth,
+    profile,
+    data: {
+      action: "message.reply",
+      module: "inventory",
+      targetType: "message",
+      targetId: String(request.data?.notificationId || "").slice(0, 60),
+      summary: "A reply to a colleague's message was sent",
+      classification: "operational",
+      metadata: { quick: request.data?.quick ? String(request.data.quick).slice(0, 30) : null },
+    },
+  }).catch((error) => console.error("Message reply audit failed", { message: error?.message }));
   return result;
 });
 
