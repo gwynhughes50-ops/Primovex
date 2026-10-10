@@ -363,7 +363,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     : 'fixed bottom-6 right-6 top-6 z-[140] w-[min(470px,calc(100vw-3rem))]';
 
   const orbAwake = voiceState !== VOICE_STATES.SLEEPING;
-  const orbLabel = voiceState === VOICE_STATES.LISTENING ? 'Listening' : voiceState === VOICE_STATES.THINKING ? 'Thinking' : voiceState === VOICE_STATES.FOLLOW_UP ? 'Anything else?' : 'Say “Orb”';
+  const orbLabel = voiceState === VOICE_STATES.LISTENING ? 'Listening' : voiceState === VOICE_STATES.THINKING ? 'Thinking' : voiceState === VOICE_STATES.FOLLOW_UP ? 'Anything else?' : voiceState === VOICE_STATES.WAKING ? 'Starting…' : 'Tap to talk';
 
   return (
     <aside
