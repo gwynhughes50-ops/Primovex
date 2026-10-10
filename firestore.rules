@@ -616,6 +616,7 @@ match /subject_access_requests/{requestId} {
       return
         role == "System Admin" ? ["*"] :
         role == "Practice Manager" ? [
+          "stocktake.count", "stocktake.manage",
           "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
           "dashboard.read", "operations.read", "operations.manage",
           "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",
@@ -633,6 +634,7 @@ match /subject_access_requests/{requestId} {
           "audit.read", "audit.write", "orb.learning.review", "security.read", "security.manage"
         ] :
         role == "User" ? [
+          "stocktake.count",
           "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
           "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify",
           "purchasing.read", "suppliers.read", "connect.view",
@@ -641,6 +643,7 @@ match /subject_access_requests/{requestId} {
           "mobile.access", "mobile.biometricUnlock"
         ] :
         role == "Nurse" ? [
+          "stocktake.count",
           "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
           "inventory.read", "inventory.write", "inventory.verify", "connect.view",
           "temperature.read", "temperature.write", "temperature.resolveIncident",
@@ -648,17 +651,20 @@ match /subject_access_requests/{requestId} {
           "mobile.access", "mobile.biometricUnlock"
         ] :
         role == "HCA" ? [
+          "stocktake.count",
           "dashboard.read", "operations.read", "inventory.read", "inventory.write", "inventory.verify",
           "connect.view", "temperature.read", "temperature.write",
           "mobile.access", "mobile.biometricUnlock"
         ] :
         role == "Reception" ? [
+          "stocktake.count",
           "clinflow.read", "clinflow.capture", "clinflow.workflow",
           "dashboard.read", "operations.read", "inventory.read", "purchasing.read",
           "governance.read", "governance.write", "governance.manageConcerns", "governance.concernsTeam",
           "connect.view", "mobile.access"
         ] :
         role == "Caretaker" ? [
+          "stocktake.count",
           "dashboard.read", "operations.read", "connect.view",
           "temperature.read", "temperature.write",
           "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets",
@@ -962,6 +968,81 @@ match /subject_access_requests/{requestId} {
         )
       );
       allow delete: if isAdmin();
+    }
+
+    // STOCK TAKE: a physical count of the practice's stock by several people on their phones. A manager (stocktake.manage)
+    // requests one for everyone or named people; anyone who can count (stocktake.count) may also start one of their own.
+    // Each place to count is its own document, so two people claiming at once cannot overwrite each other, and counts
+    // are written only by the person who has claimed that place. Nothing here changes a stock figure: the manager
+    // reviews the differences and applies them through the normal stock rules (inventory.write).
+    function stockTakeCounter() {
+      return signedIn() && (hasPermission("stocktake", "count") || hasPermission("stocktake", "manage") || isAdmin());
+    }
+    function stockTakeManager() {
+      return signedIn() && (hasPermission("stocktake", "manage") || isAdmin());
+    }
+
+    match /stock_takes/{takeId} {
+      allow get, list: if stockTakeCounter();
+      allow create: if signedIn()
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.status == "open"
+        && (stockTakeManager() || (hasPermission("stocktake", "count") && request.resource.data.mode == "self"));
+      allow update: if stockTakeManager()
+        || (signedIn() && hasPermission("stocktake", "count")
+            && resource.data.createdByUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "reviewRequestedAt", "updatedAt"])
+            && request.resource.data.status in ["open", "review"]);
+      allow delete: if isAdmin();
+
+      match /places/{placeId} {
+        allow get, list: if stockTakeCounter();
+        // getAfter: the take and its places are created together, so the take is not there yet when this is checked
+        allow create: if stockTakeManager()
+          || (signedIn() && hasPermission("stocktake", "count")
+              && getAfter(/databases/$(database)/documents/stock_takes/$(takeId)).data.createdByUid == request.auth.uid);
+        // claim a free place for yourself; finish, release or reopen your own; managers can do anything
+        allow update: if stockTakeManager()
+          || (signedIn() && hasPermission("stocktake", "count")
+              && get(/databases/$(database)/documents/stock_takes/$(takeId)).data.status == "open"
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "claimedByUid", "claimedByName", "claimedAt", "doneAt"])
+              && (
+                (resource.data.status == "free" && request.resource.data.status == "claimed" && request.resource.data.claimedByUid == request.auth.uid)
+                || (resource.data.claimedByUid == request.auth.uid
+                    && (
+                      (request.resource.data.status in ["claimed", "done"] && request.resource.data.claimedByUid == request.auth.uid)
+                      || (request.resource.data.status == "free" && request.resource.data.claimedByUid == null)
+                    ))
+              ));
+        allow delete: if isAdmin();
+      }
+
+      match /counts/{countId} {
+        allow get, list: if stockTakeCounter();
+        // only the person who has claimed the place, while it is still being counted and the take is open
+        allow create, update: if stockTakeManager()
+          || (signedIn() && hasPermission("stocktake", "count")
+              && request.resource.data.countedByUid == request.auth.uid
+              && request.resource.data.applied == false
+              && get(/databases/$(database)/documents/stock_takes/$(takeId)).data.status == "open"
+              && get(/databases/$(database)/documents/stock_takes/$(takeId)/places/$(request.resource.data.placeId)).data.claimedByUid == request.auth.uid
+              && get(/databases/$(database)/documents/stock_takes/$(takeId)/places/$(request.resource.data.placeId)).data.status == "claimed");
+        allow delete: if stockTakeManager()
+          || (signedIn() && hasPermission("stocktake", "count")
+              && resource.data.countedByUid == request.auth.uid
+              && get(/databases/$(database)/documents/stock_takes/$(takeId)/places/$(resource.data.placeId)).data.status == "claimed");
+      }
+
+      // items found that are not in the system, for the manager to turn into stock (or dismiss)
+      match /additions/{additionId} {
+        allow get, list: if stockTakeCounter();
+        allow create: if signedIn() && hasPermission("stocktake", "count")
+          && request.resource.data.addedByUid == request.auth.uid
+          && request.resource.data.status == "new"
+          && get(/databases/$(database)/documents/stock_takes/$(takeId)).data.status == "open"
+          && get(/databases/$(database)/documents/stock_takes/$(takeId)/places/$(request.resource.data.placeId)).data.claimedByUid == request.auth.uid;
+        allow update, delete: if stockTakeManager();
+      }
     }
 
     // COSHH register: the hazardous substances the practice keeps, with PPE, first aid, where they are stored and

@@ -40,6 +40,7 @@ import { useSenseSession } from "@/contexts/SenseSessionContext";
 import MobileDeveloperIssueRecorder from "@/developer/MobileDeveloperIssueRecorder";
 import MobileCleanerHome from "./MobileCleanerHome";
 import MobileCoshh from "./MobileCoshh";
+import MobileStockTake from "./MobileStockTake";
 import "./mobileLayout.css";
 import { formatProductSubtitle } from "@/utils/productDisplay";
 
@@ -79,6 +80,7 @@ export default function MobileLayout({ initialTab = "home" }) {
   const [spaceScanError, setSpaceScanError] = useState("");
   const [showQuickNotes, setShowQuickNotes] = useState(false);
   const [showCoshh, setShowCoshh] = useState(false);
+  const [showStockTake, setShowStockTake] = useState(false);
   const [showAIActionSheet, setShowAIActionSheet] = useState(false);
   // "Go to compliance" said to the Orb: it asks this screen to switch tab.
   useEffect(() => {
@@ -381,6 +383,9 @@ export default function MobileLayout({ initialTab = "home" }) {
         break;
       case "coshh":
         setShowCoshh(true);
+        break;
+      case "stocktake":
+        setShowStockTake(true);
         break;
       case "kits":
         navigate("/inventory?tab=emergency");
@@ -924,6 +929,7 @@ export default function MobileLayout({ initialTab = "home" }) {
 
       <QuickNotesSheet open={showQuickNotes} onClose={() => setShowQuickNotes(false)} />
       {showCoshh && <MobileCoshh onClose={() => setShowCoshh(false)} />}
+      {showStockTake && <MobileStockTake onClose={() => setShowStockTake(false)} />}
 
       <MobileAIActionSheet
         open={showAIActionSheet}

@@ -46,4 +46,20 @@ t("the greeting uses the first name", () => {
   assert.match(home("Practice Manager"), /Good (morning|afternoon|evening), Gwyn/);
 });
 
+t("a stock take: counters get the tile, and a banner only while one is waiting for them", () => {
+  stub.takes = [];
+  const quiet = home("Nurse", ["inventory.write", "stocktake.count"]);
+  assert.ok(quiet.includes("Stock take") && !quiet.includes("needs your help"));
+  stub.takes = [{ id: "t1", status: "open", title: "October stock take", dueDate: "2026-10-20", createdByUid: "pm", audience: { type: "everyone" } }];
+  const waiting = home("Nurse", ["inventory.write", "stocktake.count"]);
+  assert.ok(waiting.includes("A stock take needs your help") && waiting.includes("October stock take") && waiting.includes("20/10/2026"));
+  stub.takes = [{ id: "t2", status: "open", title: "Not me", createdByUid: "pm", audience: { type: "people", uids: ["someone-else"] } }, { id: "t3", status: "review", title: "Done", createdByUid: "pm", audience: { type: "everyone" } }];
+  assert.ok(!home("Nurse", ["inventory.write", "stocktake.count"]).includes("needs your help"), "asked of someone else, or already with the manager");
+  stub.takes = [{ id: "t1", status: "open", title: "October stock take", createdByUid: "pm", audience: { type: "everyone" } }];
+  assert.ok(!home("Nurse", ["inventory.write"]).includes("needs your help"), "no banner without the permission");
+  for (const role of ["Caretaker", "Reception", "Practice Manager"]) assert.ok(home(role, ["stocktake.count", "compliance.recordChecks", "dashboard.read"]).includes("Stock take"), role);
+  assert.ok(!home("Partner", ["governance.read"]).includes("Stock take"));
+  stub.takes = [];
+});
+
 console.log(`\n${n} passed`);

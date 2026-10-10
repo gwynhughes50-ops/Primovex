@@ -5,6 +5,7 @@ export const ROUTE_MANIFEST = [
   { path: "/spaces", label: "Spaces & Sense", section: "core", iconKey: "sense" },
   { path: "/spaces", label: "Sense", section: "core", iconKey: "sense", alias: true },
   { path: "/inventory", label: "Inventory", section: "core", iconKey: "inventory", capability: "inventory.read", children: ["Stock", "Emergency Drugs", "Anaphylaxis Boxes"] },
+  { path: "/stocktake", label: "Stock take", section: "core", iconKey: "inventory", capability: "stocktake.manage" },
   { path: "/alerts", label: "Operations", section: "core", iconKey: "alerts", capability: "operations.read" },
   { path: "/governance/concerns", label: "Concerns", section: "core", iconKey: "governance", capability: "governance.manageConcerns" },
   { path: "/governance/sars", label: "SARs", section: "core", iconKey: "sar", capability: "governance.manageSars" },

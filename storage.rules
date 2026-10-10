@@ -42,6 +42,7 @@ service firebase.storage {
       return
         role == "System Admin" ? ["*"] :
         role == "Practice Manager" ? [
+          "stocktake.count", "stocktake.manage",
           "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
           "dashboard.read", "operations.read", "operations.manage",
           "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",
@@ -59,6 +60,7 @@ service firebase.storage {
           "audit.read", "audit.write", "orb.learning.review", "security.read", "security.manage"
         ] :
         role == "User" ? [
+          "stocktake.count",
           "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
           "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify",
           "purchasing.read", "suppliers.read", "connect.view",
@@ -67,6 +69,7 @@ service firebase.storage {
           "mobile.access", "mobile.biometricUnlock"
         ] :
         role == "Nurse" ? [
+          "stocktake.count",
           "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
           "inventory.read", "inventory.write", "inventory.verify", "connect.view",
           "temperature.read", "temperature.write", "temperature.resolveIncident",
@@ -74,17 +77,20 @@ service firebase.storage {
           "mobile.access", "mobile.biometricUnlock"
         ] :
         role == "HCA" ? [
+          "stocktake.count",
           "dashboard.read", "operations.read", "inventory.read", "inventory.write", "inventory.verify",
           "connect.view", "temperature.read", "temperature.write",
           "mobile.access", "mobile.biometricUnlock"
         ] :
         role == "Reception" ? [
+          "stocktake.count",
           "clinflow.read", "clinflow.capture", "clinflow.workflow",
           "dashboard.read", "operations.read", "inventory.read", "purchasing.read",
           "governance.read", "governance.write", "governance.manageConcerns", "governance.concernsTeam",
           "connect.view", "mobile.access"
         ] :
         role == "Caretaker" ? [
+          "stocktake.count",
           "dashboard.read", "operations.read", "connect.view",
           "temperature.read", "temperature.write",
           "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets",

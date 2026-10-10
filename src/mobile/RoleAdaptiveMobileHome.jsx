@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useSenseSession } from "@/contexts/SenseSessionContext";
 import { getRoleHome, visibleActions } from "./roleHomes";
 import MobileAttentionStrip from "./MobileAttentionStrip";
+import MobileStockTakeBanner from "./MobileStockTakeBanner";
 
 // The phone home for everyone except the Cleaner (who has MobileCleanerHome): its tiles come from the role
 // (see roleHomes.js). Managers and partners also see what needs attention at the top.
@@ -26,6 +27,8 @@ export default function RoleAdaptiveMobileHome({ onAction }) {
           <span>Orb</span>
         </button>
       </div>
+
+      <MobileStockTakeBanner onOpen={() => onAction?.("stocktake")} />
 
       {home.attention && <MobileAttentionStrip onAction={onAction} />}
 

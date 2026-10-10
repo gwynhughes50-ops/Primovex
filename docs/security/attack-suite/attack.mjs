@@ -10,7 +10,7 @@ import {
   assertSucceeds,
 } from "@firebase/rules-unit-testing";
 import {
-  doc, getDoc, getDocs, setDoc, updateDoc, addDoc, collection, deleteDoc, serverTimestamp, query, where,
+  doc, getDoc, getDocs, setDoc, updateDoc, addDoc, collection, deleteDoc, serverTimestamp, query, where, writeBatch,
 } from "firebase/firestore";
 import { ref, uploadBytes, getBytes, deleteObject } from "firebase/storage";
 
@@ -633,6 +633,85 @@ async function main() {
     await assertSucceeds(updateDoc(doc(nursemgr, "temperature_incidents", "inc-1"), { quarantined: true, quarantinedBy: "Nurse Manager" }));
     await assertSucceeds(updateDoc(doc(pm, "temperature_incidents", "inc-1"), { status: "resolved", resolvedBy: "PM" }));
     await assertFails(deleteDoc(doc(nursemgr, "temperature_incidents", "inc-1")));
+  });
+
+  console.log("\n=== 16. Stock take (stock_takes with places, counts, additions) ===");
+  const takeDoc = (uid, extra = {}) => ({ title: "October stock take", mode: "requested", status: "open", audience: { type: "everyone" }, placeCount: 2, createdByUid: uid, createdByName: "X", ...extra });
+  const placeDoc = (id, extra = {}) => ({ id, key: `store:${id}`, kind: "store", name: `Place ${id}`, status: "free", claimedByUid: null, claimedByName: null, ...extra });
+  await check("Practice Manager CAN request a stock take with its places", async () => {
+    await assertSucceeds(setDoc(doc(pm, "stock_takes", "st-1"), takeDoc("pm-uid")));
+    await assertSucceeds(setDoc(doc(pm, "stock_takes", "st-1", "places", "p1"), placeDoc("p1")));
+    await assertSucceeds(setDoc(doc(pm, "stock_takes", "st-1", "places", "p2"), placeDoc("p2")));
+  });
+  await check("A nurse CANNOT request a stock take for the team, or start one in someone else's name", async () => {
+    await assertFails(setDoc(doc(nurse, "stock_takes", "st-x1"), takeDoc("nurse-uid")));
+    await assertFails(setDoc(doc(nurse, "stock_takes", "st-x2"), takeDoc("pm-uid", { mode: "self" })));
+  });
+  await check("Cleaner, partner, read-only and anonymous can neither read nor start a stock take", async () => {
+    for (const who of [cleaner, partner, readonly, anon]) {
+      await assertFails(getDoc(doc(who, "stock_takes", "st-1")));
+      await assertFails(setDoc(doc(who, "stock_takes", "st-bad"), takeDoc("x", { mode: "self" })));
+    }
+  });
+  await check("A nurse CAN start a stock take of their own, with its places created together", async () => {
+    const batch = writeBatch(nurse);
+    batch.set(doc(nurse, "stock_takes", "st-self"), takeDoc("nurse-uid", { mode: "self", audience: { type: "people", uids: ["nurse-uid"] } }));
+    batch.set(doc(nurse, "stock_takes", "st-self", "places", "p1"), placeDoc("p1"));
+    await assertSucceeds(batch.commit());
+  });
+  await check("...but not add places to a stock take someone else started", () =>
+    assertFails(setDoc(doc(nurse, "stock_takes", "st-1", "places", "p9"), placeDoc("p9"))));
+
+  await check("A nurse CAN claim a free place for themselves", () =>
+    assertSucceeds(updateDoc(doc(nurse, "stock_takes", "st-1", "places", "p1"), { status: "claimed", claimedByUid: "nurse-uid", claimedByName: "Nurse", claimedAt: serverTimestamp() })));
+  await check("Nobody else can take a place that is already claimed, or claim in someone else's name", async () => {
+    await assertFails(updateDoc(doc(reporter, "stock_takes", "st-1", "places", "p1"), { status: "claimed", claimedByUid: "reporter-uid", claimedByName: "HCA", claimedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(reporter, "stock_takes", "st-1", "places", "p2"), { status: "claimed", claimedByUid: "nurse-uid", claimedByName: "Nurse", claimedAt: serverTimestamp() }));
+  });
+  await check("A claimer cannot rename a place or hand it to someone else", async () => {
+    await assertFails(updateDoc(doc(nurse, "stock_takes", "st-1", "places", "p1"), { name: "Renamed" }));
+    await assertFails(updateDoc(doc(nurse, "stock_takes", "st-1", "places", "p1"), { claimedByUid: "reporter-uid" }));
+  });
+  await check("Counts: only the person who claimed the place can write them, as themselves, and never as already applied", async () => {
+    const count = (uid, extra = {}) => ({ placeId: "p1", itemId: "i1", itemLabel: "Gloves", counted: 12, expected: 10, unexpected: false, countedByUid: uid, countedByName: "X", applied: false, ...extra });
+    await assertSucceeds(setDoc(doc(nurse, "stock_takes", "st-1", "counts", "p1_i1"), count("nurse-uid")));
+    await assertSucceeds(setDoc(doc(nurse, "stock_takes", "st-1", "counts", "p1_i1"), count("nurse-uid", { counted: 11 })));
+    await assertFails(setDoc(doc(reporter, "stock_takes", "st-1", "counts", "p1_i2"), count("reporter-uid", { itemId: "i2" })));
+    await assertFails(setDoc(doc(nurse, "stock_takes", "st-1", "counts", "p1_i3"), count("reporter-uid", { itemId: "i3" })));
+    await assertFails(setDoc(doc(nurse, "stock_takes", "st-1", "counts", "p1_i4"), count("nurse-uid", { itemId: "i4", applied: true })));
+    await assertFails(setDoc(doc(nurse, "stock_takes", "st-1", "counts", "p2_i1"), count("nurse-uid", { placeId: "p2" })));
+    await assertFails(deleteDoc(doc(reporter, "stock_takes", "st-1", "counts", "p1_i1")));
+  });
+  await check("Only a manager can mark a count as applied", async () => {
+    await assertFails(updateDoc(doc(nurse, "stock_takes", "st-1", "counts", "p1_i1"), { applied: true }));
+    await assertSucceeds(updateDoc(doc(pm, "stock_takes", "st-1", "counts", "p1_i1"), { applied: true, appliedByName: "PM" }));
+  });
+  await check("Items found that are not in the system: the claimer can add them as new; only a manager can handle them", async () => {
+    const addition = (uid, extra = {}) => ({ placeId: "p1", placeName: "Place p1", name: "Spare thermometer", quantity: 2, status: "new", addedByUid: uid, addedByName: "X", ...extra });
+    await assertSucceeds(addDoc(collection(nurse, "stock_takes", "st-1", "additions"), addition("nurse-uid")));
+    await assertFails(addDoc(collection(reporter, "stock_takes", "st-1", "additions"), addition("reporter-uid")));
+    await assertFails(addDoc(collection(nurse, "stock_takes", "st-1", "additions"), addition("nurse-uid", { status: "created" })));
+    await assertFails(addDoc(collection(nurse, "stock_takes", "st-1", "additions"), addition("reporter-uid")));
+  });
+  await check("A claimer can finish their own place and no one else's; a manager can free a stuck one", async () => {
+    await assertFails(updateDoc(doc(reporter, "stock_takes", "st-1", "places", "p1"), { status: "done", doneAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(nurse, "stock_takes", "st-1", "places", "p1"), { status: "done", doneAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(nurse, "stock_takes", "st-1", "counts", "p1_i9"), { placeId: "p1", itemId: "i9", counted: 1, expected: 1, countedByUid: "nurse-uid", applied: false }));
+    await assertSucceeds(updateDoc(doc(nurse, "stock_takes", "st-1", "places", "p1"), { status: "claimed" }));
+    await assertSucceeds(updateDoc(doc(pm, "stock_takes", "st-1", "places", "p1"), { status: "free", claimedByUid: null, claimedByName: null }));
+  });
+  await check("Whoever started a take can send it for review, nothing else; managers can change anything; only an admin deletes", async () => {
+    await assertSucceeds(updateDoc(doc(nurse, "stock_takes", "st-self"), { status: "review", reviewRequestedAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(nurse, "stock_takes", "st-self"), { title: "Renamed" }));
+    await assertFails(updateDoc(doc(nurse, "stock_takes", "st-self"), { status: "closed" }));
+    await assertFails(updateDoc(doc(reporter, "stock_takes", "st-self"), { status: "open" }));
+    await assertSucceeds(updateDoc(doc(pm, "stock_takes", "st-self"), { status: "closed" }));
+    await assertFails(deleteDoc(doc(pm, "stock_takes", "st-self")));
+    await assertSucceeds(deleteDoc(doc(admin, "stock_takes", "st-self")));
+  });
+  await check("Once a take is in review nobody can claim places or count", async () => {
+    await assertSucceeds(updateDoc(doc(pm, "stock_takes", "st-1"), { status: "review" }));
+    await assertFails(updateDoc(doc(reporter, "stock_takes", "st-1", "places", "p2"), { status: "claimed", claimedByUid: "reporter-uid", claimedByName: "HCA", claimedAt: serverTimestamp() }));
   });
 
   console.log("\n=== 15. COSHH register (coshh_substances and coshh_sds safety data sheets) ===");

@@ -59,6 +59,10 @@ export const CAPABILITIES = {
     recordChecks: "compliance.recordChecks",
     manageAssets: "compliance.manageAssets",
   },
+  stocktake: {
+    count: "stocktake.count",
+    manage: "stocktake.manage",
+  },
   coshh: {
     read: "coshh.read",
     manage: "coshh.manage",
@@ -164,6 +168,8 @@ export const CAPABILITY_CATALOG = [
   { id: "compliance.write", label: "Update compliance", group: "Compliance" },
   { id: "compliance.recordChecks", label: "Record QR/NFC compliance checks", group: "Compliance" },
   { id: "compliance.manageAssets", label: "Manage QR/NFC compliance assets", group: "Compliance" },
+  { id: "stocktake.count", label: "Take part in a stock take (claim places, count, add items found)", group: "Inventory" },
+  { id: "stocktake.manage", label: "Request, review and apply a stock take", group: "Inventory" },
   { id: "coshh.read", label: "View the COSHH register (hazardous substances, PPE, first aid)", group: "Compliance" },
   { id: "coshh.manage", label: "Maintain the COSHH register and upload safety data sheets", group: "Compliance" },
 
@@ -194,6 +200,8 @@ export const CAPABILITY_CATALOG = [
 export const ROLE_TEMPLATES = {
   "System Admin": ["*"],
   "Practice Manager": [
+    "stocktake.count",
+    "stocktake.manage",
     "clinflow.read",
     "clinflow.capture",
     "clinflow.workflow",
@@ -248,6 +256,7 @@ export const ROLE_TEMPLATES = {
     "security.manage",
   ],
   "User": [
+    "stocktake.count",
     "clinflow.read",
     "clinflow.workflow",
     "dashboard.read",
@@ -267,6 +276,7 @@ export const ROLE_TEMPLATES = {
     "mobile.biometricUnlock",
   ],
   "Nurse": [
+    "stocktake.count",
     "clinflow.read",
     "clinflow.workflow",
     "dashboard.read",
@@ -284,6 +294,7 @@ export const ROLE_TEMPLATES = {
     "mobile.biometricUnlock",
   ],
   "HCA": [
+    "stocktake.count",
     "dashboard.read",
     "operations.read",
     "inventory.read",
@@ -296,6 +307,7 @@ export const ROLE_TEMPLATES = {
     "mobile.biometricUnlock",
   ],
   "Reception": [
+    "stocktake.count",
     "clinflow.read",
     "clinflow.capture",
     "clinflow.workflow",
@@ -311,6 +323,7 @@ export const ROLE_TEMPLATES = {
     "mobile.access",
   ],
   "Caretaker": [
+    "stocktake.count",
     "dashboard.read",
     "operations.read",
     "connect.view",
