@@ -13,7 +13,7 @@ export const CARD = "rounded-2xl border border-[var(--medtrak-border)] bg-[var(-
 export function Sheet({ title, eyebrow, subtitle, onClose, children, wide = false }) {
   return (
     <div className="fixed inset-0 z-[130] flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-label={title}>
-      <section className={`max-h-[92dvh] w-full overflow-y-auto rounded-t-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-5 pb-6 pt-4 text-[var(--medtrak-text)] shadow-2xl sm:rounded-3xl ${wide ? "sm:max-w-4xl" : "sm:max-w-2xl"}`}>
+      <section className={`max-h-[calc(92dvh-var(--pvx-sheet-bottom-clearance,0px))] w-full overflow-y-auto rounded-t-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-5 pb-6 pt-4 text-[var(--medtrak-text)] shadow-2xl sm:rounded-3xl ${wide ? "sm:max-w-4xl" : "sm:max-w-2xl"}`}>
         <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-[var(--medtrak-border)] sm:hidden" />
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">

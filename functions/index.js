@@ -25,6 +25,7 @@ const { phraseAnswer } = require("./services/orbPhraseService");
 const { runRetention } = require("./services/retentionService");
 const { sendTeamMessage, findColleagues } = require("./services/teamMessageService");
 const { replyToMessage } = require("./services/messageReplyService");
+const { raiseFridgeAlert } = require("./services/fridgeAlertService");
 const { getOrbCapabilities } = require("./services/orbScope");
 const { notifySignificantEvent } = require("./services/significantEventNotify");
 const { runStockReview } = require("./services/stockReviewService");
@@ -660,6 +661,18 @@ exports.replyToMessage = onCall({ region: "europe-west2", timeoutSeconds: 20 }, 
     },
   }).catch((error) => console.error("Message reply audit failed", { message: error?.message }));
   return result;
+});
+
+// An out-of-range fridge reading: tells the roles ticked under Practice Admin (the Practice Manager by default)
+// so the person who recorded it does not have to go looking. Only the person who opened the incident can ask,
+// once per incident.
+exports.raiseFridgeAlert = onCall({ region: "europe-west2", timeoutSeconds: 20 }, async (request) => {
+  assertSignedIn(request);
+  const snapshot = await db.collection("users").doc(request.auth.uid).get();
+  if (!snapshot.exists) throw new HttpsError("failed-precondition", "A Primovex user profile is required.");
+  const profile = snapshot.data() || {};
+  if (profile.active === false) throw new HttpsError("permission-denied", "This account is not active.");
+  return raiseFridgeAlert({ db, callerUid: request.auth.uid, data: { incidentId: request.data?.incidentId } });
 });
 
 // Which colleague a first name (or first and last name) means, so the Orb can show who a message is going to

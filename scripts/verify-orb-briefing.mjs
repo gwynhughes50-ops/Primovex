@@ -29,6 +29,12 @@ t("what needs attention is separated from what is fine", () => {
   }
 });
 
+t("fridge checks that are missing are an attention item", () => {
+  assert.ok(needsAttention("1 of 3 fridges checked today. Not checked yet: Medicine fridge, Sample freezer."));
+  assert.ok(needsAttention("2 fridge incidents open: Vaccine fridge."));
+  assert.ok(!needsAttention("All 3 fridges have been checked today."));
+});
+
 t("the briefing leads with what needs attention and lists the rest as fine", () => {
   const r = composeBriefing([
     { label: "Alerts", text: "Active alerts: 2 running low.", attention: true },

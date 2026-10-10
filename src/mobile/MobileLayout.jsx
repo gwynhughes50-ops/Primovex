@@ -362,6 +362,9 @@ export default function MobileLayout({ initialTab = "home" }) {
       case "orb":
         openPrimovexAI(); // straight to the Orb
         break;
+      case "fridge-check":
+        openSpaceScanner(); // the fridge's QR code; an NFC tag is just tapped
+        break;
       case "kits":
         navigate("/inventory?tab=emergency");
         break;

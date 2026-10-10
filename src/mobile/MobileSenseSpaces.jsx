@@ -8,6 +8,8 @@ import { buildNfcUrl, nativeNfcAvailable, writeNfcUrl } from '@/modules/sense/se
 import { loadSenseState, saveSenseState, upsertNfcTag } from '@/modules/sense/services/senseStore';
 import { getActiveCleaningSession, markRoomStocked, subscribeRoomOperational } from '@/modules/facilities/services/cleaningRecordService';
 import MobileFridgeSheet from './MobileFridgeSheet';
+import MobileFridgeCheckSheet from './MobileFridgeCheckSheet';
+import { isFridgeAsset } from './fridgeCheck';
 import { subscribeToEquipmentSightings } from '@/modules/equipment/services/equipmentSightingService';
 
 function sessionStartedAtMs(session) {
@@ -36,6 +38,7 @@ export default function MobileSenseSpaces({ onScan, onBleScan }) {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(null);
   const [selectedAsset, setSelectedAsset] = useState(null);
+  const [checkAsset, setCheckAsset] = useState(null); // a fridge whose tag was just scanned: the temperature check
   const [writeStatus, setWriteStatus] = useState('idle');
   const [writeMessage, setWriteMessage] = useState('');
   const [stockMessage, setStockMessage] = useState('');
@@ -48,7 +51,7 @@ export default function MobileSenseSpaces({ onScan, onBleScan }) {
     });
   }
   const { activeSenseSession } = useSenseSession();
-  const { displayName, user, role, isAdmin } = useAuth();
+  const { displayName, user, role, isAdmin, can } = useAuth();
   const { state: senseState } = useSenseContext();
 
   async function writeSpaceTag(space) {
@@ -116,7 +119,8 @@ export default function MobileSenseSpaces({ onScan, onBleScan }) {
     if (!activeSenseSession?.senseObjectId || activeSenseSession.senseObjectType !== 'asset') return;
     if (Date.now() - sessionStartedAtMs(activeSenseSession) > 15000) return;
     const match = senseState.assets.find((asset) => asset.id === activeSenseSession.senseObjectId);
-    if (match) setSelectedAsset(match);
+    // A fridge or freezer tag goes straight to the temperature check; anything else opens its own sheet.
+    if (match) { if (isFridgeAsset(match) && can('temperature.write')) setCheckAsset(match); else setSelectedAsset(match); }
   }, [activeSenseSession?.senseObjectId]);
 
   const [sightings, setSightings] = useState(new Map());
@@ -138,6 +142,32 @@ export default function MobileSenseSpaces({ onScan, onBleScan }) {
   }, [selected, senseState.assets]);
   const cleaningSession = selected ? getActiveCleaningSession(roomOperational, selected.id) : null;
 
+  const roomButton = (space) => <button key={space.id} onClick={()=>{setWriteStatus('idle');setWriteMessage('');setStockMessage('');setSelected(space);}} className="flex w-full items-center justify-between rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-2.5 text-left"><span><b className="block">{space.name}</b><small className="text-[var(--medtrak-muted)]">{space.type} · {state.zones.find(z=>z.id===space.zoneId)?.name || 'No zone'}</small></span><ChevronRight className="h-4 w-4 text-[var(--medtrak-muted)]"/></button>;
+
+  // One group of rooms (a floor, or the rooms that have no floor yet) that opens and closes.
+  const roomGroup = (id, title, rooms) => {
+    const isExpanded = Boolean(query.trim()) || expandedFloors.has(id);
+    return <div key={id} className="overflow-hidden rounded-xl border border-[var(--medtrak-border)]"><button onClick={()=>toggleFloor(id)} className="flex w-full items-center justify-between px-3 py-2.5 text-left"><span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.12em] text-[var(--medtrak-muted)]">{isExpanded ? <ChevronDown className="h-3.5 w-3.5"/> : <ChevronRight className="h-3.5 w-3.5"/>}{title}</span><span className="text-xs text-[var(--medtrak-muted)]">{rooms.length} room{rooms.length===1?'':'s'}</span></button>{isExpanded && <div className="space-y-2 border-t border-[var(--medtrak-border)] p-2.5">{rooms.map(roomButton)}</div>}</div>;
+  };
+
+  // A site's rooms by floor, then any rooms that have no floor set (they used to be left out, so a site whose
+  // rooms hadn't been given floors looked empty), and a plain message if it has no rooms at all.
+  const renderSite = (site) => {
+    const floors = state.floors.filter((floor) => floor.siteId === site.id).sort((a, b) => (a.order || 0) - (b.order || 0));
+    const floorIds = new Set(floors.map((floor) => floor.id));
+    const siteSpaces = spaces.filter((space) => space.siteId === site.id);
+    const onAFloor = (space) => floorIds.has(space.floorId) || (space.linkedFloorIds || []).some((id) => floorIds.has(id));
+    const groups = floors.map((floor) => ({ floor, rooms: siteSpaces.filter((space) => space.floorId === floor.id || space.linkedFloorIds?.includes(floor.id)) })).filter((group) => group.rooms.length);
+    const unfloored = siteSpaces.filter((space) => !onAFloor(space));
+    const hasAny = state.spaces.some((space) => space.siteId === site.id && space.status !== 'archived');
+    return <section key={site.id} className="pvx-mobile-card"><div className="flex items-center gap-2"><Building2 className="h-5 w-5 text-[var(--medtrak-accent)]"/><h2 className="font-bold">{site.name}</h2></div><div className="mt-2 space-y-2">
+      {groups.map(({ floor, rooms }) => roomGroup(floor.id, floor.name, rooms))}
+      {unfloored.length > 0 && roomGroup(`no-floor-${site.id}`, groups.length ? 'Other rooms' : 'Rooms', unfloored)}
+      {!hasAny && <p className="rounded-xl border border-dashed border-[var(--medtrak-border)] p-3 text-sm text-[var(--medtrak-muted)]">No rooms have been added to {site.name} yet. They are added under Spaces on the desktop app.</p>}
+      {hasAny && !groups.length && !unfloored.length && query.trim() && <p className="text-sm text-[var(--medtrak-muted)]">No rooms here match your search.</p>}
+    </div></section>;
+  };
+
   return (
     <main className="pvx-mobile-page pvx-mobile-stack">
       <section className="pvx-mobile-card">
@@ -152,7 +182,13 @@ export default function MobileSenseSpaces({ onScan, onBleScan }) {
 
       <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--medtrak-muted)]"/><input value={query} onChange={(e)=>setQuery(e.target.value)} placeholder="Find a room, kitchen or stairwell" className="w-full rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] py-3 pl-10 pr-3"/></div>
 
-      {state.sites.map((site) => <section key={site.id} className="pvx-mobile-card"><div className="flex items-center gap-2"><Building2 className="h-5 w-5 text-[var(--medtrak-accent)]"/><h2 className="font-bold">{site.name}</h2></div><div className="mt-2 space-y-2">{state.floors.filter((floor)=>floor.siteId===site.id).sort((a,b)=>(a.order||0)-(b.order||0)).map((floor)=>{const floorSpaces=spaces.filter((space)=>space.siteId===site.id&&(space.floorId===floor.id||space.linkedFloorIds?.includes(floor.id)));if(!floorSpaces.length)return null;const isExpanded=Boolean(query.trim())||expandedFloors.has(floor.id);return <div key={floor.id} className="overflow-hidden rounded-xl border border-[var(--medtrak-border)]"><button onClick={()=>toggleFloor(floor.id)} className="flex w-full items-center justify-between px-3 py-2.5 text-left"><span className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.12em] text-[var(--medtrak-muted)]">{isExpanded ? <ChevronDown className="h-3.5 w-3.5"/> : <ChevronRight className="h-3.5 w-3.5"/>}{floor.name}</span><span className="text-xs text-[var(--medtrak-muted)]">{floorSpaces.length} room{floorSpaces.length===1?'':'s'}</span></button>{isExpanded && <div className="space-y-2 border-t border-[var(--medtrak-border)] p-2.5">{floorSpaces.map((space)=><button key={space.id} onClick={()=>{setWriteStatus('idle');setWriteMessage('');setStockMessage('');setSelected(space);}} className="flex w-full items-center justify-between rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-2.5 text-left"><span><b className="block">{space.name}</b><small className="text-[var(--medtrak-muted)]">{space.type} · {state.zones.find(z=>z.id===space.zoneId)?.name || 'No zone'}</small></span><ChevronRight className="h-4 w-4 text-[var(--medtrak-muted)]"/></button>)}</div>}</div>})}</div></section>)}
+      {state.sites.map(renderSite)}
+      {(() => {
+        // rooms that point at a site that isn't in the list would otherwise be invisible
+        const siteIds = new Set(state.sites.map((site) => site.id));
+        const orphans = spaces.filter((space) => !siteIds.has(space.siteId));
+        return orphans.length ? <section className="pvx-mobile-card"><div className="flex items-center gap-2"><Building2 className="h-5 w-5 text-[var(--medtrak-accent)]"/><h2 className="font-bold">Rooms without a site</h2></div><div className="mt-2 space-y-2">{roomGroup('no-site', 'Rooms', orphans)}</div></section> : null;
+      })()}
 
       {assets.length > 0 && <section className="pvx-mobile-card"><div className="flex items-center gap-2"><Boxes className="h-5 w-5 text-[var(--medtrak-accent)]"/><h2 className="font-bold">Equipment</h2></div><div className="mt-2 space-y-2">{assets.map((asset) => { const sighting = sightings.get(asset.id); return <button key={asset.id} onClick={() => setSelectedAsset(asset)} className="flex w-full items-center justify-between rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-2.5 text-left"><span><b className="block">{asset.name}</b><small className="text-[var(--medtrak-muted)]">{asset.category || 'Equipment'}{asset.monitoring?.fridgeId ? ' · Live temperature' : ''}{sighting?.lastSeenAt ? ` · Seen ${timeAgo(sighting.lastSeenAt)}${sighting.lastSeenSpaceName ? ` near ${sighting.lastSeenSpaceName}` : ''}` : ''}</small></span><ChevronRight className="h-4 w-4 text-[var(--medtrak-muted)]"/></button>; })}</div></section>}
 
@@ -188,6 +224,7 @@ export default function MobileSenseSpaces({ onScan, onBleScan }) {
         </section></div>}
 
       {selectedAsset && <MobileFridgeSheet asset={selectedAsset} onClose={() => setSelectedAsset(null)} />}
+      {checkAsset && <MobileFridgeCheckSheet asset={checkAsset} onClose={() => setCheckAsset(null)} />}
     </main>
   );
 }

@@ -10,6 +10,10 @@ import { loadSenseState, saveSenseState, upsertNfcTag } from '@/modules/sense/se
 import { loadSpaceRegistry } from '@/modules/sense/services/sharedSpaceRegistry';
 import { nativeBleAvailable, onBleEvent, parseIBeaconValue, startBleScan } from '@/modules/sense/services/bleService';
 import { upsertEquipment } from '@/modules/equipment/services/equipmentRegistry';
+import { reportRoomIssue } from '@/services/roomIssueService';
+import { getQrImageUrl } from '@/lib/qrCode';
+import { isFridgeAsset } from './fridgeCheck';
+import { isQuarantined } from '@/modules/temperature/fridgeIncidents';
 
 function toDate(value) {
   if (!value) return null;
@@ -38,6 +42,9 @@ function timeAgo(value) {
 export default function MobileFridgeSheet({ asset, onClose }) {
   const { displayName, user, isAdmin } = useAuth();
   const actorName = displayName || user?.email || 'Signed-in user';
+  // Only a fridge or freezer has temperatures and stock inside it; anything else (a printer, a scanner) is just equipment.
+  const isFridge = isFridgeAsset(asset);
+  const [showQr, setShowQr] = useState(false);
   const unitId = asset?.monitoring?.fridgeId || '';
   const min = asset?.monitoring?.min;
   const max = asset?.monitoring?.max;
@@ -186,7 +193,10 @@ export default function MobileFridgeSheet({ asset, onClose }) {
     setIssueBusy(true);
     setIssueError('');
     try {
-      await addDocResendSafe(collection(db, 'temperature_incidents'), {
+      if (!isFridge) {
+        // equipment that isn't a fridge: the same route a room issue takes, to the caretaker
+        await reportRoomIssue({ roomId: asset.currentSpaceId || asset.homeSpaceId || '', roomName: `${asset.name} (equipment)`, note: [issueSummary.trim(), issueDetails.trim()].filter(Boolean).join(' - ') });
+      } else await addDocResendSafe(collection(db, 'temperature_incidents'), {
         unitId: unitId || asset.id,
         unitName: asset.name,
         unitType: 'fridge',
@@ -204,7 +214,7 @@ export default function MobileFridgeSheet({ asset, onClose }) {
         resolvedBy: null,
         resolutionNotes: '',
       });
-      setIssueSuccess('Issue logged.');
+      setIssueSuccess(isFridge ? 'Issue logged.' : 'Sent to the caretaker.');
       setIssueSummary('');
       setIssueDetails('');
       setShowIssueForm(false);
@@ -223,13 +233,19 @@ export default function MobileFridgeSheet({ asset, onClose }) {
         <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-[var(--medtrak-border)]" />
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--medtrak-accent)]">Fridge / Cold chain</p>
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--medtrak-accent)]">{isFridge ? 'Fridge / Cold chain' : 'Equipment'}</p>
             <h2 className="mt-1 text-2xl font-bold">{asset.name}</h2>
-            {Number.isFinite(min) && Number.isFinite(max) && <p className="text-sm text-[var(--medtrak-muted)]">Safe range {min}°C to {max}°C</p>}
+            {isFridge && Number.isFinite(min) && Number.isFinite(max) && <p className="text-sm text-[var(--medtrak-muted)]">Safe range {min}°C to {max}°C</p>}
+            {!isFridge && <p className="text-sm text-[var(--medtrak-muted)]">{asset.category || 'Equipment'}{homeSpaceName ? ` · belongs in ${homeSpaceName}` : ''}</p>}
           </div>
           <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full border border-[var(--medtrak-border)]" aria-label="Close"><X className="h-5 w-5" /></button>
         </div>
 
+        {isFridge && incidents.some(isQuarantined) && (
+          <p className="mt-4 flex items-center gap-2 rounded-2xl border border-rose-500/50 bg-rose-500/10 p-3 text-sm font-bold text-rose-700" role="alert"><AlertTriangle className="h-4 w-4 shrink-0" /> Quarantined. Do not use the stock in this fridge until a manager clears it.</p>
+        )}
+
+        {isFridge && (
         <div className={`mt-4 rounded-2xl border p-4 ${outOfRange ? 'border-rose-500/40 bg-rose-500/10' : 'border-[var(--medtrak-border)] bg-[var(--medtrak-bg)]'}`}>
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]"><Thermometer className="h-3.5 w-3.5" />Latest reading</div>
           {unitId ? (
@@ -242,6 +258,7 @@ export default function MobileFridgeSheet({ asset, onClose }) {
           ) : <p className="mt-1 text-sm text-[var(--medtrak-muted)]">This fridge isn't linked to a temperature unit yet.</p>}
           {isAdmin && readingError && <p className="mt-1 text-xs text-rose-500">Reading lookup error: {readingError}</p>}
         </div>
+        )}
 
         {incidents.length > 0 && (
           <div className="mt-4 space-y-2">
@@ -255,6 +272,7 @@ export default function MobileFridgeSheet({ asset, onClose }) {
           </div>
         )}
 
+        {isFridge && (
         <div className="mt-4">
           <p className="text-xs font-bold uppercase tracking-[.12em] text-[var(--medtrak-muted)]">Stock in this fridge</p>
           {stockHere.length ? (
@@ -268,13 +286,14 @@ export default function MobileFridgeSheet({ asset, onClose }) {
             </div>
           ) : <p className="mt-2 text-sm text-[var(--medtrak-muted)]">No stock assigned to this fridge yet — assign it from Inventory.</p>}
         </div>
+        )}
 
         {issueSuccess && <p className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700"><CheckCircle2 className="mr-2 inline h-4 w-4" />{issueSuccess}</p>}
 
         {showIssueForm ? (
           <form onSubmit={submitIssue} className="mt-4 space-y-2 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3">
             <label className="block text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">What's wrong?
-              <input autoFocus value={issueSummary} onChange={(e) => setIssueSummary(e.target.value)} placeholder="e.g. Door left open" className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2 text-sm text-[var(--medtrak-text)]" />
+              <input autoFocus value={issueSummary} onChange={(e) => setIssueSummary(e.target.value)} placeholder={isFridge ? 'e.g. Door left open' : 'e.g. Paper jam, screen cracked'} className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2 text-sm text-[var(--medtrak-text)]" />
             </label>
             <label className="block text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Details (optional)
               <textarea rows={2} value={issueDetails} onChange={(e) => setIssueDetails(e.target.value)} className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2 text-sm text-[var(--medtrak-text)]" />
@@ -287,11 +306,23 @@ export default function MobileFridgeSheet({ asset, onClose }) {
           </form>
         ) : (
           <button onClick={() => { setShowIssueForm(true); setIssueSuccess(''); }} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 font-bold text-amber-700">
-            <AlertTriangle className="h-5 w-5" />Log an issue with this fridge
+            <AlertTriangle className="h-5 w-5" />{isFridge ? 'Log an issue with this fridge' : 'Report a problem with this equipment'}
           </button>
         )}
 
         {writeMessage && <p className={`mt-4 rounded-xl border p-3 text-sm ${writeStatus === 'error' ? 'border-red-500/30 bg-red-500/10 text-red-700' : writeStatus === 'success' ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700' : 'border-[var(--medtrak-border)] bg-[var(--medtrak-bg)]'}`}>{writeStatus === 'success' && <CheckCircle2 className="mr-2 inline h-4 w-4" />}{writeMessage}</p>}
+        {isAdmin && (
+          <div className="mt-2">
+            <button type="button" onClick={() => setShowQr((v) => !v)} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] px-4 py-3 font-bold">{showQr ? 'Hide the QR code' : 'Show a QR code to print'}</button>
+            {showQr && (
+              <div className="mt-2 rounded-2xl border border-[var(--medtrak-border)] bg-white p-4 text-center text-slate-900">
+                <img src={getQrImageUrl(buildNfcUrl('asset', asset.id), 240)} alt={`QR code for ${asset.name}`} className="mx-auto h-56 w-56" />
+                <p className="mt-2 font-bold">{asset.name}</p>
+                <p className="text-xs text-slate-600">{isFridge ? 'Stick this on the fridge. Scanning it opens the temperature check.' : 'Stick this on the equipment. Scanning it opens this page.'}</p>
+              </div>
+            )}
+          </div>
+        )}
         {isAdmin && nativeNfcAvailable() && <button onClick={writeAssetTag} disabled={writeStatus === 'writing'} className="mt-2 flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] px-4 py-3 font-bold disabled:opacity-60"><Sparkles className="h-5 w-5" />{writeStatus === 'writing' ? 'Hold a blank tag…' : 'Write this fridge to a tag'}</button>}
 
         {isAdmin && (

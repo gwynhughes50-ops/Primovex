@@ -157,3 +157,8 @@ body.pvx-native-barcode-active > .pvx-native-barcode-overlay {
 .pvx-role-home > * { min-width: 0; }
 [data-primovex-client="android"] .grid:not([class*="grid-cols"]),
 [data-primovex-client="mobile-web"] .grid:not([class*="grid-cols"]) { grid-template-columns: minmax(0, 1fr); }
+
+/* The phone's own navigation bar can sit over the bottom of a full-screen sheet and hide its buttons.
+   Every bottom sheet is lifted clear of it (3rem is the height of the three-button bar). */
+[data-primovex-client="android"] { --pvx-sheet-bottom-clearance: 3rem; }
+[data-primovex-client="android"] .fixed.inset-0:is(.items-end, .items-center, .place-items-center) { padding-bottom: var(--pvx-sheet-bottom-clearance); }

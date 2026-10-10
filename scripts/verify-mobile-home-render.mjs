@@ -4,6 +4,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import RoleAdaptiveMobileHome from "../src/mobile/RoleAdaptiveMobileHome.jsx";
 import { stub } from "./stubs/mobileHomeStubs.js";
 
+// the room list is kept in the browser's storage; a test has none
+const store = new Map();
+globalThis.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
+globalThis.window = globalThis.window || { addEventListener() {}, removeEventListener() {}, location: { origin: "http://localhost" } };
+
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
 const home = (role, capabilities = ["*"]) => { stub.role = role; stub.capabilities = capabilities; return renderToStaticMarkup(React.createElement(RoleAdaptiveMobileHome, { onAction: () => {} })); };

@@ -20,7 +20,7 @@ for (const m of source.matchAll(/id: '([a-zA-Z.]+)', label: '[^']*', requiredCap
 registered.set("emergency.readiness", "inventory.read");
 registered.set("anaphylaxis.readiness", "inventory.read");
 
-const NEVER_SENT = ["briefing.daily", "app.navigate", "person.messageDraft", "reminder.draft", "stock.expiredDraft", "stock.countDraft", "stock.inDraft", "compliance.lastCheck", "compliance.waterTemps", "security.lastLogin", "governance.sarOverview", "governance.concernsOverview", "governance.concernLookup", "governance.sarLookup", "governance.seLookup", "se.reportDraft", "knowledge.faqLookup"];
+const NEVER_SENT = ["coldChain.checksToday", "briefing.daily", "app.navigate", "person.messageDraft", "reminder.draft", "stock.expiredDraft", "stock.countDraft", "stock.inDraft", "compliance.lastCheck", "compliance.waterTemps", "security.lastLogin", "governance.sarOverview", "governance.concernsOverview", "governance.concernLookup", "governance.sarLookup", "governance.seLookup", "se.reportDraft", "knowledge.faqLookup"];
 
 t("every lookup the model can choose exists in the app, with the same permission", () => {
   for (const tool of ORB_TOOLS) {

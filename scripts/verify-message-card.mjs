@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { QUICK_REPLIES, SNOOZE_CHOICES, isPersonMessage, messageQueue, senderOf, validateReply, whenLabel } from "../src/messaging/messageCard.js";
+import { QUICK_REPLIES, SNOOZE_CHOICES, isCardMessage, isFridgeAlert, isPersonMessage, messageQueue, senderOf, validateReply, whenLabel } from "../src/messaging/messageCard.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
@@ -16,6 +16,16 @@ t("only a person writing to a person counts as a message", () => {
   assert.ok(!isPersonMessage(msg("a", { createdByUid: "" })));
   assert.ok(!isPersonMessage(msg("a", { automated: true })));
   assert.ok(!isPersonMessage(null));
+});
+
+t("a fridge alert is a card message too, but only with an incident to act on", () => {
+  const alert = { id: "f1", kind: "fridge-alert", automated: true, incidentId: "inc-1", title: "Vaccine fridge is out of range", read: false, createdAt: at("2026-10-10T09:00:00") };
+  assert.ok(isFridgeAlert(alert) && isCardMessage(alert));
+  assert.ok(!isPersonMessage(alert), "it isn't a person writing, so there is no reply");
+  assert.ok(!isCardMessage({ ...alert, incidentId: "" }));
+  assert.ok(!isCardMessage({ ...alert, kind: "overdue" }));
+  assert.deepEqual(messageQueue([alert, msg("a", { createdAt: at("2026-10-10T10:00:00") })], { now }).map((m) => m.id), ["f1", "a"]);
+  assert.deepEqual(messageQueue([{ ...alert, read: true }], { now }), []);
 });
 
 t("the card shows unread, un-snoozed messages, oldest first", () => {

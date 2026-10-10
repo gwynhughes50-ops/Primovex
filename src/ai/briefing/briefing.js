@@ -6,6 +6,7 @@ export const BRIEFING_SECTIONS = [
   { id: "inventory.expiring", label: "Expiry", lines: 1 },
   { id: "inventory.lowStock", label: "Low stock", lines: 1 },
   { id: "coldChain.latestStatus", label: "Fridges", lines: 1 },
+  { id: "coldChain.checksToday", label: "Fridge checks", lines: 2 },
   { id: "facilities.cleaningStatus", label: "Cleaning", lines: 2 },
   { id: "compliance.lastCheck", label: "Fire alarm test", input: { kind: "fire_alarm" }, lines: 2 },
   { id: "tasks.quickNotes", label: "Your notes", lines: 1 },
@@ -28,7 +29,7 @@ export function headlineOf(text, lines = 1) {
 }
 
 const FINE = /\b(?:no active alerts|nothing (?:has expired|expires|needs|in stock|is)|no (?:open|outstanding)|none (?:are )?overdue|every room|all \d+|all .* (?:in range|ok|fine)|up to date|no items|is up to date|0 )/i;
-const WORRY = /\b(?:overdue|expired|low\b|out of stock|haven't been|has not been|not been cleaned|outside|failed|not yet acknowledged|out of range|alert|unavailable|needs? (?:attention|checking))/i;
+const WORRY = /\b(?:overdue|expired|low\b|out of stock|haven't been|has not been|not been cleaned|outside|failed|not yet acknowledged|not checked|incidents? open|out of range|alert|unavailable|needs? (?:attention|checking))/i;
 
 export function needsAttention(text) {
   const t = String(text || "");

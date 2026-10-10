@@ -31,7 +31,7 @@ function NewMeeting({ staff, actor, onClose, onCreated }) {
           <PeoplePicker people={staff} selectedIds={form.attendees.map((p) => p.id)} onChange={(ids) => setForm({ ...form, attendees: staff.filter((p) => ids.includes(p.id)) })} />
         </div>
         <ErrorText>{error}</ErrorText>
-        <div className="flex justify-end gap-2"><button type="button" onClick={onClose} className={SECONDARY}>Cancel</button><button type="button" disabled={busy} onClick={save} className={PRIMARY}>Create</button></div>
+        <div className="sticky bottom-0 -mx-5 -mb-6 mt-3 flex justify-end gap-2 border-t border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-5 py-3"><button type="button" onClick={onClose} className={SECONDARY}>Cancel</button><button type="button" disabled={busy} onClick={save} className={PRIMARY}>Create</button></div>
       </div>
     </Sheet>
   );

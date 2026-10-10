@@ -101,7 +101,7 @@ export default function SeReportForm({ actor, onClose, onReported }) {
           </div>
         )}
         <ErrorText>{error}</ErrorText>
-        <div className="flex justify-end gap-2 pt-1">
+        <div className="sticky bottom-0 -mx-5 -mb-6 mt-3 flex justify-end gap-2 border-t border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-5 py-3">
           <button type="button" onClick={onClose} disabled={busy} className={SECONDARY}>Cancel</button>
           <button type="button" onClick={submit} disabled={busy} className={PRIMARY}>{busy ? "Sending…" : "Report event"}</button>
         </div>

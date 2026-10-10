@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { httpsCallable } from "firebase/functions";
-import { BellRing, CheckCircle2, ChevronLeft, ChevronRight, Clock, MessageSquare, Send, X } from "lucide-react";
+import { BellRing, CheckCircle2, ChevronLeft, ChevronRight, Clock, MessageSquare, Send, ShieldAlert, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { functions } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import useNotifications from "@/hooks/useNotifications";
-import { QUICK_REPLIES, REPLY_MAX, SNOOZE_CHOICES, messageQueue, senderOf, validateReply, whenLabel } from "./messageCard";
+import FridgeIncidentSheet from "@/components/temperature/FridgeIncidentSheet";
+import { QUICK_REPLIES, REPLY_MAX, SNOOZE_CHOICES, isFridgeAlert, messageQueue, senderOf, validateReply, whenLabel } from "./messageCard";
 
 // A message from a colleague appears in the middle of the screen, on the desktop and the phone, as soon as
 // it arrives (or when the person signs in): who it is from, what it says, and Reply, Dismiss or Snooze.
@@ -28,6 +29,7 @@ export default function MessageCardHost() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
+  const [actionFor, setActionFor] = useState(null); // a fridge incident being acted on
   const [tick, setTick] = useState(() => Date.now());
   const firstButton = useRef(null);
   const phone = isPhone();
@@ -98,16 +100,25 @@ export default function MessageCardHost() {
     if (url && url !== "/notifications") navigate(url);
   };
 
+  // "Take action" on a fridge alert: put the card aside for now and open the incident
+  const takeAction = () => {
+    setActionFor(current.incidentId);
+    setHidden((old) => new Set(old).add(current.id));
+    if (browsing) setBrowsing(false);
+  };
+
   if (isSafeSyntheticMode() || !uid) return null;
+  const incidentSheet = actionFor ? <FridgeIncidentSheet incidentId={actionFor} onClose={() => setActionFor(null)} /> : null;
   const toastView = toast ? <div role="status" className="fixed bottom-24 left-1/2 z-[170] flex -translate-x-1/2 items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> {toast}</div> : null;
 
   // nothing on screen: on the phone, a small button for anything put aside or snoozed
   if (!current) {
     const unread = messageQueue(rows, { now, hidden, everything: true });
-    if (!phone || !unread.length) return toastView;
+    if (!phone || !unread.length) return <>{toastView}{incidentSheet}</>;
     return (
       <>
       {toastView}
+      {incidentSheet}
       <button type="button" onClick={() => { setBrowsing(true); setIndex(0); }} className="fixed bottom-24 left-3 z-[120] inline-flex min-h-11 items-center gap-2 rounded-full border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-4 text-sm font-semibold shadow-lg" aria-label={`Messages, ${unread.length} unread`}>
         <MessageSquare className="h-4 w-4 text-[var(--medtrak-accent)]" aria-hidden="true" /> Messages ({unread.length})
       </button>
@@ -116,18 +127,20 @@ export default function MessageCardHost() {
   }
 
   const position = browsing ? `${Math.min(index, queue.length - 1) + 1} of ${queue.length}` : queue.length > 1 ? `1 of ${queue.length} waiting` : "";
-  const hasLink = !phone && current.actionUrl && current.actionUrl !== "/notifications";
+  const hasLink = !phone && !isFridgeAlert(current) && current.actionUrl && current.actionUrl !== "/notifications";
+  const isAlert = isFridgeAlert(current);
 
   return (
     <>
     {toastView}
+    {incidentSheet}
     <div className="fixed inset-0 z-[160] grid place-items-center bg-black/45 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) putAside(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="message-card-title" className="w-full max-w-md rounded-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-5 text-[var(--medtrak-text)] shadow-2xl">
+      <section role="dialog" aria-modal="true" aria-labelledby="message-card-title" className="max-h-[calc(100dvh-2rem-var(--pvx-sheet-bottom-clearance,0px))] w-full max-w-md overflow-y-auto rounded-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-5 text-[var(--medtrak-text)] shadow-2xl">
         <header className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[var(--medtrak-accent)]/15 text-[var(--medtrak-accent)]"><BellRing className="h-5 w-5" aria-hidden="true" /></span>
+            <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${isAlert ? "bg-rose-500/15 text-rose-600" : "bg-[var(--medtrak-accent)]/15 text-[var(--medtrak-accent)]"}`}>{isAlert ? <ShieldAlert className="h-5 w-5" aria-hidden="true" /> : <BellRing className="h-5 w-5" aria-hidden="true" />}</span>
             <div className="min-w-0">
-              <h2 id="message-card-title" className="truncate font-bold">{current.kind === "message-reply" ? `${senderOf(current)} replied` : `Message from ${senderOf(current)}`}</h2>
+              <h2 id="message-card-title" className="truncate font-bold">{isAlert ? current.title : current.kind === "message-reply" ? `${senderOf(current)} replied` : `Message from ${senderOf(current)}`}</h2>
               <p className="text-xs text-[var(--medtrak-muted)]">{whenLabel(current.createdAt, now)}{position ? ` · ${position}` : ""}</p>
             </div>
           </div>
@@ -136,7 +149,15 @@ export default function MessageCardHost() {
 
         <p className="mt-4 whitespace-pre-line rounded-2xl bg-black/5 px-4 py-3 text-base leading-6">{current.message}</p>
 
-        {mode === "reply" ? (
+        {isAlert && mode === "read" ? (
+          <div className="mt-4 grid gap-2">
+            <button ref={firstButton} type="button" onClick={takeAction} disabled={busy} className="min-h-12 rounded-2xl bg-rose-600 px-4 font-bold text-white disabled:opacity-40">Take action</button>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => setMode("snooze")} disabled={busy} className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[var(--medtrak-border)] px-2 text-sm font-bold"><Clock className="h-4 w-4" aria-hidden="true" /> Snooze</button>
+              <button type="button" onClick={dismiss} disabled={busy} className="min-h-11 rounded-xl border border-[var(--medtrak-border)] px-2 text-sm font-bold">Dismiss</button>
+            </div>
+          </div>
+        ) : mode === "reply" ? (
           <div className="mt-4">
             <label htmlFor="message-reply" className="text-xs font-semibold text-[var(--medtrak-muted)]">Your reply to {senderOf(current)}</label>
             <textarea id="message-reply" value={text} maxLength={REPLY_MAX} onChange={(event) => setText(event.target.value)} rows={3} autoFocus placeholder="Keep it short. No patient details." className="mt-1 w-full resize-none rounded-2xl border border-[var(--medtrak-border)] bg-transparent px-3 py-2 text-base outline-none focus:border-[var(--medtrak-accent)]" />

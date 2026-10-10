@@ -33,6 +33,15 @@ export function isPersonMessage(note) {
   return Boolean(note && PERSON_KINDS.includes(note.kind) && note.createdByUid && note.automated !== true);
 }
 
+// An automatic alert that needs someone to act (a fridge reading out of range): it gets the card too, with
+// "Take action" instead of reply.
+export function isFridgeAlert(note) {
+  return Boolean(note && note.kind === "fridge-alert" && note.incidentId);
+}
+
+// Everything that shows as the centre-of-screen card.
+export const isCardMessage = (note) => isPersonMessage(note) || isFridgeAlert(note);
+
 const isSnoozedNow = (note, now) => { const until = toDate(note.snoozedUntil || note.snoozed_until); return Boolean(until && until > now); };
 const createdMs = (note) => toDate(note.createdAt)?.getTime() || 0;
 
@@ -41,7 +50,7 @@ const createdMs = (note) => toDate(note.createdAt)?.getTime() || 0;
 //   everything: also the snoozed and put-aside ones (newest first), for "my messages"
 export function messageQueue(rows = [], { now = new Date(), hidden = new Set(), everything = false } = {}) {
   const waiting = rows
-    .filter((note) => isPersonMessage(note) && note.read !== true && note.status !== "completed")
+    .filter((note) => isCardMessage(note) && note.read !== true && note.status !== "completed")
     .filter((note) => everything || (!isSnoozedNow(note, now) && !hidden.has(note.id)));
   return waiting.sort((a, b) => (everything ? createdMs(b) - createdMs(a) : createdMs(a) - createdMs(b)));
 }

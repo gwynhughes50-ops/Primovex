@@ -56,6 +56,11 @@ route("what needs attention before I leave", "briefing.daily");
 route("morning briefing", "briefing.daily");
 route("what needs attention", "operations.summary");
 
+// fridge checks
+route("which fridges haven't been checked today", "coldChain.checksToday");
+route("have the fridges been checked yet", "coldChain.checksToday");
+route("are all fridges ok today", "coldChain.latestStatus");
+
 // the older questions still go where they went
 route("tell me about SAR-2026-004", "governance.sarLookup");
 route("find concern CN-2026-12", "governance.concernLookup");

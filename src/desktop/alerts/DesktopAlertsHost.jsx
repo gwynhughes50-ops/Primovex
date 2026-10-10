@@ -10,7 +10,7 @@ import { isTauriRuntime } from "@/release/updateService";
 import useExpirySettings from "@/hooks/useExpirySettings";
 import { getExpirySettings, summariseStockAlerts } from "@/lib/stockAlerts";
 import { normalizeStockItemCategory } from "@/services/stockService";
-import { isPersonMessage } from "@/messaging/messageCard";
+import { isCardMessage } from "@/messaging/messageCard";
 import { SAR_STATUSES } from "@/modules/governance/services/sarService";
 import { CONCERN_STATUSES } from "@/modules/governance/services/concernService";
 import {
@@ -132,7 +132,7 @@ export default function DesktopAlertsHost() {
       onSnapshot(
         query(collection(db, "users", uid, "notifications"), orderBy("createdAt", "desc"), limit(50)),
         (snap) => {
-          const unread = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((row) => row.read !== true && !isPersonMessage(row));
+          const unread = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((row) => row.read !== true && !isCardMessage(row));
           rows.current.notifications = summariseNotifications(unread).active.map((row) => ({ id: row.id, priority: row.priority }));
           evaluateRef.current();
         },

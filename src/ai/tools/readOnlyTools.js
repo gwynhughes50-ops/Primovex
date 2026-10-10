@@ -31,6 +31,7 @@ import { buildReminderDraft } from '@/ai/reminders/reminders';
 import { resolveNavigation } from '@/ai/navigation/navigate';
 import { BRIEFING_SECTIONS, composeBriefing, headlineOf, needsAttention } from '@/ai/briefing/briefing';
 import { executeApprovedTool } from './toolExecutor';
+import { dateKeyOf, expectedFridges, fridgeChecksAnswer, normaliseUnit } from '@/mobile/fridgeCheck';
 import { buildPersonMessageDraft, parsePersonMessage } from '@/ai/people/personMessage';
 import { ensureMedicineNames } from '@/ai/stock/medicineNamesLoader';
 import { setProtectedWords } from '@/ai/stock/medicineNames';
@@ -779,6 +780,25 @@ export function registerApprovedReadOnlyTools() {
     return snap.docs.map((row) => ({ id: row.id, ...row.data() }));
   };
   const noAccess = (domain, topic, route) => ({ domain, data: null, summary: `You don't have access to ${topic}, so I can't answer that.`, confidence: 1, sources: [source(topic, 'Access limited by your role', 'system')], actions: route ? [{ label: 'Open', route }] : [] });
+
+  registerTool({
+    id: 'coldChain.checksToday', label: 'Fridge checks today', requiredCapability: 'temperature.read',
+    async execute() {
+      const [unitRows, logs, incidents, equipment] = await Promise.all([
+        readRows('temperature_units'),
+        readRows('temperature_logs', [where('dateKey', '==', dateKeyOf(new Date()))]),
+        readRows('temperature_incidents', [where('status', '==', 'open')]),
+        Promise.resolve(listEquipment()).catch(() => []),
+      ]);
+      const fridges = expectedFridges({ units: unitRows.map((row) => normaliseUnit(row.id, row)), assets: Array.isArray(equipment) ? equipment : [] });
+      const answer = fridgeChecksAnswer({ fridges, logs, incidents });
+      return {
+        domain: 'temperature', data: { unchecked: answer.unchecked || 0, openIncidents: answer.openIncidents || 0 }, summary: answer.text, confidence: 0.93,
+        sources: [source('Temperature checks', `${logs.length} reading${logs.length === 1 ? '' : 's'} today · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Temperature', route: '/temperature' }],
+      };
+    },
+  });
 
   registerTool({
     id: 'compliance.lastCheck', label: 'When a check was last done', requiredCapability: 'compliance.read',

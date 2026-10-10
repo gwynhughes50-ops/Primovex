@@ -12,6 +12,7 @@ import {
   Printer,
   AlertTriangle,
   CheckCircle,
+  Settings2,
 } from "lucide-react";
 
 import {
@@ -30,6 +31,10 @@ import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { db } from "../lib/firebase";
 import { TemperatureMonitoring } from "@/pages/Connect";
 import { useAuth } from "@/contexts/AuthContext";
+import FridgeSetup from "@/components/temperature/FridgeSetup";
+import FridgeIncidentSheet from "@/components/temperature/FridgeIncidentSheet";
+import { canSetUpFridges } from "@/modules/temperature/fridgeSetup";
+import { isQuarantined } from "@/modules/temperature/fridgeIncidents";
 
 /* =========================================================
    Shared constants + helpers
@@ -165,7 +170,12 @@ function TabButton({ active, onClick, icon: Icon, label }) {
    ========================================================= */
 
 export default function TemperatureLog() {
-  const [tab, setTab] = useState("monitoring"); // monitoring | log | incidents
+  const [tab, setTab] = useState("monitoring"); // monitoring | log | incidents | fridges
+  const { role, capabilities = [], isAdmin } = useAuth();
+  // who may set fridges up: admins, the Practice Manager, and the roles ticked for fridge alerts
+  const [alertRoles, setAlertRoles] = useState([]);
+  useEffect(() => onSnapshot(doc(db, "settings", "fridgeAlerts"), (snap) => { const roles = snap.exists() ? snap.data()?.roles : null; setAlertRoles(Array.isArray(roles) ? roles : []); }, () => setAlertRoles([])), []);
+  const canSetUp = canSetUpFridges({ role, capabilities, isAdmin, alertRoles });
 
   return (
     <div className="space-y-6">
@@ -188,12 +198,14 @@ export default function TemperatureLog() {
           <TabButton active={tab === "monitoring"} onClick={() => setTab("monitoring")} icon={Activity} label="Monitoring" />
           <TabButton active={tab === "log"} onClick={() => setTab("log")} icon={Thermometer} label="Log" />
           <TabButton active={tab === "incidents"} onClick={() => setTab("incidents")} icon={AlertTriangle} label="Incidents" />
+          {canSetUp && <TabButton active={tab === "fridges"} onClick={() => setTab("fridges")} icon={Settings2} label="Fridges" />}
         </div>
       </Card>
 
       {tab === "monitoring" && <TemperatureMonitoring />}
       {tab === "log" && <TemperatureLogTab />}
       {tab === "incidents" && <TemperatureIncidentsTab />}
+      {tab === "fridges" && canSetUp && <FridgeSetup sites={SITES} />}
     </div>
   );
 }
@@ -797,6 +809,7 @@ function TemperatureLogTab() {
 function TemperatureIncidentsTab() {
   const [units, setUnits] = useState([]);
   const [incidents, setIncidents] = useState([]);
+  const [actionId, setActionId] = useState(null); // an incident being acted on (quarantine, stock, clear)
 
   const [siteFilter, setSiteFilter] = useState("__ALL__");
   const [statusFilter, setStatusFilter] = useState("open"); // open | resolved | all
@@ -1201,6 +1214,14 @@ function TemperatureIncidentsTab() {
                     <div className="flex gap-2 shrink-0">
                       {status === "open" ? (
                         <Button
+                          className="rounded-full bg-rose-500 text-white hover:bg-rose-400 text-xs"
+                          onClick={() => setActionId(i.id)}
+                        >
+                          {isQuarantined(i) ? "Quarantined: manage" : "Take action"}
+                        </Button>
+                      ) : null}
+                      {status === "open" ? (
+                        <Button
                           className="rounded-full bg-emerald-400 text-slate-950 hover:bg-emerald-300 text-xs"
                           onClick={() => openResolve(i)}
                         >
@@ -1335,6 +1356,8 @@ function TemperatureIncidentsTab() {
           </div>
         </div>
       )}
+
+      {actionId && <FridgeIncidentSheet incidentId={actionId} onClose={() => setActionId(null)} />}
 
       {/* ✅ Resolve modal */}
       {resolveOpen && (

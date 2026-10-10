@@ -125,6 +125,11 @@ async function main() {
     await setDoc(doc(db, "users", "cleaner-uid"), { role: "Cleaner", displayName: "Cleaner" });
     await setDoc(doc(db, "users", "cleaner2-uid"), { role: "Cleaner", displayName: "Cleaner Two" });
     await setDoc(doc(db, "compliance_assets", "asset-wh1"), { assetCode: "WH-001", label: "Hot tap", assetType: "water_hot", qrPayload: "MEDTRAK:COMPLIANCE:asset-wh1", siteId: "main_branch" });
+    // fridges: a custom "Nurse Manager" role that can resolve incidents; an incident and a unit to work on
+    await setDoc(doc(db, "roles", "Nurse Manager"), { name: "Nurse Manager", capabilities: ["temperature.read", "temperature.write", "temperature.resolveIncident", "dashboard.read"], builtIn: false });
+    await setDoc(doc(db, "users", "nursemgr-uid"), { role: "Nurse Manager", displayName: "Nurse Manager" });
+    await setDoc(doc(db, "temperature_units", "unit-1"), { unitName: "Vaccine fridge", unitType: "fridge", rangeMin: 2, rangeMax: 8, active: true });
+    await setDoc(doc(db, "temperature_incidents", "inc-1"), { unitId: "unit-1", unitName: "Vaccine fridge", status: "open", openedByUid: "reporter-uid" });
     for (const id of ["log-c1", "log-c2", "log-c3", "log-c4"]) {
       await setDoc(doc(db, "cleaning_logs", id), { roomId: "room-1", roomName: "Room 1", cleanedBy: "Cleaner", cleanedByUid: "cleaner-uid", method: "nfc-session" });
     }
@@ -147,6 +152,7 @@ async function main() {
   const reviewer = testEnv.authenticatedContext("reviewer-uid").firestore();
   const reporter = testEnv.authenticatedContext("reporter-uid").firestore();
   const bystander = testEnv.authenticatedContext("bystander-uid").firestore();
+  const nursemgr = testEnv.authenticatedContext("nursemgr-uid").firestore();
   const anon = testEnv.unauthenticatedContext().firestore();
   const auditor = testEnv.authenticatedContext("auditor-uid").firestore();
 
@@ -595,6 +601,38 @@ async function main() {
     await assertSucceeds(setDoc(doc(pm, "settings", "significantEvents"), { reviewerRoles: ["Practice Manager"] }));
     await assertFails(setDoc(doc(bystander, "settings", "significantEvents"), { reviewerRoles: [] }));
     await assertFails(setDoc(doc(pm, "settings", "orb"), { aiRouting: true }));
+  });
+
+  await check("Fridges: the Practice Manager and admins set them up; a nurse lead only once the role is ticked for fridge alerts; others never", async () => {
+    await assertSucceeds(setDoc(doc(pm, "temperature_units", "unit-pm"), { unitName: "Medicine fridge", rangeMin: 2, rangeMax: 8 }));
+    await assertSucceeds(setDoc(doc(admin, "temperature_units", "unit-admin"), { unitName: "Freezer", rangeMin: -25, rangeMax: -15 }));
+    await assertFails(setDoc(doc(reception, "temperature_units", "unit-rec"), { unitName: "x" }));
+    await assertFails(setDoc(doc(reporter, "temperature_units", "unit-hca"), { unitName: "x" }));
+    // before the setting exists, or while the role is not ticked, the nurse lead cannot
+    await assertFails(setDoc(doc(nursemgr, "temperature_units", "unit-nm"), { unitName: "x" }));
+    await assertSucceeds(setDoc(doc(pm, "settings", "fridgeAlerts"), { roles: ["Practice Manager"] }));
+    await assertFails(setDoc(doc(nursemgr, "temperature_units", "unit-nm"), { unitName: "x" }));
+    await assertSucceeds(setDoc(doc(pm, "settings", "fridgeAlerts"), { roles: ["Practice Manager", "Nurse Manager"] }));
+    await assertSucceeds(setDoc(doc(nursemgr, "temperature_units", "unit-nm"), { unitName: "Nurse fridge", rangeMin: 2, rangeMax: 8 }));
+    await assertSucceeds(updateDoc(doc(nursemgr, "temperature_units", "unit-nm"), { rangeMax: 7 }));
+    await assertFails(setDoc(doc(nurse, "temperature_units", "unit-n"), { unitName: "x" }));
+    await assertFails(deleteDoc(doc(pm, "temperature_units", "unit-pm")));
+    await assertSucceeds(deleteDoc(doc(admin, "temperature_units", "unit-admin")));
+  });
+  await check("Who is told about fridge incidents: everyone can read it, only the Practice Manager and admins set it (not the nurse lead who is ticked)", async () => {
+    await assertSucceeds(getDoc(doc(reporter, "settings", "fridgeAlerts")));
+    await assertSucceeds(setDoc(doc(admin, "settings", "fridgeAlerts"), { roles: ["Practice Manager"] }));
+    await assertFails(setDoc(doc(nursemgr, "settings", "fridgeAlerts"), { roles: ["Nurse Manager", "HCA"] }));
+    await assertFails(setDoc(doc(reception, "settings", "fridgeAlerts"), { roles: [] }));
+  });
+  await check("Fridge incidents: anyone who records temperatures can raise one; only those who can resolve them take action on it", async () => {
+    await assertSucceeds(setDoc(doc(reporter, "temperature_incidents", "inc-hca"), { unitId: "unit-1", unitName: "Vaccine fridge", status: "open", openedByUid: "reporter-uid" }));
+    await assertFails(setDoc(doc(reception, "temperature_incidents", "inc-rec"), { unitId: "unit-1", status: "open" }));
+    await assertFails(updateDoc(doc(reporter, "temperature_incidents", "inc-1"), { status: "resolved" }));
+    await assertFails(updateDoc(doc(reporter, "temperature_incidents", "inc-1"), { quarantined: false }));
+    await assertSucceeds(updateDoc(doc(nursemgr, "temperature_incidents", "inc-1"), { quarantined: true, quarantinedBy: "Nurse Manager" }));
+    await assertSucceeds(updateDoc(doc(pm, "temperature_incidents", "inc-1"), { status: "resolved", resolvedBy: "PM" }));
+    await assertFails(deleteDoc(doc(nursemgr, "temperature_incidents", "inc-1")));
   });
 
   console.log(`\n${pass} passed, ${fail} failed`);

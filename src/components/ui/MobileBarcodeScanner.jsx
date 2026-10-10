@@ -171,7 +171,7 @@ export default function MobileBarcodeScanner({
     <Button {...{ [triggerAttribute]: true }} onClick={openScanner} className="hidden" variant="outline" disabled={scannerBusy}>
       <Camera className="h-4 w-4" />Scan
     </Button>
-    {open && <div className="fixed inset-0 z-[150] flex flex-col bg-black px-3 pb-[max(.75rem,env(safe-area-inset-bottom))] pt-[max(.75rem,env(safe-area-inset-top))] text-white">
+    {open && <div className="fixed inset-0 z-[150] flex flex-col bg-black px-3 pb-[calc(max(.75rem,env(safe-area-inset-bottom))+var(--pvx-sheet-bottom-clearance,0px))] pt-[max(.75rem,env(safe-area-inset-top))] text-white">
       <div className="flex items-start justify-between gap-3 rounded-2xl !bg-[#071a33] p-3 !text-white" style={{ backgroundColor: "#071a33", color: "#fff" }}>
         <div><p className="font-bold">{title}</p><p className="mt-0.5 text-xs text-white/80">{status || helper}</p></div>
         <button type="button" onClick={close} className="inline-flex h-11 min-w-11 items-center justify-center rounded-full border border-white/30 bg-black/55 px-3 font-semibold text-white" aria-label="Close barcode scanner">

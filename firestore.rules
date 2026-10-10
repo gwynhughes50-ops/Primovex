@@ -24,6 +24,12 @@ service cloud.firestore {
         : null;
     }
 
+    function canSetUpFridges() {
+      return hasPermission("practiceAdmin", "write") || isAdmin()
+        || (exists(/databases/$(database)/documents/settings/fridgeAlerts)
+            && userRole() in get(/databases/$(database)/documents/settings/fridgeAlerts).data.get("roles", []));
+    }
+
     function isCaretaker() {
       return signedIn() && userRole() == "Caretaker";
     }
@@ -136,6 +142,12 @@ service cloud.firestore {
     // The names this practice uses for its stock, taught to the Orb (Admin > Orb): same people.
     match /settings/orbAliases {
       allow create, update: if hasPermission("inventory", "verify") || isAdmin();
+    }
+
+    // Which roles are told when a fridge reading is out of range (read by everyone; set by the Practice Manager
+    // and admins). The Practice Manager default is applied in the app when this has not been set.
+    match /settings/fridgeAlerts {
+      allow create, update: if hasPermission("practiceAdmin", "write") || isAdmin();
     }
 
     // -------------------------
@@ -499,15 +511,20 @@ match /subject_access_requests/{requestId} {
       allow update, delete: if isAdmin();
     }
 
+    // The practice's fridges and freezers and the range each must stay in. Set up by the Practice Manager and admins,
+    // and by anyone whose role is ticked for fridge alerts (the nurse lead); only an admin removes one.
     match /temperature_units/{docId} {
       allow get, list: if signedIn();
-      allow create, update, delete: if isAdmin();
+      allow create, update: if canSetUpFridges();
+      allow delete: if isAdmin();
     }
 
     match /temperature_incidents/{docId} {
       allow get, list: if signedIn();
       allow create: if hasPermission("temperature", "write") || isAdmin();
-      allow update: if hasPermission("temperature", "write") || hasPermission("temperature", "resolveIncident") || isAdmin();
+      // taking action on an incident (quarantine, record stock, clear it) is for the people who can resolve them,
+      // not for whoever recorded the reading
+      allow update: if hasPermission("temperature", "resolveIncident") || isAdmin();
       allow delete: if isAdmin();
     }
 

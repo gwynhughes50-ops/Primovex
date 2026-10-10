@@ -117,6 +117,11 @@ export function parseManagementQuestion(prompt, conversation = []) {
     return { toolId: "security.lastLogin", input: { name } };
   }
 
+  // which fridges have been checked today
+  if (/\b(?:fridges?|freezers?)\b/.test(text) && /\b(?:checked|check|checks|logged|recorded|readings?)\b/.test(text) && /\b(?:today|yet|this morning|so far|missed|outstanding|not been)\b/.test(text)) {
+    return { toolId: "coldChain.checksToday", input: {} };
+  }
+
   // water temperatures
   if (/\b(?:water|tap|taps|legionella|hot\s+tap|cold\s+tap|outlets?)\b/.test(text) && /\b(?:temp|temps|temperatures?|degrees|readings?|legionella|results?)\b/.test(text)) {
     return { toolId: "compliance.waterTemps", input: { days: daysFromQuestion(text, 30) } };

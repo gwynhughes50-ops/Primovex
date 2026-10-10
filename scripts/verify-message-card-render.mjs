@@ -26,6 +26,15 @@ t("a reply shows as 'replied', and several waiting are counted", () => {
   assert.match(html, /1 of 2 waiting/);
 });
 
+t("a fridge alert shows as a card with Take action, Snooze and Dismiss, and no reply buttons", () => {
+  stubState.rows = [{ id: "f1", kind: "fridge-alert", automated: true, incidentId: "inc-1", title: "Vaccine fridge is out of range", message: "Readings: now 6°C, min 4°C, max 9.5°C.", read: false, createdAt: new Date(Date.now() - 60000) }];
+  const html = render();
+  assert.match(html, /Vaccine fridge is out of range/);
+  for (const label of ["Take action", "Snooze", "Dismiss"]) assert.ok(html.includes(label), label);
+  assert.ok(!html.includes("Quick replies") && !html.includes(">Reply<") && !html.includes("Done"));
+  assert.match(html, /Readings: now 6/);
+});
+
 t("nothing waiting shows nothing; alerts and read or snoozed messages never open the card", () => {
   stubState.rows = [];
   assert.equal(render(), "");

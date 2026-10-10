@@ -22,3 +22,4 @@ export const getFirestore = () => ({});
 export const where = () => ({});
 export const normalizeStockItemCategory = () => ({ category: "general" });
 export const SAR_COLLECTION = "governance_sars";
+export const auth = { currentUser: null };

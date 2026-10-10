@@ -25,13 +25,20 @@ t("every tile has a key, label, helper and icon; keys are unique within a home; 
   }
 });
 
-t("the manager's home has the SARs tile, the Orb as a slim bar, and no tile is left alone in a row of two", () => {
+t("the manager's home has the SARs and Fridge check tiles and the Orb as a slim bar", () => {
   const home = getRoleHome("Practice Manager", ["*"]);
   assert.ok(home.actions.some((a) => a.key === "sars"));
   assert.ok(home.actions.some((a) => a.key === "briefing"));
   assert.equal(home.primary.compact, true);
-  assert.equal(home.actions.length % 2, 0, "an even number of tiles leaves no gap");
+  assert.ok(home.actions.some((a) => a.key === "fridge-check"));
   assert.equal(home.attention, true);
+});
+
+t("the fridge check tile is only for people who may record temperatures (nurse, HCA, manager), and caretaker and reception don't get it", () => {
+  assert.ok(visibleActions(getRoleHome("Nurse"), ["temperature.write"]).some((a) => a.key === "fridge-check"));
+  assert.ok(!visibleActions(getRoleHome("Nurse"), ["inventory.read"]).some((a) => a.key === "fridge-check"));
+  assert.ok(!getRoleHome("Caretaker").actions.some((a) => a.key === "fridge-check"));
+  assert.ok(!getRoleHome("Reception").actions.some((a) => a.key === "fridge-check"));
 });
 
 t("tiles that need a permission are hidden from people without it", () => {
@@ -46,7 +53,7 @@ t("the clinical home is about taking stock, kits and temperature, not management
   const home = getRoleHome("HCA", []);
   assert.equal(home.primary.key, "scan-stock");
   const keys = home.actions.map((a) => a.key);
-  for (const k of ["orb-voice", "stock", "kits", "temperature", "issue"]) assert.ok(keys.includes(k), k);
+  for (const k of ["orb-voice", "stock", "kits", "temperature", "fridge-check", "issue"]) assert.ok(keys.includes(k), k);
   assert.ok(!keys.includes("sars") && !keys.includes("concerns"));
   assert.equal(home.attention, false);
 });
@@ -97,6 +104,20 @@ t("the attention strip lists what's urgent, most urgent first, each a tap from w
     ["stock-low", "2 running low", "warning", "stock"],
     ["messages", "2 unread messages", "info", "messages"],
   ]);
+});
+
+t("a quarantined fridge heads the strip", () => {
+  const chips = buildAttention({ fridgeQuarantined: 1, fridgeIncidents: 2, fridgesUnchecked: 1, messages: 1, now });
+  assert.deepEqual(chips.map((c) => c.key), ["fridges-quarantined", "fridge-incidents", "fridges-unchecked", "messages"]);
+  assert.equal(chips[0].label, "1 fridge quarantined");
+  assert.equal(buildAttention({ fridgeQuarantined: 0, now })[0].key, "clear");
+});
+
+t("open fridge incidents and fridges not checked today are on the strip", () => {
+  const chips = buildAttention({ fridgeIncidents: 1, fridgesUnchecked: 2, now });
+  assert.deepEqual(chips.map((c) => [c.key, c.label, c.tone, c.action]), [["fridge-incidents", "1 fridge incident open", "critical", "temperature"], ["fridges-unchecked", "2 fridges not checked today", "warning", "fridge-check"]]);
+  assert.equal(buildAttention({ fridgeIncidents: 0, fridgesUnchecked: 0, now })[0].key, "clear");
+  assert.equal(buildAttention({ fridgeIncidents: null, fridgesUnchecked: null, now })[0].key, "clear");
 });
 
 t("an area the person can't see is left out, and a clear day says so", () => {
