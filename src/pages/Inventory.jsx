@@ -132,6 +132,9 @@ export default function Inventory() {
   const { items, loading, error, archiveItem, restoreItem, receiveStock, useStockQty, addItem, updateItem, transferStock, unassignLocation, purgeItem } =
     useStock({ includeArchived: true });
 
+  // forms already in use on stock, offered in the Add item window's Form dropdown
+  const existingForms = useMemo(() => (items || []).map((i) => i?.form).filter(Boolean), [items]);
+
 
   // Photos whose image failed to load show the placeholder instead of a broken-image icon.
   const [brokenPhotos, setBrokenPhotos] = useState({});
