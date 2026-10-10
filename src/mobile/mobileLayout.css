@@ -27,7 +27,12 @@
   color: var(--medtrak-text);
 }
 
-.pvx-mobile-stack { display: grid; align-content: start; gap: var(--pvx-mobile-section-gap); }
+/* A grid column normally grows to fit its widest child, so one long title or a row of tabs that won't
+   wrap would stretch the whole page wider than the screen. minmax(0, 1fr) and min-width: 0 keep every
+   page exactly as wide as the phone; long text wraps or truncates, and tab rows scroll sideways. */
+.pvx-mobile-stack { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: var(--pvx-mobile-section-gap); }
+.pvx-mobile-stack > * { min-width: 0; }
+.pvx-mobile-page { max-width: 100%; }
 .pvx-mobile-card {
   border: 1px solid var(--medtrak-border);
   border-radius: var(--pvx-mobile-card-radius);
@@ -145,3 +150,10 @@ body.pvx-native-barcode-active > .pvx-native-barcode-overlay {
   visibility: visible !important;
   background: transparent !important;
 }
+
+/* The same protection for every other single-column grid on the phone (the home screen, sheets, lists):
+   without it a long line or a row that won't wrap makes the whole screen wider than the phone. */
+.pvx-role-home { grid-template-columns: minmax(0, 1fr); }
+.pvx-role-home > * { min-width: 0; }
+[data-primovex-client="android"] .grid:not([class*="grid-cols"]),
+[data-primovex-client="mobile-web"] .grid:not([class*="grid-cols"]) { grid-template-columns: minmax(0, 1fr); }
