@@ -9,6 +9,7 @@ import MobileConnect from "./MobileConnect";
 import MobileCompliance from "./MobileCompliance";
 import MobileSessionShell from "./MobileSessionShell";
 import MessageCardHost from "@/messaging/MessageCardHost";
+import { getRoleHome, navFor } from "./roleHomes";
 import AskPrimovexPanel from "@/ai/components/AskPrimovexPanel";
 import usePrimovexAI from "@/ai/hooks/usePrimovexAI";
 import OperationalEscalationSheet from "./OperationalEscalationSheet";
@@ -115,7 +116,9 @@ export default function MobileLayout({ initialTab = "home" }) {
   const navigate = useNavigate();
   const { open: openPrimovexAI, ask: askPrimovexAI } = usePrimovexAI();
   const { activeSenseSession, activate } = useSenseSession();
-  const { role, user, displayName, can } = useAuth();
+  const { role, user, displayName, can, capabilities = [] } = useAuth();
+  // The four places in the bottom bar are the ones this role uses.
+  const navPlaces = navFor(getRoleHome(role, capabilities));
   const routedChecklistTab = location.pathname === '/inventory' ? new URLSearchParams(location.search).get('tab') : null;
   const showRoutedChecklist = routedChecklistTab === 'emergency' || routedChecklistTab === 'anaphylaxis';
   const routedChecklistAssetId = showRoutedChecklist ? new URLSearchParams(location.search).get('asset') : null;
@@ -135,7 +138,10 @@ export default function MobileLayout({ initialTab = "home" }) {
     setShowStockMore(false);
     setScannedItem(null);
     setRecentMovement(null);
-    setActiveTab(nextTab);
+    if (nextTab === "messages") { window.dispatchEvent(new CustomEvent("primovex:open-messages")); return; }
+    if (nextTab === "sars") { navigate("/governance/sars"); return; }
+    if (nextTab === "concerns") { navigate("/governance/concerns"); return; }
+    setActiveTab(nextTab === "checks" ? "compliance" : nextTab === "rooms" ? "sense" : nextTab);
   };
 
 
@@ -354,7 +360,24 @@ export default function MobileLayout({ initialTab = "home" }) {
         setEscalationSeed({ senseObjectId: activeSenseSession?.senseObjectId, location: activeSenseSession?.senseObjectName });
         break;
       case "orb":
-        setShowAIActionSheet(true);
+        openPrimovexAI(); // straight to the Orb
+        break;
+      case "kits":
+        navigate("/inventory?tab=emergency");
+        break;
+      case "quick-note":
+        setShowQuickNotes(true);
+        break;
+      case "messages":
+        window.dispatchEvent(new CustomEvent("primovex:open-messages"));
+        break;
+      case "orb-voice":
+        openPrimovexAI();
+        window.dispatchEvent(new CustomEvent("primovex:orb-listen"));
+        break;
+      case "briefing":
+        openPrimovexAI();
+        await askPrimovexAI("What needs attention before I leave?");
         break;
       default:
         break;
@@ -913,7 +936,8 @@ export default function MobileLayout({ initialTab = "home" }) {
       <AskPrimovexPanel variant="mobile" />
 
       <MobileBottomNav
-        activeKey={activeTab === "sense" ? "facilities" : activeTab}
+        places={navPlaces}
+        activeKey={activeTab === "sense" ? (navPlaces.includes("rooms") ? "rooms" : "facilities") : activeTab === "compliance" && navPlaces.includes("checks") ? "checks" : activeTab}
         onNavigate={handleBottomNavigation}
         onOpenAI={() => setShowAIActionSheet(true)}
       />

@@ -31,6 +31,18 @@ export default function MessageCardHost() {
   const [tick, setTick] = useState(() => Date.now());
   const firstButton = useRef(null);
   const phone = isPhone();
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+
+  // "Messages" in the bottom bar or on the home screen: show everything unread, newest first.
+  useEffect(() => {
+    const open = () => {
+      if (messageQueue(rowsRef.current, { now: new Date(), everything: true }).length) { setBrowsing(true); setIndex(0); }
+      else { setToast("No unread messages."); window.setTimeout(() => setToast(""), 2400); }
+    };
+    window.addEventListener("primovex:open-messages", open);
+    return () => window.removeEventListener("primovex:open-messages", open);
+  }, []);
 
   // wakes snoozed messages while the app is open
   useEffect(() => {

@@ -324,6 +324,14 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, status]);
 
+  // "Take items by voice" on the phone home: open the Orb already listening.
+  useEffect(() => {
+    if (!isMobile) return undefined;
+    const listenNow = () => window.setTimeout(() => startSessionRef.current(), 450);
+    window.addEventListener('primovex:orb-listen', listenNow);
+    return () => window.removeEventListener('primovex:orb-listen', listenNow);
+  }, [isMobile]);
+
   // "Go to the alerts": the Orb takes them there, once, then gets out of the way.
   const openedRef = useRef(new Set());
   useEffect(() => {

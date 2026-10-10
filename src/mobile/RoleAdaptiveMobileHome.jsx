@@ -1,28 +1,33 @@
-import { MapPin, Mic, QrCode, Sparkles } from "lucide-react";
+import { MapPin, QrCode, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSenseSession } from "@/contexts/SenseSessionContext";
-import { getMobilePersona } from "./roleAdaptiveMobile";
+import { getRoleHome, visibleActions } from "./roleHomes";
+import MobileAttentionStrip from "./MobileAttentionStrip";
 
+// The phone home for everyone except the Cleaner (who has MobileCleanerHome): its tiles come from the role
+// (see roleHomes.js). Managers and partners also see what needs attention at the top.
 export default function RoleAdaptiveMobileHome({ onAction }) {
   const { role, capabilities = [], displayName } = useAuth();
   const { activeSenseSession } = useSenseSession();
-  const persona = getMobilePersona(role, capabilities);
+  const home = getRoleHome(role, capabilities);
   const firstName = String(displayName || "").trim().split(" ")[0] || "there";
-  const PrimaryIcon = persona.primary.Icon;
+  const PrimaryIcon = home.primary.Icon;
 
   return (
     <section className="pvx-role-home">
       <div className="pvx-role-hero">
         <div>
-          <p className="pvx-role-eyebrow">{persona.eyebrow}</p>
+          <p className="pvx-role-eyebrow">{home.eyebrow}</p>
           <h1>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {firstName}</h1>
-          <p>{persona.headline}</p>
+          <p>{home.headline}</p>
         </div>
-        <button type="button" className="pvx-orb-command" onClick={() => onAction?.("orb")} aria-label="Wake Orb">
+        <button type="button" className="pvx-orb-command" onClick={() => onAction?.("orb")} aria-label="Ask the Orb">
           <Sparkles className="h-6 w-6" />
           <span>Orb</span>
         </button>
       </div>
+
+      {home.attention && <MobileAttentionStrip onAction={onAction} />}
 
       {activeSenseSession ? (
         <button type="button" className="pvx-active-context" onClick={() => onAction?.("room")}>
@@ -37,24 +42,19 @@ export default function RoleAdaptiveMobileHome({ onAction }) {
         </button>
       )}
 
-      <button type="button" className="pvx-primary-action" onClick={() => onAction?.(persona.primary.key)}>
+      <button type="button" className={`pvx-primary-action${home.primary.compact ? " is-compact" : ""}`} onClick={() => onAction?.(home.primary.key)}>
         <span className="pvx-primary-icon"><PrimaryIcon className="h-7 w-7" /></span>
-        <span><b>{persona.primary.label}</b><small>{persona.primary.helper}</small></span>
+        <span><b>{home.primary.label}</b><small>{home.primary.helper}</small></span>
       </button>
 
       <div className="pvx-role-actions">
-        {persona.actions.map(({ key, label, helper, Icon }) => (
+        {visibleActions(home, capabilities).map(({ key, label, helper, Icon }) => (
           <button key={key} type="button" onClick={() => onAction?.(key)}>
             <Icon className="h-5 w-5" />
             <b>{label}</b>
             <small>{helper}</small>
           </button>
         ))}
-      </div>
-
-      <div className="pvx-orb-hint">
-        <Mic className="h-4 w-4" />
-        <span>Future command layer: say <b>“Orb”</b>, give the action, then carry on working.</span>
       </div>
     </section>
   );

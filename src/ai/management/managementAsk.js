@@ -264,8 +264,8 @@ export function lastLoginAnswer({ name = "", people = [], days = 90, now = new D
 // ---- SARs ----------------------------------------------------------------------------------------------
 
 const SAR_LABELS = { new: "New", assigned: "Assigned", in_progress: "In progress", quality_check: "Quality check", completed: "Completed", archived: "Archived" };
-const sarOpen = (sar) => !["completed", "archived"].includes(sar.status || "new");
-const sarDays = (sar, now) => { const due = asDate(sar.dueDate || sar.due_date); return due ? daysBetween(due, now) : null; };
+export const sarOpen = (sar) => !["completed", "archived"].includes(sar.status || "new");
+export const sarDays = (sar, now) => { const due = asDate(sar.dueDate || sar.due_date); return due ? daysBetween(due, now) : null; };
 const sarWhen = (days) => (days === null ? "no due date" : days < 0 ? `overdue by ${plural(Math.abs(days), "day")}` : days === 0 ? "due today" : `${plural(days, "day")} left`);
 
 export function sarOverviewAnswer({ person = "", sars = [], now = new Date() }) {
@@ -310,9 +310,9 @@ export function sarOverviewAnswer({ person = "", sars = [], now = new Date() }) 
 // ---- concerns ------------------------------------------------------------------------------------------
 
 const CONCERN_STAGE_LABELS = { received: "received", acknowledged: "acknowledged", listening: "listening discussion", early_resolution: "early resolution", investigation: "being investigated", response: "response being written", learning: "learning", closed: "closed", archived: "archived" };
-const concernOpen = (concern) => !["closed", "archived"].includes(concern.status || "received");
+export const concernOpen = (concern) => !["closed", "archived"].includes(concern.status || "received");
 
-function concernDeadline(concern, now) {
+export function concernDeadline(concern, now) {
   const final = asDate(concern.finalResponseDueAt);
   const ack = asDate(concern.acknowledgementDueAt);
   if (!concern.acknowledgedAt && ack && concern.status === "received") {

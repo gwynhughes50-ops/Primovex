@@ -76,6 +76,12 @@
 .pvx-primary-action b { display:block; font-size:1.06rem; }
 .pvx-primary-action small { display:block; margin-top:.15rem; color:rgb(255 255 255 / .82); font-size:.76rem; }
 .pvx-primary-icon { display:grid; place-items:center; width:3rem; height:3rem; border-radius:1rem; background:rgb(255 255 255 / .16); }
+.pvx-primary-action.is-compact { gap:.7rem; padding:.55rem .9rem; border-radius:999px; box-shadow:0 6px 16px color-mix(in srgb,var(--medtrak-accent) 20%,transparent); }
+.pvx-primary-action.is-compact .pvx-primary-icon { width:2rem; height:2rem; border-radius:999px; }
+.pvx-primary-action.is-compact .pvx-primary-icon svg { height:1.25rem; width:1.25rem; }
+.pvx-primary-action.is-compact b { display:inline; font-size:.95rem; }
+.pvx-primary-action.is-compact small { display:inline; margin:0 0 0 .4rem; font-size:.74rem; }
+.pvx-role-actions > button:last-child:nth-child(odd) { grid-column:span 2; }
 .pvx-role-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.65rem; }
 .pvx-role-actions button { min-height:6.25rem; border:1px solid var(--medtrak-border); border-radius:1.15rem; background:var(--medtrak-panel); padding:.8rem; text-align:left; }
 .pvx-role-actions svg { color:var(--medtrak-accent); }
