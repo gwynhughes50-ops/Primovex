@@ -324,6 +324,20 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, status]);
 
+  // "Go to the alerts": the Orb takes them there, once, then gets out of the way.
+  const openedRef = useRef(new Set());
+  useEffect(() => {
+    const last = messages[messages.length - 1];
+    if (last?.role !== 'assistant' || openedRef.current.has(last.id)) return;
+    const action = (last.actions || []).find((item) => item.auto);
+    if (!action) return;
+    openedRef.current.add(last.id);
+    if (action.tab) window.dispatchEvent(new CustomEvent('primovex:orb-tab', { detail: { tab: action.tab } }));
+    else if (action.route) navigate(action.route);
+    // a moment to hear or read "Opening …", then the screen is clear to look at
+    window.setTimeout(() => close(), isMobile ? 900 : 600);
+  }, [close, isMobile, messages, navigate]);
+
   useEffect(() => {
     if (!isOpen) return undefined;
     const closeOnEscape = (event) => event.key === 'Escape' && close();

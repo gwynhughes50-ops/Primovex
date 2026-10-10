@@ -20,7 +20,7 @@
 // Facts here must be true of the app today. Where a feature is built but not switched on,
 // the article says so.
 
-export const HELP_CHECKED = "2026-10-07";
+export const HELP_CHECKED = "2026-10-10";
 
 export const HELP_ARTICLES = [
   // ---- stock -----------------------------------------------------------------------------
@@ -503,9 +503,29 @@ export const HELP_ARTICLES = [
     steps: [
       "Ask in your own words about stock (\"is anything low?\", \"what's expiring?\", \"do we have any dressings?\"), fridges (\"are the fridges OK?\"), cleaning (\"which rooms haven't been cleaned?\"), alerts, tasks, maintenance, emergency kits and anaphylaxis boxes, and how the practice is doing overall.",
       "Ask \"how do I...\" for step-by-step help, for example \"how do I move stock into a kit?\".",
-      "The Orb can look things up but can't change anything. Answers show where they came from, and it only tells you what your permissions allow.",
+      "Managers can ask management questions: \"when was the last fire alarm test?\", \"what are the tap water temps in the last month?\", \"when did Craig last log in?\", \"how many SARs does he have outstanding?\", \"where are we up to with concerns?\", or \"what needs attention before I leave?\" for an end-of-day briefing.",
+      "It can also get things ready for you to confirm: \"I've taken two gloves from the store cupboard\", \"I've received 20 chlorphenamine, batch 4471, expires March 2028\", \"count the nurses room: gloves 12, syringes 40\", \"take the expired stock off\", \"remind me to check the fridge tomorrow at 9\" or \"tell Ben the vaccine fridge needs checking\". It shows a card and nothing changes until you press Confirm (or say \"yes\").",
+      "Say \"go to purchase orders\" or \"open the alerts\" and it takes you there.",
+      "Answers show where they came from, and it only tells you and does what your permissions allow.",
     ],
-    related: ["add-stock-item", "check-kit-phone", "log-temperature"],
+    related: ["talk-to-orb-phone", "add-stock-item", "check-kit-phone", "log-temperature"],
+  },
+  {
+    id: "talk-to-orb-phone",
+    title: "Talk to the Orb on the phone when your hands are busy",
+    topic: "The Orb",
+    asks: ["how do i talk to the orb", "voice orb", "how do i use voice", "orb keeps stopping listening", "how do i end the conversation", "speak to the orb", "hands free orb", "how do i take several items from stock quickly", "say yes to confirm"],
+    keywords: ["voice", "talk", "speak", "listening", "microphone", "hands", "conversation", "yes", "confirm"],
+    where: "phone",
+    steps: [
+      "Open the Orb and tap the glowing orb (or the microphone) once. It says \"Listening\" and keeps listening after every answer, so you can carry on without tapping again.",
+      "Take several items in one go: \"I've taken two chlorphenamine, one adrenaline and a box of gloves from the store cupboard\". You get one card. Say \"and two more gloves\" to add to it.",
+      "When a card appears, say \"yes\" or \"go ahead\" to confirm, or \"cancel\". When it asks you to choose (a batch, a place, how much harm), say what's on the button, like \"low harm\" or \"the second one\".",
+      "To finish, say \"that's all\", \"thanks\" or \"stop\", or just stay quiet for about 15 seconds. Tap the orb to end it at any time.",
+      "Under the orb, \"Spoken answers\" switches on short spoken replies.",
+    ],
+    tip: "The phone app listens when you tap it. It doesn't wake up to the word \"Orb\".",
+    related: ["what-can-orb-do"],
   },
   {
     id: "find-notifications",

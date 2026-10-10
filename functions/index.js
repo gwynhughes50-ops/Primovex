@@ -23,7 +23,7 @@ const { recordUsage } = require("./services/usageService");
 const { routeQuestion } = require("./services/orbRouterService");
 const { phraseAnswer } = require("./services/orbPhraseService");
 const { runRetention } = require("./services/retentionService");
-const { sendTeamMessage } = require("./services/teamMessageService");
+const { sendTeamMessage, findColleagues } = require("./services/teamMessageService");
 const { getOrbCapabilities } = require("./services/orbScope");
 const { notifySignificantEvent } = require("./services/significantEventNotify");
 const { runStockReview } = require("./services/stockReviewService");
@@ -611,7 +611,7 @@ exports.orbTeamMessage = onCall({ region: "europe-west2", timeoutSeconds: 30 }, 
     callerUid: request.auth.uid,
     callerName: profile.displayName || profile.email || "A colleague",
     capabilities,
-    data: { role: request.data?.role, text: request.data?.text, actionUrl: request.data?.actionUrl },
+    data: { role: request.data?.role, toUid: request.data?.toUid, text: request.data?.text, actionUrl: request.data?.actionUrl },
   });
   appendGovernedAuditEvent({
     db,
@@ -621,13 +621,24 @@ exports.orbTeamMessage = onCall({ region: "europe-west2", timeoutSeconds: 30 }, 
       action: "orb.team.message",
       module: "inventory",
       targetType: "team",
-      targetId: String(result.role).slice(0, 60),
-      summary: "A message was sent to a team through the Orb",
+      targetId: String(result.role || "person").slice(0, 60),
+      summary: result.role ? "A message was sent to a team through the Orb" : "A message was sent to a colleague through the Orb",
       classification: "operational",
-      metadata: { role: result.role, recipients: result.sent },
+      metadata: { role: result.role || null, recipients: result.sent },
     },
   }).catch((error) => console.error("Team message audit failed", { message: error?.message }));
   return result;
+});
+
+// Which colleague a first name (or first and last name) means, so the Orb can show who a message is going to
+// before it is sent. Returns names and roles only.
+exports.orbFindColleague = onCall({ region: "europe-west2", timeoutSeconds: 15 }, async (request) => {
+  assertSignedIn(request);
+  const snapshot = await db.collection("users").doc(request.auth.uid).get();
+  if (!snapshot.exists) throw new HttpsError("failed-precondition", "A Primovex user profile is required.");
+  const profile = snapshot.data() || {};
+  const capabilities = await getOrbCapabilities(db, profile);
+  return findColleagues({ db, callerUid: request.auth.uid, capabilities, words: request.data?.words });
 });
 
 // Weekly tidy-up so records about how people use the system are not kept indefinitely:

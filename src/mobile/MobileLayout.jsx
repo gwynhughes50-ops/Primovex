@@ -76,6 +76,12 @@ export default function MobileLayout({ initialTab = "home" }) {
   const [spaceScanError, setSpaceScanError] = useState("");
   const [showQuickNotes, setShowQuickNotes] = useState(false);
   const [showAIActionSheet, setShowAIActionSheet] = useState(false);
+  // "Go to compliance" said to the Orb: it asks this screen to switch tab.
+  useEffect(() => {
+    const switchTab = (event) => { if (event?.detail?.tab) setActiveTab(event.detail.tab); };
+    window.addEventListener("primovex:orb-tab", switchTab);
+    return () => window.removeEventListener("primovex:orb-tab", switchTab);
+  }, []);
   const [quickNotes, setQuickNotes] = useState(() => getOpenQuickNotes());
   useEffect(() => subscribeQuickNotes((notes) => setQuickNotes(notes.filter((note) => note.status !== "completed"))), []);
 

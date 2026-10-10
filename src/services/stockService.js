@@ -16,7 +16,7 @@ import {
 import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { db } from "../lib/firebase";
 import { writeAuditEvent } from "@/core/identity/auditService";
-import { applyLocationDelta, planTransfer } from "@/lib/stockLocations";
+import { applyLocationDelta, planTransfer, unassignedQty } from "@/lib/stockLocations";
 import { daysUntilExpiry, expiryStatus, parseExpiryDate } from "@/lib/stockAlerts";
 import { adjustBatches, batchSummary, receiveIntoBatches, restoreToBatches, useFromBatches } from "@/lib/stockBatches";
 import { matchStockByScan, parseGs1, toGtin14 } from "@/lib/gs1";
@@ -567,8 +567,19 @@ export async function applyStockMovement(itemId, movement) {
     if (type === "adjust") {
       const setTo = toNumber(movement.set_to, NaN);
       if (!Number.isFinite(setTo) || setTo < 0) throw new Error("set_to must be >= 0");
-      after = setTo;
-      delta = after - before;
+      if (movement?.place_count) {
+        // A count of one place: set_to is what was counted THERE (the main store when no place is given).
+        // The item's total moves by the difference, and the place's own figure is set to what was counted.
+        const countPlace = cleanString(movement?.locationId);
+        const here = countPlace
+          ? toNumber((Array.isArray(item.locations) ? item.locations : []).find((loc) => loc.locationId === countPlace)?.quantity, 0)
+          : unassignedQty(item);
+        delta = setTo - here;
+        after = before + delta;
+      } else {
+        after = setTo;
+        delta = after - before;
+      }
     }
 
     const reason = movement?.reason || null;
@@ -593,7 +604,7 @@ export async function applyStockMovement(itemId, movement) {
     // with the same delta — not just the item's overall current_stock.
     const locationId = cleanString(movement?.locationId);
     let nextLocations = item.locations;
-    if (locationId && (type === "receive" || type === "use")) {
+    if (locationId && (type === "receive" || type === "use" || (type === "adjust" && movement?.place_count))) {
       nextLocations = applyLocationDelta(item.locations, locationId, cleanString(movement?.locationName), movement?.locationType, delta);
     }
 

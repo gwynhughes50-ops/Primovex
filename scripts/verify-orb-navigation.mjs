@@ -1,0 +1,41 @@
+import assert from "node:assert/strict";
+import { looksLikeNavigation, parseNavigation, resolveNavigation } from "../src/ai/navigation/navigate.js";
+
+let n = 0;
+const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
+
+t("going to a screen is told apart from asking about it", () => {
+  for (const [s, id] of [["show me the alerts", "alerts"], ["go to purchase orders", "purchasing"], ["open the reorder centre", "reorder"], ["take me to compliance", "compliance"], ["Open inventory.", "inventory"], ["please go to the dashboard", "dashboard"], ["can you open the concerns", "concerns"], ["navigate to SARs", "sars"], ["open significant events", "significant-events"], ["bring up the temperature log", "temperature"], ["go to the anaphylaxis boxes", "anaphylaxis"], ["open practice admin", "practice-admin"], ["switch to the help page", "help"]]) {
+    assert.equal(parseNavigation(s)?.id, id, s);
+  }
+  for (const s of ["show me stock that is low", "open a new product", "go to town on the cleaning", "what are the alerts", "how do I open the alerts", "show me what expires this month", "I've opened a box of gloves", "open the fridge", "show me temperatures"]) {
+    assert.ok(!looksLikeNavigation(s), s);
+  }
+});
+
+t("on the desktop it opens the page", () => {
+  const r = resolveNavigation({ id: "purchasing" }, { capabilities: ["purchasing.read"], platform: "desktop" });
+  assert.equal(r.text, "Opening Purchasing.");
+  assert.deepEqual(r.action, { label: "Open Purchasing", route: "/purchasing", auto: true });
+});
+
+t("only a screen they are allowed into", () => {
+  const r = resolveNavigation({ id: "admin" }, { capabilities: ["inventory.read"], platform: "desktop" });
+  assert.match(r.text, /don't have access to Advanced Administration/);
+  assert.equal(r.action, undefined);
+  assert.ok(resolveNavigation({ id: "admin" }, { capabilities: ["*"], platform: "desktop" }).action);
+  assert.ok(resolveNavigation({ id: "alerts" }, { capabilities: [], platform: "desktop" }).action, "a screen with no permission needed is open to everyone");
+});
+
+t("on the phone it switches tab, opens a page, or says it is desktop only", () => {
+  const tab = resolveNavigation({ id: "compliance" }, { capabilities: ["compliance.read"], platform: "mobile" });
+  assert.deepEqual(tab.action, { label: "Open Compliance", route: "/compliance", tab: "compliance", auto: true });
+  const page = resolveNavigation({ id: "sars" }, { capabilities: ["governance.read"], platform: "mobile" });
+  assert.deepEqual(page.action, { label: "Open SARs", route: "/governance/sars", tab: null, auto: true });
+  const desktopOnly = resolveNavigation({ id: "purchasing" }, { capabilities: ["purchasing.read"], platform: "mobile" });
+  assert.equal(desktopOnly.action, undefined);
+  assert.match(desktopOnly.text, /only on the desktop app/);
+  assert.match(resolveNavigation({ id: "nowhere" }, {}).text, /not sure where you mean/);
+});
+
+console.log(`\n${n} passed`);

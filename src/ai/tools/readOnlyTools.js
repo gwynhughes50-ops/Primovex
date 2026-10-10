@@ -1,5 +1,8 @@
-import { collection, doc, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { Timestamp, collection, doc, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
+import { concernsOverviewAnswer, lastCheckAnswer, lastLoginAnswer, sarOverviewAnswer, waterTempsAnswer } from '@/ai/management/managementAsk';
+import { summariseUsers } from '@/lib/usageReport';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '@/lib/firebase';
 import { getFacilitiesSnapshot } from '@/modules/facilities/services/facilitiesStore';
 import { listEquipment } from '@/modules/equipment/services/equipmentRegistry';
 import { buildOperationsTimeline, changesSince } from '@/operations/engine/operationsTimeline';
@@ -21,6 +24,14 @@ import { needsCleaning } from '@/lib/cleaningFrequency';
 import { buildSeAnswer } from '@/ai/governance/seAnswers';
 import { buildSeReportDraft } from '@/ai/governance/seDraft';
 import { buildAnyUseDraft } from '@/ai/stock/stockUse';
+import { buildStockInDraft } from '@/ai/stock/stockIn';
+import { buildStockCountDraft } from '@/ai/stock/stockCount';
+import { buildExpiredDraft } from '@/ai/stock/expiryRound';
+import { buildReminderDraft } from '@/ai/reminders/reminders';
+import { resolveNavigation } from '@/ai/navigation/navigate';
+import { BRIEFING_SECTIONS, composeBriefing, headlineOf, needsAttention } from '@/ai/briefing/briefing';
+import { executeApprovedTool } from './toolExecutor';
+import { buildPersonMessageDraft, parsePersonMessage } from '@/ai/people/personMessage';
 import { ensureMedicineNames } from '@/ai/stock/medicineNamesLoader';
 import { setProtectedWords } from '@/ai/stock/medicineNames';
 import { loadVisibleSe } from '@/modules/governance/services/seService';
@@ -244,7 +255,7 @@ export function registerApprovedReadOnlyTools() {
     id: 'inventory.expiring', label: 'Expiring stock', requiredCapability: 'inventory.read',
     // With no number of days given, this uses the practice's own expiry windows; a
     // number ("expiring in 14 days") overrides them.
-    async execute({ days = null } = {}) {
+    async execute({ days = null } = {}, context = {}) {
       const [items, settings] = await Promise.all([readStock(), readExpirySettings()]);
       const explicit = Number.isFinite(Number(days)) && Number(days) > 0;
       const picture = stockPicture(items, settings);
@@ -259,7 +270,7 @@ export function registerApprovedReadOnlyTools() {
       return {
         data: [...expired, ...soon],
         summary: answer.text,
-        followUps: answer.followUps,
+        followUps: expired.length && hasCapability(context.capabilities || [], 'inventory.write') ? [{ label: 'Take the expired stock off', ask: 'take the expired stock off', color: '#ef4444' }, ...answer.followUps] : answer.followUps,
         confidence: 0.98,
         sources: [source('Inventory expiry register', `${items.length} active items checked · ${nowLabel()}`)],
         actions: [{ label: 'Open Inventory', route: '/inventory' }],
@@ -760,6 +771,100 @@ export function registerApprovedReadOnlyTools() {
     },
   });
 
+  // ---- management questions: checks last done, water temperatures, sign-ins, SARs and concerns ---------------------
+  // Read-only. They name staff and reference numbers (never patients) and are never offered to the
+  // language assistant. Wording lives in src/ai/management/managementAsk.js.
+  const readRows = async (name, constraints = []) => {
+    const snap = await getDocs(query(collection(db, name), ...constraints));
+    return snap.docs.map((row) => ({ id: row.id, ...row.data() }));
+  };
+  const noAccess = (domain, topic, route) => ({ domain, data: null, summary: `You don't have access to ${topic}, so I can't answer that.`, confidence: 1, sources: [source(topic, 'Access limited by your role', 'system')], actions: route ? [{ label: 'Open', route }] : [] });
+
+  registerTool({
+    id: 'compliance.lastCheck', label: 'When a check was last done', requiredCapability: 'compliance.read',
+    async execute({ kind = 'fire_alarm' } = {}) {
+      const legacyName = kind === 'fire_alarm' ? 'fire_weekly_checks' : kind === 'water' ? 'water_temp_rounds' : null;
+      const [checks, assets, legacy] = await Promise.all([
+        readRows('compliance_checks', [orderBy('createdAt', 'desc'), limit(500)]),
+        readRows('compliance_assets').catch(() => []),
+        legacyName ? readRows(legacyName, [orderBy('createdAt', 'desc'), limit(5)]).catch(() => []) : Promise.resolve([]),
+      ]);
+      const answer = lastCheckAnswer({ kind, checks, assets, legacy });
+      return {
+        domain: 'compliance', data: { kind, overdue: Boolean(answer.overdue) }, summary: answer.text, confidence: answer.found ? 0.95 : 0.75,
+        sources: [source('Compliance checks', `${checks.length} recent check${checks.length === 1 ? '' : 's'} read · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Compliance', route: '/compliance' }],
+      };
+    },
+  });
+
+  registerTool({
+    id: 'compliance.waterTemps', label: 'Water temperatures', requiredCapability: 'compliance.read',
+    async execute({ days = 30 } = {}) {
+      const [checks, assets] = await Promise.all([
+        readRows('compliance_checks', [orderBy('createdAt', 'desc'), limit(800)]),
+        readRows('compliance_assets').catch(() => []),
+      ]);
+      const answer = waterTempsAnswer({ checks, assets, days: Math.min(Math.max(Number(days) || 30, 1), 365) });
+      return {
+        domain: 'compliance', data: { readings: answer.readings || 0, outOfRange: answer.outOfRange || 0 }, summary: answer.text, confidence: answer.found ? 0.95 : 0.75,
+        warnings: answer.outOfRange ? [`${answer.outOfRange} reading${answer.outOfRange === 1 ? '' : 's'} outside the safe range`] : [],
+        sources: [source('Compliance checks', `${checks.length} recent checks read · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Compliance', route: '/compliance' }],
+      };
+    },
+  });
+
+  registerTool({
+    id: 'security.lastLogin', label: 'When someone last signed in', requiredCapability: 'audit.read',
+    async execute({ name = '' } = {}, context = {}) {
+      const days = 90;
+      const practiceId = context.profile?.practiceId || context.profile?.organisationId || context.profile?.organizationId || 'primary';
+      let sessions;
+      try {
+        sessions = await readRows('usage_sessions', [where('practiceId', '==', practiceId), where('startedAt', '>=', Timestamp.fromDate(new Date(Date.now() - days * 86400000))), orderBy('startedAt', 'desc'), limit(2000)]);
+      } catch {
+        return noAccess('security', 'the sign-in records', '/security-centre');
+      }
+      const answer = lastLoginAnswer({ name, people: summariseUsers(sessions), days });
+      return {
+        domain: 'security', data: { found: Boolean(answer.found), choices: answer.choices || [] }, summary: answer.text,
+        followUps: answer.ambiguous ? answer.choices.map((choice) => ({ label: choice, ask: `when did ${choice} last log in`, color: 'blue' })) : undefined,
+        confidence: answer.found ? 0.95 : 0.7,
+        sources: [source('Sign-in records', `${sessions.length} session${sessions.length === 1 ? '' : 's'} in the last ${days} days · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Security Centre', route: '/security-centre' }],
+      };
+    },
+  });
+
+  registerTool({
+    id: 'governance.sarOverview', label: 'SARs outstanding', requiredCapability: 'governance.read',
+    async execute({ person = '' } = {}) {
+      let sars;
+      try { sars = await readRows(SAR_COLLECTION); } catch { return noAccess('governance', 'subject access requests', '/governance/sars'); }
+      const answer = sarOverviewAnswer({ person, sars });
+      return {
+        domain: 'governance', data: { count: answer.count, overdue: answer.overdue || 0 }, summary: answer.text, confidence: 0.96,
+        sources: [source('Governance SARs', `${sars.length} request${sars.length === 1 ? '' : 's'} you can see · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open SARs', route: '/governance/sars' }],
+      };
+    },
+  });
+
+  registerTool({
+    id: 'governance.concernsOverview', label: 'Where concerns are up to', requiredCapability: 'governance.read',
+    async execute() {
+      let concerns;
+      try { concerns = await readRows(CONCERNS_COLLECTION); } catch { return noAccess('governance', 'concerns', '/governance/concerns'); }
+      const answer = concernsOverviewAnswer({ concerns });
+      return {
+        domain: 'governance', data: { count: answer.count, overdue: answer.overdue || 0 }, summary: answer.text, confidence: 0.96,
+        sources: [source('Governance concerns', `${concerns.length} case${concerns.length === 1 ? '' : 's'} you can see · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Concerns', route: '/governance/concerns' }],
+      };
+    },
+  });
+
   // ---- stock: where it is, and things the Orb can PREPARE for you to confirm ------------------------------------
   // The two "draft" lookups only read data and return a proposal card; nothing is sent, created
   // or changed until the person presses Confirm (see src/orb/actionProposals.js).
@@ -835,6 +940,132 @@ export function registerApprovedReadOnlyTools() {
       const result = buildAnyUseDraft(input, { items });
       return {
         domain: 'inventory', data: { proposed: Boolean(result.proposal) }, summary: result.text, followUps: result.followUps, proposal: result.proposal || null,
+        confidence: result.proposal ? 0.95 : 0.8,
+        sources: [source('Inventory', `${items.length} active products checked · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Inventory', route: '/inventory' }],
+      };
+    },
+  });
+
+  // "I've received two boxes of gauze, batch 4471, expires March 2028": works out the product, place,
+  // batch and expiry (asking for what is missing) and prepares a card. Stock is added only on confirm.
+  registerTool({
+    id: 'stock.inDraft', label: 'Book stock in', requiredCapability: 'inventory.write',
+    async execute(input = {}) {
+      await ensureMedicineNames();
+      const [items, kits] = await Promise.all([readStock(), readKits()]);
+      const result = buildStockInDraft(input, { items, kits });
+      return {
+        domain: 'inventory', data: { proposed: Boolean(result.proposal), pending: result.pending ? { toolId: 'stock.inDraft', sentence: String(input.question || '') } : undefined },
+        summary: result.text, followUps: result.followUps, proposal: result.proposal || null,
+        confidence: result.proposal ? 0.95 : 0.8,
+        sources: [source('Inventory', `${items.length} active products checked · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Inventory', route: '/inventory' }],
+      };
+    },
+  });
+
+  // "What needs attention before I leave?": the headline of each lookup this person can use, together. Reads only.
+  registerTool({
+    id: 'briefing.daily', label: 'Daily briefing', requiredCapability: 'dashboard.read',
+    async execute(_input = {}, context = {}) {
+      const results = await Promise.allSettled(BRIEFING_SECTIONS.map((section) => executeApprovedTool(section.id, section.input || {}, context)));
+      const sections = results.map((result, index) => {
+        if (result.status !== 'fulfilled' || result.value?.denied) return null; // not allowed, or couldn't be read: left out
+        const section = BRIEFING_SECTIONS[index];
+        const text = headlineOf(result.value.summary, section.lines);
+        return text ? { label: section.label, text, attention: needsAttention(text) } : null;
+      }).filter(Boolean);
+      const hour = new Date().getHours();
+      const briefing = composeBriefing(sections, { when: hour < 12 ? 'morning' : 'now' });
+      return {
+        domain: 'operations', data: { sections: sections.length, attention: briefing.attention }, summary: briefing.text, confidence: sections.length ? 0.9 : 0.5,
+        sources: [source('Primovex briefing', `${sections.length} area${sections.length === 1 ? '' : 's'} checked · live read ${nowLabel()}`, 'system')],
+        followUps: briefing.attention ? ['active alerts'] : [],
+        actions: [{ label: 'Open Dashboard', route: '/dashboard' }],
+      };
+    },
+  });
+
+  // "Go to the alerts": opens a screen the person is allowed into. Changes nothing.
+  registerTool({
+    id: 'app.navigate', label: 'Open a screen', requiredCapability: 'dashboard.read',
+    execute(input = {}, context = {}) {
+      const platform = typeof document !== 'undefined' ? document.documentElement.dataset.primovexClient || 'desktop' : 'desktop';
+      const result = resolveNavigation(input, { capabilities: context.capabilities || [], platform: platform === 'android' || platform === 'mobile' ? 'mobile' : 'desktop' });
+      return {
+        domain: 'navigation', data: { opened: Boolean(result.action) }, summary: result.text, confidence: result.action ? 0.97 : 0.9,
+        sources: [source('Primovex screens', 'Opens a screen; changes nothing', 'system')],
+        actions: result.action ? [result.action] : [],
+      };
+    },
+  });
+
+  // "Remind me to check the fridge tomorrow at 9": a card; confirming saves it as a Quick note. Needs no permission
+  // beyond being signed in, since it only ever writes the person's own note (or a shared practice note).
+  registerTool({
+    id: 'reminder.draft', label: 'Set a reminder', requiredCapability: 'dashboard.read',
+    execute(input = {}) {
+      const result = buildReminderDraft(input);
+      return {
+        domain: 'tasks', data: { proposed: Boolean(result.proposal) }, summary: result.text, followUps: result.followUps, proposal: result.proposal || null,
+        confidence: result.proposal ? 0.95 : 0.8,
+        sources: [source('Quick notes', 'Drafted from what you said; nothing saved yet', 'system')],
+        actions: [{ label: 'Open Dashboard', route: '/dashboard' }],
+      };
+    },
+  });
+
+  // "Tell Ben the vaccine fridge needs checking": the server finds which colleague Ben is (names and roles only),
+  // then a card shows who it goes to. Nothing is sent until they confirm.
+  registerTool({
+    id: 'person.messageDraft', label: 'Message a colleague', requiredCapability: 'inventory.write',
+    async execute(input = {}) {
+      const parsed = parsePersonMessage(input.question);
+      let matches = null;
+      if (parsed) {
+        try {
+          const found = await httpsCallable(functions, 'orbFindColleague')({ words: parsed.words });
+          matches = Array.isArray(found?.data?.matches) ? found.data.matches : [];
+        } catch (error) {
+          console.warn('Orb colleague lookup failed', error?.code || error?.message);
+        }
+      }
+      const result = buildPersonMessageDraft(input, matches);
+      return {
+        domain: 'inventory', data: { proposed: Boolean(result.proposal) }, summary: result.text, followUps: result.followUps, proposal: result.proposal || null,
+        confidence: result.proposal ? 0.95 : 0.7,
+        sources: [source('Primovex team', 'Colleague looked up by first name; nothing sent yet', 'system')],
+        actions: [],
+      };
+    },
+  });
+
+  // "Take the expired stock off": one card listing every batch past its date; stock changes only on confirm.
+  registerTool({
+    id: 'stock.expiredDraft', label: 'Remove expired stock', requiredCapability: 'inventory.write',
+    async execute(input = {}) {
+      const items = await readStock();
+      const result = buildExpiredDraft(input, { items });
+      return {
+        domain: 'inventory', data: { proposed: Boolean(result.proposal) }, summary: result.text, followUps: result.followUps, proposal: result.proposal || null,
+        confidence: result.proposal ? 0.95 : 0.9,
+        sources: [source('Inventory expiry register', `${items.length} active products checked · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Inventory', route: '/inventory' }],
+      };
+    },
+  });
+
+  // "Count the nurses room: gloves 12, syringes 40": one card showing counted against recorded for that place.
+  registerTool({
+    id: 'stock.countDraft', label: 'Count stock', requiredCapability: 'inventory.write',
+    async execute(input = {}) {
+      await ensureMedicineNames();
+      const [items, kits] = await Promise.all([readStock(), readKits()]);
+      const result = buildStockCountDraft(input, { items, kits });
+      return {
+        domain: 'inventory', data: { proposed: Boolean(result.proposal), pending: result.pending ? { toolId: 'stock.countDraft', sentence: String(input.question || '') } : undefined },
+        summary: result.text, followUps: result.followUps, proposal: result.proposal || null,
         confidence: result.proposal ? 0.95 : 0.8,
         sources: [source('Inventory', `${items.length} active products checked · live read ${nowLabel()}`)],
         actions: [{ label: 'Open Inventory', route: '/inventory' }],

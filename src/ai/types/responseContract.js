@@ -7,7 +7,7 @@ export const AI_STATES = Object.freeze({
   ERROR: 'error',
 });
 
-export function createMessage({ role, content, confidence = null, confidenceBand = null, sources = [], actions = [], warnings = [], followUps = [], proposal = null, modulesUsed = [], auditId = null, error = false, intent = null, clarification = null, request = null }) {
+export function createMessage({ role, content, confidence = null, confidenceBand = null, sources = [], actions = [], warnings = [], followUps = [], proposal = null, modulesUsed = [], auditId = null, error = false, intent = null, clarification = null, request = null, pending = null }) {
   return {
     id: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     role,
@@ -25,6 +25,7 @@ export function createMessage({ role, content, confidence = null, confidenceBand
     intent,
     clarification,
     request,
+    pending,
     createdAt: new Date().toISOString(),
   };
 }

@@ -51,6 +51,7 @@ export function includesAny(text, phrases) {
 export function extractNumberOfDays(text, fallback = 60) {
   const direct = text.match(/(?:next|within|in)\s+(\d{1,3})\s+days?/);
   if (direct) return Math.max(1, Math.min(365, Number(direct[1])));
+  if (/this month|rest of the month|end of the month|by the end of (?:this )?month/.test(text)) { const now = new Date(); return Math.max(1, new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() - now.getDate()); }
   if (/next week|within a week/.test(text)) return 7;
   if (/next fortnight|within a fortnight/.test(text)) return 14;
   if (/next month|within a month/.test(text)) return 30;

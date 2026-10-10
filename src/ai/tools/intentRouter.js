@@ -14,6 +14,15 @@ import { findHelp, isHowToQuestion } from '@/ai/help/helpSearch';
 import { SE_REFERENCE } from '@/ai/governance/seAnswers';
 import { looksLikeSeReport } from '@/ai/governance/seDraft';
 import { parseUseRequest } from '@/ai/stock/stockUse';
+import { parseManagementQuestion } from '@/ai/management/managementAsk';
+import { looksLikeStockIn } from '@/ai/stock/stockIn';
+import { looksLikeStockCount } from '@/ai/stock/stockCount';
+import { looksLikeExpiryRemoval } from '@/ai/stock/expiryRound';
+import { looksLikeReminder } from '@/ai/reminders/reminders';
+import { parseNavigation } from '@/ai/navigation/navigate';
+import { looksLikeBriefing } from '@/ai/briefing/briefing';
+import { looksLikePersonMessage } from '@/ai/people/personMessage';
+import { routePendingDetails } from './pendingDetails';
 import { looksLikePlaceQuestion, looksLikeTeamMessage, parseLocateQuestion, parseStockRequest } from '@/ai/stock/stockAsk';
 
 const INVENTORY_WORDS = ['stock', 'inventory', 'supplies', 'products', 'consumables', 'items'];
@@ -57,6 +66,17 @@ export function routeApprovedTool(prompt, options = {}) {
   const followUp = routeFollowUp(text, context);
   if (followUp) return { ...followUp, language: { normalised: text, followUp: true } };
 
+  // The answer to a question the Orb just asked ("what's the batch number and expiry date?").
+  const pendingAnswer = routePendingDetails(prompt, options.conversation);
+  if (pendingAnswer) return { ...pendingAnswer, language: { normalised: text, confidence: 0.95 } };
+
+  // "Go to purchase orders", "open the alerts": take them there.
+  const navigation = parseNavigation(prompt);
+  if (navigation) return { toolId: 'app.navigate', input: navigation, language: { normalised: text, confidence: 0.95 } };
+
+  // "What needs attention before I leave?": the end-of-day briefing.
+  if (looksLikeBriefing(prompt)) return { toolId: 'briefing.daily', input: {}, language: { normalised: text, confidence: 0.95 } };
+
   // "How do I...?" with a matching help article goes to the help lookup, before the data
   // lookups (so "how do I check the anaphylaxis box" gives the steps, not the box's status).
   // A how-to with no matching article carries on to the usual routing.
@@ -77,12 +97,21 @@ export function routeApprovedTool(prompt, options = {}) {
     return { toolId: 'governance.seLookup', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.95 } };
   }
 
+  // Management questions: a check last done, water temperatures, someone's last sign-in, SARs and concerns.
+  const management = parseManagementQuestion(prompt, options.conversation);
+  if (management) return { ...management, language: { normalised: text, confidence: 0.95 } };
+
   // Doing something with stock, or asking where it is (before the older stock phrases below,
   // which would otherwise treat "need ordering" as a question about low stock).
   //   "tell the HCA team BD blue needles need ordering"  -> a message to confirm
   //   "BD blue needles need ordering" / "reorder ..."     -> a reorder to confirm
   //   "what's in anaphylaxis box 3"                      -> where things are
+  if (looksLikeStockIn(prompt)) return { toolId: 'stock.inDraft', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.93 } };
+  if (looksLikeExpiryRemoval(prompt)) return { toolId: 'stock.expiredDraft', input: {}, language: { normalised: text, confidence: 0.93 } };
+  if (looksLikeStockCount(prompt)) return { toolId: 'stock.countDraft', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.93 } };
+  if (looksLikeReminder(prompt)) return { toolId: 'reminder.draft', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.95 } };
   if (looksLikeTeamMessage(prompt)) return { toolId: 'team.messageDraft', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.95 } };
+  if (looksLikePersonMessage(prompt)) return { toolId: 'person.messageDraft', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.9 } };
   if (parseUseRequest(prompt)) return { toolId: 'stock.useDraft', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.93 } };
   if (parseStockRequest(prompt)) return { toolId: 'reorder.draft', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.93 } };
   if (looksLikePlaceQuestion(prompt)) return { toolId: 'inventory.locate', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.95 } };

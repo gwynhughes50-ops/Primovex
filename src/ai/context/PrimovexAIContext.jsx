@@ -59,8 +59,10 @@ export function PrimovexAIProvider({ children }) {
       setStatus(AI_STATES.REASONING);
       await new Promise((resolve) => window.setTimeout(resolve, 220));
       const response = assertProviderResponse(raw);
+      // A card still waiting that this answer rebuilds (a count with more items added) is replaced, not left beside it.
+      const replaces = lastAssistant?.pending && lastAssistant.proposal?.status === 'proposed' && response.proposal?.kind === lastAssistant.proposal.kind ? lastAssistant.id : null;
       setMessages((current) => [
-        ...current,
+        ...(replaces ? current.map((item) => (item.id === replaces ? { ...item, proposal: { ...item.proposal, status: 'cancelled', result: 'Updated below.' } } : item)) : current),
         createMessage({
           role: 'assistant',
           content: response.answer,
@@ -76,6 +78,7 @@ export function PrimovexAIProvider({ children }) {
           confidenceBand: response.confidenceBand,
           clarification: response.clarification,
           request: cleanPrompt,
+          pending: response.data?.pending || null,
         }),
       ]);
       setStatus(AI_STATES.RESPONDING);
