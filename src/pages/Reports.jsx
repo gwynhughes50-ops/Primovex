@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   ShieldAlert,
   FileSearch,
+  Pencil,
 } from "lucide-react";
 
 import jsPDF from "jspdf";
@@ -26,6 +27,7 @@ import { db } from "@/lib/firebase";
 import { normalizeStockItemCategory } from "@/services/stockService";
 import { categoryLabel as taxonomyCategoryLabel, subcategoryLabel as taxonomySubcategoryLabel } from "@/data/stockCategories";
 import { useAuth } from "@/contexts/AuthContext";
+import StockItemEditDialog from "@/components/stock/StockItemEditDialog";
 import {
   CONCERN_CATEGORIES,
   CONCERN_OUTCOME_LABELS,
@@ -287,6 +289,29 @@ function EmptyRow({ cols }) {
   );
 }
 
+// The item's name opens its editor in place (for people who can edit stock), so a missing site or an expiry date
+// can be fixed from the report without going back to Inventory and finding the item again.
+function ItemName({ item, onEdit }) {
+  if (!onEdit) return <span>{item.name}</span>;
+  return (
+    <button type="button" onClick={() => onEdit(item)} className="text-left font-medium text-slate-100 underline decoration-dotted decoration-teal-300/60 underline-offset-4 hover:text-teal-200" title="Edit this item">
+      {item.name}
+    </button>
+  );
+}
+
+function EditCell({ item, onEdit }) {
+  return (
+    <td className="px-4 py-3 text-right">
+      {onEdit && (
+        <button type="button" onClick={() => onEdit(item)} className="inline-flex items-center gap-1 rounded-full border border-teal-300/40 px-2.5 py-1 text-[0.7rem] font-semibold text-teal-200 hover:bg-teal-500/10" aria-label={`Edit ${item.name}`}>
+          <Pencil className="h-3 w-3" aria-hidden="true" /> Edit
+        </button>
+      )}
+    </td>
+  );
+}
+
 function NeedsAttentionPill({ item }) {
   const needs = isNeedsAttention(item);
   if (!needs) return null;
@@ -308,7 +333,7 @@ function NeedsAttentionPill({ item }) {
   );
 }
 
-function StockTable({ rows }) {
+function StockTable({ rows, onEdit }) {
   return (
     <table className="min-w-full text-left text-sm">
       <thead>
@@ -319,11 +344,12 @@ function StockTable({ rows }) {
           <th className="px-4 py-2">Location</th>
           <th className="px-4 py-2 text-right">Stock</th>
           <th className="px-4 py-2">Status</th>
+          {onEdit && <th className="px-4 py-2 text-right"><span className="sr-only">Edit</span></th>}
         </tr>
       </thead>
       <tbody>
         {rows.length === 0 ? (
-          <EmptyRow cols={6} />
+          <EmptyRow cols={onEdit ? 7 : 6} />
         ) : (
           rows.map((item) => {
             const st = stockStatus(item);
@@ -332,7 +358,7 @@ function StockTable({ rows }) {
               <tr key={item.id} className="border-b border-white/10 last:border-0">
                 <td className="px-4 py-3 text-xs text-slate-100">
                   <div className="font-medium flex items-center">
-                    {item.name}
+                    <ItemName item={item} onEdit={onEdit} />
                     <NeedsAttentionPill item={item} />
                   </div>
                   {item.barcode && <div className="text-[0.7rem] text-slate-400">{item.barcode}</div>}
@@ -346,6 +372,7 @@ function StockTable({ rows }) {
                     {st.label}
                   </span>
                 </td>
+                {onEdit && <EditCell item={item} onEdit={onEdit} />}
               </tr>
             );
           })
@@ -355,7 +382,7 @@ function StockTable({ rows }) {
   );
 }
 
-function ExpiryTable({ rows }) {
+function ExpiryTable({ rows, onEdit }) {
   return (
     <table className="min-w-full text-left text-sm">
       <thead>
@@ -366,16 +393,17 @@ function ExpiryTable({ rows }) {
           <th className="px-4 py-2">Batch</th>
           <th className="px-4 py-2">Expiry</th>
           <th className="px-4 py-2">Status</th>
+          {onEdit && <th className="px-4 py-2 text-right"><span className="sr-only">Edit</span></th>}
         </tr>
       </thead>
       <tbody>
         {rows.length === 0 ? (
-          <EmptyRow cols={6} />
+          <EmptyRow cols={onEdit ? 7 : 6} />
         ) : (
           rows.map((item) => (
             <tr key={item.id} className="border-b border-white/10 last:border-0">
               <td className="px-4 py-3 text-xs text-slate-100">
-                <div className="font-medium">{item.name}</div>
+                <div className="font-medium"><ItemName item={item} onEdit={onEdit} /></div>
                 {item.barcode && <div className="text-[0.7rem] text-slate-400">{item.barcode}</div>}
               </td>
               <td className="px-4 py-3 text-xs text-slate-200">{resolveSite(item) || "—"}</td>
@@ -383,6 +411,7 @@ function ExpiryTable({ rows }) {
               <td className="px-4 py-3 text-xs text-slate-200">{item.batch_number || "—"}</td>
               <td className="px-4 py-3 text-xs text-slate-200">{item.expiry_date || "—"}</td>
               <td className="px-4 py-3 text-xs text-slate-200">{item.expiry_status}</td>
+              {onEdit && <EditCell item={item} onEdit={onEdit} />}
             </tr>
           ))
         )}
@@ -558,6 +587,9 @@ function BreakdownCard({ title, counts, labelFor, total }) {
 export default function Reports() {
   const { can } = useAuth();
   const [tab, setTab] = useState("stock"); // stock | expiry | tx | temp | concerns | sars
+  // Editing a stock item from the report: anyone who can edit stock, in a window opened in place
+  const canEditStock = can("inventory.write");
+  const [editId, setEditId] = useState(null);
 
   // Filters
   const [siteFilter, setSiteFilter] = useState(ALL_SITES);
@@ -1338,14 +1370,18 @@ export default function Reports() {
         </div>
 
         <div className="overflow-x-auto">
-          {tab === "stock" && <StockTable rows={filteredStock} />}
-          {tab === "expiry" && <ExpiryTable rows={expiryRows} />}
+          {tab === "stock" && <StockTable rows={filteredStock} onEdit={canEditStock ? (item) => setEditId(item.id) : null} />}
+          {tab === "expiry" && <ExpiryTable rows={expiryRows} onEdit={canEditStock ? (item) => setEditId(item.id) : null} />}
           {tab === "tx" && <TransactionsTable rows={filteredTransactions} />}
           {tab === "temp" && <TempTable rows={filteredTemps} />}
           {tab === "concerns" && <ConcernsTable rows={filteredConcerns} />}
           {tab === "sars" && <SarsTable rows={filteredSars} />}
         </div>
       </Card>
+
+      {canEditStock && editId && stock.find((entry) => entry.id === editId) && (
+        <StockItemEditDialog item={stock.find((entry) => entry.id === editId)} items={stock} onClose={() => setEditId(null)} />
+      )}
     </div>
   );
 }
