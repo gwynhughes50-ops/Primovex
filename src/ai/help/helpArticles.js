@@ -540,6 +540,7 @@ export const HELP_ARTICLES = [
     steps: [
       "Go to Temperature and open the \"Fridges\" tab (you only see it if you can set fridges up).",
       "Press \"Add a fridge\", give it a name, choose its site and kind. The usual safe range is filled in (2 to 8 °C for a fridge); change it if the fridge needs a different one.",
+      "Press \"Print QR label\" on a fridge (or \"Print all QR labels\") and stick the label on the fridge. Scanning it with the Primovex app opens that fridge's temperature check. For an NFC tag instead, open the phone app, go to Facilities > Practice spaces > Fridges, choose the fridge and press \"Write this fridge to an NFC tag\".",
       "Under \"Who is alerted\", tick the roles that should be told when a reading is out of range. The Practice Manager is ticked to start with. Add a Nurse Manager role under Practice Admin > Roles, give it \"Resolve temperature incidents\", then tick it here.",
       "When a reading is out of range, the people ticked get a message on their screen with \"Take action\": Quarantine this fridge, Record stock moved or discarded, and Clear it and return to use. A fridge can only be cleared after a recheck that is back in range.",
     ],

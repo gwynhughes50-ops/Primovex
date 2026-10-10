@@ -182,3 +182,14 @@ export function fridgeChecksAnswer({ fridges = [], logs = [], incidents = [], no
   if (open.length) lines.push(`${plural(open.length, "fridge incident")} open: ${names(open.map((i) => ({ name: i.unitName || "a fridge" })))}.`);
   return { text: lines.join("\n"), unchecked: missing.length, openIncidents: open.length };
 }
+
+// A fridge from the Temperature page's list, shaped like the equipment the check form works with, so a tag that
+// points straight at the fridge (rather than at a piece of equipment) opens the same check.
+export function unitAsAsset(unit) {
+  return {
+    id: unit.id,
+    name: unit.name,
+    category: unit.type === "freezer" ? "Freezer" : "Fridge",
+    monitoring: { fridgeId: unit.id, min: unit.range?.min, max: unit.range?.max },
+  };
+}

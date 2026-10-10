@@ -199,12 +199,18 @@ export default function MobileLayout({ initialTab = "home" }) {
     let entityId = code;
     try {
       const url = new URL(code, window.location.origin);
-      const match = url.pathname.match(/^\/sense\/open\/(space|asset)\/([^/]+)\/?$/i);
+      const match = url.pathname.match(/^\/sense\/open\/(space|asset|fridge)\/([^/]+)\/?$/i);
       if (match) {
         entityType = match[1].toLowerCase();
         entityId = decodeURIComponent(match[2]);
       }
     } catch {}
+
+    // a fridge's own QR code: straight to its temperature check
+    if (entityType === "fridge") {
+      navigate(`/sense/open/fridge/${encodeURIComponent(entityId)}`);
+      return;
+    }
 
     if (entityType === "asset") {
       const senseState = loadSenseState();

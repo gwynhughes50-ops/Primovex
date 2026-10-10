@@ -106,7 +106,7 @@ export function parsePrimovexSenseUrl(value) {
   try {
     const url = new URL(value, window.location.origin);
     if (url.origin !== window.location.origin) return null;
-    const match = url.pathname.match(/^\/sense\/open\/(space|asset)\/([^/]+)\/?$/i);
+    const match = url.pathname.match(/^\/sense\/open\/(space|asset|fridge)\/([^/]+)\/?$/i);
     if (!match) return null;
     return {
       entityType: match[1].toLowerCase(),

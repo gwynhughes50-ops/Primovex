@@ -9,6 +9,7 @@ import { loadSenseState, saveSenseState, upsertNfcTag } from '@/modules/sense/se
 import { getActiveCleaningSession, markRoomStocked, subscribeRoomOperational } from '@/modules/facilities/services/cleaningRecordService';
 import MobileFridgeSheet from './MobileFridgeSheet';
 import MobileFridgeCheckSheet from './MobileFridgeCheckSheet';
+import MobileFridgeTags from './MobileFridgeTags';
 import { isFridgeAsset } from './fridgeCheck';
 import { subscribeToEquipmentSightings } from '@/modules/equipment/services/equipmentSightingService';
 
@@ -191,6 +192,8 @@ export default function MobileSenseSpaces({ onScan, onBleScan }) {
       })()}
 
       {assets.length > 0 && <section className="pvx-mobile-card"><div className="flex items-center gap-2"><Boxes className="h-5 w-5 text-[var(--medtrak-accent)]"/><h2 className="font-bold">Equipment</h2></div><div className="mt-2 space-y-2">{assets.map((asset) => { const sighting = sightings.get(asset.id); return <button key={asset.id} onClick={() => setSelectedAsset(asset)} className="flex w-full items-center justify-between rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-2.5 text-left"><span><b className="block">{asset.name}</b><small className="text-[var(--medtrak-muted)]">{asset.category || 'Equipment'}{asset.monitoring?.fridgeId ? ' · Live temperature' : ''}{sighting?.lastSeenAt ? ` · Seen ${timeAgo(sighting.lastSeenAt)}${sighting.lastSeenSpaceName ? ` near ${sighting.lastSeenSpaceName}` : ''}` : ''}</small></span><ChevronRight className="h-4 w-4 text-[var(--medtrak-muted)]"/></button>; })}</div></section>}
+
+      <MobileFridgeTags />
 
       {selected && <div className="pvx-mobile-sheet-backdrop"><section className="pvx-mobile-sheet">
         <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-[var(--medtrak-border)]"/>

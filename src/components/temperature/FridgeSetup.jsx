@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, doc, onSnapshot, serverTimestamp, setDoc, addDoc, updateDoc } from "firebase/firestore";
-import { CheckCircle2, Plus, Save, Thermometer } from "lucide-react";
+import { CheckCircle2, Plus, Printer, QrCode, Save, Thermometer } from "lucide-react";
+import { printHtmlDocument } from "@/lib/printHtmlDocument";
+import { getQrImageUrl } from "@/lib/qrCode";
+import { buildNfcUrl } from "@/modules/sense/services/nfcService";
+import { fridgeLabelsHtml } from "@/modules/temperature/fridgeLabels";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { ROLE_TEMPLATES } from "@/core/identity/capabilities";
@@ -15,7 +19,7 @@ import { ALERT_ROLES_DEFAULT } from "@/modules/temperature/fridgeIncidents";
 const FIELD = "mt-1 w-full rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-teal-300/60";
 const LABEL = "block text-xs font-semibold uppercase tracking-wide text-slate-400";
 
-function UnitRow({ unit, sites, units, onSaved }) {
+function UnitRow({ unit, sites, units, onSaved, onPrint }) {
   const [form, setForm] = useState(() => formFromUnit(unit));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
@@ -56,6 +60,7 @@ function UnitRow({ unit, sites, units, onSaved }) {
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> In use</label>
         <button type="button" onClick={save} disabled={busy || !dirty} className="inline-flex items-center gap-1.5 rounded-lg bg-teal-500/90 px-3 py-1.5 text-sm font-semibold text-slate-950 disabled:opacity-40"><Save className="h-4 w-4" aria-hidden="true" /> Save</button>
+        <button type="button" onClick={() => onPrint(unit)} disabled={dirty} title={dirty ? "Save your changes first" : "Print the QR code to stick on this fridge"} className="inline-flex items-center gap-1.5 rounded-lg border border-teal-300/40 px-3 py-1.5 text-sm font-semibold text-teal-200 disabled:opacity-40"><QrCode className="h-4 w-4" aria-hidden="true" /> Print QR label</button>
         {message && <span className="flex items-center gap-1 text-sm text-emerald-300" role="status"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> {message}</span>}
         {error && <span className="text-sm text-rose-300" role="alert">{error}</span>}
       </div>
@@ -77,6 +82,10 @@ export default function FridgeSetup({ sites = [] }) {
   const [addError, setAddError] = useState("");
   const [addBusy, setAddBusy] = useState(false);
   const canChoose = canChooseAlertRoles({ capabilities, isAdmin });
+
+  // the label for a fridge: its QR code opens that fridge's temperature check on the phone; the NFC tag is
+  // written from the phone app (Facilities > Practice spaces > Fridges)
+  const printLabels = (list) => printHtmlDocument(fridgeLabelsHtml(list, { sites, urlFor: (unit) => buildNfcUrl("fridge", unit.id), qrFor: (link) => getQrImageUrl(link, 220) }));
 
   useEffect(() => onSnapshot(collection(db, "temperature_units"), (snap) => setUnits(snap.docs.map((d) => normaliseUnit(d.id, d.data())).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))), () => setUnits([])), []);
   useEffect(() => onSnapshot(collection(db, "roles"), (snap) => setCustomRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setCustomRoles([])), []);
@@ -115,9 +124,12 @@ export default function FridgeSetup({ sites = [] }) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-100"><Thermometer className="h-5 w-5 text-teal-300" aria-hidden="true" /> Fridges and their safe range</h2>
-            <p className="mt-1 text-sm text-slate-400">Each fridge and freezer the practice checks, and the range it must stay in. A reading outside it is flagged red and alerts the people chosen below.</p>
+            <p className="mt-1 text-sm text-slate-400">Each fridge and freezer the practice checks, and the range it must stay in. A reading outside it is flagged red and alerts the people chosen below. Print each fridge's QR label to stick on it; to set up its NFC tag, open the phone app (Facilities, Practice spaces, Fridges).</p>
           </div>
-          <button type="button" onClick={() => setAdding((v) => !v)} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-teal-300/40 px-3 py-1.5 text-sm font-semibold text-teal-200"><Plus className="h-4 w-4" aria-hidden="true" /> Add a fridge</button>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            {units && units.some((unit) => unit.active) && <button type="button" onClick={() => printLabels(units.filter((unit) => unit.active))} className="inline-flex items-center gap-1.5 rounded-lg border border-teal-300/40 px-3 py-1.5 text-sm font-semibold text-teal-200"><Printer className="h-4 w-4" aria-hidden="true" /> Print all QR labels</button>}
+            <button type="button" onClick={() => setAdding((v) => !v)} className="inline-flex items-center gap-1.5 rounded-lg border border-teal-300/40 px-3 py-1.5 text-sm font-semibold text-teal-200"><Plus className="h-4 w-4" aria-hidden="true" /> Add a fridge</button>
+          </div>
         </div>
 
         {adding && (
@@ -144,7 +156,7 @@ export default function FridgeSetup({ sites = [] }) {
         )}
 
         <div className="mt-3 space-y-2">
-          {units === null ? <p className="text-sm text-slate-400">Loading…</p> : units.length === 0 ? <p className="rounded-xl border border-dashed border-white/15 p-4 text-sm text-slate-400">No fridges set up yet. Add each fridge and freezer the practice checks.</p> : units.map((unit) => <UnitRow key={unit.id} unit={unit} sites={sites} units={units} />)}
+          {units === null ? <p className="text-sm text-slate-400">Loading…</p> : units.length === 0 ? <p className="rounded-xl border border-dashed border-white/15 p-4 text-sm text-slate-400">No fridges set up yet. Add each fridge and freezer the practice checks.</p> : units.map((unit) => <UnitRow key={unit.id} unit={unit} sites={sites} units={units} onPrint={(u) => printLabels([u])} />)}
         </div>
       </section>
 

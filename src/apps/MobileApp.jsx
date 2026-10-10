@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import MobileLayout from "@/mobile/MobileLayout";
 import MobileSessionShell from "@/mobile/MobileSessionShell";
@@ -7,6 +7,7 @@ import MobileGovernanceConcerns from "@/mobile/MobileGovernanceConcerns";
 import MobileGovernanceSARs from "@/mobile/MobileGovernanceSARs";
 import MobileSignificantEvents from "@/mobile/MobileSignificantEvents";
 import SenseNfcOpen from "@/pages/SenseNfcOpen";
+import FridgeCheckLanding from "@/mobile/FridgeCheckLanding";
 import MobileBootSplash from "@/mobile/auth/MobileBootSplash";
 import MobileAccountLogin from "@/mobile/auth/MobileAccountLogin";
 import FirstRunSetupGate from "@/setup/FirstRunSetupGate";
@@ -46,12 +47,15 @@ function MobileBootController({ initialTab = "home" }) {
 }
 
 function MobileSenseRoute() {
+  const { entityType, entityId } = useParams();
   const { user, loading, can } = useAuth();
   if (loading) return <MobileBootSplash message="Opening Primovex Sense" />;
   // Keep the deep-link route in place while the user signs in. Once Firebase
   // restores the session this component opens the intended room automatically.
   if (!user) return <MobileAccountLogin />;
   if (!can("mobile.access")) return <MobileAccessDenied />;
+  // a fridge's own tag or QR code goes straight to that fridge's temperature check
+  if (entityType === "fridge") return <FridgeCheckLanding unitId={entityId} />;
   return <SenseNfcOpen />;
 }
 
