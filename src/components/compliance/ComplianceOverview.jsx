@@ -11,6 +11,7 @@ import { dueList } from "@/modules/compliance/complianceDue";
 import { useComplianceIncidents } from "@/modules/compliance/complianceIncidentService";
 import { useMaintenanceIssues } from "@/modules/maintenance/maintenanceService";
 import { useCoshhSubstances } from "@/modules/coshh/coshhService";
+import { useCertificates } from "@/modules/certificates/certificateService";
 import ManualRecordDialog from "./ManualRecordDialog";
 import ComplianceIncidentSheet from "./ComplianceIncidentSheet";
 import { checkPerson, formatWhen, isFireType, isWaterType, toDate } from "./complianceView";
@@ -92,6 +93,7 @@ export default function ComplianceOverview({ assets = [], checks = [], onGoTab }
   const [patSessions, setPatSessions] = useState([]);
   const { list: incidents } = useComplianceIncidents(can("compliance.read"));
   const { list: issues } = useMaintenanceIssues(true);
+  const { list: certificates } = useCertificates(can("compliance.read"));
   const { list: coshh } = useCoshhSubstances(canSeeCoshh && !isSafeSyntheticMode());
 
   // the latest PAT sessions, only to know when the next test is due (a one-off read; it changes rarely)
@@ -121,7 +123,7 @@ export default function ComplianceOverview({ assets = [], checks = [], onGoTab }
   const weekAgo = Date.now() - 7 * 86400000;
   const checksThisWeek = checks.filter((c) => (toDate(c.performedAt) || toDate(c.createdAt) || new Date(0)).getTime() >= weekAgo).length;
 
-  const needs = useMemo(() => dueList({ assets, incidents: incidents || [], patSessions, issues: issues || [], coshh: canSeeCoshh ? coshh : null }), [assets, incidents, patSessions, issues, coshh, canSeeCoshh]);
+  const needs = useMemo(() => dueList({ assets, incidents: incidents || [], patSessions, issues: issues || [], coshh: canSeeCoshh ? coshh : null, certificates }), [assets, incidents, patSessions, issues, coshh, canSeeCoshh, certificates]);
   const canRecord = can("compliance.recordChecks");
 
   const go = (item) => {

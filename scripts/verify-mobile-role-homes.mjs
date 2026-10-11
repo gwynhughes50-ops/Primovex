@@ -154,4 +154,14 @@ t("failed compliance checks head the strip for the people who deal with them, an
   assert.equal(buildAttention({ complianceFailures: null, now })[0].key, "clear");
 });
 
+t("expired and running-out certificates are on the strip for the people who keep them, and left out for everyone else", () => {
+  const chips = buildAttention({ certificates: { expired: 1, dueSoon: 2 }, complianceFailures: 1, now });
+  assert.deepEqual(chips.map((c) => c.key), ["compliance-failed", "certs-expired", "certs-soon"]);
+  assert.equal(chips[1].label, "1 certificate expired");
+  assert.equal(chips[2].label, "2 certificates running out");
+  assert.equal(chips[1].action, "checks");
+  assert.equal(buildAttention({ certificates: { expired: 0, dueSoon: 0 }, now })[0].key, "clear");
+  assert.equal(buildAttention({ certificates: null, now })[0].key, "clear");
+});
+
 console.log(`\n${n} passed`);

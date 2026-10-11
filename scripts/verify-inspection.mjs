@@ -8,8 +8,8 @@ let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
 const now = new Date(2026, 9, 10, 12, 0); // Sat 10 Oct 2026
 const ago = (days) => new Date(now.getTime() - days * 86400000);
-const all = { fire: true, water: true, pat: true, cleaning: true, temperature: true, stock: true, coshh: true, concerns: true, sars: true, events: true };
-const base = { checks: [], fireWeekly: [], waterRounds: [], patSessions: [], patAssets: [], cleaningLogs: [], tempUnits: [], tempLogs: [], tempIncidents: [], stockAlerts: [], stockCount: 0, coshh: [], concerns: [], sars: [], events: [], available: all };
+const all = { fire: true, water: true, pat: true, cleaning: true, temperature: true, stock: true, coshh: true, certs: true, concerns: true, sars: true, events: true };
+const base = { checks: [], fireWeekly: [], waterRounds: [], patSessions: [], patAssets: [], cleaningLogs: [], tempUnits: [], tempLogs: [], tempIncidents: [], stockAlerts: [], stockCount: 0, coshh: [], certificates: [], concerns: [], sars: [], events: [], available: all };
 const sec = (data, id) => buildSections({ ...base, ...data, now })[id];
 const check = (assetType, days, extra = {}) => ({ assetType, assetId: `${assetType}-1`, performedAt: ago(days), result: "pass", actor: { displayName: "Caretaker" }, ...extra });
 
@@ -101,8 +101,8 @@ t("each visit sheet lists its own areas, and the gaps are gathered at the top", 
   const data = { checks: [check("fire_point", 40)], coshh: [] };
   const hs = buildReport({ visitId: "hs", data: { ...base, ...data }, now });
   const heiw = buildReport({ visitId: "heiw", data: { ...base, ...data }, now });
-  assert.deepEqual(hs.sections.map((s) => s.id), ["fire", "water", "pat", "emergency", "cleaning", "coshh"]);
-  assert.equal(heiw.sections.length, 9);
+  assert.deepEqual(hs.sections.map((s) => s.id), ["fire", "water", "pat", "emergency", "cleaning", "coshh", "certificates"]);
+  assert.equal(heiw.sections.length, 10);
   assert.ok(heiw.sections.some((s) => s.id === "governance") && !hs.sections.some((s) => s.id === "governance"), "governance is for the HEIW sheet only");
   assert.match(hs.gaps[0].text, /fire check was 40 days ago/);
 });

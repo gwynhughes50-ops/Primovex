@@ -5,6 +5,7 @@
 
 import { concernDeadline, concernOpen, sarDays, sarOpen } from "../../ai/management/managementAsk.js";
 import { reviewSummary, reviewStatus } from "../coshh/coshh.js";
+import { certLabel, certStatus, certSummary } from "../certificates/certificates.js";
 
 const DAY = 86400000;
 
@@ -46,11 +47,13 @@ export function fireSection({ checks, fireWeekly, now, available }) {
   const all = [...tagged, ...legacy].filter((r) => within(r.date, from, now));
   if (!all.length) return section("fire", "Fire safety", "none", "No fire checks recorded in the last 12 months.", [], ["No fire checks recorded in the last 12 months."]);
   const last = all.reduce((a, b) => (b.date > a.date ? b : a));
-  const weeks = new Set(all.filter((r) => r.type === "fire_point").map((r) => weekKey(r.date))).size;
+  const alarm = all.filter((r) => r.type === "fire_point");
+  const weeks = new Set(alarm.map((r) => weekKey(r.date))).size;
   const fails = all.filter((r) => r.fail).length;
-  const since = daysAgo(last.date, now);
+  const lastAlarm = alarm.length ? alarm.reduce((a, b) => (b.date > a.date ? b : a)) : null;
   const gaps = [];
-  if (since > 10) gaps.push(`The last fire check was ${plural(since, "day")} ago (a weekly alarm test is expected).`);
+  if (!lastAlarm) gaps.push("No weekly fire alarm test has been recorded in the last 12 months.");
+  else if (daysAgo(lastAlarm.date, now) > 10) gaps.push(`The last fire check was ${plural(daysAgo(lastAlarm.date, now), "day")} ago (a weekly alarm test is expected).`);
   if (fails) gaps.push(`${plural(fails, "fire check")} failed in the last 12 months. Show what was done about each.`);
   return section("fire", "Fire safety", gaps.length ? "attention" : "ok",
     `${plural(all.length, "check")} in the last 12 months; last on ${ukDate(last.date)}.`,
@@ -90,14 +93,26 @@ export function patSection({ patSessions, patAssets, now, available }) {
     [["Appliances listed", String(assets)], ["Sessions in the last 12 months", String(recent.length)]], gaps);
 }
 
+// the equipment that has to work in an emergency, each judged against how often it should be checked (days allowed between checks)
+const EMERGENCY_TYPES = [
+  ["aed", "AED", 10],
+  ["emergency_equipment", "Emergency equipment", 35],
+  ["fire_emergency_light", "Emergency lighting", 35],
+  ["fire_extinguisher", "Fire extinguishers", 35],
+  ["fire_alarm_panel", "Fire alarm panel", 10],
+  ["fire_drill", "Fire drill", 200],
+];
+
 export function emergencySection({ checks, now, available }) {
-  if (!available.fire) return unavailable("emergency", "Emergency equipment (AED and emergency kit)");
+  const title = "Emergency and fire safety equipment";
+  if (!available.fire) return unavailable("emergency", title);
   const from = periodStart(now);
-  const mine = (checks || []).filter((c) => c.assetType === "aed" || c.assetType === "emergency_equipment").map((c) => ({ type: c.assetType, date: checkDate(c), fail: failed(c) })).filter((r) => within(r.date, from, now));
-  if (!mine.length) return section("emergency", "Emergency equipment (AED and emergency kit)", "none", "No AED or emergency equipment checks recorded in the last 12 months.", [], ["No AED or emergency equipment checks recorded in the last 12 months."]);
+  const known = new Set(EMERGENCY_TYPES.map(([type]) => type));
+  const mine = (checks || []).filter((c) => known.has(c.assetType)).map((c) => ({ type: c.assetType, date: checkDate(c), fail: failed(c) })).filter((r) => within(r.date, from, now));
+  if (!mine.length) return section("emergency", title, "none", "No AED, emergency lighting, extinguisher or fire drill checks recorded in the last 12 months.", [], ["No AED, emergency lighting, extinguisher or fire drill checks recorded in the last 12 months."]);
   const gaps = [];
   const rows = [];
-  for (const [type, label, limit] of [["aed", "AED", 10], ["emergency_equipment", "Emergency equipment", 35]]) {
+  for (const [type, label, limit] of EMERGENCY_TYPES) {
     const own = mine.filter((r) => r.type === type);
     if (!own.length) continue;
     const last = latest(own.map((r) => r.date));
@@ -105,8 +120,8 @@ export function emergencySection({ checks, now, available }) {
     if (daysAgo(last, now) > limit) gaps.push(`${label} was last checked ${plural(daysAgo(last, now), "day")} ago.`);
   }
   const fails = mine.filter((r) => r.fail).length;
-  if (fails) gaps.push(`${plural(fails, "emergency equipment check")} failed in the last 12 months.`);
-  return section("emergency", "Emergency equipment (AED and emergency kit)", gaps.length ? "attention" : "ok", `${plural(mine.length, "check")} in the last 12 months.`, rows, gaps);
+  if (fails) gaps.push(`${plural(fails, "emergency or fire equipment check")} failed in the last 12 months.`);
+  return section("emergency", title, gaps.length ? "attention" : "ok", `${plural(mine.length, "check")} in the last 12 months.`, rows, gaps);
 }
 
 export function cleaningSection({ cleaningLogs, now, available }) {
@@ -169,6 +184,22 @@ export function coshhSection({ coshh, now, available }) {
       ["In date", String(active.filter((s) => reviewStatus(s, now) === "ok").length)]], gaps);
 }
 
+export function certificatesSection({ certificates, now, available }) {
+  if (!available.certs) return unavailable("certificates", "Certificates and servicing");
+  const live = (certificates || []).filter((c) => c.active !== false);
+  if (!live.length) return section("certificates", "Certificates and servicing", "none", "No certificates or servicing records are on the register.", [], ["No certificates or servicing records are on the register."]);
+  const summary = certSummary(live, now);
+  const expired = live.filter((c) => ["expired", "missing"].includes(certStatus(c, now)));
+  const soon = live.filter((c) => certStatus(c, now) === "due-soon");
+  const gaps = [];
+  if (expired.length) gaps.push(`${plural(expired.length, "certificate")} expired or without a date: ${expired.slice(0, 4).map(certLabel).join(", ")}${expired.length > 4 ? " and more" : ""}.`);
+  if (summary.noPdf) gaps.push(`${plural(summary.noPdf, "certificate")} without the PDF attached.`);
+  if (soon.length) gaps.push(`${plural(soon.length, "certificate")} running out in the next 60 days: ${soon.slice(0, 4).map(certLabel).join(", ")}${soon.length > 4 ? " and more" : ""}.`);
+  return section("certificates", "Certificates and servicing", gaps.length ? "attention" : "ok",
+    `${plural(live.length, "certificate")} on the register; ${summary.expired} expired, ${summary.dueSoon} running out soon.`,
+    [["In date", String(summary.ok)], ["Running out in the next 60 days", String(summary.dueSoon)], ["Expired or without a date", String(summary.expired)], ["With the certificate PDF held", `${live.length - summary.noPdf} of ${live.length}`]], gaps);
+}
+
 // ---- governance: counts and dates only -------------------------------------------------------------------
 export function governanceSection({ concerns, sars, events, now, available }) {
   const from = periodStart(now);
@@ -205,7 +236,7 @@ export function governanceSection({ concerns, sars, events, now, available }) {
 export function buildSections(data) {
   return {
     fire: fireSection(data), water: waterSection(data), pat: patSection(data), emergency: emergencySection(data), cleaning: cleaningSection(data),
-    coldchain: coldChainSection(data), stock: stockSection(data), coshh: coshhSection(data), governance: governanceSection(data),
+    coldchain: coldChainSection(data), stock: stockSection(data), coshh: coshhSection(data), certificates: certificatesSection(data), governance: governanceSection(data),
   };
 }
 

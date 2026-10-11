@@ -8,14 +8,14 @@ export const VISITS = [
     id: "heiw",
     label: "HEIW visit",
     long: "Health Education and Improvement Wales visit",
-    sections: ["fire", "water", "pat", "emergency", "cleaning", "coldchain", "stock", "coshh", "governance"],
+    sections: ["fire", "water", "pat", "emergency", "cleaning", "coldchain", "stock", "coshh", "certificates", "governance"],
     outside: ["Risk assessments (held in Croner)", "Staff training matrix (to be added to Primovex)", "Policies and procedures", "Infection prevention and control audits"],
   },
   {
     id: "hs",
     label: "Health and Safety visit",
     long: "Health and Safety visit",
-    sections: ["fire", "water", "pat", "emergency", "cleaning", "coshh"],
+    sections: ["fire", "water", "pat", "emergency", "cleaning", "coshh", "certificates"],
     outside: ["Risk assessments (held in Croner)", "Fire and legionella risk assessments", "Staff training records (fire, manual handling)", "Accident book"],
   },
 ];

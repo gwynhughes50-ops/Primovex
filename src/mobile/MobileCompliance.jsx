@@ -29,6 +29,9 @@ import { PassFailSheet, TemperatureCheckSheet } from "@/mobile/compliance/CheckS
 import ComplianceIncidentSheet from "@/components/compliance/ComplianceIncidentSheet";
 import { isOpen as incidentOpen, ageText } from "@/modules/compliance/complianceIncidents";
 import { useComplianceIncidents } from "@/modules/compliance/complianceIncidentService";
+import { useCertificates } from "@/modules/certificates/certificateService";
+import { certLabel, certStatus, expiryText } from "@/modules/certificates/certificates";
+import { openDocument } from "@/lib/openDocument";
 
 function assetLabel(asset) {
   return [asset?.assetCode, asset?.label].filter(Boolean).join(" • ") || "Compliance asset";
@@ -47,7 +50,7 @@ function DueRow({ asset, onOpen }) {
 // it is, the right check opens, and who did it and when are recorded by Primovex
 // without being asked. Everything else on the screen is a fallback.
 export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
-  const { isAdmin, user, displayName } = useAuth();
+  const { isAdmin, user, displayName, can } = useAuth();
   const [assets, setAssets] = useState([]);
   const [activeAsset, setActiveAsset] = useState(null);
   const [sheetKey, setSheetKey] = useState(0);
@@ -61,6 +64,9 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
   const [writingTagFor, setWritingTagFor] = useState(null);
   const [writeMessage, setWriteMessage] = useState("");
   const [incidentId, setIncidentId] = useState("");
+  const [certMessage, setCertMessage] = useState("");
+  const { list: certList } = useCertificates(can("compliance.read"));
+  const certsNeeding = useMemo(() => (certList || []).filter((c) => c.active !== false && certStatus(c) !== "ok").sort((a, b) => (a.expiryDate || "").localeCompare(b.expiryDate || "")), [certList]);
   const { list: incidentList } = useComplianceIncidents(true);
   const openIncidents = useMemo(() => (incidentList || []).filter(incidentOpen), [incidentList]);
 
@@ -258,6 +264,24 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+
+        {certsNeeding.length > 0 && (
+          <div className="mt-5 rounded-[1.5rem] border border-amber-500/40 bg-amber-500/10 p-4" aria-label="Certificates running out or expired">
+            <div className="mb-2 text-sm font-bold text-amber-800">Certificates to renew ({certsNeeding.length})</div>
+            <ul className="space-y-2">
+              {certsNeeding.map((c) => (
+                <li key={c.id}>
+                  <button type="button" disabled={!c.certUrl} onClick={async () => setCertMessage(await openDocument({ url: c.certUrl, path: c.certPath, fileName: c.certFileName }))} className="w-full rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3 text-left disabled:opacity-70">
+                    <span className="block font-semibold">{certLabel(c)}</span>
+                    <span className={`block text-xs font-bold ${certStatus(c) === "due-soon" ? "text-amber-800" : "text-rose-700"}`}>{expiryText(c)}{c.provider ? ` · ${c.provider}` : ""}</span>
+                    {c.certUrl ? <span className="block text-xs text-[var(--medtrak-muted)]">Tap to open the current certificate</span> : <span className="block text-xs text-rose-700">No PDF attached</span>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {certMessage && <p className="mt-2 text-sm font-semibold text-rose-700" role="alert">{certMessage}</p>}
           </div>
         )}
 

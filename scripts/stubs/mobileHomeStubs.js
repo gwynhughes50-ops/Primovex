@@ -29,3 +29,5 @@ export const useCoshhSubstances = () => ({ list: stub.coshh || null, error: "" }
 export const useStockTakes = () => ({ list: stub.takes || [], error: "" });
 
 export const useComplianceIncidents = () => ({ list: stub.incidents || [], error: "" });
+
+export const useCertificates = () => ({ list: stub.certificates || null, error: "" });

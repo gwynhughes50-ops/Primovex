@@ -702,6 +702,55 @@ async function main() {
     await assertSucceeds(deleteDoc(doc(admin, "maintenance_issues", "mi-1")));
   });
 
+  console.log("\n=== 20. Certificates and servicing register (compliance_certificates and compliance_certs files) ===");
+  const certDoc = (extra = {}) => ({ type: "gas_safety", site: "Main Surgery", provider: "Gas Safe Ltd", completedOn: "2026-03-01", expiryDate: "2027-03-01", certUrl: "", active: true, previous: [], ...extra });
+  await check("Caretaker and practice manager CAN add a certificate", async () => {
+    await assertSucceeds(setDoc(doc(caretaker, "compliance_certificates", "cert-1"), certDoc()));
+    await assertSucceeds(setDoc(doc(pm, "compliance_certificates", "cert-2"), certDoc({ type: "eicr" })));
+  });
+  await check("A nurse, a cleaner, a partner, reception and anonymous cannot add or change one", async () => {
+    for (const who of [nurse, cleaner, partner, reception, anon]) {
+      await assertFails(setDoc(doc(who, "compliance_certificates", "cert-x"), certDoc()));
+    }
+    await assertFails(updateDoc(doc(nurse, "compliance_certificates", "cert-1"), { expiryDate: "2099-01-01" }));
+  });
+  await check("A certificate must have a type, an expiry date and a history list", async () => {
+    await assertFails(setDoc(doc(caretaker, "compliance_certificates", "cert-b1"), certDoc({ type: 5 })));
+    await assertFails(setDoc(doc(caretaker, "compliance_certificates", "cert-b2"), certDoc({ expiryDate: null })));
+    await assertFails(setDoc(doc(caretaker, "compliance_certificates", "cert-b3"), certDoc({ previous: "none" })));
+  });
+  await check("Anyone with compliance access (caretaker, practice manager, nurse) can read the register; a cleaner, a partner and anonymous cannot", async () => {
+    for (const who of [caretaker, pm, nurse]) await assertSucceeds(getDoc(doc(who, "compliance_certificates", "cert-1")));
+    for (const who of [cleaner, partner, anon]) await assertFails(getDoc(doc(who, "compliance_certificates", "cert-1")));
+  });
+  await check("The caretaker records a renewal; nobody except an administrator deletes a certificate", async () => {
+    await assertSucceeds(updateDoc(doc(caretaker, "compliance_certificates", "cert-1"), { expiryDate: "2028-03-01", previous: [{ expiryDate: "2027-03-01" }] }));
+    await assertFails(deleteDoc(doc(pm, "compliance_certificates", "cert-1")));
+    await assertFails(deleteDoc(doc(caretaker, "compliance_certificates", "cert-1")));
+    await assertSucceeds(deleteDoc(doc(admin, "compliance_certificates", "cert-2")));
+  });
+  const certCaretaker = testEnv.authenticatedContext("caretaker-uid").storage();
+  const certPm = testEnv.authenticatedContext("pm-uid").storage();
+  const certCleaner = testEnv.authenticatedContext("cleaner-uid").storage();
+  const certPartner = testEnv.authenticatedContext("partner-uid").storage();
+  const certPdf = new TextEncoder().encode("%PDF-1.4 certificate");
+  await check("Caretaker and practice manager CAN upload a certificate PDF; others cannot, and only PDFs under 15MB", async () => {
+    await assertSucceeds(uploadBytes(ref(certCaretaker, "compliance_certs/cert-1/a.pdf"), certPdf, { contentType: "application/pdf" }));
+    await assertSucceeds(uploadBytes(ref(certPm, "compliance_certs/cert-1/b.pdf"), certPdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(nurseStorage, "compliance_certs/cert-1/c.pdf"), certPdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(certCleaner, "compliance_certs/cert-1/c.pdf"), certPdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(certCaretaker, "compliance_certs/cert-1/d.png"), new Uint8Array([1, 2, 3]), { contentType: "image/png" }));
+    await assertFails(uploadBytes(ref(certCaretaker, "compliance_certs/cert-1/e.pdf"), new Uint8Array(16 * 1024 * 1024), { contentType: "application/pdf" }));
+  });
+  await check("Compliance readers can open a certificate PDF; a cleaner, a partner and anonymous cannot", async () => {
+    for (const who of [certCaretaker, certPm, nurseStorage]) await assertSucceeds(getBytes(ref(who, "compliance_certs/cert-1/a.pdf")));
+    for (const who of [certCleaner, certPartner, anonStorage]) await assertFails(getBytes(ref(who, "compliance_certs/cert-1/a.pdf")));
+  });
+  await check("Only the people who manage certificates can delete a certificate PDF", async () => {
+    await assertFails(deleteObject(ref(nurseStorage, "compliance_certs/cert-1/a.pdf")));
+    await assertSucceeds(deleteObject(ref(certCaretaker, "compliance_certs/cert-1/a.pdf")));
+  });
+
   console.log("\n=== 17. ClinFlow switch (practice_config.moduleToggles.clinflow) ===");
   const setClinflow = (value) => seed(async (db) => (value === undefined ? deleteDoc(doc(db, "practice_config", "main")) : setDoc(doc(db, "practice_config", "main"), { moduleToggles: { clinflow: value } })));
   const readRecord = (who) => getDoc(doc(who, "clinflow_workflow_records", "rec-primary"));

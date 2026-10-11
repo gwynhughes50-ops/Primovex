@@ -1104,6 +1104,18 @@ match /subject_access_requests/{requestId} {
       allow delete: if isAdmin();
     }
 
+    // Certificates and servicing register (gas safety, electrical test, fire risk assessment...): who did it, when, when it
+    // runs out, and the PDF. The caretaker and the practice manager keep it up to date; anyone with compliance access reads it.
+    // Nothing is deleted from here: a certificate is retired (active:false) and its old versions stay in its history.
+    match /compliance_certificates/{certId} {
+      allow get, list: if signedIn() && (hasPermission("compliance", "read") || isCaretaker() || isAdmin());
+      allow create, update: if signedIn() && (hasPermission("compliance", "manageAssets") || isCaretaker() || isAdmin())
+        && request.resource.data.type is string
+        && request.resource.data.expiryDate is string
+        && request.resource.data.previous is list;
+      allow delete: if isAdmin();
+    }
+
     match /pulse_events/{eventId} {
       allow get, list: if signedIn() && (hasPermission("operations", "read") || hasPermission("compliance", "read") || isAdmin());
       allow create: if signedIn();

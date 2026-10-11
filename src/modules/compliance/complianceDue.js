@@ -5,6 +5,7 @@ import { getNextFirePointToTest, isComplianceCheckDue, isFireAlarmTestDueThisWee
 import { isOpen as incidentOpen, ageText } from "./complianceIncidents.js";
 import { issueSummary } from "../maintenance/maintenance.js";
 import { reviewSummary } from "../coshh/coshh.js";
+import { certLabel, certStatus, daysUntilExpiry } from "../certificates/certificates.js";
 
 const DAY = 86400000;
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -23,7 +24,7 @@ export function patRetest(sessions = [], now = new Date()) {
   return { date: latest.retest, days };
 }
 
-export function dueList({ assets = [], incidents = [], patSessions = [], issues = [], coshh = null, now = new Date() } = {}) {
+export function dueList({ assets = [], incidents = [], patSessions = [], issues = [], coshh = null, certificates = null, now = new Date() } = {}) {
   const items = [];
   const open = incidents.filter(incidentOpen);
   for (const incident of open) {
@@ -48,6 +49,15 @@ export function dueList({ assets = [], incidents = [], patSessions = [], issues 
 
   const maintenance = issueSummary(issues, now);
   if (maintenance.open) items.push({ key: "maintenance", tone: maintenance.urgent ? "critical" : "warning", label: `${plural(maintenance.open, "maintenance issue")} open${maintenance.urgent ? `, ${maintenance.urgent} urgent` : ""}`, detail: maintenance.oldestDays ? `The oldest is ${plural(maintenance.oldestDays, "day")} old.` : "", action: { type: "tab", tab: "maintenance" } });
+
+  if (certificates) {
+    const live = certificates.filter((c) => c.active !== false);
+    const expired = live.filter((c) => ["expired", "missing"].includes(certStatus(c, now)));
+    const soon = live.filter((c) => certStatus(c, now) === "due-soon").sort((a, b) => daysUntilExpiry(a, now) - daysUntilExpiry(b, now));
+    const names = (list) => `${list.slice(0, 3).map(certLabel).join(", ")}${list.length > 3 ? ` and ${list.length - 3} more` : ""}`;
+    if (expired.length) items.push({ key: "certs-expired", tone: "critical", label: `${plural(expired.length, "certificate")} expired`, detail: names(expired), action: { type: "tab", tab: "certificates" } });
+    if (soon.length) items.push({ key: "certs-soon", tone: "warning", label: `${plural(soon.length, "certificate")} running out soon`, detail: `${names(soon)}. The first runs out in ${plural(daysUntilExpiry(soon[0], now), "day")}.`, action: { type: "tab", tab: "certificates" } });
+  }
 
   if (coshh) {
     const review = reviewSummary(coshh, now);

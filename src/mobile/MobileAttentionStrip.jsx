@@ -17,6 +17,8 @@ import { isQuarantined } from "@/modules/temperature/fridgeIncidents";
 import { reviewSummary } from "@/modules/coshh/coshh";
 import { useCoshhSubstances } from "@/modules/coshh/coshhService";
 import { useComplianceIncidents } from "@/modules/compliance/complianceIncidentService";
+import { useCertificates } from "@/modules/certificates/certificateService";
+import { certSummary } from "@/modules/certificates/certificates";
 import { isOpen as incidentOpen } from "@/modules/compliance/complianceIncidents";
 import { buildAttention } from "./homeAttention";
 import { dateKeyOf, expectedFridges, normaliseUnit, notCheckedToday } from "./fridgeCheck";
@@ -48,6 +50,7 @@ export default function MobileAttentionStrip({ onAction }) {
   useExpirySettings();
   const { rows } = useNotifications(uid);
   const { list: incidentList } = useComplianceIncidents(seesCompliance && !!uid && !isSafeSyntheticMode());
+  const { list: certList } = useCertificates(seesCompliance && !!uid);
   const { list: coshhList } = useCoshhSubstances(seesCoshh && !!uid && !isSafeSyntheticMode());
 
   useEffect(() => {
@@ -77,8 +80,8 @@ export default function MobileAttentionStrip({ onAction }) {
       ? summariseStockAlerts(allItems, { categoryOf: (item) => normalizeStockItemCategory(item).category, settings: getExpirySettings(), now, resolved: {} }).alerts
       : null;
     const fridgesUnchecked = seesFridges && units && todaysLogs ? notCheckedToday({ fridges: expectedFridges({ units, assets: senseState?.assets || [] }), logs: todaysLogs, now }).length : null;
-    return buildAttention({ sars: seesSars ? sars : null, concerns: seesConcerns ? concerns : null, stockAlerts, messages: messageQueue(rows, { now, everything: true }).length, fridgeIncidents: seesFridges && openIncidents ? openIncidents.length : null, fridgeQuarantined: seesFridges && openIncidents ? openIncidents.filter(isQuarantined).length : null, fridgesUnchecked, coshh: seesCoshh && coshhList ? reviewSummary(coshhList, now) : null, complianceFailures: seesCompliance && incidentList ? incidentList.filter(incidentOpen).length : null, now });
-  }, [allItems, coshhList, incidentList, seesCompliance, concerns, openIncidents, rows, sars, seesCoshh, seesConcerns, seesFridges, seesSars, seesStock, senseState?.assets, todaysLogs, units]);
+    return buildAttention({ sars: seesSars ? sars : null, concerns: seesConcerns ? concerns : null, stockAlerts, messages: messageQueue(rows, { now, everything: true }).length, fridgeIncidents: seesFridges && openIncidents ? openIncidents.length : null, fridgeQuarantined: seesFridges && openIncidents ? openIncidents.filter(isQuarantined).length : null, fridgesUnchecked, coshh: seesCoshh && coshhList ? reviewSummary(coshhList, now) : null, complianceFailures: seesCompliance && incidentList ? incidentList.filter(incidentOpen).length : null, certificates: seesCompliance && certList ? certSummary(certList, now) : null, now });
+  }, [allItems, coshhList, incidentList, certList, seesCompliance, concerns, openIncidents, rows, sars, seesCoshh, seesConcerns, seesFridges, seesSars, seesStock, senseState?.assets, todaysLogs, units]);
 
   return (
     <section aria-label="What needs attention" className="flex flex-wrap gap-2">

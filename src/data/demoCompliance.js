@@ -40,3 +40,22 @@ export function demoComplianceChecks() {
     check("demo-c7", by("AED-001"), 3, "pass", { actor: { displayName: "Demo Nurse" } }),
   ];
 }
+
+// Sample certificates for Demo and Training mode (no real files; the PDF link opens nothing).
+const dayKey = (offsetDays) => {
+  const d = new Date(Date.now() + offsetDays * DAY);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+export function demoCertificates() {
+  const cert = (id, type, provider, completedOffset, expiryOffset, extra = {}) => ({
+    id, type, site: "Main Surgery", provider, reference: `DEMO-${id.slice(-1).toUpperCase()}`, completedOn: dayKey(completedOffset), expiryDate: dayKey(expiryOffset),
+    certUrl: "", certPath: "", certFileName: "", active: true, demo: true, ...extra,
+  });
+  return [
+    cert("demo-cert-1", "gas_safety", "Demo Gas Services", -330, 35),
+    cert("demo-cert-2", "eicr", "Demo Electrical Ltd", -900, 925),
+    cert("demo-cert-3", "fire_extinguisher_service", "Demo Fire Protection", -380, -15),
+    cert("demo-cert-4", "legionella_risk_assessment", "Demo Water Hygiene", -100, 630),
+  ];
+}

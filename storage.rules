@@ -158,6 +158,17 @@ service firebase.storage {
       allow delete: if hasPermission("coshh", "manage");
     }
 
+    // Compliance certificates (gas safety, electrical test and so on), one folder per certificate:
+    // compliance_certs/{certId}/{fileName}. Read by anyone with compliance access; written by whoever manages compliance
+    // assets (the caretaker and practice manager). PDFs only, up to 15MB.
+    match /compliance_certs/{certId}/{fileName} {
+      allow read: if hasPermission("compliance", "read") || isAdmin();
+      allow write: if (hasPermission("compliance", "manageAssets") || isAdmin())
+        && request.resource.size < 15 * 1024 * 1024
+        && request.resource.contentType == "application/pdf";
+      allow delete: if hasPermission("compliance", "manageAssets") || isAdmin();
+    }
+
     // Everything else is closed by default.
     match /{allPaths=**} {
       allow read, write: if false;

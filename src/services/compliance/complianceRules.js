@@ -10,6 +10,14 @@ export const COMPLIANCE_ASSET_TYPES = [
   { key: "freezer", label: "Freezer", icon: "❄️", checkMode: "temperature", defaultFrequency: "daily", minTempC: -45, maxTempC: -35, codePrefix: "FZ" },
   { key: "aed", label: "AED", icon: "❤️", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "AED" },
   { key: "emergency_equipment", label: "Emergency Equipment", icon: "🧰", checkMode: "pass_fail", defaultFrequency: "monthly", codePrefix: "EE" },
+  // fire safety equipment (the key starts with fire_, so every fire screen and report picks them up)
+  { key: "fire_emergency_light", label: "Emergency Light", icon: "💡", checkMode: "pass_fail", defaultFrequency: "monthly", codePrefix: "EL" },
+  { key: "fire_extinguisher", label: "Fire Extinguisher", icon: "🧯", checkMode: "pass_fail", defaultFrequency: "monthly", codePrefix: "FX" },
+  { key: "fire_drill", label: "Fire Drill", icon: "🚨", checkMode: "pass_fail", defaultFrequency: "sixmonthly", codePrefix: "DR" },
+  { key: "fire_alarm_panel", label: "Fire Alarm Panel", icon: "🔔", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "AP" },
+  // water safety beyond the taps (the key starts with water_, so the water screens and reports pick them up)
+  { key: "water_tmv", label: "Thermostatic Mixing Valve (TMV)", icon: "🚿", checkMode: "temperature", defaultFrequency: "quarterly", minTempC: 38, maxTempC: 44, codePrefix: "TMV", countdownSeconds: 30, flushable: true },
+  { key: "water_flush", label: "Little-used Outlet or Shower (flush)", icon: "🚰", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "FL" },
   { key: "general", label: "General Asset", icon: "📍", checkMode: "pass_fail", defaultFrequency: "monthly", codePrefix: "GA" },
 ];
 
@@ -38,8 +46,19 @@ export const FREQUENCY_MS = {
   weekly: 7 * 24 * 3600000,
   monthly: 30 * 24 * 3600000,
   quarterly: 91 * 24 * 3600000,
+  sixmonthly: 182 * 24 * 3600000,
   annually: 365 * 24 * 3600000,
 };
+
+// how often, in words, for the screens that offer a choice
+export const FREQUENCY_OPTIONS = [
+  { key: "daily", label: "Daily" },
+  { key: "weekly", label: "Weekly" },
+  { key: "monthly", label: "Monthly" },
+  { key: "quarterly", label: "Every 3 months" },
+  { key: "sixmonthly", label: "Every 6 months" },
+  { key: "annually", label: "Yearly" },
+];
 
 export function toDateValue(value) {
   if (!value) return null;

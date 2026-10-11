@@ -24,6 +24,7 @@ import {
   SprayCan,
   Wrench,
   FlaskConical,
+  FileBadge,
 } from "lucide-react";
 import { db } from "../lib/firebase";
 import {
@@ -42,6 +43,7 @@ import ComplianceQrEngine from "@/components/compliance/ComplianceQrEngine";
 import ComplianceOverview from "@/components/compliance/ComplianceOverview";
 import ChecksHistory from "@/components/compliance/ChecksHistory";
 import CoshhRegister from "@/components/compliance/CoshhRegister";
+import CertificatesRegister from "@/components/compliance/CertificatesRegister";
 import { useAuth } from "@/contexts/AuthContext";
 import CleaningPanel from "@/modules/facilities/components/CleaningPanel";
 import MaintenancePanel from "@/modules/facilities/components/MaintenancePanel";
@@ -212,7 +214,7 @@ function ComplianceFull({ canCoshh }) {
   const inSite = (row) => !siteId || String(row.siteId || row.site || "").trim() === siteId;
   const siteAssets = useMemo(() => allAssets.filter(inSite), [allAssets, siteId]);
   const siteChecks = useMemo(() => recentChecks.filter(inSite), [recentChecks, siteId]);
-  const [tab, setTab] = useState("overview"); // overview | history | cleaning | maintenance | assets | pat | coshh
+  const [tab, setTab] = useState("overview"); // overview | history | cleaning | maintenance | assets | pat | certificates | coshh
 
   // For printing we keep our own “recent” datasets at page level
   const [printFireChecks, setPrintFireChecks] = useState([]);
@@ -656,7 +658,7 @@ function ComplianceFull({ canCoshh }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-100">Compliance</h1>
-          <p className="text-sm text-slate-400">Fire • Water • Cleaning • Maintenance • PAT • COSHH</p>
+          <p className="text-sm text-slate-400">Fire • Water • Cleaning • Maintenance • PAT • Certificates • COSHH</p>
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -688,6 +690,7 @@ function ComplianceFull({ canCoshh }) {
           <TabButton active={tab === "maintenance"} onClick={() => setTab("maintenance")} icon={Wrench} label="Maintenance" />
           <TabButton active={tab === "assets"} onClick={() => setTab("assets")} icon={QrCode} label="Assets and tags" />
           <TabButton active={tab === "pat"} onClick={() => setTab("pat")} icon={PlugZap} label="PAT Testing" />
+          <TabButton active={tab === "certificates"} onClick={() => setTab("certificates")} icon={FileBadge} label="Certificates" />
           {canCoshh && <TabButton active={tab === "coshh"} onClick={() => setTab("coshh")} icon={FlaskConical} label="COSHH" />}
         </div>
       </Card>
@@ -698,6 +701,7 @@ function ComplianceFull({ canCoshh }) {
       {tab === "maintenance" && <MaintenancePanel />}
       {tab === "assets" && <ComplianceQrEngine assets={siteAssets} checks={siteChecks} sites={sites} />}
       {tab === "pat" && <PatTestingTab siteId={siteId} newSiteId={sites.newSiteId} />}
+      {tab === "certificates" && <CertificatesRegister />}
       {tab === "coshh" && canCoshh && <CoshhRegister />}
 
       {/* PRINT MODAL */}

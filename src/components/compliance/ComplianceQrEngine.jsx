@@ -20,7 +20,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
 import { namesWithCurrent } from "@/lib/stockPickerOptions";
-import { RETIRE_REASONS } from "@/services/compliance/complianceRules";
+import { FREQUENCY_OPTIONS, RETIRE_REASONS } from "@/services/compliance/complianceRules";
 import {
   COMPLIANCE_ASSET_TYPES,
   buildComplianceQrPayload,
@@ -280,7 +280,7 @@ export default function ComplianceQrEngine({ assets: siteAssets = [], checks = [
                   : <input className={field} value={editing.location} onChange={(e) => setEditing({ ...editing, location: e.target.value })} />}
               </label>
               {type.key !== "fire_point" && (
-                <label className="text-xs text-slate-300">How often<select className={field} value={editing.frequency} onChange={(e) => setEditing({ ...editing, frequency: e.target.value })}>{["daily", "weekly", "monthly", "quarterly", "annually"].map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
+                <label className="text-xs text-slate-300">How often<select className={field} value={editing.frequency} onChange={(e) => setEditing({ ...editing, frequency: e.target.value })}>{FREQUENCY_OPTIONS.map((f) => <option key={f.key} value={f.key}>{f.label}</option>)}</select></label>
               )}
               {type.checkMode === "temperature" && (
                 <>
@@ -446,7 +446,7 @@ export default function ComplianceQrEngine({ assets: siteAssets = [], checks = [
                       onChange={(e) => setForm((p) => ({ ...p, frequency: e.target.value, frequencyTouched: true }))}
                       className="mt-1 w-full max-w-[220px] rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-sm text-slate-100"
                     >
-                      {['daily','weekly','monthly','quarterly','annually'].map((f) => <option key={f} className="bg-slate-950" value={f}>{f}</option>)}
+                      {FREQUENCY_OPTIONS.map((f) => <option key={f.key} className="bg-slate-950" value={f.key}>{f.label}</option>)}
                     </select>
                   </label>
                 ) : (
