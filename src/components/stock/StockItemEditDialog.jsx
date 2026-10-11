@@ -130,8 +130,8 @@ export default function StockItemEditDialog({ item, items = [], onClose }) {
   if (!item) return null;
 
   return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-        <div className="bg-slate-900 p-4 rounded-2xl max-w-md w-full border border-slate-800">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="bg-slate-900 p-4 rounded-2xl max-w-md w-full border border-slate-800 max-h-[calc(100dvh-2rem)] overflow-y-auto">
           <p className="font-semibold text-slate-100">Edit item</p>
 
           <div className="mt-4 space-y-3">

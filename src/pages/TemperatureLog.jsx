@@ -687,8 +687,8 @@ function TemperatureLogTab() {
 
       {/* Log Temperature modal */}
       {isLogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur">
-          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <h2 className="text-sm font-semibold text-slate-50">Log temperature</h2>
 
             {saveError && (
@@ -1254,8 +1254,8 @@ function TemperatureIncidentsTab() {
 
       {/* New Incident modal */}
       {isOpenModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur">
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur">
+          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="flex items-start justify-between">
               <h3 className="text-sm font-semibold text-slate-100">New incident</h3>
               <button
@@ -1365,8 +1365,8 @@ function TemperatureIncidentsTab() {
 
       {/* ✅ Resolve modal */}
       {resolveOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur">
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur">
+          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-sm font-semibold text-slate-50">Resolve incident</h2>

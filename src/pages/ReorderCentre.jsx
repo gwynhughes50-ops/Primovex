@@ -124,7 +124,7 @@ export default function ReorderCentre() {
     <div className="min-h-screen bg-slate-950 p-6 text-white">
       {showRejectModal && (
         <div className="fixed inset-0 z-[80] flex items-end bg-black/60">
-          <div className="w-full rounded-t-3xl border border-rose-500/30 bg-slate-950 p-5 shadow-2xl">
+          <div className="max-h-[90dvh] w-full overflow-y-auto rounded-t-3xl border border-rose-500/30 bg-slate-950 p-5 shadow-2xl">
             <h2 className="text-xl font-bold text-white">Reject Request</h2>
 
             <p className="mt-1 text-sm text-slate-400">

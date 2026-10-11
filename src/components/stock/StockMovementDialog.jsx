@@ -74,7 +74,7 @@ export default function StockMovementDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -82,7 +82,7 @@ export default function StockMovementDialog({
     >
       <div
         ref={panelRef}
-        className="w-full max-w-lg rounded-2xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl"
+        className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950 text-slate-100 shadow-2xl"
       >
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-800">

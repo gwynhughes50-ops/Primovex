@@ -150,7 +150,7 @@ export default function MobileCleanerHome({ onScanRoom, finished = null, onFinis
 
       {issueOpen && (
         <div className="fixed inset-0 z-[150] flex items-end justify-center bg-black/55 sm:items-center">
-          <div className="w-full max-w-md rounded-t-[2rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-left sm:rounded-2xl">
+          <div className="max-h-[90dvh] w-full max-w-md overflow-y-auto rounded-t-[2rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-left sm:rounded-2xl">
             <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--medtrak-accent)]">Report an issue</p>
             <h2 className="mt-1 text-xl font-bold">{roomName || "Current room"}</h2>
             <p className="mt-1 text-sm text-[var(--medtrak-muted)]">{roomName ? "This goes straight to the caretaker." : "Scan a room first so the caretaker knows where to go."}</p>

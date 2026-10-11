@@ -706,8 +706,8 @@ function ComplianceFull({ canCoshh }) {
 
       {/* PRINT MODAL */}
       {printOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur">
-          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur">
+          <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl max-h-[calc(100dvh-2rem)] overflow-y-auto">
             <div className="flex items-start justify-between">
               <h3 className="text-sm font-semibold text-slate-100">Export / Print compliance report</h3>
               <button className="text-slate-400 hover:text-slate-200" onClick={() => setPrintOpen(false)}>

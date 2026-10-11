@@ -29,7 +29,7 @@ export default function PhotoCapture({ onCapture, buttonLabel = "Take photo", di
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-slate-900/95 p-4 shadow-2xl">
+          <div className="max-h-[90dvh] w-full max-w-sm overflow-y-auto rounded-2xl border border-white/10 bg-slate-900/95 p-4 shadow-2xl">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-semibold text-slate-50">
                 Take photo
