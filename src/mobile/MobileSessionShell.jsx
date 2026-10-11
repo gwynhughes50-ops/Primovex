@@ -3,6 +3,7 @@ import { Fingerprint, KeyRound, LockKeyhole, LogOut, ShieldCheck } from "lucide-
 import { useAuth } from "@/contexts/AuthContext";
 import { useSession } from "@/contexts/SessionContext";
 import { createPinDigest, verifyPinDigest } from "@/lib/localPin";
+import { previewFrameRole } from "@/core/identity/viewAs";
 
 const PIN_KEY = "primovex.mobile.pin";
 const UNLOCK_KEY = "primovex.mobile.unlocked";
@@ -204,10 +205,13 @@ export default function MobileSessionShell({ children, showSplash = false }) {
 
   if (showSplash && splash) return <Splash onDone={() => setSplash(false)} />;
 
+  // The phone preview on the desktop (Advanced Admin > View as) is inside an already-unlocked administrator session, so
+  // it has no second lock of its own.
+
   return (
     <div className="pvx-mobile-session-shell min-h-screen bg-[var(--medtrak-bg)] text-[var(--medtrak-text)]">
       {children}
-      {locked && (
+      {locked && !previewFrameRole() && (
         <div className="fixed inset-0 z-[190] flex items-center justify-center bg-[var(--medtrak-bg)] p-5">
           <div className="w-full max-w-sm">
             <MobileBrandLockup compact />

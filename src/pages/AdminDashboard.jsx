@@ -79,6 +79,7 @@ import { describeNotificationAccess, ON_THEIR_COMPUTER } from "@/lib/notificatio
 import { sendDueNotificationsNow } from "@/services/dueNotificationsService";
 import { describeDueRun } from "@/lib/dueNotificationsText";
 import { useAuth } from "@/contexts/AuthContext";
+import ViewAsPanel from "@/components/admin/ViewAsPanel";
 import { subscribeUsers, updateUserRole, updateUserOrbScope, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa } from "@/services/adminUserService";
 import { ORB_TOPICS, describeOrbScope, normaliseOrbScope } from "@/lib/orbScope";
 
@@ -585,6 +586,8 @@ export default function AdminDashboard() {
             <div className="text-slate-300/80 -mt-0.5">Manage sites, locations, users, and roles</div>
           </div>
         </div>
+
+        <ViewAsPanel />
 
         <AdminTabs showUsers={isAdmin} />
 

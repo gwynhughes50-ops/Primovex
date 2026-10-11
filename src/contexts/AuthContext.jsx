@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, onIdTokenChanged, signOut as fbSignOut } from "firebase/auth";
 import { collection, doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { VIEW_AS_KEY, readViewAs, resolveViewAs, writeViewAs } from "@/core/identity/viewAs";
 import { getCapabilitiesForProfile, hasCapability, hasAnyCapability, CAPABILITY_CATALOG } from "@/core/identity/capabilities";
 import { getStoredPlatformMode, isSafeSyntheticMode, setPlatformMode } from "@/config/platformMode";
 import { getActiveDemoProfile } from "@/config/demoMode";
@@ -47,6 +48,13 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
   const [error, setError] = useState("");
+  const [viewAsRequested, setViewAsRequested] = useState(() => readViewAs()); // a System Admin looking at the app as another role
+
+  useEffect(() => {
+    const onStorage = (event) => { if (event.key === VIEW_AS_KEY || event.key === null) setViewAsRequested(readViewAs()); };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   useEffect(() => {
     function handleModeChange(event) {
@@ -213,8 +221,13 @@ export function AuthProvider({ children }) {
     [customRoles]
   );
 
-  const role = profile?.role || null;
-  const rawCapabilities = getCapabilitiesForProfile(profile, customRoleCapabilities);
+  const realRole = profile?.role || null;
+  // "View as": only a System Admin, and only what the screens show. They stay signed in as themselves.
+  const viewingAs = resolveViewAs({ realRole, requested: viewAsRequested });
+  const role = viewingAs || realRole;
+  const rawCapabilities = viewingAs
+    ? getCapabilitiesForProfile({ role: viewingAs }, customRoleCapabilities)
+    : getCapabilitiesForProfile(profile, customRoleCapabilities);
   // Modules switched off (practice_config.moduleToggles) are removed from the
   // capabilities list itself — not just checked in can()/canAny() — because
   // navigation.js filters the sidebar straight off this array, bypassing
@@ -243,6 +256,8 @@ export function AuthProvider({ children }) {
     "";
 
   const isAdmin = role === "System Admin" || can("admin.access");
+  const canViewAs = realRole === "System Admin";
+  const setViewAs = (next) => { writeViewAs(next || null); setViewAsRequested(next || null); };
 
   async function signOut(reason) {
     if (isSafeSyntheticMode(platformMode)) {
@@ -250,6 +265,8 @@ export function AuthProvider({ children }) {
       setPlatformModeState("live");
       return;
     }
+    writeViewAs(null);
+    setViewAsRequested(null);
     // Close out the activity record while still signed in.
     await endUsageSession(reason === "session_timeout" ? "session_timeout" : "signed_out").catch(() => {});
     await writeAuditEvent({
@@ -269,6 +286,10 @@ export function AuthProvider({ children }) {
       user,
       profile,
       role,
+      realRole,
+      viewingAs,
+      canViewAs,
+      setViewAs,
       capabilities,
       can,
       canAny,
@@ -281,7 +302,7 @@ export function AuthProvider({ children }) {
       error,
       signOut,
     }),
-    [user, profile, role, capabilities, moduleToggles, customRoles, displayName, isAdmin, platformMode, loading, profileLoading, error]
+    [user, profile, role, viewingAs, viewAsRequested, capabilities, moduleToggles, customRoles, displayName, isAdmin, platformMode, loading, profileLoading, error]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

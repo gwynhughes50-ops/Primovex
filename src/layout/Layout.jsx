@@ -7,6 +7,8 @@ import PulseWidget from "@/components/pulse/PulseWidget";
 import PlatformModeBanner from "@/components/platform/PlatformModeBanner";
 import AskPrimovexPanel from "@/ai/components/AskPrimovexPanel";
 import DesktopSidebar from "@/components/navigation/DesktopSidebar";
+import ViewAsBanner from "@/components/security/ViewAsBanner";
+import PhonePreview from "@/components/security/PhonePreview";
 import LegacyDesktopLayout from "@/layout/LegacyDesktopLayout";
 import { Icons } from "@/config/medtrakIcons";
 import { medtrakTheme } from "@/config/medtrakTheme";
@@ -70,6 +72,7 @@ export default function Layout() {
         />
 
         <div className={`min-w-0 flex-1 ${immersiveModule ? "h-screen overflow-hidden" : ""}`}>
+          <ViewAsBanner />
           {!immersiveModule && <header className="sticky top-0 z-30 flex min-h-20 items-center justify-between border-b border-[var(--medtrak-border)] bg-[var(--medtrak-bg)]/88 px-5 backdrop-blur-xl lg:px-8">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--medtrak-accent)]">Primovex operations platform</p>
@@ -98,6 +101,7 @@ export default function Layout() {
         </div>
       </div>
 
+      <PhonePreview />
       {!immersiveModule && <PulseWidget />}
       {!immersiveModule && <AskPrimovexPanel />}
     </div>
