@@ -36,9 +36,9 @@ function ResultBadge({ result }) {
     : <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[11px] font-semibold text-rose-300"><AlertTriangle className="h-3 w-3" /> Fail</span>;
 }
 
-function AssetTable({ title, icon: Icon, rows, latestCheck, showTemp, emptyText }) {
+function AssetTable({ title, icon: Icon, rows, latestCheck, showTemp, emptyText, sectionId }) {
   return (
-    <Card className="border border-white/10 bg-slate-900/70 p-4 shadow-lg backdrop-blur">
+    <Card id={sectionId ? `compliance-section-${sectionId}` : undefined} className="border border-white/10 bg-slate-900/70 p-4 shadow-lg backdrop-blur">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-100"><Icon className="h-4 w-4 text-teal-300" /> {title} <span className="text-xs font-normal text-slate-500">({rows.length})</span></div>
       {rows.length === 0 ? (
         <p className="text-sm text-slate-500">{emptyText}</p>
@@ -129,6 +129,15 @@ export default function ComplianceOverview({ assets = [], checks = [], onGoTab }
   const go = (item) => {
     if (item.action?.type === "incident") setIncidentId(item.action.id);
     else if (item.action?.type === "tab") onGoTab?.(item.action.tab);
+    else if (item.action?.type === "section") {
+      // take them to the list the check belongs to, and show which it is for a moment
+      const el = document.getElementById(`compliance-section-${item.action.section}`);
+      if (!el) return;
+      el.style.scrollMarginTop = "5rem";
+      el.scrollIntoView({ block: "start" });
+      el.classList.add("ring-2", "ring-teal-300");
+      window.setTimeout(() => el.classList.remove("ring-2", "ring-teal-300"), 2500);
+    }
   };
 
   return (
@@ -157,7 +166,7 @@ export default function ComplianceOverview({ assets = [], checks = [], onGoTab }
                 <button type="button" onClick={() => go(item)} className={`flex w-full items-start gap-3 rounded-xl border px-3 py-2 text-left ${TONE[item.tone]}`}>
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                   <span className="min-w-0"><span className="block text-sm font-semibold">{item.label}</span>{item.detail && <span className="block text-xs opacity-80">{item.detail}</span>}</span>
-                  <span className="ml-auto shrink-0 self-center text-xs font-semibold underline">{item.action?.type === "incident" ? "Take action" : "Open"}</span>
+                  <span className="ml-auto shrink-0 self-center text-xs font-semibold underline">{item.action?.type === "incident" ? "Take action" : item.action?.type === "section" ? "Show me" : "Open"}</span>
                 </button>
               </li>
             ))}
@@ -172,10 +181,10 @@ export default function ComplianceOverview({ assets = [], checks = [], onGoTab }
         <Tile label="Checks in the last 7 days" value={checksThisWeek} />
       </div>
 
-      <AssetTable title="Fire call points" icon={Flame} rows={firePoints} latestCheck={latestCheck} emptyText="No fire call points yet. Add them under Assets and tags, or bring them across from the old list." />
-      <AssetTable title="Water outlets" icon={Droplets} rows={water} latestCheck={latestCheck} showTemp emptyText="No water outlets yet. Add them under Assets and tags, or bring them across from the old list." />
+      <AssetTable sectionId="fire" title="Fire call points" icon={Flame} rows={firePoints} latestCheck={latestCheck} emptyText="No fire call points yet. Add them under Assets and tags, or bring them across from the old list." />
+      <AssetTable sectionId="water" title="Water outlets" icon={Droplets} rows={water} latestCheck={latestCheck} showTemp emptyText="No water outlets yet. Add them under Assets and tags, or bring them across from the old list." />
       {(otherFire.length > 0 || other.length > 0) && (
-        <AssetTable title="Other checked items" icon={ShieldCheck} rows={[...otherFire, ...other]} latestCheck={latestCheck} showTemp={other.some((a) => a.checkMode === "temperature")} emptyText="" />
+        <AssetTable sectionId="other" title="Other checked items" icon={ShieldCheck} rows={[...otherFire, ...other]} latestCheck={latestCheck} showTemp={other.some((a) => a.checkMode === "temperature")} emptyText="" />
       )}
 
       {manualOpen && (

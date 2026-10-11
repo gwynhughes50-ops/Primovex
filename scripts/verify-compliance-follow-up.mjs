@@ -149,4 +149,16 @@ t("late is amber, properly overdue is red: a check a week past its day, the fire
   assert.equal(daysSinceFireTest([{ assetType: "fire_point", active: false, lastCheckAt: ago(1) }], now), Infinity, "a retired point doesn't count");
 });
 
+t("'Open' on a check that needs doing takes the person to the list it belongs to", () => {
+  const now = new Date(2026, 9, 10, 12);
+  const ago = (days) => new Date(now.getTime() - days * 86400000);
+  const list = dueList({ assets: [
+    { id: "fp", assetCode: "FP-001", assetType: "fire_point", label: "Reception", lastCheckAt: ago(30), lastCheckResult: "pass" },
+    { id: "w", assetCode: "WH-002", assetType: "water_hot", label: "Tap", frequency: "monthly", lastCheckAt: ago(40), lastCheckResult: "pass" },
+  ], now });
+  const by = Object.fromEntries(list.map((i) => [i.key, i.action]));
+  assert.deepEqual(by["fire-weekly"], { type: "section", section: "fire" });
+  assert.deepEqual(by.overdue, { type: "section", section: "water" });
+});
+
 console.log(`\n${n} passed`);
