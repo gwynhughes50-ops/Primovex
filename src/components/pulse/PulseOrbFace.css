@@ -112,3 +112,55 @@
 .pvx-orb--still.pvx-orb--active .pvx-orb-ring { border: 2px solid #9adfff; }
 .pvx-orb--still.pvx-orb--active .pvx-orb-core { filter: brightness(1.18); }
 .pvx-orb--still::before, .pvx-orb--still::after { opacity: 0; }
+
+/* Traffic light. The orb takes its colour from how things stand for the person looking at it: green when what is
+   theirs is in order, amber when something is coming up or just late, red when something has failed or is properly
+   overdue. The pulse follows: calm, a little quicker, and for red quicker and slightly firmer, but never frantic. */
+.pvx-orb { --beat-up: 1.045; --ring-rgb: 121, 227, 255; }
+.pvx-orb--green, .pvx-orb--amber, .pvx-orb--red { filter: none; }
+
+.pvx-orb--green { --tempo: 4.8s; --ring-rgb: 120, 238, 176; }
+.pvx-orb--green.pvx-orb--active { --tempo: 3.9s; }
+.pvx-orb--green .pvx-orb-core {
+  background: radial-gradient(circle at 34% 28%, #eafff2 0%, #a6f0c2 13%, #3fc77f 43%, #16794f 69%, #0b3a2c 100%);
+  box-shadow: inset -12px -17px 22px #0b2e269c, inset 7px 8px 19px #f0fff54a, 0 0 22px #3be39a6e, 0 0 58px #18c37c45;
+}
+
+.pvx-orb--amber { --tempo: 3.5s; --beat-up: 1.055; --ring-rgb: 255, 207, 120; }
+.pvx-orb--amber .pvx-orb-core {
+  background: radial-gradient(circle at 34% 28%, #fff7e2 0%, #ffd98c 13%, #f2aa3a 43%, #b3691a 69%, #4d2b0c 100%);
+  box-shadow: inset -12px -17px 22px #4a260a9c, inset 7px 8px 19px #fff6e44a, 0 0 22px #f2b13c70, 0 0 58px #e0902a45;
+}
+
+.pvx-orb--red { --tempo: 2.4s; --beat-up: 1.07; --ring-rgb: 255, 150, 150; }
+.pvx-orb--red .pvx-orb-core {
+  background: radial-gradient(circle at 34% 28%, #fff0ee 0%, #ffb7b0 13%, #e5605f 43%, #a02b36 69%, #4a1222 100%);
+  box-shadow: inset -12px -17px 22px #4a10209c, inset 7px 8px 19px #fff0ee4a, 0 0 20px #ec636770, 0 0 52px #d3384a40;
+}
+
+.pvx-orb--green .pvx-orb-ring, .pvx-orb--amber .pvx-orb-ring, .pvx-orb--red .pvx-orb-ring {
+  border-color: rgba(var(--ring-rgb), 0.3);
+  box-shadow: 0 0 30px rgba(var(--ring-rgb), 0.12), inset 0 0 27px rgba(var(--ring-rgb), 0.14);
+}
+.pvx-orb--green::before, .pvx-orb--green::after,
+.pvx-orb--amber::before, .pvx-orb--amber::after,
+.pvx-orb--red::before, .pvx-orb--red::after { border-color: rgba(var(--ring-rgb), 0.28); }
+
+.pvx-orb--amber .pvx-orb-core, .pvx-orb--red .pvx-orb-core { animation-name: pvx-orb-heartbeat-lvl; }
+@keyframes pvx-orb-heartbeat-lvl {
+  0%, 38%, 100% { transform: scale(0.96); filter: brightness(0.91); }
+  44% { transform: scale(var(--beat-up)); filter: brightness(1.22); }
+  51% { transform: scale(0.985); filter: brightness(1); }
+  57% { transform: scale(calc(var(--beat-up) - 0.02)); filter: brightness(1.12); }
+  65% { transform: scale(0.96); filter: brightness(0.91); }
+}
+
+/* For anyone who asks for less movement (or the widget's "still" option) the colour carries the message, and a firmer
+   ring says how serious it is: none for green, thin for amber, firmer for red. */
+@media (prefers-reduced-motion: reduce) {
+  .pvx-orb--amber .pvx-orb-ring { border: 2px solid rgba(255, 207, 120, 0.9); }
+  .pvx-orb--red .pvx-orb-ring { border: 3px solid rgba(255, 150, 150, 0.95); }
+}
+.pvx-orb--still.pvx-orb--amber .pvx-orb-ring { border: 2px solid rgba(255, 207, 120, 0.9); }
+.pvx-orb--still.pvx-orb--red .pvx-orb-ring { border: 3px solid rgba(255, 150, 150, 0.95); }
+.pvx-orb--still.pvx-orb--green .pvx-orb-core, .pvx-orb--still.pvx-orb--amber .pvx-orb-core, .pvx-orb--still.pvx-orb--red .pvx-orb-core { animation: none; filter: none; }

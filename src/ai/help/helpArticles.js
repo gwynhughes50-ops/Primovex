@@ -587,6 +587,22 @@ export const HELP_ARTICLES = [
     related: ["coshh-register"],
   },
   {
+    id: "orb-colour",
+    title: "What do the Orb's colours mean?",
+    topic: "Orb",
+    asks: ["how do i read the orb colour", "what does the orb colour mean", "why is the orb red", "why is the orb amber", "what does a red orb mean", "traffic light orb"],
+    keywords: ["orb", "colour", "color", "red", "amber", "green", "traffic", "light", "overdue", "failed"],
+    where: "both",
+    steps: [
+      "Green means everything of yours is in order. Amber means something is coming up or is just late. Red means something has failed or is properly overdue.",
+      "It is personal to you. The Practice Manager's Orb watches the whole practice. The Caretaker's only watches compliance. A nurse's watches the fridges and expired stock. Reception and cleaners have nothing to watch, so theirs stays green.",
+      "Hover over the Orb on the desktop for a short message, or open it and it tells you what is wrong at the top, with a line for each thing. Press a line to go straight to it.",
+      "The pulse is a little quicker for amber and a little firmer for red, but never alarming. If you have reduced motion switched on, red shows as a firmer ring instead.",
+    ],
+    tip: "A check counts as red a week after it was due (the weekly fire alarm test, a fortnight after the last one). Anything failed, such as a fridge out of range or a failed fire or water check, is red straight away.",
+    related: ["inspection-pack"],
+  },
+  {
     id: "stock-take",
     title: "Do a full stock take with the team on their phones",
     topic: "Inventory",

@@ -31,3 +31,7 @@ export const useStockTakes = () => ({ list: stub.takes || [], error: "" });
 export const useComplianceIncidents = () => ({ list: stub.incidents || [], error: "" });
 
 export const useCertificates = () => ({ list: stub.certificates || null, error: "" });
+
+// the Orb's status provider reads the whole practice; the phone home only needs the chips it works out
+import { buildAttention } from "../../src/mobile/homeAttention.js";
+export const useOrbStatus = () => ({ chips: buildAttention({ ...(stub.attention || {}), now: new Date() }), level: "green", signals: [] });

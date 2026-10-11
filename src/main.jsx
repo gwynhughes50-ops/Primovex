@@ -16,6 +16,7 @@ import DeepLinkNavigator from "@/routes/DeepLinkNavigator";
 import UsageTracker from "@/components/security/UsageTracker";
 import MaintenanceSync from "@/modules/maintenance/MaintenanceSync";
 import ViewAsBanner from "@/components/security/ViewAsBanner";
+import OrbStatusProvider from "@/orb/OrbStatusContext";
 
 const isAndroidRuntime = /Android/i.test(navigator.userAgent) && Boolean(window.__TAURI_INTERNALS__);
 const isAndroidBuild = import.meta.env.MODE === "android";
@@ -48,7 +49,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <SenseSessionProvider>
             <MedTrakThemeProvider>
               <PrimovexAIProvider>
-                <Application />
+                <OrbStatusProvider>
+                  <Application />
+                </OrbStatusProvider>
                 {useMobileApplication && <ViewAsBanner compact />}
               </PrimovexAIProvider>
             </MedTrakThemeProvider>

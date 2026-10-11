@@ -9,6 +9,8 @@ import usePrimovexAI from '@/ai/hooks/usePrimovexAI';
 import { useAuth } from '@/contexts/AuthContext';
 import useOrbSignal from '@/hooks/useOrbSignal';
 import PulseOrbFace from './PulseOrbFace';
+import { useOrbStatus } from '@/orb/OrbStatusContext';
+import OrbStatusPanel, { LEVEL_COLOUR } from '@/orb/OrbStatusPanel';
 import { configureDesktopOrb, isDesktopShell, pushDesktopOrbState } from '@/desktop/desktopOrb';
 
 const STORAGE_KEY = 'medtrak_pulse_nexus_v3';
@@ -212,7 +214,12 @@ export default function PulseWidget({ variant = 'desktop' }) {
 
   // A quicker pulse when there has been a substantial change since the orb was last opened.
   const signal = useOrbSignal({ score, loading: pulse.loading, stockItems: pulse.stockItems, userId: user?.uid, canSeeSars: can?.('governance.read') });
-  const changeNote = signal.changed ? `Substantial change: ${signal.reasons.join('; ')}.` : 'System steady.';
+  const orbStatus = useOrbStatus();
+  const level = orbStatus.level;
+  // the traffic light speaks first: what has failed or is overdue, then any substantial change, then "steady"
+  const changeNote = level !== 'green'
+    ? `${orbStatus.headline}. ${orbStatus.summary}`
+    : signal.changed ? `Substantial change: ${signal.reasons.join('; ')}.` : 'System steady.';
   const { acknowledge } = signal;
 
   // On the Windows desktop app the orb can also sit on the desktop (its own small window) when
@@ -230,8 +237,8 @@ export default function PulseWidget({ variant = 'desktop' }) {
   }, [desktopShell]);
   useEffect(() => {
     if (!desktopShell || pulse.loading) return;
-    pushDesktopOrbState({ changed: signal.changed, note: changeNote, score });
-  }, [desktopShell, pulse.loading, signal.changed, changeNote, score]);
+    pushDesktopOrbState({ changed: signal.changed, level, note: changeNote, score });
+  }, [desktopShell, pulse.loading, signal.changed, level, changeNote, score]);
   useEffect(() => { if (state.expanded) acknowledge(); }, [state.expanded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -372,7 +379,7 @@ export default function PulseWidget({ variant = 'desktop' }) {
           cursor: dragging ? 'grabbing' : 'grab',
         }}
       >
-        <PulseOrbFace size={spec.box} active={signal.changed} still={state.reducedMotion} />
+        <PulseOrbFace size={spec.box} active={signal.changed} still={state.reducedMotion} level={level} />
         <span className="sr-only" role="status" aria-live="polite">{changeNote}</span>
       </div>
 
@@ -384,6 +391,12 @@ export default function PulseWidget({ variant = 'desktop' }) {
 
       {showPreview && (
         <div className="pointer-events-none absolute left-1/2 top-[calc(100%+10px)] z-[45] w-56 -translate-x-1/2 rounded-2xl border p-3 shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
+          {level !== 'green' && (
+            <div className="mb-2 border-b pb-2">
+              <div className="flex items-center gap-2 text-xs font-bold"><span className="h-2 w-2 rounded-full" style={{ background: LEVEL_COLOUR[level] }} />{orbStatus.headline}</div>
+              <p className="mt-1 text-xs mt-pulse-secondary">{orbStatus.summary}</p>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-[0.18em] mt-pulse-muted">Pulse</span>
             <span className="text-xs font-bold" style={{ color: tone.accent }}>{tone.label}</span>
@@ -411,13 +424,14 @@ export default function PulseWidget({ variant = 'desktop' }) {
           navigate={navigate}
           theme={theme}
           primovexAI={primovexAI}
+          orbStatus={orbStatus}
         />
       )}
 
       {state.expanded && variant === 'mobile' && (
         <div className="fixed inset-x-3 bottom-20 top-16 z-[49] flex max-h-[calc(100dvh-6rem)] flex-col overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-xl mt-pulse-panel mt-pulse-text">
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pr-3 [scrollbar-gutter:stable]">
-            <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} theme={theme} primovexAI={primovexAI} compact />
+            <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} theme={theme} primovexAI={primovexAI} orbStatus={orbStatus} compact />
           </div>
         </div>
       )}
@@ -432,12 +446,12 @@ export default function PulseWidget({ variant = 'desktop' }) {
   );
 }
 
-function PulseDrawer({ side, pulse, score, tone, band, state, updateState, resetPosition, navigate, theme, primovexAI }) {
+function PulseDrawer({ side, pulse, score, tone, band, state, updateState, resetPosition, navigate, theme, primovexAI, orbStatus }) {
   const sideClass = side === 'left' ? 'right-[calc(100%+14px)]' : 'left-[calc(100%+14px)]';
   return (
     <div className={`absolute top-0 z-[42] flex max-h-[min(82dvh,760px)] w-[min(92vw,430px)] flex-col overflow-hidden rounded-3xl border shadow-2xl backdrop-blur-xl mt-pulse-panel mt-pulse-text ${sideClass}`}>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pr-3 [scrollbar-gutter:stable]">
-        <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} theme={theme} primovexAI={primovexAI} />
+        <PulseDrawerContent pulse={pulse} score={score} tone={tone} band={band} updateState={updateState} navigate={navigate} theme={theme} primovexAI={primovexAI} orbStatus={orbStatus} />
       </div>
       {state.settingsOpen && (
         <div className="shrink-0 border-t p-4 mt-pulse-panel">
@@ -472,7 +486,7 @@ function PulseDrawer({ side, pulse, score, tone, band, state, updateState, reset
   );
 }
 
-function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, theme, primovexAI, compact = false }) {
+function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, theme, primovexAI, orbStatus, compact = false }) {
   const modules = Array.isArray(pulse.modules) ? pulse.modules : [];
   const issues = Array.isArray(pulse.issues) ? pulse.issues : [];
   const timeline = makeTimeline(issues);
@@ -494,6 +508,10 @@ function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, t
           <button type="button" onClick={() => updateState({ expanded: false, settingsOpen: false })} className="rounded-full p-2 mt-pulse-icon-button" title="Close"><X className="h-4 w-4" /></button>
         </div>
       </div>
+
+      {orbStatus && orbStatus.level !== 'green' && (
+        <div className="mb-4"><OrbStatusPanel status={orbStatus} onGo={(signal) => { updateState({ expanded: false, settingsOpen: false }); navigate(signal.route); }} /></div>
+      )}
 
       <div className="grid grid-cols-[112px_1fr] gap-4">
         <div className="relative grid h-28 w-28 place-items-center rounded-full" style={{ filter: `drop-shadow(0 0 18px ${tone.aura})` }}>

@@ -5,6 +5,7 @@ import { concernDeadline, concernOpen, sarDays, sarOpen } from "../ai/management
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const ORDER = { critical: 0, warning: 1, info: 2, ok: 3 };
+const AREA_OF = { sars: "governance", concerns: "governance", stock: "stock", fridges: "coldchain", fridge: "coldchain", compliance: "compliance", certs: "compliance", coshh: "compliance", messages: "messages" };
 
 // sars / concerns / stockAlerts are the records (or null when this person can't see them);
 // stockAlerts are [{ state: 'expired' | 'out' | 'low' | 'soon' }]; messages is a count of unread messages;
@@ -50,6 +51,8 @@ export function buildAttention({ sars = null, concerns = null, stockAlerts = nul
 
   if (messages > 0) chips.push({ key: "messages", tone: "info", label: plural(messages, "unread message"), action: "messages" });
 
+  // which part of the practice each chip is about, so the Orb's colour can follow what is this person's
+  chips.forEach((chip) => { chip.area = AREA_OF[chip.key.split("-")[0]] || ""; });
   chips.sort((a, b) => ORDER[a.tone] - ORDER[b.tone]);
   return chips.length ? chips : [{ key: "clear", tone: "ok", label: "Nothing urgent right now", action: null }];
 }

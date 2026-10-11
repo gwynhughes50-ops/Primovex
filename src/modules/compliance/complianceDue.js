@@ -1,7 +1,7 @@
 // "What needs doing": one list across everything the Compliance page looks after, most urgent first. Pure: the screen
 // hands in the records.
 
-import { getNextFirePointToTest, isComplianceCheckDue, isFireAlarmTestDueThisWeek, toDateValue } from "../../services/compliance/complianceRules.js";
+import { FREQUENCY_MS, getNextFirePointToTest, isComplianceCheckDue, isFireAlarmTestDueThisWeek, toDateValue } from "../../services/compliance/complianceRules.js";
 import { isOpen as incidentOpen, ageText } from "./complianceIncidents.js";
 import { issueSummary } from "../maintenance/maintenance.js";
 import { reviewSummary } from "../coshh/coshh.js";
@@ -11,6 +11,25 @@ const DAY = 86400000;
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const ORDER = { critical: 0, warning: 1 };
 const label = (asset) => asset?.label || asset?.assetCode || "An asset";
+
+// Late, but not alarming yet, is amber; properly overdue is red. A check is red a week past the day it fell due; the
+// weekly fire alarm test, a fortnight after the last one (or never done).
+export const RED_AFTER_DAYS = 7;
+export const FIRE_RED_AFTER_DAYS = 14;
+
+// whole days past the day this asset's check fell due (0 when never checked: a new asset is amber, not red)
+export function overdueDays(asset, now = new Date()) {
+  const last = toDateValue(asset?.lastCheckAt);
+  if (!last) return 0;
+  const interval = FREQUENCY_MS[asset.frequency] ?? FREQUENCY_MS.monthly;
+  return Math.max(0, Math.floor((now.getTime() - last.getTime() - interval) / DAY));
+}
+
+// days since any call point was last tested (Infinity when none ever has)
+export function daysSinceFireTest(assets = [], now = new Date()) {
+  const times = assets.filter((a) => a.assetType === "fire_point" && a.active !== false).map((a) => toDateValue(a.lastCheckAt)?.getTime()).filter(Boolean);
+  return times.length ? Math.floor((now.getTime() - Math.max(...times)) / DAY) : Infinity;
+}
 
 // A PAT session records when the next test is due; the most recent session's date is the one that counts.
 export function patRetest(sessions = [], now = new Date()) {
@@ -35,14 +54,14 @@ export function dueList({ assets = [], incidents = [], patSessions = [], issues 
   const live = assets.filter((a) => a.active !== false);
   if (isFireAlarmTestDueThisWeek(live, now)) {
     const next = getNextFirePointToTest(live);
-    items.push({ key: "fire-weekly", tone: "warning", label: "The weekly fire alarm test hasn't been done", detail: next ? `Test ${label(next)} next.` : "", action: { type: "tab", tab: "overview" } });
+    items.push({ key: "fire-weekly", tone: daysSinceFireTest(live, now) > FIRE_RED_AFTER_DAYS ? "critical" : "warning", label: "The weekly fire alarm test hasn't been done", detail: next ? `Test ${label(next)} next.` : "", action: { type: "tab", tab: "overview" } });
   }
 
   const due = live.filter((a) => isComplianceCheckDue(a, now) && !withIncident.has(a.id));
   const failingNoIncident = due.filter((a) => a.lastCheckResult === "fail");
   const overdue = due.filter((a) => a.lastCheckResult !== "fail");
   if (failingNoIncident.length) items.push({ key: "failing", tone: "critical", label: `${plural(failingNoIncident.length, "asset")} last failed its check`, detail: failingNoIncident.slice(0, 4).map(label).join(", "), action: { type: "tab", tab: "overview" } });
-  if (overdue.length) items.push({ key: "overdue", tone: "warning", label: `${plural(overdue.length, "check")} overdue`, detail: `${overdue.slice(0, 4).map((a) => a.assetCode || label(a)).join(", ")}${overdue.length > 4 ? ` and ${overdue.length - 4} more` : ""}`, action: { type: "tab", tab: "overview" } });
+  if (overdue.length) items.push({ key: "overdue", tone: Math.max(...overdue.map((a) => overdueDays(a, now))) >= RED_AFTER_DAYS ? "critical" : "warning", label: `${plural(overdue.length, "check")} overdue`, detail: `${overdue.slice(0, 4).map((a) => a.assetCode || label(a)).join(", ")}${overdue.length > 4 ? ` and ${overdue.length - 4} more` : ""}`, action: { type: "tab", tab: "overview" } });
 
   const pat = patRetest(patSessions, now);
   if (pat && pat.days <= 30) items.push({ key: "pat", tone: pat.days < 0 ? "critical" : "warning", label: pat.days < 0 ? "PAT retesting is overdue" : "PAT retesting is due soon", detail: `Retest ${pat.days < 0 ? `was due ${Math.abs(pat.days)} day${Math.abs(pat.days) === 1 ? "" : "s"} ago` : pat.days === 0 ? "is due today" : `due in ${pat.days} day${pat.days === 1 ? "" : "s"}`}.`, action: { type: "tab", tab: "pat" } });

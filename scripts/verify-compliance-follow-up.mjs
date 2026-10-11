@@ -3,7 +3,7 @@ import {
   ALERT_ROLES, actionChoicesFor, actionEntry, ageText, assetGroup, buildIncident, closeBlockedReason, describeFailure, isOpen, recheckState, resolutionPatch, sortIncidents,
 } from "../src/modules/compliance/complianceIncidents.js";
 import { ageDays, buildIssue, isOpenIssue, issueSummary, openIssuesIn, sortIssues, updateEntry, validateIssue } from "../src/modules/maintenance/maintenance.js";
-import { dueList, patRetest } from "../src/modules/compliance/complianceDue.js";
+import { daysSinceFireTest, dueList, overdueDays, patRetest } from "../src/modules/compliance/complianceDue.js";
 import { normaliseSubstance } from "../src/modules/coshh/coshh.js";
 
 let n = 0;
@@ -118,7 +118,7 @@ t("the 'what needs doing' list puts failures first and gathers every area", () =
   assert.deepEqual(list.map((i) => i.key), ["incident-i1", "pat", "maintenance", "coshh-overdue", "fire-weekly", "overdue"].sort((x, y) => list.findIndex((i) => i.key === x) - list.findIndex((i) => i.key === y)));
   assert.equal(list[0].key, "incident-i1", "an open failed check heads the list");
   assert.equal(list[0].action.type, "incident");
-  assert.ok(list.slice(0, 4).every((i) => i.tone === "critical") && list.slice(4).every((i) => i.tone === "warning"), "all the critical ones come before the warnings");
+  assert.ok(list.slice(0, 5).every((i) => i.tone === "critical") && list.slice(5).every((i) => i.tone === "warning"), "all the critical ones come before the warnings (the 10-days-overdue check is red)");
   assert.ok(!list.some((i) => i.key === "failing"), "an asset with an open incident is not listed twice");
   const overdue = list.find((i) => i.key === "overdue");
   assert.match(overdue.label, /1 check overdue/);
@@ -126,6 +126,27 @@ t("the 'what needs doing' list puts failures first and gathers every area", () =
   assert.match(list.find((i) => i.key === "fire-weekly").detail, /FP-009|Reception/, "says which call point to test next");
   assert.deepEqual(dueList({ now }), []);
   assert.equal(dueList({ assets: [{ id: "x", assetCode: "WH-9", assetType: "water_hot", lastCheckAt: ago(45), lastCheckResult: "fail" }], now })[0].key, "failing", "a legacy failure with no incident is still shown");
+});
+
+t("late is amber, properly overdue is red: a check a week past its day, the fire test a fortnight after the last", () => {
+  const monthly = (id, daysSinceCheck) => ({ id, assetCode: id, assetType: "water_hot", frequency: "monthly", lastCheckAt: ago(daysSinceCheck), lastCheckResult: "pass" });
+  const tone = (assets) => dueList({ assets, now }).find((i) => i.key === "overdue")?.tone;
+  assert.equal(tone([monthly("a", 31)]), "warning", "one day late");
+  assert.equal(tone([monthly("a", 36)]), "warning", "six days late");
+  assert.equal(tone([monthly("a", 37)]), "critical", "seven days late");
+  assert.equal(tone([monthly("a", 31), monthly("b", 50)]), "critical", "the worst one decides");
+  assert.equal(tone([{ id: "n", assetCode: "N", assetType: "water_hot", frequency: "monthly" }]), "warning", "a new asset never checked is amber, not red");
+  assert.equal(overdueDays(monthly("a", 40), now), 10);
+  assert.equal(overdueDays({ assetType: "aed" }, now), 0);
+  const fire = (days) => [{ id: "f", assetCode: "FP-1", assetType: "fire_point", lastCheckAt: days === null ? undefined : ago(days) }];
+  const fireTone = (assets) => dueList({ assets, now }).find((i) => i.key === "fire-weekly")?.tone;
+  assert.equal(fireTone(fire(8)), "warning");
+  assert.equal(fireTone(fire(14)), "warning");
+  assert.equal(fireTone(fire(15)), "critical");
+  assert.equal(fireTone(fire(null)), "critical", "never tested");
+  assert.equal(daysSinceFireTest(fire(null), now), Infinity);
+  assert.equal(daysSinceFireTest(fire(20), now), 20);
+  assert.equal(daysSinceFireTest([{ assetType: "fire_point", active: false, lastCheckAt: ago(1) }], now), Infinity, "a retired point doesn't count");
 });
 
 console.log(`\n${n} passed`);

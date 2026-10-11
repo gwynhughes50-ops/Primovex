@@ -3,6 +3,8 @@ import { ArrowRight, Bot, CheckCircle2, ExternalLink, Meh, Mic, MicOff, RotateCc
 import { useNavigate } from 'react-router-dom';
 import usePrimovexAI from '../hooks/usePrimovexAI';
 import PulseOrbFace from '@/components/pulse/PulseOrbFace';
+import { useOrbStatus } from '@/orb/OrbStatusContext';
+import OrbStatusPanel from '@/orb/OrbStatusPanel';
 import { AI_STATES } from '../types/responseContract';
 import { interpretSpoken, spokenReply } from '../voice/spokenCommands';
 import { cancelNativeListening, nativeVoiceAvailable, requestNativeMicrophonePermission, startNativeListening, stopNativeListening, subscribeNativeOrbVoice } from '../voice/nativeOrbVoice';
@@ -88,6 +90,7 @@ function speakText(text) {
 export default function AskPrimovexPanel({ variant = 'desktop' }) {
   const navigate = useNavigate();
   const { isOpen, close, status, messages, ask, addUserMessage, clearConversation, resolveClarification, recordFeedback, confirmProposal, cancelProposal } = usePrimovexAI();
+  const orbStatus = useOrbStatus();
   const [prompt, setPrompt] = useState('');
   const [voiceState, setVoiceState] = useState(VOICE_STATES.SLEEPING);
   const [voiceSupported, setVoiceSupported] = useState(true);
@@ -394,7 +397,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     >
       <header className="primovex-ai-divider flex items-center justify-between px-4 py-4">
         <div className="flex items-center gap-3">
-          <div className={`relative h-10 w-10 shrink-0 ${busy ? 'primovex-ai-breathe' : ''}`} aria-hidden="true"><PulseOrbFace size={40} active={busy} /></div>
+          <div className={`relative h-10 w-10 shrink-0 ${busy ? 'primovex-ai-breathe' : ''}`} aria-hidden="true"><PulseOrbFace size={40} active={busy} level={orbStatus.level} /></div>
           <div>
             <h2 className="font-bold">Orb</h2>
             <p className="primovex-ai-muted text-xs">{STATUS_LABELS[status]} · Operational intelligence</p>
@@ -410,7 +413,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
         {isMobile && (
           <section className={`primovex-voice-stage ${orbAwake ? 'is-awake' : 'is-sleeping'}`} aria-live="polite">
             <button type="button" onClick={orbAwake ? sleepOrb : wakeOrb} className={`primovex-pulse-voice-orb state-${voiceState}`} aria-label={orbAwake ? 'Put Orb to sleep' : 'Wake Orb'}>
-              <PulseOrbFace size={150} active={voiceState === VOICE_STATES.LISTENING || voiceState === VOICE_STATES.THINKING || voiceState === VOICE_STATES.WAKING} still={voiceState === VOICE_STATES.SLEEPING} />
+              <PulseOrbFace level={orbStatus.level} size={150} active={voiceState === VOICE_STATES.LISTENING || voiceState === VOICE_STATES.THINKING || voiceState === VOICE_STATES.WAKING} still={voiceState === VOICE_STATES.SLEEPING} />
             </button>
             <strong>{orbLabel}</strong>
             <span>{voiceError || partialTranscript || (voiceSupported ? (orbAwake ? 'Keep talking. Say “that’s all” when you are finished.' : 'Tap the Orb and talk. It keeps listening until you say “that’s all” or go quiet.') : 'Voice recognition is unavailable on this device. You can still type below.')}</span>
@@ -424,6 +427,20 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
 
         {messages.length === 0 ? (
           <div>
+            <div className="mb-4">
+              <OrbStatusPanel
+                status={orbStatus}
+                quietWhenGreen
+                onGo={(signal) => {
+                  if (isMobile && signal.mobile && !/^(sars|concerns)$/.test(signal.mobile)) {
+                    const tab = { stock: 'stock', temperature: 'temperature', checks: 'compliance' }[signal.mobile];
+                    if (tab) window.dispatchEvent(new CustomEvent('primovex:orb-tab', { detail: { tab } }));
+                    else navigate(signal.route);
+                  } else navigate(signal.route);
+                  close();
+                }}
+              />
+            </div>
             {!isMobile && (
               <div className="primovex-ai-accent-card rounded-2xl p-4">
                 <div className="primovex-ai-accent-text flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4" /> Evidence-aware answers</div>

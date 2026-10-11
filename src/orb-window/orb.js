@@ -17,6 +17,9 @@ function setOrb(state = {}) {
   const changed = Boolean(state.changed);
   const note = String(state.note || (changed ? "Substantial change." : "System steady."));
   face.classList.toggle("pvx-orb--active", changed);
+  // the traffic light: green when all is well, amber when something is coming up, red when something has failed
+  const level = ["green", "amber", "red"].includes(state.level) ? state.level : "";
+  for (const name of ["green", "amber", "red"]) face.classList.toggle(`pvx-orb--${name}`, name === level);
   const score = Number.isFinite(Number(state.score)) ? ` Practice Pulse ${Math.round(Number(state.score))}.` : "";
   const label = `Primovex Orb.${score} ${note} Double-click to open Primovex.`;
   orb.setAttribute("aria-label", label);
