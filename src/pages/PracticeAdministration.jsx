@@ -352,7 +352,8 @@ export default function PracticeAdministration() {
     }
   };
 
-  const clinflowDisabled = Boolean(practice?.moduleToggles?.clinflow?.disabled);
+  // off unless it has been deliberately turned on for everyone (see core/identity/moduleAccess.js)
+  const clinflowDisabled = practice?.moduleToggles?.clinflow?.disabled !== false;
 
   const toggleClinflowModule = async () => {
     if (!requireManage()) return;

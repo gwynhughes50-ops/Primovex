@@ -98,6 +98,8 @@ async function main() {
     await setDoc(doc(db, "usage_sessions", "other-uid_sess-00000002"), { uid: "other-uid", practiceId: "site-b", displayName: "Other", role: "User", pages: [], activeSeconds: 10 });
     await setDoc(doc(db, "orb_ai_usage", "all_20261006"), { count: 3, kind: "day", day: "20261006" });
     await setDoc(doc(db, "settings", "orb"), { aiRouting: false });
+    // ClinFlow is off unless deliberately turned on; the tenant checks below run with it on, section 17 tests the switch
+    await setDoc(doc(db, "practice_config", "main"), { moduleToggles: { clinflow: { disabled: false, allowUids: [] } } });
     await setDoc(doc(db, "clinflow_workflow_records", "rec-primary"), {
       dataMode: "synthetic", practiceId: "primary", siteId: "SITE-MAIN",
     });
@@ -633,6 +635,42 @@ async function main() {
     await assertSucceeds(updateDoc(doc(nursemgr, "temperature_incidents", "inc-1"), { quarantined: true, quarantinedBy: "Nurse Manager" }));
     await assertSucceeds(updateDoc(doc(pm, "temperature_incidents", "inc-1"), { status: "resolved", resolvedBy: "PM" }));
     await assertFails(deleteDoc(doc(nursemgr, "temperature_incidents", "inc-1")));
+  });
+
+  console.log("\n=== 17. ClinFlow switch (practice_config.moduleToggles.clinflow) ===");
+  const setClinflow = (value) => seed(async (db) => (value === undefined ? deleteDoc(doc(db, "practice_config", "main")) : setDoc(doc(db, "practice_config", "main"), { moduleToggles: { clinflow: value } })));
+  const readRecord = (who) => getDoc(doc(who, "clinflow_workflow_records", "rec-primary"));
+  await check("Switched off for everyone except the developer: staff cannot read ClinFlow records, the developer can", async () => {
+    await setClinflow({ disabled: true, allowUids: ["admin-uid"] });
+    for (const who of [nurse, pm, user, reception, sitea, partner, readonly]) await assertFails(readRecord(who));
+    await assertSucceeds(readRecord(admin));
+  });
+  await check("Switched off: staff cannot write ClinFlow records either", async () => {
+    const rec = { dataMode: "synthetic", practiceId: "primary", siteId: "SITE-MAIN", status: "new", createdByUid: "nurse-uid", archived: false, schemaVersion: 1 };
+    await assertFails(setDoc(doc(nurse, "clinflow_workflow_records", "rec-new-n"), rec));
+    await assertFails(setDoc(doc(pm, "clinflow_workflow_records", "rec-new-p"), { ...rec, createdByUid: "pm-uid" }));
+  });
+  await check("Switched off: even another System Admin who is not on the allow-list cannot read it", async () => {
+    await seed(async (db) => setDoc(doc(db, "users", "admin2-uid"), { role: "System Admin", displayName: "Admin Two" }));
+    await assertFails(readRecord(testEnv.authenticatedContext("admin2-uid").firestore()));
+  });
+  await check("Never set (a practice that has not touched it): ClinFlow is off for everyone", async () => {
+    await setClinflow(undefined);
+    for (const who of [nurse, pm, admin]) await assertFails(readRecord(who));
+    await setClinflow({});
+    await assertFails(readRecord(pm));
+  });
+  await check("Deliberately switched on for everyone: staff with ClinFlow access can read it again, others still cannot", async () => {
+    await setClinflow({ disabled: false, allowUids: [] });
+    await assertSucceeds(readRecord(nurse));
+    await assertSucceeds(readRecord(pm));
+    await assertFails(readRecord(cleaner));
+    await assertFails(readRecord(anon));
+  });
+  await check("A malformed allow-list allows no one", async () => {
+    await setClinflow({ disabled: true, allowUids: "nurse-uid" });
+    await assertFails(readRecord(nurse));
+    await setClinflow({ disabled: false, allowUids: [] });
   });
 
   console.log("\n=== 16. Stock take (stock_takes with places, counts, additions) ===");

@@ -79,6 +79,7 @@
     "test:stocktake": "esbuild scripts/verify-stocktake.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-stocktake.bundle.mjs && node work/verify-stocktake.bundle.mjs",
     "test:no-undefined": "node scripts/verify-no-undefined.mjs",
     "test:view-as": "esbuild scripts/verify-view-as.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-view-as.bundle.mjs && node work/verify-view-as.bundle.mjs",
+    "test:module-access": "esbuild scripts/verify-module-access.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-module-access.bundle.mjs && node work/verify-module-access.bundle.mjs",
     "test:coshh": "esbuild scripts/verify-coshh.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-coshh.bundle.mjs && node work/verify-coshh.bundle.mjs",
     "test:fridge-setup": "esbuild scripts/verify-fridge-setup.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-fridge-setup.bundle.mjs && node work/verify-fridge-setup.bundle.mjs",
     "test:user-search": "esbuild scripts/verify-user-search.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-user-search.bundle.mjs && node work/verify-user-search.bundle.mjs",

@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, onIdTokenChanged, signOut as fbSignOut } from "firebase/auth";
 import { collection, doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
+import { blockedModuleDomains } from "@/core/identity/moduleAccess";
 import { VIEW_AS_KEY, readViewAs, resolveViewAs, writeViewAs } from "@/core/identity/viewAs";
 import { getCapabilitiesForProfile, hasCapability, hasAnyCapability, CAPABILITY_CATALOG } from "@/core/identity/capabilities";
 import { getStoredPlatformMode, isSafeSyntheticMode, setPlatformMode } from "@/config/platformMode";
@@ -235,12 +236,10 @@ export function AuthProvider({ children }) {
   // the nav AND its route, from one place, for every capability check in the
   // app including a System Admin's "*" wildcard (expanded against the full
   // catalog so the block actually applies rather than being shortcut past).
+  // ClinFlow is off unless the practice has deliberately turned it on, and the allow-list (the administrator who
+  // switched it off) never carries over to a role being viewed through "View as".
   const blockedDomains = new Set(
-    Object.keys(moduleToggles || {}).filter((domain) => {
-      const toggle = moduleToggles[domain];
-      if (!toggle?.disabled) return false;
-      return !(toggle.allowUids || []).includes(user?.uid);
-    })
+    blockedModuleDomains({ toggles: moduleToggles, uid: user?.uid, viewingAs: Boolean(viewingAs), synthetic: isSafeSyntheticMode(platformMode) })
   );
   const capabilities = blockedDomains.size === 0
     ? rawCapabilities

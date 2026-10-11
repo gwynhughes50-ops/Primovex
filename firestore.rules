@@ -34,16 +34,26 @@ service cloud.firestore {
       return signedIn() && userRole() == "Caretaker";
     }
 
+    // ClinFlow is OFF unless the practice has deliberately turned it on (practice_config/main, set in Practice Admin >
+    // Module Access). Switched off, only the people on its allow-list (the administrator who switched it off) can reach
+    // it. The app and the Cloud Functions apply the same rule; this is the one that holds even if a screen is bypassed.
+    // A missing practice_config document fails the get() and so denies, which is the safe direction.
+    function clinFlowEnabled() {
+      let toggle = get(/databases/$(database)/documents/practice_config/main).data.get("moduleToggles", {}).get("clinflow", {});
+      return toggle.get("disabled", true) == false
+        || (toggle.get("allowUids", []) is list && request.auth.uid in toggle.get("allowUids", []));
+    }
+
     function clinFlowReader() {
-      return signedIn() && userRole() in ["System Admin", "Practice Manager", "User", "Nurse", "Reception", "ReadOnly"];
+      return signedIn() && clinFlowEnabled() && userRole() in ["System Admin", "Practice Manager", "User", "Nurse", "Reception", "ReadOnly"];
     }
 
     function clinFlowWorker() {
-      return signedIn() && userRole() in ["System Admin", "Practice Manager", "User", "Nurse", "Reception"];
+      return signedIn() && clinFlowEnabled() && userRole() in ["System Admin", "Practice Manager", "User", "Nurse", "Reception"];
     }
 
     function clinFlowManager() {
-      return signedIn() && userRole() in ["System Admin", "Practice Manager"];
+      return signedIn() && clinFlowEnabled() && userRole() in ["System Admin", "Practice Manager"];
     }
 
     function clinFlowPracticeMatches(practiceId) {

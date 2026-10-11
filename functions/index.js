@@ -8,6 +8,7 @@ const { getProvider, listProviders } = require("./providers/providerFactory");
 const { syncProvider } = require("./services/deviceSyncService");
 const { publishEvent } = require("./services/eventBus");
 const { getSyntheticPackDocument } = require("./config/clinflowSyntheticPack");
+const { clinFlowEnabledFor } = require("./services/moduleAccess");
 const { API_VERSION, MODEL_ID, analyzeDocument, summariseAnalyzeResult } = require("./services/azureDocumentIntelligenceService");
 const { extractClinicalFacts } = require("./services/azureOpenAiExtractionService");
 const { appendGovernedAuditEvent } = require("./services/governedAuditService");
@@ -88,6 +89,11 @@ async function assertAdmin(request) {
 
 async function requireClinFlowCapture(request) {
   assertSignedIn(request);
+  // ClinFlow sends documents to an outside processor, so the practice's switch is enforced here, not just on screen
+  const config = await db.collection("practice_config").doc("main").get();
+  if (!clinFlowEnabledFor(config.data(), request.auth.uid)) {
+    throw new HttpsError("permission-denied", "ClinFlow is switched off for this practice.");
+  }
   const snapshot = await db.collection("users").doc(request.auth.uid).get();
   const profile = snapshot.data() || {};
   if (profile.role !== "System Admin") {
