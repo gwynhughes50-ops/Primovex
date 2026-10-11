@@ -144,4 +144,14 @@ t("COSHH: managers, the caretaker and partners get the tile only if they may rea
   assert.equal(buildAttention({ coshh: null, now })[0].key, "clear");
 });
 
+t("failed compliance checks head the strip for the people who deal with them, and are left out for everyone else", () => {
+  const chips = buildAttention({ complianceFailures: 2, coshh: { overdue: 1, dueSoon: 0 }, now });
+  assert.deepEqual(chips.map((c) => c.key), ["compliance-failed", "coshh-overdue"]);
+  assert.equal(chips[0].label, "2 failed checks to deal with");
+  assert.equal(chips[0].action, "checks");
+  assert.equal(buildAttention({ complianceFailures: 1, now })[0].label, "1 failed check to deal with");
+  assert.equal(buildAttention({ complianceFailures: 0, now })[0].key, "clear");
+  assert.equal(buildAttention({ complianceFailures: null, now })[0].key, "clear");
+});
+
 console.log(`\n${n} passed`);

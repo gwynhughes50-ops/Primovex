@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { QUICK_REPLIES, SNOOZE_CHOICES, isCardMessage, isFridgeAlert, isPersonMessage, messageQueue, senderOf, validateReply, whenLabel } from "../src/messaging/messageCard.js";
+import { QUICK_REPLIES, SNOOZE_CHOICES, isActionAlert, isCardMessage, isComplianceAlert, isFridgeAlert, isPersonMessage, messageQueue, senderOf, validateReply, whenLabel } from "../src/messaging/messageCard.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
@@ -26,6 +26,16 @@ t("a fridge alert is a card message too, but only with an incident to act on", (
   assert.ok(!isCardMessage({ ...alert, kind: "overdue" }));
   assert.deepEqual(messageQueue([alert, msg("a", { createdAt: at("2026-10-10T10:00:00") })], { now }).map((m) => m.id), ["f1", "a"]);
   assert.deepEqual(messageQueue([{ ...alert, read: true }], { now }), []);
+});
+
+t("a failed compliance check is a card too, with Take action, but only with an incident to act on", () => {
+  const alert = { id: "c1", kind: "compliance-alert", automated: true, incidentId: "ci-1", title: "Staff Kitchen Hot Tap failed its check", read: false, createdAt: at("2026-10-10T09:00:00") };
+  assert.ok(isComplianceAlert(alert) && isCardMessage(alert) && isActionAlert(alert));
+  assert.ok(!isFridgeAlert(alert), "it is not a fridge alert");
+  assert.ok(!isPersonMessage(alert));
+  assert.ok(!isCardMessage({ ...alert, incidentId: "" }));
+  assert.ok(isActionAlert({ id: "f", kind: "fridge-alert", incidentId: "i" }) && !isActionAlert(msg("a")));
+  assert.deepEqual(messageQueue([alert, { ...alert, id: "c2", read: true }], { now }).map((m) => m.id), ["c1"]);
 });
 
 t("the card shows unread, un-snoozed messages, oldest first", () => {

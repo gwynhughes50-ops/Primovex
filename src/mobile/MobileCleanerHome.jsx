@@ -4,7 +4,7 @@ import MobileCoshh from "./MobileCoshh";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSenseSession } from "@/contexts/SenseSessionContext";
 import { addCleaningNote, getActiveCleaningSession, subscribeRoomOperational } from "@/modules/facilities/services/cleaningRecordService";
-import { reportRoomIssue } from "@/services/roomIssueService";
+import { raiseIssue } from "@/modules/maintenance/maintenanceService";
 
 function elapsedLabel(startedAt) {
   if (!startedAt) return "";
@@ -18,7 +18,7 @@ function elapsedLabel(startedAt) {
 // room's tag" instructions and a way to report an issue to the caretaker.
 // No bottom nav, no stock/temperature/other tabs — deliberately minimal.
 export default function MobileCleanerHome({ onScanRoom, finished = null, onFinishedHandled, notice = "", onNoticeHandled }) {
-  const { displayName } = useAuth();
+  const { displayName, user } = useAuth();
   const { activeSenseSession } = useSenseSession();
   const [roomOperational, setRoomOperational] = useState({});
   const [issueOpen, setIssueOpen] = useState(false);
@@ -43,7 +43,7 @@ export default function MobileCleanerHome({ onScanRoom, finished = null, onFinis
     setIssueStatus("sending");
     setIssueMessage("");
     try {
-      await reportRoomIssue({ roomId: roomId || "", roomName: roomName || "Unspecified room", note: issueNote.trim() });
+      await raiseIssue({ roomId: roomId || "", roomName: roomName || "Room not stated", note: issueNote.trim(), source: "phone", actor: { uid: user?.uid, displayName, email: user?.email } });
       setIssueStatus("success");
       setIssueMessage("Sent to the caretaker.");
       setIssueNote("");
@@ -78,7 +78,7 @@ export default function MobileCleanerHome({ onScanRoom, finished = null, onFinis
         await addCleaningNote(finished.logId, note, { issue: asIssue });
         setNoteSavedFor(finished.logId);
       }
-      if (asIssue) await reportRoomIssue({ roomId: finished.roomId || "", roomName: finished.roomName || "Unspecified room", note });
+      if (asIssue) await raiseIssue({ roomId: finished.roomId || "", roomName: finished.roomName || "Room not stated", note, source: "phone", actor: { uid: user?.uid, displayName, email: user?.email } });
       onFinishedHandled?.();
     } catch (error) {
       setFinishError(error?.message || "Could not save that. Try again.");

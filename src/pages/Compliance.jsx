@@ -18,7 +18,6 @@ import {
   Droplets,
   Printer,
   X,
-  Mail,
   QrCode,
   LayoutDashboard,
   History,
@@ -39,7 +38,6 @@ import {
 } from "firebase/firestore";
 import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
-import { getFunctions, httpsCallable } from "firebase/functions";
 import ComplianceQrEngine from "@/components/compliance/ComplianceQrEngine";
 import ComplianceOverview from "@/components/compliance/ComplianceOverview";
 import ChecksHistory from "@/components/compliance/ChecksHistory";
@@ -48,7 +46,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import CleaningPanel from "@/modules/facilities/components/CleaningPanel";
 import MaintenancePanel from "@/modules/facilities/components/MaintenancePanel";
 import { checkPerson, checkTime, localDateInput } from "@/components/compliance/complianceView";
-import { subscribeRecentComplianceChecks } from "@/services/compliance/complianceQrService";
+import { getComplianceChecksBetween, subscribeComplianceAssets, subscribeRecentComplianceChecks } from "@/services/compliance/complianceQrService";
+import useComplianceSites from "@/modules/compliance/useComplianceSites";
 import { subscribeCleaningLogs } from "@/modules/facilities/services/cleaningRecordService";
 import { listEquipment, upsertEquipment } from "@/modules/equipment/services/equipmentRegistry";
 
@@ -180,12 +179,6 @@ function inDateRange(key, from, to) {
   return true;
 }
 
-function isValidEmail(email) {
-  const s = String(email || "").trim();
-  if (!s) return false;
-  // Simple sanity check (good enough for UI)
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
-}
 
 // ---------- Page ----------
 // Whoever can see compliance gets the full page (with the COSHH register as one more tab). Someone who can only
@@ -207,7 +200,18 @@ export default function Compliance() {
 }
 
 function ComplianceFull({ canCoshh }) {
-  const SITE_ID = "main_branch";
+  // Assets and the last 45 days of checks are read once here and shared with the tabs (they used to read the same
+  // collection five times, each with its own row limit). "" means every site.
+  const [allAssets, setAllAssets] = useState([]);
+  const [recentChecks, setRecentChecks] = useState([]);
+  useEffect(() => subscribeComplianceAssets(setAllAssets, console.error, { includeInactive: true }), []);
+  useEffect(() => subscribeRecentComplianceChecks(setRecentChecks, console.error, { sinceDays: 45, max: 4000 }), []);
+  const usedSiteIds = useMemo(() => [...new Set([...allAssets.map((a) => a.siteId), ...recentChecks.map((c) => c.siteId)].filter(Boolean))], [allAssets, recentChecks]);
+  const sites = useComplianceSites(usedSiteIds);
+  const siteId = sites.siteId;
+  const inSite = (row) => !siteId || String(row.siteId || row.site || "").trim() === siteId;
+  const siteAssets = useMemo(() => allAssets.filter(inSite), [allAssets, siteId]);
+  const siteChecks = useMemo(() => recentChecks.filter(inSite), [recentChecks, siteId]);
   const [tab, setTab] = useState("overview"); // overview | history | cleaning | maintenance | assets | pat | coshh
 
   // For printing we keep our own “recent” datasets at page level
@@ -222,8 +226,8 @@ function ComplianceFull({ canCoshh }) {
   const [printOpen, setPrintOpen] = useState(false);
   const [printFrom, setPrintFrom] = useState(""); // YYYY-MM-DD
   const [printTo, setPrintTo] = useState(""); // YYYY-MM-DD
-  const [printEmail, setPrintEmail] = useState("");
-  const [sendingEmail, setSendingEmail] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [printError, setPrintError] = useState("");
 
   const [printSel, setPrintSel] = useState({
     fire: true,
@@ -233,10 +237,8 @@ function ComplianceFull({ canCoshh }) {
     includeRegisters: true, // include call points/outlets/assets lists
   });
 
-  // tag-based checks and cleaning logs, for the printed report
-  const [printChecks, setPrintChecks] = useState([]);
+  // cleaning logs, for the printed report (the tag checks are read for the chosen dates when printing)
   const [printCleaning, setPrintCleaning] = useState([]);
-  useEffect(() => subscribeRecentComplianceChecks(setPrintChecks, console.error, { siteId: SITE_ID, max: 500 }), []);
   useEffect(() => subscribeCleaningLogs(setPrintCleaning, console.error), []);
 
   // subscriptions for printing
@@ -245,7 +247,7 @@ function ComplianceFull({ canCoshh }) {
       query(collection(db, "fire_weekly_checks"), orderBy("createdAt", "desc"), limit(200)),
       (snap) => {
         const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setPrintFireChecks(rows.filter((r) => String(r.siteId || "").trim() === SITE_ID));
+        setPrintFireChecks(rows.filter(inSite));
       }
     );
 
@@ -253,7 +255,7 @@ function ComplianceFull({ canCoshh }) {
       query(collection(db, "pat_test_sessions"), orderBy("createdAt", "desc"), limit(200)),
       (snap) => {
         const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setPrintPatSessions(rows.filter((r) => String(r.siteId || "").trim() === SITE_ID));
+        setPrintPatSessions(rows.filter(inSite));
       }
     );
 
@@ -261,7 +263,7 @@ function ComplianceFull({ canCoshh }) {
       query(collection(db, "water_temp_rounds"), orderBy("createdAt", "desc"), limit(200)),
       (snap) => {
         const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const filtered = rows.filter((r) => String(r.siteId || r.site || "").trim() === SITE_ID);
+        const filtered = rows.filter(inSite);
         setPrintWaterRounds(filtered);
       }
     );
@@ -276,7 +278,7 @@ function ComplianceFull({ canCoshh }) {
             active: r.active !== false,
             displayName: String(r.displayName || makeDisplayName(r.label, r.pointNumber)).trim(),
           }))
-          .filter((r) => r.active && r.siteId === SITE_ID)
+          .filter((r) => r.active && inSite(r))
           .sort((a, b) => String(a.displayName).localeCompare(String(b.displayName)))
       );
     });
@@ -295,7 +297,7 @@ function ComplianceFull({ canCoshh }) {
             frequency: String(r.frequency || "").trim(),
             order: typeof r.order === "number" ? r.order : null,
           }))
-          .filter((r) => r.active && r.siteId === SITE_ID)
+          .filter((r) => r.active && inSite(r))
           .sort((a, b) => {
             const ao = a.order ?? 9999;
             const bo = b.order ?? 9999;
@@ -319,7 +321,7 @@ function ComplianceFull({ canCoshh }) {
             makeModel: String(r.makeModel || "").trim(),
             serialNumber: String(r.serialNumber || "").trim(),
           }))
-          .filter((r) => r.active && r.siteId === SITE_ID)
+          .filter((r) => r.active && inSite(r))
           .sort((a, b) => a.tag.localeCompare(b.tag))
       );
     });
@@ -332,14 +334,14 @@ function ComplianceFull({ canCoshh }) {
       unsub5();
       unsub6();
     };
-  }, []);
+  }, [siteId]);
 
-  const buildReportHtml = () => {
+  const buildReportHtml = (printChecks = []) => {
     const from = printFrom.trim() || "";
     const to = printTo.trim() || "";
     const now = new Date();
     const meta =
-      `Site: Main Branch (main_branch) • Generated: ${now.toLocaleString()}` +
+      `Site: ${siteId ? sites.nameOf(siteId) : "All sites"} • Generated: ${now.toLocaleString()}` +
       (from || to ? ` • Date filter: ${from || "…"} to ${to || "…"} ` : "");
 
     const sections = [];
@@ -350,8 +352,7 @@ function ComplianceFull({ canCoshh }) {
     const tagChecks = (prefix) =>
       printChecks
         .filter((c) => String(c.assetType || "").startsWith(prefix) && inDateRange(dayOf(checkTime(c)), from, to))
-        .sort((a, b) => (checkTime(b)?.getTime() || 0) - (checkTime(a)?.getTime() || 0))
-        .slice(0, 300);
+        .sort((a, b) => (checkTime(b)?.getTime() || 0) - (checkTime(a)?.getTime() || 0));
 
     if (printSel.fire) {
       const rows = printFireChecks.filter((r) => inDateRange(r.dateKey, from, to)).slice(0, 200);
@@ -627,49 +628,26 @@ function ComplianceFull({ canCoshh }) {
       <div class="small muted" style="margin-top: 22px;">End of report.</div>
     `;
 
-    return basePrintHtml({ title: "Aurora Compliance Report", bodyHtml });
+    return basePrintHtml({ title: "Compliance Report", bodyHtml });
   };
 
-  const buildAndPrint = () => {
-    const html = buildReportHtml();
-    openPrintWindow(html);
-  };
-
-  const sendReportEmail = async () => {
+  // Reads every check in the chosen dates (not just what is on screen), then prints.
+  const buildAndPrint = async () => {
     if (!printSel.fire && !printSel.water && !printSel.pat && !printSel.cleaning) {
-      alert("Please choose at least one section to include.");
+      setPrintError("Choose at least one section to include.");
       return;
     }
-    const toEmail = printEmail.trim();
-    if (!isValidEmail(toEmail)) {
-      alert("Please enter a valid email address.");
-      return;
-    }
-
-    setSendingEmail(true);
+    setPrintError("");
+    setPrinting(true);
     try {
-      const html = buildReportHtml();
-
-      const functions = getFunctions();
-      const fn = httpsCallable(functions, "sendComplianceReport");
-
-      await fn({
-        siteId: SITE_ID,
-        emailTo: toEmail,
-        from: printFrom.trim() || "",
-        to: printTo.trim() || "",
-        selection: printSel,
-        html,
-      });
-
-      alert("Email sent.");
+      const found = await getComplianceChecksBetween({ from: printFrom.trim(), to: printTo.trim(), siteId });
+      openPrintWindow(buildReportHtml(found));
       setPrintOpen(false);
-      setPrintEmail("");
-    } catch (e) {
-      console.error("sendComplianceReport error:", e);
-      alert("Could not send email. Check Cloud Function logs / configuration.");
+    } catch (error) {
+      console.error("Compliance report: could not read the checks", error);
+      setPrintError("Could not read the checks to print. Check your connection and try again.");
     } finally {
-      setSendingEmail(false);
+      setPrinting(false);
     }
   };
 
@@ -681,14 +659,25 @@ function ComplianceFull({ canCoshh }) {
           <p className="text-sm text-slate-400">Fire • Water • Cleaning • Maintenance • PAT • COSHH</p>
         </div>
 
-        <Button
-          variant="outline"
-          className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
-          onClick={() => setPrintOpen(true)}
-        >
-          <Printer className="mr-2 h-4 w-4" />
-          Export / Print (PDF)
-        </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {sites.options.length > 1 && (
+            <label className="flex items-center gap-2 text-xs text-slate-300">
+              Site
+              <select value={siteId} onChange={(e) => sites.setSiteId(e.target.value)} aria-label="Show compliance for" className="rounded-full border border-white/10 bg-slate-900/60 px-3 py-1.5 text-xs text-slate-100 outline-none [&>option]:bg-slate-900">
+                <option value="">All sites</option>
+                {sites.options.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
+              </select>
+            </label>
+          )}
+          <Button
+            variant="outline"
+            className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
+            onClick={() => { setPrintError(""); setPrintOpen(true); }}
+          >
+            <Printer className="mr-2 h-4 w-4" />
+            Export / Print (PDF)
+          </Button>
+        </div>
       </div>
 
       <Card className="border border-white/10 bg-slate-900/70 backdrop-blur p-2 shadow-lg">
@@ -703,12 +692,12 @@ function ComplianceFull({ canCoshh }) {
         </div>
       </Card>
 
-      {tab === "overview" && <ComplianceOverview />}
-      {tab === "history" && <ChecksHistory legacyFire={printFireChecks} legacyWater={printWaterRounds} />}
+      {tab === "overview" && <ComplianceOverview assets={siteAssets.filter((a) => a.active !== false)} checks={siteChecks} onGoTab={setTab} />}
+      {tab === "history" && <ChecksHistory siteId={siteId} legacyFire={printFireChecks} legacyWater={printWaterRounds} />}
       {tab === "cleaning" && <CleaningPanel />}
       {tab === "maintenance" && <MaintenancePanel />}
-      {tab === "assets" && <ComplianceQrEngine />}
-      {tab === "pat" && <PatTestingTab />}
+      {tab === "assets" && <ComplianceQrEngine assets={siteAssets} checks={siteChecks} sites={sites} />}
+      {tab === "pat" && <PatTestingTab siteId={siteId} newSiteId={sites.newSiteId} />}
       {tab === "coshh" && canCoshh && <CoshhRegister />}
 
       {/* PRINT MODAL */}
@@ -723,7 +712,7 @@ function ComplianceFull({ canCoshh }) {
             </div>
 
             <div className="mt-3 text-xs text-slate-400">
-              Choose what to include, then print/save as PDF — or email the report.
+              Choose what to include, then print or save as a PDF. The report covers {siteId ? sites.nameOf(siteId) : "all sites"}.
             </div>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -744,19 +733,6 @@ function ComplianceFull({ canCoshh }) {
                   min={printFrom || undefined}
                   onChange={(e) => setPrintTo(e.target.value)}
                 />
-              </div>
-            </div>
-
-            <div className="mt-3">
-              <label className="text-xs text-slate-300">Email to (optional)</label>
-              <Input
-                value={printEmail}
-                onChange={(e) => setPrintEmail(e.target.value)}
-                placeholder="name@nhs.net"
-                inputMode="email"
-              />
-              <div className="mt-1 text-[0.7rem] text-slate-500">
-                Email sends a PDF attachment using a Firebase Cloud Function.
               </div>
             </div>
 
@@ -807,6 +783,7 @@ function ComplianceFull({ canCoshh }) {
               </label>
             </div>
 
+            {printError && <p className="mt-3 text-sm text-rose-300" role="alert">{printError}</p>}
             <div className="mt-5 flex justify-end gap-2">
               <Button
                 variant="outline"
@@ -817,28 +794,11 @@ function ComplianceFull({ canCoshh }) {
               </Button>
 
               <Button
-                variant="outline"
-                className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200 hover:bg-slate-900/60"
-                onClick={sendReportEmail}
-                disabled={sendingEmail}
-                title="Send PDF to email (requires Cloud Function configured)"
-              >
-                <Mail className="mr-2 h-4 w-4" />
-                {sendingEmail ? "Sending..." : "Send to email"}
-              </Button>
-
-              <Button
                 className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 text-xs"
-                onClick={() => {
-                  if (!printSel.fire && !printSel.water && !printSel.pat && !printSel.cleaning) {
-                    alert("Please choose at least one section to include.");
-                    return;
-                  }
-                  setPrintOpen(false);
-                  buildAndPrint();
-                }}
+                disabled={printing}
+                onClick={buildAndPrint}
               >
-                Generate PDF / Print
+                {printing ? "Reading the records…" : "Generate PDF / Print"}
               </Button>
             </div>
           </div>
@@ -849,8 +809,7 @@ function ComplianceFull({ canCoshh }) {
 }
 
 // ---------- PAT TESTING (your existing PAT code preserved) ----------
-function PatTestingTab() {
-  const SITE_ID = "main_branch";
+function PatTestingTab({ siteId = "", newSiteId = "main_branch" }) {
   const [subTab, setSubTab] = useState("register"); // register | session
 
   return (
@@ -870,13 +829,14 @@ function PatTestingTab() {
         </div>
       </Card>
 
-      {subTab === "register" && <PatRegister SITE_ID={SITE_ID} />}
-      {subTab === "session" && <PatSession SITE_ID={SITE_ID} />}
+      {subTab === "register" && <PatRegister siteId={siteId} newSiteId={newSiteId} />}
+      {subTab === "session" && <PatSession siteId={siteId} newSiteId={newSiteId} />}
     </div>
   );
 }
 
-function PatRegister({ SITE_ID }) {
+function PatRegister({ siteId, newSiteId }) {
+  const inSite = (row) => !siteId || String(row.siteId || "").trim() === siteId;
   const [assets, setAssets] = useState([]);
   const [err, setErr] = useState("");
   const [form, setForm] = useState({
@@ -900,7 +860,7 @@ function PatRegister({ SITE_ID }) {
         });
 
         const filtered = rows
-          .filter((r) => r.active && r.siteId === SITE_ID)
+          .filter((r) => r.active && inSite(r))
           .sort((a, b) => String(a.tag || "").localeCompare(String(b.tag || "")));
 
         filtered.forEach((asset) => {
@@ -932,7 +892,7 @@ function PatRegister({ SITE_ID }) {
       },
       (e) => console.error("pat_assets subscribe error:", e)
     );
-  }, []);
+  }, [siteId]);
 
   const addAsset = async () => {
     setErr("");
@@ -944,7 +904,7 @@ function PatRegister({ SITE_ID }) {
     try {
       const equipmentId = `EQ-PAT-${Date.now().toString().slice(-7)}`;
       const created = await addDocResendSafe(collection(db, "pat_assets"), {
-        siteId: SITE_ID,
+        siteId: newSiteId,
         equipmentId,
         tag,
         name,
@@ -1058,7 +1018,8 @@ function PatRegister({ SITE_ID }) {
   );
 }
 
-function PatSession({ SITE_ID }) {
+function PatSession({ siteId, newSiteId }) {
+  const inSite = (row) => !siteId || String(row.siteId || "").trim() === siteId;
   const [assets, setAssets] = useState([]);
   const [recent, setRecent] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -1096,7 +1057,7 @@ function PatSession({ SITE_ID }) {
         });
 
         const filtered = rows
-          .filter((r) => r.active && r.siteId === SITE_ID)
+          .filter((r) => r.active && inSite(r))
           .sort((a, b) => a.tag.localeCompare(b.tag));
 
         setAssets(filtered);
@@ -1128,7 +1089,7 @@ function PatSession({ SITE_ID }) {
       },
       (e) => console.error("pat_assets subscribe error:", e)
     );
-  }, []);
+  }, [siteId]);
 
   useEffect(() => {
     const qy = query(collection(db, "pat_test_sessions"), orderBy("createdAt", "desc"), limit(20));
@@ -1136,11 +1097,11 @@ function PatSession({ SITE_ID }) {
       qy,
       (snap) => {
         const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setRecent(rows.filter((r) => String(r.siteId || "").trim() === SITE_ID));
+        setRecent(rows.filter(inSite));
       },
       (e) => console.error("pat_test_sessions subscribe error:", e)
     );
-  }, []);
+  }, [siteId]);
 
   const setAssetResult = (assetId, patch) => {
     setResults((prev) => ({
@@ -1194,7 +1155,7 @@ function PatSession({ SITE_ID }) {
       });
 
       await addDocResendSafe(collection(db, "pat_test_sessions"), {
-        siteId: SITE_ID,
+        siteId: newSiteId,
         testDate: header.testDate,
         retestDate: header.retestDate.trim(),
         testerName: header.testerName.trim(),

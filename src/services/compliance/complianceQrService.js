@@ -14,165 +14,31 @@ import {
 } from "firebase/firestore";
 import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { auth, db } from "@/lib/firebase";
+import { isSafeSyntheticMode } from "@/config/platformMode";
+import { demoComplianceAssets, demoComplianceChecks } from "@/data/demoCompliance";
+import { openIncidentForFailedCheck } from "@/modules/compliance/complianceIncidentService";
+import {
+  FREQUENCY_MS, toDateValue, buildAssetPatch, RETIRE_REASONS, retireReasonLabel,
+  COMPLIANCE_ASSET_TYPES, DEFAULT_WATER_COUNTDOWN_SECONDS, buildComplianceQrPayload, evaluateComplianceResult, generateNextAssetCode, getAssetTypeConfig,
+  getCountdownSeconds, getNextFirePointToTest, isComplianceCheckDue, isFireAlarmTestDueThisWeek, isFlushableAsset, normaliseAssetCode, parseComplianceQrPayload,
+} from "./complianceRules";
+
+export {
+  COMPLIANCE_ASSET_TYPES, DEFAULT_WATER_COUNTDOWN_SECONDS, buildComplianceQrPayload, evaluateComplianceResult, generateNextAssetCode, getAssetTypeConfig,
+  getCountdownSeconds, getNextFirePointToTest, isComplianceCheckDue, isFireAlarmTestDueThisWeek, isFlushableAsset, normaliseAssetCode, parseComplianceQrPayload,
+};
 
 export const COMPLIANCE_ASSETS_COLLECTION = "compliance_assets";
 export const COMPLIANCE_CHECKS_COLLECTION = "compliance_checks";
 export const PULSE_EVENTS_COLLECTION = "pulse_events";
 
-export const COMPLIANCE_ASSET_TYPES = [
-  { key: "fire_point", label: "Fire Point", icon: "🔥", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "FP" },
-  { key: "fire_door", label: "Fire Door", icon: "🚪", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "FD" },
-  { key: "water_hot", label: "Hot Water Outlet", icon: "💧", checkMode: "temperature", defaultFrequency: "monthly", minTempC: 50, maxTempC: 65, codePrefix: "WH", countdownSeconds: 30, flushable: true },
-  { key: "water_cold", label: "Cold Water Outlet", icon: "💧", checkMode: "temperature", defaultFrequency: "monthly", minTempC: 0, maxTempC: 20, codePrefix: "WC", countdownSeconds: 30, flushable: true },
-  { key: "fridge", label: "Fridge", icon: "🌡️", checkMode: "temperature", defaultFrequency: "daily", minTempC: 2, maxTempC: 8, codePrefix: "FR" },
-  { key: "freezer", label: "Freezer", icon: "❄️", checkMode: "temperature", defaultFrequency: "daily", minTempC: -45, maxTempC: -35, codePrefix: "FZ" },
-  { key: "aed", label: "AED", icon: "❤️", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "AED" },
-  { key: "emergency_equipment", label: "Emergency Equipment", icon: "🧰", checkMode: "pass_fail", defaultFrequency: "monthly", codePrefix: "EE" },
-  { key: "general", label: "General Asset", icon: "📍", checkMode: "pass_fail", defaultFrequency: "monthly", codePrefix: "GA" },
-];
 
-export function getAssetTypeConfig(type) {
-  return COMPLIANCE_ASSET_TYPES.find((row) => row.key === type) || COMPLIANCE_ASSET_TYPES.at(-1);
-}
-
-// Water outlets are checked after the water has been running for a set time:
-// the phone counts that down and keeps the temperature box locked until it
-// ends. 30 seconds by default; an outlet can carry its own time
-// (asset.countdownSeconds). 0 means no countdown.
-export const DEFAULT_WATER_COUNTDOWN_SECONDS = 30;
-export function getCountdownSeconds(asset) {
-  const config = getAssetTypeConfig(asset?.assetType);
-  if (!config.countdownSeconds) return 0;
-  const own = Number(asset?.countdownSeconds);
-  if (Number.isFinite(own) && own >= 0) return Math.min(600, Math.round(own));
-  return config.countdownSeconds;
-}
-export function isFlushableAsset(asset) {
-  return Boolean(getAssetTypeConfig(asset?.assetType).flushable);
-}
-
-const FREQUENCY_MS = {
-  daily: 24 * 3600000,
-  weekly: 7 * 24 * 3600000,
-  monthly: 30 * 24 * 3600000,
-  quarterly: 91 * 24 * 3600000,
-  annually: 365 * 24 * 3600000,
-};
-
-function toDateValue(value) {
-  if (!value) return null;
-  const date = value?.toDate ? value.toDate() : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-// A monthly water-outlet check and a weekly fire-point check must not be
-// treated the same just because both have "been checked at some point" —
-// this is the actual re-check-is-due calculation, not just "ever checked".
-//
-// Fire points are the one exception: per BS 5839-1 weekly testing practice,
-// the caretaker sets off ONE call point a week, a different one each time,
-// so the whole system gets exercised in rotation — it is NOT "every call
-// point needs testing every week". Individual fire_point assets are
-// deliberately excluded here; see isFireAlarmTestDueThisWeek/
-// getNextFirePointToTest below for the group-level equivalent.
-export function isComplianceCheckDue(asset, now = new Date()) {
-  if (!asset) return false;
-  if (asset.assetType === "fire_point") return false;
-  if (asset.lastCheckResult === "fail") return true;
-  const lastChecked = toDateValue(asset.lastCheckAt);
-  if (!lastChecked) return true;
-  const intervalMs = FREQUENCY_MS[asset.frequency] ?? FREQUENCY_MS.monthly;
-  return now.getTime() - lastChecked.getTime() >= intervalMs;
-}
-
-// Suggests the next free code for a type, e.g. FP-001, FP-002... — scoped
-// per type so each asset type gets its own sequence rather than sharing one
-// global counter. Only ever a suggestion: the field stays editable in case a
-// practice already has its own physical labelling scheme to match.
-export function generateNextAssetCode(assetType, existingAssets = []) {
-  const prefix = getAssetTypeConfig(assetType).codePrefix || "GA";
-  const pattern = new RegExp(`^${prefix}-(\\d+)$`, "i");
-  const highest = existingAssets.reduce((max, asset) => {
-    const match = pattern.exec(String(asset.assetCode || "").trim());
-    return match ? Math.max(max, Number(match[1])) : max;
-  }, 0);
-  return `${prefix}-${String(highest + 1).padStart(3, "0")}`;
-}
-
-const FIRE_ROTATION_WINDOW_MS = FREQUENCY_MS.weekly;
-
-function activeFirePoints(assets = []) {
-  return assets.filter((asset) => asset.assetType === "fire_point" && asset.active !== false);
-}
-
-// The compliance obligation is satisfied for the week as soon as ANY fire
-// point has been tested in the last 7 days — not each one individually.
-export function isFireAlarmTestDueThisWeek(assets = [], now = new Date()) {
-  const firePoints = activeFirePoints(assets);
-  if (!firePoints.length) return false;
-  const mostRecent = firePoints.reduce((latest, asset) => {
-    const checked = toDateValue(asset.lastCheckAt);
-    return checked && (!latest || checked > latest) ? checked : latest;
-  }, null);
-  if (!mostRecent) return true;
-  return now.getTime() - mostRecent.getTime() >= FIRE_ROTATION_WINDOW_MS;
-}
-
-// Whichever fire point has gone longest without being tested — the natural
-// "test this one next" suggestion that keeps the rotation actually covering
-// every call point over time, rather than the same one or two getting picked
-// out of habit.
-export function getNextFirePointToTest(assets = []) {
-  const firePoints = activeFirePoints(assets);
-  if (!firePoints.length) return null;
-  return [...firePoints].sort((a, b) => (toDateValue(a.lastCheckAt)?.getTime() || 0) - (toDateValue(b.lastCheckAt)?.getTime() || 0))[0];
-}
-
-export function normaliseAssetCode(value) {
-  return String(value || "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .replace(/[^A-Za-z0-9_-]/g, "")
-    .toUpperCase();
-}
-
-export function buildComplianceQrPayload(asset) {
-  const assetId = asset?.id || asset?.assetCode || asset?.code;
-  return `MEDTRAK:COMPLIANCE:${assetId}`;
-}
-
-export function parseComplianceQrPayload(raw) {
-  const value = String(raw || "").trim();
-  if (!value) return null;
-
-  const upper = value.toUpperCase();
-  const parts = value.split(":");
-
-  if (upper.startsWith("MEDTRAK:COMPLIANCE:")) {
-    return { type: "compliance", assetId: parts.slice(2).join(":"), raw: value };
+// siteId: one site's assets, or empty for every site. Demo and training mode show synthetic assets and never read live records.
+export function subscribeComplianceAssets(onData, onError, { siteId = "", includeInactive = false } = {}) {
+  if (isSafeSyntheticMode()) {
+    const timer = setTimeout(() => onData(demoComplianceAssets().filter((row) => !siteId || row.siteId === siteId)), 30);
+    return () => clearTimeout(timer);
   }
-
-  if (upper.startsWith("MTQR:")) {
-    return { type: "compliance", assetId: value.slice(5), raw: value };
-  }
-
-  try {
-    const url = new URL(value);
-    const asset = url.searchParams.get("asset") || url.searchParams.get("assetId") || url.searchParams.get("a");
-    if (asset) return { type: "compliance", assetId: asset, raw: value };
-  } catch {
-    // not a URL
-  }
-
-  // Plain asset code fallback: FP-007, W-023, etc.
-  if (/^[A-Za-z]{1,5}-?[0-9A-Za-z]{1,12}$/.test(value)) {
-    return { type: "compliance", assetId: value, raw: value };
-  }
-
-  return null;
-}
-
-export function subscribeComplianceAssets(onData, onError, { siteId = "main_branch", includeInactive = false } = {}) {
   const qy = query(collection(db, COMPLIANCE_ASSETS_COLLECTION), orderBy("assetCode", "asc"));
   return onSnapshot(
     qy,
@@ -189,8 +55,17 @@ export function subscribeComplianceAssets(onData, onError, { siteId = "main_bran
   );
 }
 
-export function subscribeRecentComplianceChecks(onData, onError, { siteId = "main_branch", max = 30 } = {}) {
-  const qy = query(collection(db, COMPLIANCE_CHECKS_COLLECTION), orderBy("createdAt", "desc"), limit(max));
+// The latest checks, newest first. sinceDays asks for every check in that many days (so a busy week is never cut
+// short by a row limit); without it you get the latest `max`. siteId empty means every site.
+export function subscribeRecentComplianceChecks(onData, onError, { siteId = "", max = 30, sinceDays = 0 } = {}) {
+  if (isSafeSyntheticMode()) {
+    const timer = setTimeout(() => onData(demoComplianceChecks().filter((row) => !siteId || row.siteId === siteId)), 30);
+    return () => clearTimeout(timer);
+  }
+  const since = sinceDays > 0 ? Timestamp.fromDate(new Date(Date.now() - sinceDays * 86400000)) : null;
+  const qy = since
+    ? query(collection(db, COMPLIANCE_CHECKS_COLLECTION), where("createdAt", ">=", since), orderBy("createdAt", "desc"), limit(max))
+    : query(collection(db, COMPLIANCE_CHECKS_COLLECTION), orderBy("createdAt", "desc"), limit(max));
   return onSnapshot(
     qy,
     (snap) => {
@@ -201,7 +76,20 @@ export function subscribeRecentComplianceChecks(onData, onError, { siteId = "mai
   );
 }
 
-export async function findComplianceAssetByScan(rawScan, { siteId = "main_branch" } = {}) {
+// A tag names its own asset, so a scan finds it at any site unless a site is asked for.
+// Every check between two dates (inclusive), for the printed report: not limited to what is already on screen.
+export async function getComplianceChecksBetween({ from, to, siteId = "", max = 5000 } = {}) {
+  if (isSafeSyntheticMode()) return demoComplianceChecks().filter((row) => !siteId || row.siteId === siteId);
+  const start = from ? Timestamp.fromDate(new Date(`${from}T00:00:00`)) : null;
+  const end = to ? Timestamp.fromDate(new Date(`${to}T23:59:59.999`)) : null;
+  const constraints = [orderBy("createdAt", "desc")];
+  if (start) constraints.unshift(where("createdAt", ">=", start));
+  if (end) constraints.unshift(where("createdAt", "<=", end));
+  const snap = await getDocs(query(collection(db, COMPLIANCE_CHECKS_COLLECTION), ...constraints, limit(max)));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((row) => !siteId || String(row.siteId || "").trim() === siteId);
+}
+
+export async function findComplianceAssetByScan(rawScan, { siteId = "" } = {}) {
   const parsed = parseComplianceQrPayload(rawScan);
   if (!parsed?.assetId) throw new Error("This QR/NFC tag is not a Primovex compliance asset.");
 
@@ -235,32 +123,6 @@ function getCurrentActor() {
   };
 }
 
-export function evaluateComplianceResult(asset, payload = {}) {
-  const mode = asset?.checkMode || getAssetTypeConfig(asset?.assetType)?.checkMode || "pass_fail";
-
-  if (mode === "temperature") {
-    const tempC = Number(payload.tempC);
-    const min = asset.minTempC ?? getAssetTypeConfig(asset.assetType)?.minTempC;
-    const max = asset.maxTempC ?? getAssetTypeConfig(asset.assetType)?.maxTempC;
-    const hasTemp = Number.isFinite(tempC);
-    const pass = hasTemp && (min === null || min === undefined || tempC >= Number(min)) && (max === null || max === undefined || tempC <= Number(max));
-    return {
-      status: pass ? "pass" : "fail",
-      label: pass ? "Temperature in range" : "Temperature outside range",
-      severity: pass ? "info" : "high",
-      value: hasTemp ? tempC : null,
-      minTempC: min ?? null,
-      maxTempC: max ?? null,
-    };
-  }
-
-  const pass = payload.status === "pass" || payload.passed === true;
-  return {
-    status: pass ? "pass" : "fail",
-    label: pass ? "Check passed" : "Check failed",
-    severity: pass ? "info" : "medium",
-  };
-}
 
 export async function createComplianceAsset(form = {}) {
   const config = getAssetTypeConfig(form.assetType);
@@ -420,6 +282,8 @@ export async function recordComplianceCheck(asset, payload = {}) {
 
   if (result.status === "fail") {
     await createCompliancePulseEvent(asset, check, result);
+    // a failure is someone's job to put right: open an incident and tell the caretaker and practice manager
+    await openIncidentForFailedCheck({ asset, check: { ...check, id: ref.id }, actor });
   }
 
   return { id: ref.id, ...check };
@@ -447,3 +311,25 @@ export async function createCompliancePulseEvent(asset, check, result) {
 }
 
 export { getQrImageUrl } from "@/lib/qrCode";
+
+// ---- changing an asset after it was created ----
+
+const who = (actor = {}) => actor.displayName || actor.name || actor.email || "Unknown";
+
+// Edit where an asset is, its name, how often it is checked and its safe range. Never its code, type or tag.
+export async function updateComplianceAsset(asset, form, actor) {
+  const { patch, problems } = buildAssetPatch(form, asset?.assetType);
+  if (problems.length) throw new Error(problems[0]);
+  await updateDoc(doc(db, COMPLIANCE_ASSETS_COLLECTION, asset.id), { ...patch, updatedAt: serverTimestamp(), updatedByName: who(actor) });
+  return patch;
+}
+
+// Stop counting an asset (removed, replaced, added by mistake). It stays on record with its checks, and can come back.
+export async function retireComplianceAsset(asset, { reason, actor }) {
+  if (!RETIRE_REASONS.some((r) => r.key === reason)) throw new Error("Say why it is being retired.");
+  await updateDoc(doc(db, COMPLIANCE_ASSETS_COLLECTION, asset.id), { active: false, retiredReason: reason, retiredReasonLabel: retireReasonLabel(reason), retiredAt: serverTimestamp(), retiredByName: who(actor), updatedAt: serverTimestamp() });
+}
+
+export async function restoreComplianceAsset(asset, actor) {
+  await updateDoc(doc(db, COMPLIANCE_ASSETS_COLLECTION, asset.id), { active: true, retiredReason: "", retiredReasonLabel: "", restoredAt: serverTimestamp(), restoredByName: who(actor), updatedAt: serverTimestamp() });
+}

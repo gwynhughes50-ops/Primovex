@@ -13,7 +13,14 @@ import {
   Droplets,
   Thermometer,
   ShieldCheck,
+  Pencil,
+  Archive,
+  RotateCcw,
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
+import { namesWithCurrent } from "@/lib/stockPickerOptions";
+import { RETIRE_REASONS } from "@/services/compliance/complianceRules";
 import {
   COMPLIANCE_ASSET_TYPES,
   buildComplianceQrPayload,
@@ -25,8 +32,9 @@ import {
   isComplianceCheckDue,
   isFireAlarmTestDueThisWeek,
   importLegacyComplianceAssets,
-  subscribeComplianceAssets,
-  subscribeRecentComplianceChecks,
+  restoreComplianceAsset,
+  retireComplianceAsset,
+  updateComplianceAsset,
 } from "@/services/compliance/complianceQrService";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
 
@@ -84,10 +92,21 @@ function openPrintLabels(assets) {
   printHtmlDocument(printableLabelsHtml(assets));
 }
 
-export default function ComplianceQrEngine() {
-  const SITE_ID = "main_branch";
-  const [assets, setAssets] = useState([]);
-  const [recent, setRecent] = useState([]);
+// siteAssets: this site's assets (retired ones too); checks: the latest checks; sites: the site picker state from the page.
+export default function ComplianceQrEngine({ assets: siteAssets = [], checks = [], sites }) {
+  const { user, displayName, can, isAdmin } = useAuth();
+  const mayManage = can("compliance.manageAssets") || isAdmin;
+  const actor = { uid: user?.uid || "", displayName: displayName || user?.email || "" };
+  const assets = useMemo(() => siteAssets.filter((a) => a.active !== false), [siteAssets]);
+  const retired = useMemo(() => siteAssets.filter((a) => a.active === false), [siteAssets]);
+  const recent = useMemo(() => checks.slice(0, 20), [checks]);
+  const [showRetired, setShowRetired] = useState(false);
+  const [editing, setEditing] = useState(null); // { id, label, location, frequency, minTempC, maxTempC, countdownSeconds }
+  const [retiring, setRetiring] = useState(null); // { id, reason }
+  const [rowBusy, setRowBusy] = useState("");
+  const [rowMessage, setRowMessage] = useState("");
+  const [formSite, setFormSite] = useState("");
+  const { spaceNamesFor } = useSiteSpaceNames(true);
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
   // Only what actually varies per asset: type, location, and a name that Primovex
@@ -112,8 +131,10 @@ export default function ComplianceQrEngine() {
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
 
-  useEffect(() => subscribeComplianceAssets(setAssets, console.error, { siteId: SITE_ID }), []);
-  useEffect(() => subscribeRecentComplianceChecks(setRecent, console.error, { siteId: SITE_ID, max: 20 }), []);
+  const newSite = formSite || sites?.newSiteId || "main_branch";
+  // a place is picked from the practice's rooms (Practice Admin > Spaces); if none are set up for the site it can be typed
+  const rooms = useMemo(() => spaceNamesFor(sites?.nameOf?.(newSite) || ""), [spaceNamesFor, sites, newSite]);
+  const locationOptions = namesWithCurrent(rooms, form.location);
 
   const selectedType = useMemo(() => getAssetTypeConfig(form.assetType), [form.assetType]);
 
@@ -163,7 +184,7 @@ export default function ComplianceQrEngine() {
         minTempC: form.minTempC,
         maxTempC: form.maxTempC,
         countdownSeconds: form.countdownSeconds,
-        siteId: SITE_ID,
+        siteId: newSite,
       });
       setMsg(`${assetCode} created. QR/NFC payload ready.`);
       setForm({
@@ -190,7 +211,7 @@ export default function ComplianceQrEngine() {
     setImportMsg("");
     setImporting(true);
     try {
-      const r = await importLegacyComplianceAssets(assets, { siteId: SITE_ID });
+      const r = await importLegacyComplianceAssets(assets, { siteId: newSite });
       setImportMsg(r.total === 0 ? "There are no call points or outlets in the old lists." : r.created === 0 ? "Everything in the old lists is already here." : `Brought across ${r.created} item${r.created === 1 ? "" : "s"}. Print their labels or write their tags to start using them.`);
     } catch (error) {
       console.error(error);
@@ -198,6 +219,96 @@ export default function ComplianceQrEngine() {
     } finally {
       setImporting(false);
     }
+  }
+
+  function startEdit(asset) {
+    setRowMessage("");
+    setRetiring(null);
+    setEditing({ id: asset.id, label: asset.label || "", location: asset.location || "", frequency: asset.frequency || getAssetTypeConfig(asset.assetType).defaultFrequency, minTempC: asset.minTempC ?? "", maxTempC: asset.maxTempC ?? "", countdownSeconds: asset.countdownSeconds ?? "" });
+  }
+
+  async function saveEdit(asset) {
+    setRowBusy(asset.id); setRowMessage("");
+    try {
+      await updateComplianceAsset(asset, editing, actor);
+      setEditing(null);
+      setRowMessage(`${asset.assetCode} updated.`);
+    } catch (error) {
+      setRowMessage(error?.message || "Could not save the change. Check you have permission.");
+    } finally { setRowBusy(""); }
+  }
+
+  async function retire(asset) {
+    setRowBusy(asset.id); setRowMessage("");
+    try {
+      await retireComplianceAsset(asset, { reason: retiring.reason, actor });
+      setRetiring(null);
+      setRowMessage(`${asset.assetCode} retired. It stays on record and can be restored.`);
+    } catch (error) {
+      setRowMessage(error?.message || "Could not retire it. Check you have permission.");
+    } finally { setRowBusy(""); }
+  }
+
+  async function restore(asset) {
+    setRowBusy(asset.id); setRowMessage("");
+    try { await restoreComplianceAsset(asset, actor); setRowMessage(`${asset.assetCode} is back in use.`); } catch (error) { setRowMessage(error?.message || "Could not restore it."); } finally { setRowBusy(""); }
+  }
+
+  // edit / retire / print one label, under each asset in the register
+  function RowActions({ asset }) {
+    const type = getAssetTypeConfig(asset.assetType);
+    const isEditing = editing?.id === asset.id;
+    const isRetiring = retiring?.id === asset.id;
+    const field = "mt-1 w-full rounded-lg border border-white/10 bg-slate-950/50 px-2 py-1.5 text-sm text-slate-100 [&>option]:bg-slate-900";
+    const roomsHere = namesWithCurrent(spaceNamesFor(sites?.nameOf?.(asset.siteId) || ""), editing?.location || asset.location);
+    return (
+      <div className="mt-3 border-t border-white/5 pt-3">
+        {!isEditing && !isRetiring && (
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => openPrintLabels([asset])} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-white/5"><Printer className="h-3.5 w-3.5" aria-hidden="true" /> Print this label</button>
+            <button type="button" onClick={() => startEdit(asset)} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-white/5"><Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Edit</button>
+            <button type="button" onClick={() => { setEditing(null); setRowMessage(""); setRetiring({ id: asset.id, reason: "" }); }} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-300 hover:bg-white/5"><Archive className="h-3.5 w-3.5" aria-hidden="true" /> Retire</button>
+          </div>
+        )}
+        {isEditing && (
+          <div className="space-y-2">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="text-xs text-slate-300">Name<input className={field} value={editing.label} onChange={(e) => setEditing({ ...editing, label: e.target.value })} /></label>
+              <label className="text-xs text-slate-300">Location
+                {roomsHere.length > 0
+                  ? <select className={field} value={editing.location} onChange={(e) => setEditing({ ...editing, location: e.target.value })}><option value="">Choose the room…</option>{roomsHere.map((name) => <option key={name} value={name}>{name}</option>)}</select>
+                  : <input className={field} value={editing.location} onChange={(e) => setEditing({ ...editing, location: e.target.value })} />}
+              </label>
+              {type.key !== "fire_point" && (
+                <label className="text-xs text-slate-300">How often<select className={field} value={editing.frequency} onChange={(e) => setEditing({ ...editing, frequency: e.target.value })}>{["daily", "weekly", "monthly", "quarterly", "annually"].map((f) => <option key={f} value={f}>{f}</option>)}</select></label>
+              )}
+              {type.checkMode === "temperature" && (
+                <>
+                  <label className="text-xs text-slate-300">Lowest safe °C<input type="number" className={field} value={editing.minTempC} onChange={(e) => setEditing({ ...editing, minTempC: e.target.value })} /></label>
+                  <label className="text-xs text-slate-300">Highest safe °C<input type="number" className={field} value={editing.maxTempC} onChange={(e) => setEditing({ ...editing, maxTempC: e.target.value })} /></label>
+                </>
+              )}
+              {type.countdownSeconds ? <label className="text-xs text-slate-300">Run the water for (seconds)<input type="number" min="0" max="600" className={field} value={editing.countdownSeconds} onChange={(e) => setEditing({ ...editing, countdownSeconds: e.target.value })} /></label> : null}
+            </div>
+            <p className="text-[11px] text-slate-500">The code and the tag stay the same, so the printed label is still right.</p>
+            <div className="flex gap-2">
+              <Button disabled={rowBusy === asset.id} onClick={() => saveEdit(asset)} className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-xs text-slate-950">Save</Button>
+              <Button variant="outline" onClick={() => setEditing(null)} className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200">Cancel</Button>
+            </div>
+          </div>
+        )}
+        {isRetiring && (
+          <div className="space-y-2">
+            <p className="text-xs text-slate-300">Retiring {asset.assetCode} stops it counting towards what is due. Its checks stay on record.</p>
+            <select className={field} value={retiring.reason} onChange={(e) => setRetiring({ ...retiring, reason: e.target.value })} aria-label="Why is it being retired"><option value="">Why?</option>{RETIRE_REASONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}</select>
+            <div className="flex gap-2">
+              <Button disabled={!retiring.reason || rowBusy === asset.id} onClick={() => retire(asset)} className="rounded-full bg-rose-600 text-xs text-white">Retire it</Button>
+              <Button variant="outline" onClick={() => setRetiring(null)} className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200">Cancel</Button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   }
 
   const dueCount = assets.filter((asset) => isComplianceCheckDue(asset)).length;
@@ -287,9 +398,25 @@ export default function ComplianceQrEngine() {
               </select>
             </label>
 
+            {sites?.options?.length > 1 && (
+              <label className="text-xs text-slate-300">
+                Site
+                <select value={newSite} onChange={(e) => { setFormSite(e.target.value); setForm((p) => ({ ...p, location: "" })); }} className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 [&>option]:bg-slate-900">
+                  {sites.options.map((site) => <option key={site.id} value={site.id}>{site.name}</option>)}
+                </select>
+              </label>
+            )}
+
             <label className="text-xs text-slate-300">
               Location
-              <Input value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))} placeholder="Reception" />
+              {locationOptions.length > 0 ? (
+                <select value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))} className="mt-1 w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 [&>option]:bg-slate-900">
+                  <option value="">Choose the room…</option>
+                  {locationOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+                </select>
+              ) : (
+                <Input value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))} placeholder="Reception" />
+              )}
             </label>
 
             <label className="text-xs text-slate-300">
@@ -374,6 +501,7 @@ export default function ComplianceQrEngine() {
             </Button>
           </div>
 
+          {rowMessage && <p className="mb-3 rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-sm text-slate-200" role="status">{rowMessage}</p>}
           <div className="max-h-[560px] space-y-3 overflow-auto pr-1">
             {assets.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/30 p-8 text-center text-sm text-slate-400">
@@ -400,11 +528,27 @@ export default function ComplianceQrEngine() {
                         <img alt="QR" src={getQrImageUrl(payload, 90)} className="h-16 w-16 rounded-lg bg-white p-1" />
                       </div>
                     </div>
+                    {mayManage && RowActions({ asset })}
                   </div>
                 );
               })
             )}
           </div>
+          {retired.length > 0 && (
+            <div className="mt-4 border-t border-white/10 pt-3">
+              <button type="button" onClick={() => setShowRetired((v) => !v)} className="text-xs font-semibold text-slate-400 underline">{showRetired ? "Hide" : "Show"} {retired.length} retired</button>
+              {showRetired && (
+                <ul className="mt-2 space-y-2">
+                  {retired.map((asset) => (
+                    <li key={asset.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/5 bg-slate-950/30 px-3 py-2 text-sm text-slate-300">
+                      <span>{assetTitle(asset)} <span className="text-xs text-slate-500">· {asset.retiredReasonLabel || "retired"}{asset.retiredByName ? `, ${asset.retiredByName}` : ""}</span></span>
+                      {mayManage && <button type="button" disabled={rowBusy === asset.id} onClick={() => restore(asset)} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-white/5"><RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Restore</button>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </Card>
       </div>
 

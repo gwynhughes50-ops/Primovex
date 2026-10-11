@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { collection, getDocs, limit, orderBy, query } from "firebase/firestore";
 import { AlertTriangle, CheckCircle2, ClipboardPen, Droplets, Flame, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { db } from "@/lib/firebase";
+import { isSafeSyntheticMode } from "@/config/platformMode";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  getAssetTypeConfig,
-  isComplianceCheckDue,
-  isFireAlarmTestDueThisWeek,
-  subscribeComplianceAssets,
-  subscribeRecentComplianceChecks,
-} from "@/services/compliance/complianceQrService";
+import { getAssetTypeConfig, isComplianceCheckDue, isFireAlarmTestDueThisWeek } from "@/services/compliance/complianceQrService";
+import { dueList } from "@/modules/compliance/complianceDue";
+import { useComplianceIncidents } from "@/modules/compliance/complianceIncidentService";
+import { useMaintenanceIssues } from "@/modules/maintenance/maintenanceService";
+import { useCoshhSubstances } from "@/modules/coshh/coshhService";
 import ManualRecordDialog from "./ManualRecordDialog";
+import ComplianceIncidentSheet from "./ComplianceIncidentSheet";
 import { checkPerson, formatWhen, isFireType, isWaterType, toDate } from "./complianceView";
 
 const TH = "py-2 pr-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500";
@@ -77,17 +79,30 @@ function AssetTable({ title, icon: Icon, rows, latestCheck, showTemp, emptyText 
   );
 }
 
-// The at-a-glance register. Everything on it comes from checks made on the
-// phone (or entered by hand); nothing is typed here as a routine.
-export default function ComplianceOverview() {
+const TONE = { critical: "border-rose-400/40 bg-rose-500/10 text-rose-100", warning: "border-amber-400/40 bg-amber-500/10 text-amber-100" };
+
+// The at-a-glance register. Assets and the last 45 days of checks come from the page (read once, shared with the other
+// tabs); everything on it comes from checks made on the phone (or entered by hand); nothing is typed here as a routine.
+export default function ComplianceOverview({ assets = [], checks = [], onGoTab }) {
   const { can } = useAuth();
-  const [assets, setAssets] = useState([]);
-  const [checks, setChecks] = useState([]);
+  const canSeeCoshh = can("coshh.read");
   const [manualOpen, setManualOpen] = useState(false);
   const [saved, setSaved] = useState("");
+  const [incidentId, setIncidentId] = useState("");
+  const [patSessions, setPatSessions] = useState([]);
+  const { list: incidents } = useComplianceIncidents(can("compliance.read"));
+  const { list: issues } = useMaintenanceIssues(true);
+  const { list: coshh } = useCoshhSubstances(canSeeCoshh && !isSafeSyntheticMode());
 
-  useEffect(() => subscribeComplianceAssets(setAssets, console.error, { siteId: "main_branch" }), []);
-  useEffect(() => subscribeRecentComplianceChecks(setChecks, console.error, { siteId: "main_branch", max: 300 }), []);
+  // the latest PAT sessions, only to know when the next test is due (a one-off read; it changes rarely)
+  useEffect(() => {
+    if (isSafeSyntheticMode()) return undefined;
+    let live = true;
+    getDocs(query(collection(db, "pat_test_sessions"), orderBy("createdAt", "desc"), limit(20)))
+      .then((snap) => { if (live) setPatSessions(snap.docs.map((d) => d.data())); })
+      .catch(() => { if (live) setPatSessions([]); });
+    return () => { live = false; };
+  }, []);
 
   const latestCheck = useMemo(() => {
     const map = new Map();
@@ -95,7 +110,7 @@ export default function ComplianceOverview() {
     return map;
   }, [checks]);
 
-  const firePoints = useMemo(() => assets.filter((a) => isFireType(a.assetType) && a.assetType === "fire_point"), [assets]);
+  const firePoints = useMemo(() => assets.filter((a) => a.assetType === "fire_point"), [assets]);
   const otherFire = useMemo(() => assets.filter((a) => isFireType(a.assetType) && a.assetType !== "fire_point"), [assets]);
   const water = useMemo(() => assets.filter((a) => isWaterType(a.assetType)), [assets]);
   const other = useMemo(() => assets.filter((a) => !isFireType(a.assetType) && !isWaterType(a.assetType)), [assets]);
@@ -106,7 +121,13 @@ export default function ComplianceOverview() {
   const weekAgo = Date.now() - 7 * 86400000;
   const checksThisWeek = checks.filter((c) => (toDate(c.performedAt) || toDate(c.createdAt) || new Date(0)).getTime() >= weekAgo).length;
 
+  const needs = useMemo(() => dueList({ assets, incidents: incidents || [], patSessions, issues: issues || [], coshh: canSeeCoshh ? coshh : null }), [assets, incidents, patSessions, issues, coshh, canSeeCoshh]);
   const canRecord = can("compliance.recordChecks");
+
+  const go = (item) => {
+    if (item.action?.type === "incident") setIncidentId(item.action.id);
+    else if (item.action?.type === "tab") onGoTab?.(item.action.tab);
+  };
 
   return (
     <div className="space-y-4">
@@ -122,6 +143,25 @@ export default function ComplianceOverview() {
       </div>
 
       {saved && <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200" role="status">{saved}</div>}
+
+      <Card className="border border-white/10 bg-slate-900/70 p-4 shadow-lg backdrop-blur" aria-label="What needs doing">
+        <div className="text-sm font-semibold text-slate-100">What needs doing</div>
+        {needs.length === 0 ? (
+          <p className="mt-2 flex items-center gap-2 text-sm text-emerald-300"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> Nothing is overdue and no check has failed.</p>
+        ) : (
+          <ul className="mt-2 space-y-2">
+            {needs.map((item) => (
+              <li key={item.key}>
+                <button type="button" onClick={() => go(item)} className={`flex w-full items-start gap-3 rounded-xl border px-3 py-2 text-left ${TONE[item.tone]}`}>
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0"><span className="block text-sm font-semibold">{item.label}</span>{item.detail && <span className="block text-xs opacity-80">{item.detail}</span>}</span>
+                  <span className="ml-auto shrink-0 self-center text-xs font-semibold underline">{item.action?.type === "incident" ? "Take action" : "Open"}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Tile label="Weekly fire test" value={firePoints.length === 0 ? "No points" : fireDone ? "Done" : "Not yet"} tone={fireDone ? "text-emerald-300" : "text-amber-300"} note="One call point a week, rotating" />
@@ -146,6 +186,7 @@ export default function ComplianceOverview() {
           }}
         />
       )}
+      {incidentId && <ComplianceIncidentSheet incidentId={incidentId} onClose={() => setIncidentId("")} />}
     </div>
   );
 }

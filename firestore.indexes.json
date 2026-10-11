@@ -9,6 +9,14 @@
       ]
     },
     {
+      "collectionGroup": "compliance_checks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "assetId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "audit_events",
       "queryScope": "COLLECTION",
       "fields": [

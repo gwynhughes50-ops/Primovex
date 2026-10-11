@@ -17,9 +17,8 @@ export const defaultEquipment = [
   { id: 'EQ-DOP-001', name: 'Doppler', category: 'Diagnostic', roomId: 'RM-MO-001', status: 'in-service', lastSeenAt: hoursAgo(20), lastSeenBy: 'Demo user', serviceDue: daysFromNow(28), patDue: daysFromNow(75), notes: '' },
 ];
 
-export const defaultMaintenance = [
-  { id: 'MT-001', roomId: 'RM-MO-001', title: 'Check flickering ceiling light', priority: 'medium', status: 'open', assignedTo: 'Caretaker', reportedAt: hoursAgo(5), reportedBy: 'Demo user' },
-];
+// no sample issues: real ones come from the shared list (modules/maintenance)
+export const defaultMaintenance = [];
 
 export const defaultCleaningLogs = defaultRooms
   .filter((room) => room.lastCleanedAt)

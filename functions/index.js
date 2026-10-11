@@ -9,6 +9,7 @@ const { syncProvider } = require("./services/deviceSyncService");
 const { publishEvent } = require("./services/eventBus");
 const { getSyntheticPackDocument } = require("./config/clinflowSyntheticPack");
 const { clinFlowEnabledFor } = require("./services/moduleAccess");
+const { raiseComplianceAlert } = require("./services/complianceAlertService");
 const { API_VERSION, MODEL_ID, analyzeDocument, summariseAnalyzeResult } = require("./services/azureDocumentIntelligenceService");
 const { extractClinicalFacts } = require("./services/azureOpenAiExtractionService");
 const { appendGovernedAuditEvent } = require("./services/governedAuditService");
@@ -679,6 +680,17 @@ exports.raiseFridgeAlert = onCall({ region: "europe-west2", timeoutSeconds: 20 }
   const profile = snapshot.data() || {};
   if (profile.active === false) throw new HttpsError("permission-denied", "This account is not active.");
   return raiseFridgeAlert({ db, callerUid: request.auth.uid, data: { incidentId: request.data?.incidentId } });
+});
+
+// A failed compliance check: tells the caretaker and the practice manager so the person who recorded it does not have
+// to go looking. Only the person who opened the incident can ask, once per incident.
+exports.raiseComplianceAlert = onCall({ region: "europe-west2", timeoutSeconds: 20 }, async (request) => {
+  assertSignedIn(request);
+  const snapshot = await db.collection("users").doc(request.auth.uid).get();
+  if (!snapshot.exists) throw new HttpsError("failed-precondition", "A Primovex user profile is required.");
+  const profile = snapshot.data() || {};
+  if (profile.active === false) throw new HttpsError("permission-denied", "This account is not active.");
+  return raiseComplianceAlert({ db, callerUid: request.auth.uid, data: { incidentId: request.data?.incidentId } });
 });
 
 // Which colleague a first name (or first and last name) means, so the Orb can show who a message is going to

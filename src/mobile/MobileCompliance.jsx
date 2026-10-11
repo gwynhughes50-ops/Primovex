@@ -26,6 +26,9 @@ import {
   subscribeComplianceAssets,
 } from "@/services/compliance/complianceQrService";
 import { PassFailSheet, TemperatureCheckSheet } from "@/mobile/compliance/CheckSheets";
+import ComplianceIncidentSheet from "@/components/compliance/ComplianceIncidentSheet";
+import { isOpen as incidentOpen, ageText } from "@/modules/compliance/complianceIncidents";
+import { useComplianceIncidents } from "@/modules/compliance/complianceIncidentService";
 
 function assetLabel(asset) {
   return [asset?.assetCode, asset?.label].filter(Boolean).join(" • ") || "Compliance asset";
@@ -44,7 +47,6 @@ function DueRow({ asset, onOpen }) {
 // it is, the right check opens, and who did it and when are recorded by Primovex
 // without being asked. Everything else on the screen is a fallback.
 export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
-  const SITE_ID = "main_branch";
   const { isAdmin, user, displayName } = useAuth();
   const [assets, setAssets] = useState([]);
   const [activeAsset, setActiveAsset] = useState(null);
@@ -58,8 +60,11 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
   const [showAllAssets, setShowAllAssets] = useState(false);
   const [writingTagFor, setWritingTagFor] = useState(null);
   const [writeMessage, setWriteMessage] = useState("");
+  const [incidentId, setIncidentId] = useState("");
+  const { list: incidentList } = useComplianceIncidents(true);
+  const openIncidents = useMemo(() => (incidentList || []).filter(incidentOpen), [incidentList]);
 
-  useEffect(() => subscribeComplianceAssets(setAssets, console.error, { siteId: SITE_ID }), []);
+  useEffect(() => subscribeComplianceAssets(setAssets, console.error, { siteId: "" }), []);
 
   const dueAssets = useMemo(() => assets.filter((asset) => isComplianceCheckDue(asset)), [assets]);
   const dueWater = useMemo(() => dueAssets.filter((asset) => String(asset.assetType || "").startsWith("water_")), [dueAssets]);
@@ -79,7 +84,7 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
     setScanError("");
     setResult(null);
     try {
-      const asset = await findComplianceAssetByScan(code, { siteId: SITE_ID });
+      const asset = await findComplianceAssetByScan(code);
       openCheck(asset, method, code);
     } catch (error) {
       console.error(error);
@@ -239,6 +244,23 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
           <div className="mt-4 rounded-[1.5rem] border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-700" role="alert">{scanError}</div>
         )}
 
+        {openIncidents.length > 0 && (
+          <div className="mt-5 rounded-[1.5rem] border border-rose-500/40 bg-rose-500/10 p-4" aria-label="Failed checks needing action">
+            <div className="mb-2 text-sm font-bold text-rose-700">Failed checks needing action ({openIncidents.length})</div>
+            <ul className="space-y-2">
+              {openIncidents.map((incident) => (
+                <li key={incident.id}>
+                  <button type="button" onClick={() => setIncidentId(incident.id)} className="w-full rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3 text-left">
+                    <span className="block font-semibold">{incident.assetLabel || incident.assetCode}</span>
+                    <span className="block text-xs text-[var(--medtrak-muted)]">{incident.summary}</span>
+                    <span className="mt-1 block text-xs font-bold text-rose-700">Open for {ageText(incident)}{(incident.actions || []).length ? ", action recorded" : ", nothing recorded yet"}. Tap to take action.</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         {nextFirePoint && (
           <div className={`mt-5 rounded-[1.5rem] border p-4 ${fireTestDue ? "border-amber-500/40 bg-amber-500/10" : "border-[var(--medtrak-border)] bg-[var(--medtrak-panel)]"}`}>
             <div className="mb-1 flex items-center gap-2 text-sm font-semibold"><Flame className="h-4 w-4 text-amber-500" /> Weekly fire test</div>
@@ -331,6 +353,8 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
           onCancel={() => setActiveAsset(null)}
         />
       )}
+
+      {incidentId && <ComplianceIncidentSheet incidentId={incidentId} onClose={() => setIncidentId("")} />}
 
       <MobileBarcodeScanner
         onScan={(code) => handleScan(code, "qr")}

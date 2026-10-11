@@ -15,13 +15,17 @@ function typeGroup(type) {
 
 // Every check in date order, newest first, with the earlier records from the
 // old manual forms underneath (read only; they are still in the printed report).
-export default function ChecksHistory({ legacyFire = [], legacyWater = [] }) {
+const RANGES = [[30, "30 days"], [90, "3 months"], [365, "12 months"], [1095, "3 years"]];
+
+export default function ChecksHistory({ siteId = "", legacyFire = [], legacyWater = [] }) {
   const [checks, setChecks] = useState([]);
   const [group, setGroup] = useState("all");
   const [search, setSearch] = useState("");
   const [showOld, setShowOld] = useState(false);
+  const [days, setDays] = useState(90);
 
-  useEffect(() => subscribeRecentComplianceChecks(setChecks, console.error, { siteId: "main_branch", max: 400 }), []);
+  // every check in the chosen period, not just the latest few hundred
+  useEffect(() => subscribeRecentComplianceChecks(setChecks, console.error, { siteId, sinceDays: days, max: 5000 }), [siteId, days]);
 
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -29,7 +33,7 @@ export default function ChecksHistory({ legacyFire = [], legacyWater = [] }) {
       .filter((c) => group === "all" || typeGroup(c.assetType) === group)
       .filter((c) => !term || [c.assetCode, c.assetLabel, c.location, checkPerson(c), c.notes].filter(Boolean).some((v) => String(v).toLowerCase().includes(term)))
       .sort((a, b) => (checkTime(b)?.getTime() || 0) - (checkTime(a)?.getTime() || 0))
-      .slice(0, 300);
+      .slice(0, 1000);
   }, [checks, group, search]);
 
   return (
@@ -39,6 +43,11 @@ export default function ChecksHistory({ legacyFire = [], legacyWater = [] }) {
           {[["all", "All"], ["fire", "Fire"], ["water", "Water"], ["other", "Other"]].map(([key, label]) => (
             <button key={key} type="button" onClick={() => setGroup(key)} className={`${FILTER} ${group === key ? "border-teal-400/60 bg-teal-500/15 text-teal-100" : "border-white/10 text-slate-300"}`}>{label}</button>
           ))}
+          <label className="flex items-center gap-1.5 text-xs text-slate-400">Show the last
+            <select value={days} onChange={(e) => setDays(Number(e.target.value))} aria-label="How far back" className="rounded-full border border-white/10 bg-slate-900/60 px-2 py-1 text-xs text-slate-100 outline-none [&>option]:bg-slate-900">
+              {RANGES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search asset, person or note" aria-label="Search checks" className="ml-auto w-64 rounded-full border border-white/10 bg-slate-950/50 px-3 py-1.5 text-xs text-slate-100 outline-none" />
         </div>
         <div className="overflow-x-auto">
@@ -67,7 +76,7 @@ export default function ChecksHistory({ legacyFire = [], legacyWater = [] }) {
                   </td>
                 </tr>
               ))}
-              {rows.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-sm text-slate-500">No checks match.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-sm text-slate-500">No checks match in the last {RANGES.find(([value]) => value === days)?.[1] || `${days} days`}.</td></tr>}
             </tbody>
           </table>
         </div>

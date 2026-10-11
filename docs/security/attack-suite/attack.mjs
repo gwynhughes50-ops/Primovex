@@ -637,6 +637,71 @@ async function main() {
     await assertFails(deleteDoc(doc(nursemgr, "temperature_incidents", "inc-1")));
   });
 
+  console.log("\n=== 18. Failed compliance checks (compliance_incidents) ===");
+  const incidentDoc = (uid, extra = {}) => ({ assetId: "asset-wh1", assetCode: "WH-001", assetLabel: "Hot tap", status: "open", openedByUid: uid, openedBy: "X", actions: [], ...extra });
+  await check("Caretaker and a nurse (who can record checks) CAN open an incident as themselves", async () => {
+    await assertSucceeds(setDoc(doc(caretaker, "compliance_incidents", "ci-1"), incidentDoc("caretaker-uid")));
+    await assertSucceeds(setDoc(doc(nurse, "compliance_incidents", "ci-2"), incidentDoc("nurse-uid")));
+  });
+  await check("...but not in someone else's name, already closed, or with actions already filled in", async () => {
+    await assertFails(setDoc(doc(nurse, "compliance_incidents", "ci-x1"), incidentDoc("caretaker-uid")));
+    await assertFails(setDoc(doc(nurse, "compliance_incidents", "ci-x2"), incidentDoc("nurse-uid", { status: "resolved" })));
+    await assertFails(setDoc(doc(nurse, "compliance_incidents", "ci-x3"), incidentDoc("nurse-uid", { actions: [{ key: "repaired" }] })));
+  });
+  await check("An HCA, a cleaner, a partner and anonymous cannot open one", async () => {
+    await assertFails(setDoc(doc(reporter, "compliance_incidents", "ci-x4"), incidentDoc("reporter-uid")));
+    await assertFails(setDoc(doc(cleaner, "compliance_incidents", "ci-x5"), incidentDoc("cleaner-uid")));
+    await assertFails(setDoc(doc(partner, "compliance_incidents", "ci-x6"), incidentDoc("partner-uid")));
+    await assertFails(setDoc(doc(anon, "compliance_incidents", "ci-x7"), incidentDoc("x")));
+  });
+  await check("Caretaker, practice manager and a nurse can read them; a cleaner, a partner and anonymous cannot", async () => {
+    for (const who of [caretaker, pm, nurse]) await assertSucceeds(getDoc(doc(who, "compliance_incidents", "ci-1")));
+    for (const who of [cleaner, partner, anon]) await assertFails(getDoc(doc(who, "compliance_incidents", "ci-1")));
+  });
+  await check("Caretaker and practice manager CAN record actions and close it; a nurse cannot", async () => {
+    await assertSucceeds(updateDoc(doc(caretaker, "compliance_incidents", "ci-1"), { actions: [{ key: "flushed", by: "Caretaker" }] }));
+    await assertSucceeds(updateDoc(doc(pm, "compliance_incidents", "ci-1"), { status: "resolved", resolvedBy: "PM" }));
+    await assertFails(updateDoc(doc(nurse, "compliance_incidents", "ci-2"), { status: "resolved" }));
+    await assertFails(updateDoc(doc(nurse, "compliance_incidents", "ci-2"), { actions: [{ key: "other" }] }));
+  });
+  await check("Nobody except an administrator deletes an incident", async () => {
+    await assertFails(deleteDoc(doc(pm, "compliance_incidents", "ci-1")));
+    await assertFails(deleteDoc(doc(caretaker, "compliance_incidents", "ci-2")));
+    await assertSucceeds(deleteDoc(doc(admin, "compliance_incidents", "ci-2")));
+  });
+
+  console.log("\n=== 19. Maintenance issues (maintenance_issues) ===");
+  const issueDoc = (uid, extra = {}) => ({ title: "Hand dryer not working", roomName: "Staff toilet", priority: "medium", status: "open", reportedByUid: uid, reportedBy: "X", updates: [], ...extra });
+  await check("Anyone signed in with a role CAN report an issue as themselves", async () => {
+    await assertSucceeds(setDoc(doc(cleaner, "maintenance_issues", "mi-1"), issueDoc("cleaner-uid")));
+    await assertSucceeds(setDoc(doc(reception, "maintenance_issues", "mi-2"), issueDoc("reception-uid")));
+    await assertSucceeds(setDoc(doc(nurse, "maintenance_issues", "mi-3"), issueDoc("nurse-uid")));
+    await assertSucceeds(setDoc(doc(reporter, "maintenance_issues", "mi-4"), issueDoc("reporter-uid")));
+  });
+  await check("...but not as someone else, already closed, with no description, or an essay", async () => {
+    await assertFails(setDoc(doc(nurse, "maintenance_issues", "mi-x1"), issueDoc("cleaner-uid")));
+    await assertFails(setDoc(doc(nurse, "maintenance_issues", "mi-x2"), issueDoc("nurse-uid", { status: "closed" })));
+    await assertFails(setDoc(doc(nurse, "maintenance_issues", "mi-x3"), issueDoc("nurse-uid", { title: "" })));
+    await assertFails(setDoc(doc(nurse, "maintenance_issues", "mi-x4"), issueDoc("nurse-uid", { title: "x".repeat(401) })));
+    await assertFails(setDoc(doc(anon, "maintenance_issues", "mi-x5"), issueDoc("x")));
+  });
+  await check("Cleaner, reception, nurse, caretaker and practice manager can read the list; a partner and anonymous cannot", async () => {
+    for (const who of [cleaner, reception, nurse, caretaker, pm]) await assertSucceeds(getDoc(doc(who, "maintenance_issues", "mi-1")));
+    for (const who of [partner, anon]) await assertFails(getDoc(doc(who, "maintenance_issues", "mi-1")));
+  });
+  await check("Only the caretaker and practice manager work an issue; the person who raised it, a cleaner and a nurse cannot change it", async () => {
+    await assertSucceeds(updateDoc(doc(caretaker, "maintenance_issues", "mi-1"), { status: "in_progress", startedBy: "Caretaker" }));
+    await assertSucceeds(updateDoc(doc(pm, "maintenance_issues", "mi-1"), { status: "closed", closedBy: "PM" }));
+    await assertFails(updateDoc(doc(cleaner, "maintenance_issues", "mi-2"), { status: "closed" }));
+    await assertFails(updateDoc(doc(reception, "maintenance_issues", "mi-2"), { status: "closed" }));
+    await assertFails(updateDoc(doc(nurse, "maintenance_issues", "mi-3"), { status: "closed" }));
+  });
+  await check("Nobody except an administrator deletes an issue", async () => {
+    await assertFails(deleteDoc(doc(pm, "maintenance_issues", "mi-1")));
+    await assertFails(deleteDoc(doc(caretaker, "maintenance_issues", "mi-1")));
+    await assertSucceeds(deleteDoc(doc(admin, "maintenance_issues", "mi-1")));
+  });
+
   console.log("\n=== 17. ClinFlow switch (practice_config.moduleToggles.clinflow) ===");
   const setClinflow = (value) => seed(async (db) => (value === undefined ? deleteDoc(doc(db, "practice_config", "main")) : setDoc(doc(db, "practice_config", "main"), { moduleToggles: { clinflow: value } })));
   const readRecord = (who) => getDoc(doc(who, "clinflow_workflow_records", "rec-primary"));

@@ -6,6 +6,8 @@ import {
   Wrench, X, XCircle,
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { openIssuesIn } from '@/modules/maintenance/maintenance';
+import { raiseIssue, useMaintenanceIssues } from '@/modules/maintenance/maintenanceService';
 import { loadFacilitiesState, resetFacilitiesState, saveFacilitiesState } from '@/modules/facilities/services/facilitiesStore';
 import { getActiveCleaningSession, markRoomCleaned, markRoomStocked, subscribeCleaningLogs, subscribeRoomOperational } from '@/modules/facilities/services/cleaningRecordService';
 import SpaceBuilder from '@/modules/sense/components/SpaceBuilder';
@@ -76,8 +78,11 @@ export default function Facilities() {
   const [query, setQuery] = useState('');
   const [selectedRoomId, setSelectedRoomId] = useState(null);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState(null);
+  // maintenance issues are shared across every device (Compliance > Maintenance); the page only counts them
+  const { list: maintenanceIssues } = useMaintenanceIssues(true);
   const [newIssue, setNewIssue] = useState('');
   const [issuePriority, setIssuePriority] = useState('medium');
+  const [issueMessage, setIssueMessage] = useState('');
   const [historyRoom, setHistoryRoom] = useState('all');
   const [historyPerson, setHistoryPerson] = useState('all');
   const [showEquipmentWizard, setShowEquipmentWizard] = useState(false);
@@ -118,20 +123,20 @@ export default function Facilities() {
     };
     return {
       ...merged,
-      operationalStatus: getRoomOperationalStatus(merged, state.maintenance),
+      operationalStatus: getRoomOperationalStatus(merged, maintenanceIssues || []),
       nextCleanAt: getNextCleanAt(merged),
       equipmentCount: state.equipment.filter((item) => item.roomId === room.id).length,
-      openIssues: state.maintenance.filter((item) => item.roomId === room.id && item.status !== 'closed').length,
+      openIssues: openIssuesIn(maintenanceIssues || [], room.id, room.name).length,
     };
-  }), [state, roomOperational]);
+  }), [state, roomOperational, maintenanceIssues]);
 
   const metrics = useMemo(() => {
     const cleanedToday = roomRows.filter((room) => toDate(room.lastCleanedAt)?.toDateString() === today).length;
-    const openMaintenance = state.maintenance.filter((item) => item.status !== 'closed').length;
+    const openMaintenance = (maintenanceIssues || []).filter((item) => item.status !== 'closed').length;
     const readyRooms = roomRows.filter((room) => room.operationalStatus === 'ready').length;
     const overdueRooms = roomRows.filter((room) => room.operationalStatus === 'overdue').length;
     return { cleanedToday, openMaintenance, readyRooms, overdueRooms, equipment: state.equipment.length };
-  }, [state, roomRows, today]);
+  }, [state, roomRows, today, maintenanceIssues]);
 
   const filteredRooms = roomRows.filter((room) => `${room.name} ${room.id} ${room.type} ${room.zone}`.toLowerCase().includes(query.toLowerCase()));
   const selectedRoom = roomRows.find((room) => room.id === selectedRoomId);
@@ -161,26 +166,17 @@ export default function Facilities() {
 
   const activeCleaningSession = selectedRoom ? getActiveCleaningSession(roomOperational, selectedRoom.id) : null;
 
-  function addIssue() {
+  async function addIssue() {
     if (!selectedRoom || !newIssue.trim()) return;
-    commit({
-      ...state,
-      maintenance: [{ id: crypto.randomUUID(), roomId: selectedRoom.id, title: newIssue.trim(), priority: issuePriority, status: 'open', assignedTo: 'Caretaker', reportedAt: new Date().toISOString(), reportedBy: actor }, ...state.maintenance],
-      rooms: state.rooms.map((room) => room.id === selectedRoom.id ? { ...room, status: 'attention' } : room),
-    });
-    setNewIssue('');
-    setIssuePriority('medium');
-  }
-
-  function closeIssue(issueId) {
-    const issue = state.maintenance.find((item) => item.id === issueId);
-    const nextMaintenance = state.maintenance.map((item) => item.id === issueId ? { ...item, status: 'closed', closedAt: new Date().toISOString(), closedBy: actor } : item);
-    const roomHasOtherOpenIssues = nextMaintenance.some((item) => item.roomId === issue?.roomId && item.status !== 'closed');
-    commit({
-      ...state,
-      maintenance: nextMaintenance,
-      rooms: state.rooms.map((room) => room.id === issue?.roomId && !roomHasOtherOpenIssues ? { ...room, status: 'ready' } : room),
-    });
+    setIssueMessage('');
+    try {
+      await raiseIssue({ roomId: selectedRoom.id, roomName: selectedRoom.name, note: newIssue, priority: issuePriority, source: 'desktop', actor: { uid: user?.uid, displayName: actor } });
+      setNewIssue('');
+      setIssuePriority('medium');
+      setIssueMessage('Reported. It is in Compliance > Maintenance and the caretaker has been told.');
+    } catch (error) {
+      setIssueMessage(error?.message || 'Could not report it. Try again.');
+    }
   }
 
   function moveEquipment(equipmentId, roomId) {
@@ -260,7 +256,7 @@ export default function Facilities() {
           <button onClick={()=>markStocked(selectedRoom.id)} className={`${button} flex items-center justify-center gap-2 py-4 text-base font-semibold`}><PackageCheck className="h-5 w-5"/> Room stocked: YES</button>
         </div>
         <p className={`mt-2 text-center text-xs ${muted}`}>One confirmation records the signed-in user, room and exact time. NFC will open this card directly.</p>
-        <div className="mt-6 grid gap-5 lg:grid-cols-2"><div><h3 className="font-semibold">Equipment in this room</h3><div className="mt-2 space-y-2">{state.equipment.filter((item)=>item.roomId===selectedRoom.id).length === 0 && <p className={`text-sm ${muted}`}>No equipment currently assigned.</p>}{state.equipment.filter((item)=>item.roomId===selectedRoom.id).map((item)=><button key={item.id} onClick={()=>setSelectedEquipmentId(item.id)} className="flex w-full items-center justify-between rounded-xl border border-[color:var(--medtrak-border)] p-3 text-left hover:bg-white/5"><span><span className="block font-medium">{item.name}</span><span className={`text-xs ${muted}`}>{item.id}</span></span><ChevronRight className="h-4 w-4" /></button>)}</div></div><div><h3 className="font-semibold">Report an issue</h3><div className="mt-2 space-y-2"><input value={newIssue} onChange={(e)=>setNewIssue(e.target.value)} placeholder="e.g. hand dryer not working" className="w-full rounded-xl border border-[color:var(--medtrak-border)] bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-[color:var(--medtrak-accent)]"/><div className="flex gap-2"><select value={issuePriority} onChange={(e)=>setIssuePriority(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] px-3 py-2 text-sm"><option value="low">Low priority</option><option value="medium">Medium priority</option><option value="high">High priority</option></select><button onClick={addIssue} className={`${button} flex items-center gap-2`}><Plus className="h-4 w-4"/> Add</button></div></div></div></div>
+        <div className="mt-6 grid gap-5 lg:grid-cols-2"><div><h3 className="font-semibold">Equipment in this room</h3><div className="mt-2 space-y-2">{state.equipment.filter((item)=>item.roomId===selectedRoom.id).length === 0 && <p className={`text-sm ${muted}`}>No equipment currently assigned.</p>}{state.equipment.filter((item)=>item.roomId===selectedRoom.id).map((item)=><button key={item.id} onClick={()=>setSelectedEquipmentId(item.id)} className="flex w-full items-center justify-between rounded-xl border border-[color:var(--medtrak-border)] p-3 text-left hover:bg-white/5"><span><span className="block font-medium">{item.name}</span><span className={`text-xs ${muted}`}>{item.id}</span></span><ChevronRight className="h-4 w-4" /></button>)}</div></div><div><h3 className="font-semibold">Report an issue</h3><div className="mt-2 space-y-2"><input value={newIssue} onChange={(e)=>setNewIssue(e.target.value)} placeholder="e.g. hand dryer not working" className="w-full rounded-xl border border-[color:var(--medtrak-border)] bg-transparent px-3 py-2 outline-none focus:ring-2 focus:ring-[color:var(--medtrak-accent)]"/><div className="flex gap-2"><select value={issuePriority} onChange={(e)=>setIssuePriority(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] px-3 py-2 text-sm"><option value="low">Low priority</option><option value="medium">Medium priority</option><option value="high">High priority</option></select><button onClick={addIssue} className={`${button} flex items-center gap-2`}><Plus className="h-4 w-4"/> Add</button></div>{issueMessage && <p role="status" className={`text-xs ${muted}`}>{issueMessage}</p>}</div></div></div>
         {selectedRoom.notes && <div className={`mt-5 rounded-xl p-4 ${soft}`}><div className="text-sm font-medium">Room notes</div><p className={`mt-1 text-sm ${muted}`}>{selectedRoom.notes}</p></div>}
       </div></div>}
 

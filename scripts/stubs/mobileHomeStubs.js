@@ -27,3 +27,5 @@ export const auth = { currentUser: null };
 export const useCoshhSubstances = () => ({ list: stub.coshh || null, error: "" });
 
 export const useStockTakes = () => ({ list: stub.takes || [], error: "" });
+
+export const useComplianceIncidents = () => ({ list: stub.incidents || [], error: "" });

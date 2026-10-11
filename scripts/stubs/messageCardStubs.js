@@ -17,3 +17,9 @@ export const httpsCallable = () => async () => ({ data: { toName: "Ben Jones" } 
 export const isSafeSyntheticMode = () => false;
 const useNotifications = () => ({ rows: stubState.rows, markRead: async () => {}, snooze: async () => {} });
 export default useNotifications;
+
+export const useComplianceIncident = () => undefined;
+export const useAssetChecks = () => [];
+export const useAssetRecord = () => null;
+export const recordIncidentAction = async () => {};
+export const resolveIncident = async () => {};

@@ -39,8 +39,17 @@ export function isFridgeAlert(note) {
   return Boolean(note && note.kind === "fridge-alert" && note.incidentId);
 }
 
+// A failed compliance check (a water outlet out of range, a fire door that will not close), sent to the caretaker and
+// the practice manager: also a card with "Take action".
+export function isComplianceAlert(note) {
+  return Boolean(note && note.kind === "compliance-alert" && note.incidentId);
+}
+
+// An automatic alert someone has to act on (either kind)
+export const isActionAlert = (note) => isFridgeAlert(note) || isComplianceAlert(note);
+
 // Everything that shows as the centre-of-screen card.
-export const isCardMessage = (note) => isPersonMessage(note) || isFridgeAlert(note);
+export const isCardMessage = (note) => isPersonMessage(note) || isActionAlert(note);
 
 const isSnoozedNow = (note, now) => { const until = toDate(note.snoozedUntil || note.snoozed_until); return Boolean(until && until > now); };
 const createdMs = (note) => toDate(note.createdAt)?.getTime() || 0;

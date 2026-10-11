@@ -1078,6 +1078,32 @@ match /subject_access_requests/{requestId} {
       allow update, delete: if false; // compliance checks are immutable audit records
     }
 
+    // A failed compliance check is an incident someone has to deal with: say what was done, show it passing again.
+    // Whoever records the failing check opens it (as themselves); the caretaker and practice manager act on it.
+    // The alert to them is created by the raiseComplianceAlert Cloud Function, never by a client.
+    match /compliance_incidents/{incidentId} {
+      allow get, list: if signedIn() && (hasPermission("compliance", "read") || isCaretaker() || isAdmin());
+      allow create: if signedIn()
+        && (hasPermission("compliance", "recordChecks") || isCaretaker() || isAdmin())
+        && request.resource.data.openedByUid == request.auth.uid
+        && request.resource.data.status == "open"
+        && request.resource.data.actions is list && request.resource.data.actions.size() == 0;
+      allow update: if signedIn() && (hasPermission("compliance", "write") || hasPermission("compliance", "manageAssets") || isCaretaker() || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Maintenance issues (a light that doesn't work, a blocked sink). Anyone signed in can raise one as themselves;
+    // the caretaker and the people who manage operations or compliance work them.
+    match /maintenance_issues/{issueId} {
+      allow get, list: if signedIn() && (hasPermission("operations", "read") || hasPermission("compliance", "read") || isCaretaker() || isAdmin());
+      allow create: if signedIn()
+        && request.resource.data.reportedByUid == request.auth.uid
+        && request.resource.data.status == "open"
+        && request.resource.data.title is string && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 400;
+      allow update: if signedIn() && (hasPermission("compliance", "write") || hasPermission("operations", "manage") || isCaretaker() || isAdmin());
+      allow delete: if isAdmin();
+    }
+
     match /pulse_events/{eventId} {
       allow get, list: if signedIn() && (hasPermission("operations", "read") || hasPermission("compliance", "read") || isAdmin());
       allow create: if signedIn();

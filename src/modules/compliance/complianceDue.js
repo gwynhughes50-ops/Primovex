@@ -1,0 +1,59 @@
+// "What needs doing": one list across everything the Compliance page looks after, most urgent first. Pure: the screen
+// hands in the records.
+
+import { getNextFirePointToTest, isComplianceCheckDue, isFireAlarmTestDueThisWeek, toDateValue } from "../../services/compliance/complianceRules.js";
+import { isOpen as incidentOpen, ageText } from "./complianceIncidents.js";
+import { issueSummary } from "../maintenance/maintenance.js";
+import { reviewSummary } from "../coshh/coshh.js";
+
+const DAY = 86400000;
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const ORDER = { critical: 0, warning: 1 };
+const label = (asset) => asset?.label || asset?.assetCode || "An asset";
+
+// A PAT session records when the next test is due; the most recent session's date is the one that counts.
+export function patRetest(sessions = [], now = new Date()) {
+  const dated = sessions
+    .map((s) => ({ tested: toDateValue(s.testDate) || toDateValue(s.createdAt), retest: toDateValue(s.retestDate) }))
+    .filter((s) => s.tested)
+    .sort((a, b) => b.tested - a.tested);
+  const latest = dated[0];
+  if (!latest?.retest) return null;
+  const days = Math.round((latest.retest.getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / DAY);
+  return { date: latest.retest, days };
+}
+
+export function dueList({ assets = [], incidents = [], patSessions = [], issues = [], coshh = null, now = new Date() } = {}) {
+  const items = [];
+  const open = incidents.filter(incidentOpen);
+  for (const incident of open) {
+    items.push({ key: `incident-${incident.id}`, tone: "critical", label: `${label({ label: incident.assetLabel, assetCode: incident.assetCode })} failed its check`, detail: `Open for ${ageText(incident, now)}. ${(incident.actions || []).length ? "Action recorded; needs a passing recheck." : "Nothing recorded yet."}`, action: { type: "incident", id: incident.id } });
+  }
+  const withIncident = new Set(open.map((i) => i.assetId));
+
+  const live = assets.filter((a) => a.active !== false);
+  if (isFireAlarmTestDueThisWeek(live, now)) {
+    const next = getNextFirePointToTest(live);
+    items.push({ key: "fire-weekly", tone: "warning", label: "The weekly fire alarm test hasn't been done", detail: next ? `Test ${label(next)} next.` : "", action: { type: "tab", tab: "overview" } });
+  }
+
+  const due = live.filter((a) => isComplianceCheckDue(a, now) && !withIncident.has(a.id));
+  const failingNoIncident = due.filter((a) => a.lastCheckResult === "fail");
+  const overdue = due.filter((a) => a.lastCheckResult !== "fail");
+  if (failingNoIncident.length) items.push({ key: "failing", tone: "critical", label: `${plural(failingNoIncident.length, "asset")} last failed its check`, detail: failingNoIncident.slice(0, 4).map(label).join(", "), action: { type: "tab", tab: "overview" } });
+  if (overdue.length) items.push({ key: "overdue", tone: "warning", label: `${plural(overdue.length, "check")} overdue`, detail: `${overdue.slice(0, 4).map((a) => a.assetCode || label(a)).join(", ")}${overdue.length > 4 ? ` and ${overdue.length - 4} more` : ""}`, action: { type: "tab", tab: "overview" } });
+
+  const pat = patRetest(patSessions, now);
+  if (pat && pat.days <= 30) items.push({ key: "pat", tone: pat.days < 0 ? "critical" : "warning", label: pat.days < 0 ? "PAT retesting is overdue" : "PAT retesting is due soon", detail: `Retest ${pat.days < 0 ? `was due ${Math.abs(pat.days)} day${Math.abs(pat.days) === 1 ? "" : "s"} ago` : pat.days === 0 ? "is due today" : `due in ${pat.days} day${pat.days === 1 ? "" : "s"}`}.`, action: { type: "tab", tab: "pat" } });
+
+  const maintenance = issueSummary(issues, now);
+  if (maintenance.open) items.push({ key: "maintenance", tone: maintenance.urgent ? "critical" : "warning", label: `${plural(maintenance.open, "maintenance issue")} open${maintenance.urgent ? `, ${maintenance.urgent} urgent` : ""}`, detail: maintenance.oldestDays ? `The oldest is ${plural(maintenance.oldestDays, "day")} old.` : "", action: { type: "tab", tab: "maintenance" } });
+
+  if (coshh) {
+    const review = reviewSummary(coshh, now);
+    if (review.overdue) items.push({ key: "coshh-overdue", tone: "critical", label: `${plural(review.overdue, "COSHH review")} overdue`, detail: "", action: { type: "tab", tab: "coshh" } });
+    else if (review.dueSoon) items.push({ key: "coshh-soon", tone: "warning", label: `${plural(review.dueSoon, "COSHH review")} due in the next 30 days`, detail: "", action: { type: "tab", tab: "coshh" } });
+  }
+
+  return items.sort((a, b) => ORDER[a.tone] - ORDER[b.tone]);
+}

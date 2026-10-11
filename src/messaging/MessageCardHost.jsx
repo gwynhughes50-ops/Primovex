@@ -7,7 +7,8 @@ import { functions } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import useNotifications from "@/hooks/useNotifications";
 import FridgeIncidentSheet from "@/components/temperature/FridgeIncidentSheet";
-import { QUICK_REPLIES, REPLY_MAX, SNOOZE_CHOICES, isFridgeAlert, messageQueue, senderOf, validateReply, whenLabel } from "./messageCard";
+import ComplianceIncidentSheet from "@/components/compliance/ComplianceIncidentSheet";
+import { QUICK_REPLIES, REPLY_MAX, SNOOZE_CHOICES, isActionAlert, isComplianceAlert, messageQueue, senderOf, validateReply, whenLabel } from "./messageCard";
 
 // A message from a colleague appears in the middle of the screen, on the desktop and the phone, as soon as
 // it arrives (or when the person signs in): who it is from, what it says, and Reply, Dismiss or Snooze.
@@ -29,7 +30,7 @@ export default function MessageCardHost() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
-  const [actionFor, setActionFor] = useState(null); // a fridge incident being acted on
+  const [actionFor, setActionFor] = useState(null); // an incident being acted on: { kind: "fridge" | "compliance", id }
   const [tick, setTick] = useState(() => Date.now());
   const firstButton = useRef(null);
   const phone = isPhone();
@@ -100,15 +101,17 @@ export default function MessageCardHost() {
     if (url && url !== "/notifications") navigate(url);
   };
 
-  // "Take action" on a fridge alert: put the card aside for now and open the incident
+  // "Take action" on a fridge or compliance alert: put the card aside for now and open the incident
   const takeAction = () => {
-    setActionFor(current.incidentId);
+    setActionFor({ kind: isComplianceAlert(current) ? "compliance" : "fridge", id: current.incidentId });
     setHidden((old) => new Set(old).add(current.id));
     if (browsing) setBrowsing(false);
   };
 
   if (isSafeSyntheticMode() || !uid) return null;
-  const incidentSheet = actionFor ? <FridgeIncidentSheet incidentId={actionFor} onClose={() => setActionFor(null)} /> : null;
+  const incidentSheet = !actionFor ? null : actionFor.kind === "compliance"
+    ? <ComplianceIncidentSheet incidentId={actionFor.id} onClose={() => setActionFor(null)} />
+    : <FridgeIncidentSheet incidentId={actionFor.id} onClose={() => setActionFor(null)} />;
   const toastView = toast ? <div role="status" className="fixed bottom-24 left-1/2 z-[170] flex -translate-x-1/2 items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-lg"><CheckCircle2 className="h-4 w-4" aria-hidden="true" /> {toast}</div> : null;
 
   // nothing on screen: on the phone, a small button for anything put aside or snoozed
@@ -127,8 +130,8 @@ export default function MessageCardHost() {
   }
 
   const position = browsing ? `${Math.min(index, queue.length - 1) + 1} of ${queue.length}` : queue.length > 1 ? `1 of ${queue.length} waiting` : "";
-  const hasLink = !phone && !isFridgeAlert(current) && current.actionUrl && current.actionUrl !== "/notifications";
-  const isAlert = isFridgeAlert(current);
+  const hasLink = !phone && !isActionAlert(current) && current.actionUrl && current.actionUrl !== "/notifications";
+  const isAlert = isActionAlert(current);
 
   return (
     <>

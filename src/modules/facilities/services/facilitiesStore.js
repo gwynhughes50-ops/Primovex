@@ -96,6 +96,25 @@ export function saveFacilitiesState(state) {
   window.dispatchEvent(new CustomEvent('primovex:facilities-changed'));
 }
 
+// Maintenance issues live in Firestore (modules/maintenance), shared by every device. Screens that still read them from
+// this local state (the Orb, room cards, the operations timeline) are fed from this copy, kept up to date by MaintenanceSync.
+export function mirrorMaintenanceFromShared(issues = []) {
+  try {
+    const raw = localStorage.getItem(KEY);
+    const base = raw ? { ...operationalBase(), ...JSON.parse(raw) } : operationalBase();
+    const next = issues.map((issue) => ({
+      id: issue.id, roomId: issue.roomId || '', roomName: issue.roomName || '', title: issue.title || '', priority: issue.priority || 'medium',
+      status: issue.status === 'closed' ? 'closed' : issue.status || 'open', assignedTo: issue.assignedTo || 'Caretaker',
+      reportedAt: issue.reportedAtMs ? new Date(issue.reportedAtMs).toISOString() : '', reportedBy: issue.reportedBy || '',
+    }));
+    if (JSON.stringify(base.maintenance) === JSON.stringify(next)) return;
+    localStorage.setItem(KEY, JSON.stringify({ ...base, schemaVersion: 3, maintenance: next }));
+    window.dispatchEvent(new CustomEvent('primovex:facilities-changed'));
+  } catch (error) {
+    console.error('Unable to mirror maintenance issues', error);
+  }
+}
+
 export function resetFacilitiesState() {
   resetSpaceRegistry();
   const state = operationalBase();
