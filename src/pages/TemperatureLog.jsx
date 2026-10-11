@@ -31,6 +31,7 @@ import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { db } from "../lib/firebase";
 import { TemperatureMonitoring } from "@/pages/Connect";
 import { useAuth } from "@/contexts/AuthContext";
+import StaffPicker from "@/components/ui/StaffPicker";
 import FridgeSetup from "@/components/temperature/FridgeSetup";
 import FridgeIncidentSheet from "@/components/temperature/FridgeIncidentSheet";
 import { canSetUpFridges } from "@/modules/temperature/fridgeSetup";
@@ -232,6 +233,7 @@ function TemperatureLogTab() {
     unitId: "",
     temp: "",
     recordedBy: "",
+    recordedByUid: "",
     notes: "",
   });
 
@@ -448,6 +450,7 @@ function TemperatureLogTab() {
 
         temp: tempNum,
         recordedBy: newReading.recordedBy || "",
+        recordedByUid: newReading.recordedByUid || "",
         notes: newReading.notes || "",
 
         siteId: newReading.siteId,
@@ -470,6 +473,7 @@ function TemperatureLogTab() {
         datetime: "",
         temp: "",
         recordedBy: "",
+        recordedByUid: "",
         notes: "",
       }));
       setIsLogOpen(false);
@@ -757,14 +761,12 @@ function TemperatureLogTab() {
                 />
               </div>
 
-              <div>
-                <label className="text-xs text-slate-300">Recorded by</label>
-                <Input
-                  value={newReading.recordedBy}
-                  onChange={(e) => handleNewChange("recordedBy", e.target.value)}
-                  placeholder="e.g. J. Smith"
-                />
-              </div>
+              <StaffPicker
+                id="reading-recorded-by"
+                label="Recorded by"
+                value={{ uid: newReading.recordedByUid }}
+                onChange={(person) => setNewReading((prev) => ({ ...prev, recordedBy: person.name, recordedByUid: person.uid }))}
+              />
 
               <div>
                 <label className="text-xs text-slate-300">Notes</label>
@@ -820,7 +822,7 @@ function TemperatureIncidentsTab() {
   // ✅ Resolve modal state (NO window.prompt)
   const [resolveOpen, setResolveOpen] = useState(false);
   const [resolveTarget, setResolveTarget] = useState(null);
-  const [resolveBy, setResolveBy] = useState("");
+  const [resolveBy, setResolveBy] = useState({ uid: "", name: "" });
   const [resolveNotes, setResolveNotes] = useState("");
   const [resolveErr, setResolveErr] = useState("");
 
@@ -835,6 +837,7 @@ function TemperatureIncidentsTab() {
     movedToBackupUnit: false,
     stockNotes: "",
     openedBy: "",
+    openedByUid: "",
   });
 
   // Load units
@@ -937,6 +940,7 @@ function TemperatureIncidentsTab() {
       movedToBackupUnit: false,
       stockNotes: "",
       openedBy: "",
+      openedByUid: "",
     }));
   };
 
@@ -976,6 +980,7 @@ function TemperatureIncidentsTab() {
         status: "open",
         openedAt: serverTimestamp(),
         openedBy: newIncident.openedBy.trim() || "",
+        openedByUid: newIncident.openedByUid || "",
 
         resolvedAt: null,
         resolvedBy: null,
@@ -994,7 +999,7 @@ function TemperatureIncidentsTab() {
   const openResolve = (incident) => {
     setResolveErr("");
     setResolveTarget(incident);
-    setResolveBy("");
+    setResolveBy({ uid: "", name: "" });
     setResolveNotes("");
     setResolveOpen(true);
   };
@@ -1010,7 +1015,8 @@ function TemperatureIncidentsTab() {
       await updateDoc(doc(db, INCIDENTS_COLLECTION, resolveTarget.id), {
         status: "resolved",
         resolvedAt: serverTimestamp(),
-        resolvedBy: resolveBy.trim(),
+        resolvedBy: resolveBy.name || "",
+        resolvedByUid: resolveBy.uid || "",
         resolutionNotes: resolveNotes.trim(),
       });
 
@@ -1324,14 +1330,12 @@ function TemperatureIncidentsTab() {
                 />
               </div>
 
-              <div>
-                <label className="text-xs text-slate-300">Opened by</label>
-                <Input
-                  value={newIncident.openedBy}
-                  onChange={(e) => handleNewChange("openedBy", e.target.value)}
-                  placeholder="e.g. J. Smith"
-                />
-              </div>
+              <StaffPicker
+                id="incident-opened-by"
+                label="Opened by"
+                value={{ uid: newIncident.openedByUid }}
+                onChange={(person) => setNewIncident((p) => ({ ...p, openedBy: person.name, openedByUid: person.uid }))}
+              />
             </div>
 
             <div className="mt-5 flex justify-end gap-2">
@@ -1389,10 +1393,7 @@ function TemperatureIncidentsTab() {
             )}
 
             <div className="mt-4 space-y-3">
-              <div>
-                <label className="text-xs text-slate-300">Resolved by (optional)</label>
-                <Input value={resolveBy} onChange={(e) => setResolveBy(e.target.value)} placeholder="e.g. J. Smith" />
-              </div>
+              <StaffPicker id="incident-resolved-by" label="Resolved by" value={resolveBy} onChange={setResolveBy} />
 
               <div>
                 <label className="text-xs text-slate-300">Resolution notes (required)</label>

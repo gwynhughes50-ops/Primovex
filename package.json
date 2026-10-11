@@ -84,6 +84,7 @@
     "test:compliance-follow-up": "esbuild scripts/verify-compliance-follow-up.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-compliance-follow-up.bundle.mjs && node work/verify-compliance-follow-up.bundle.mjs",
     "test:certificates": "esbuild scripts/verify-certificates.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-certificates.bundle.mjs && node work/verify-certificates.bundle.mjs",
     "test:orb-render": "esbuild scripts/verify-orb-render.mjs --bundle --platform=node --format=cjs --external:react --external:react-dom --loader:.jsx=jsx --jsx=automatic --loader:.css=empty --alias:@=./src --outfile=work/verify-orb-render.bundle.cjs && node work/verify-orb-render.bundle.cjs",
+    "test:staff-picker": "esbuild scripts/verify-staff-picker.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-staff-picker.bundle.mjs && node work/verify-staff-picker.bundle.mjs",
     "test:orb-status": "esbuild scripts/verify-orb-status.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-status.bundle.mjs && node work/verify-orb-status.bundle.mjs",
     "test:coshh": "esbuild scripts/verify-coshh.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-coshh.bundle.mjs && node work/verify-coshh.bundle.mjs",
     "test:fridge-setup": "esbuild scripts/verify-fridge-setup.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-fridge-setup.bundle.mjs && node work/verify-fridge-setup.bundle.mjs",

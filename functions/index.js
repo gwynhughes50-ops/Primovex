@@ -476,8 +476,10 @@ exports.listStaffDirectory = onCall({ region: "europe-west2" }, async (request) 
       || hasCapability(capabilities, "governance.concernsTeam")
       || hasCapability(capabilities, "governance.seTeam") // picking leads, reviewers and action owners for a significant event
       || hasCapability(capabilities, "admin.access")
-      || hasCapability(capabilities, "inventory.verify"); // choosing a colleague to message from a kit check
-    if (!allowed) throw new HttpsError("permission-denied", "You need SAR, concerns, admin or stock-verification access to list staff.");
+      || hasCapability(capabilities, "inventory.verify") // choosing a colleague to message from a kit check
+      || hasCapability(capabilities, "temperature.write") // naming who took a reading or opened an incident
+      || hasCapability(capabilities, "temperature.resolveIncident"); // naming who resolved a fridge incident
+    if (!allowed) throw new HttpsError("permission-denied", "You need SAR, concerns, fridge, admin or stock-verification access to list staff.");
   }
   return { staff: await listStaffDirectory({ db }) };
 });

@@ -111,6 +111,14 @@ function injectThemeStyles() {
       color: var(--medtrak-text) !important;
     }
 
+    /* A full-screen dialog backdrop is a see-through scrim, not a panel: the rule below turns every bg-slate-950 into the
+       solid page colour, which blanked the whole app (sidebar and logo included) behind each dialog. Lock screens (/97)
+       and the phone preview (/85) are meant to be dark and keep their own. */
+    html[data-medtrak-theme] .fixed.inset-0[class*="bg-slate-950/"]:not([class*="bg-slate-950/97"]):not([class*="bg-slate-950/85"]),
+    html.medtrak-light .fixed.inset-0[class*="bg-slate-950/"]:not([class*="bg-slate-950/97"]):not([class*="bg-slate-950/85"]) {
+      background-color: rgba(15, 23, 42, 0.5) !important;
+    }
+
     html[data-medtrak-theme] .bg-slate-950,
     html[data-medtrak-theme] .bg-slate-950\\/90,
     html[data-medtrak-theme] .bg-slate-950\\/85,
