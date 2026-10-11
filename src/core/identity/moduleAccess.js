@@ -32,3 +32,11 @@ export function blockedModuleDomains({ toggles, uid, viewingAs = false, syntheti
     return !allowed;
   });
 }
+
+// Should this device's ClinFlow data (the documents, original PDFs and finished packs it keeps locally) be wiped now?
+// Yes when ClinFlow is off for the person signed in. Not until the practice's switch has actually been read (an
+// unread switch would wipe a developer's cache every time the app starts), not while an administrator is only
+// viewing as another role (the data is theirs), and not in demo or training mode.
+export function shouldPurgeClinFlowLocalData({ switchLoaded, blockedDomains = [], viewingAs = false, signedIn = false, synthetic = false } = {}) {
+  return Boolean(switchLoaded && signedIn && !viewingAs && !synthetic && blockedDomains.includes("clinflow"));
+}

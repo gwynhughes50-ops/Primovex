@@ -3,7 +3,8 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, onIdTokenChanged, signOut as fbSignOut } from "firebase/auth";
 import { collection, doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
-import { blockedModuleDomains } from "@/core/identity/moduleAccess";
+import { blockedModuleDomains, shouldPurgeClinFlowLocalData } from "@/core/identity/moduleAccess";
+import { purgeClinFlowLocalData } from "@/modules/clinflow/clinflowDocumentCache";
 import { VIEW_AS_KEY, readViewAs, resolveViewAs, writeViewAs } from "@/core/identity/viewAs";
 import { getCapabilitiesForProfile, hasCapability, hasAnyCapability, CAPABILITY_CATALOG } from "@/core/identity/capabilities";
 import { getStoredPlatformMode, isSafeSyntheticMode, setPlatformMode } from "@/config/platformMode";
@@ -44,6 +45,7 @@ export function AuthProvider({ children }) {
   const [platformMode, setPlatformModeState] = useState(() => getStoredPlatformMode());
   const [user, setUser] = useState(null); // firebase auth user or synthetic demo user
   const [profile, setProfile] = useState(null); // firestore /users/{uid} or synthetic profile
+  const [moduleTogglesLoaded, setModuleTogglesLoaded] = useState(false); // true once the practice's module switch has actually been read
   const [moduleToggles, setModuleToggles] = useState(null); // practice_config.moduleToggles — per-module on/off with an allow-list
   const [customRoles, setCustomRoles] = useState([]); // admin-defined roles/{roleId} docs, on top of the built-in ROLE_TEMPLATES
   const [loading, setLoading] = useState(true);
@@ -196,12 +198,15 @@ export function AuthProvider({ children }) {
   const authUid = user?.uid || null;
 
   useEffect(() => {
-    if (isSafeSyntheticMode(platformMode) || !authUid) { setModuleToggles(null); return undefined; }
+    if (isSafeSyntheticMode(platformMode) || !authUid) { setModuleToggles(null); setModuleTogglesLoaded(false); return undefined; }
     return onSnapshot(doc(db, "practice_config", "main"), (snap) => {
       setModuleToggles(snap.exists() ? snap.data()?.moduleToggles || null : null);
+      setModuleTogglesLoaded(true);
     }, (err) => {
+      // unread, so unknown: leave the loaded flag down and never wipe anything on a guess
       console.error("Module toggles subscription failed", err);
       setModuleToggles(null);
+      setModuleTogglesLoaded(false);
     });
   }, [platformMode, authUid]);
 
@@ -241,6 +246,13 @@ export function AuthProvider({ children }) {
   const blockedDomains = new Set(
     blockedModuleDomains({ toggles: moduleToggles, uid: user?.uid, viewingAs: Boolean(viewingAs), synthetic: isSafeSyntheticMode(platformMode) })
   );
+  // ClinFlow off for this person: also clear what it has kept on this device (documents, original PDFs, packs)
+  const purgeClinFlow = shouldPurgeClinFlowLocalData({
+    switchLoaded: moduleTogglesLoaded, blockedDomains: [...blockedDomains], viewingAs: Boolean(viewingAs), signedIn: Boolean(user), synthetic: isSafeSyntheticMode(platformMode),
+  });
+  useEffect(() => {
+    if (purgeClinFlow) purgeClinFlowLocalData().catch(() => {});
+  }, [purgeClinFlow]);
   const capabilities = blockedDomains.size === 0
     ? rawCapabilities
     : (rawCapabilities.includes("*") ? CAPABILITY_CATALOG.map((item) => item.id) : rawCapabilities)

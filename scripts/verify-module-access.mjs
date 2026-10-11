@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { OFF_BY_DEFAULT, blockedModuleDomains } from "../src/core/identity/moduleAccess.js";
+import { OFF_BY_DEFAULT, blockedModuleDomains, shouldPurgeClinFlowLocalData } from "../src/core/identity/moduleAccess.js";
+import { purgeClinFlowLocalData } from "../src/modules/clinflow/clinflowDocumentCache.js";
 import { CAPABILITY_CATALOG, getCapabilitiesForProfile } from "../src/core/identity/capabilities.js";
 
 let n = 0;
@@ -46,5 +47,32 @@ t("any other module switched off works as before, and is not off by default", ()
   assert.deepEqual(blockedModuleDomains({ toggles: { purchasing: { disabled: false } }, uid: "x" }), ["clinflow"]);
   assert.ok(CAPABILITY_CATALOG.some((c) => c.id.startsWith("clinflow.")), "the domain name matches the capability prefix");
 });
+
+t("ClinFlow data kept on the device is wiped when ClinFlow is off for the person signed in, and only then", () => {
+  const base = { switchLoaded: true, blockedDomains: ["clinflow"], viewingAs: false, signedIn: true, synthetic: false };
+  assert.equal(shouldPurgeClinFlowLocalData(base), true);
+  assert.equal(shouldPurgeClinFlowLocalData({ ...base, switchLoaded: false }), false, "not until the practice switch has been read");
+  assert.equal(shouldPurgeClinFlowLocalData({ ...base, blockedDomains: [] }), false, "the developer on the allow-list keeps theirs");
+  assert.equal(shouldPurgeClinFlowLocalData({ ...base, blockedDomains: ["purchasing"] }), false);
+  assert.equal(shouldPurgeClinFlowLocalData({ ...base, viewingAs: true }), false, "viewing as another role does not wipe the administrator's own data");
+  assert.equal(shouldPurgeClinFlowLocalData({ ...base, signedIn: false }), false);
+  assert.equal(shouldPurgeClinFlowLocalData({ ...base, synthetic: true }), false, "demo and training have no real documents");
+  assert.equal(shouldPurgeClinFlowLocalData(), false);
+});
+
+const fakeFactory = (outcome) => {
+  const calls = [];
+  return { calls, deleteDatabase: (name) => { calls.push(name); const request = {}; setTimeout(() => request[outcome]?.(), 0); return request; } };
+};
+
+// the wipe deletes the whole ClinFlow database and says whether it worked
+const ok = fakeFactory("onsuccess");
+assert.equal(await purgeClinFlowLocalData(ok), true);
+assert.deepEqual(ok.calls, ["primovex-clinflow"]);
+assert.equal(await purgeClinFlowLocalData(fakeFactory("onerror")), false);
+assert.equal(await purgeClinFlowLocalData(fakeFactory("onblocked")), false);
+assert.equal(await purgeClinFlowLocalData({ deleteDatabase: () => { throw new Error("no"); } }), false);
+assert.equal(await purgeClinFlowLocalData(null), true, "no local database in this environment: nothing to wipe");
+n += 1; console.log("ok  the wipe deletes the whole ClinFlow database and says whether it worked");
 
 console.log(`\n${n} passed`);

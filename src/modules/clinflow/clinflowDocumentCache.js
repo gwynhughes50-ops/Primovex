@@ -184,3 +184,22 @@ export async function saveClinFlowTeachingFeedback({ document, suggestedDecision
   await runTransaction(TEACHING_STORE, "readwrite", (store) => store.put(record));
   return record;
 }
+
+// Wipes everything ClinFlow keeps on this device: the cached documents, the original PDFs, the finished packs and the
+// teaching feedback. Used when ClinFlow is switched off for the person signed in, so a device that once held ClinFlow
+// documents does not keep them. Resolves true when the database is gone (or never existed), false if it could not be
+// removed. `factory` is only there so a test can pass a stand-in for the browser's indexedDB.
+export function purgeClinFlowLocalData(factory = globalThis.indexedDB) {
+  if (!factory?.deleteDatabase) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    try {
+      const request = factory.deleteDatabase(DATABASE_NAME);
+      request.onsuccess = () => resolve(true);
+      request.onerror = () => resolve(false);
+      // another tab still has it open: it goes as soon as that tab lets go
+      request.onblocked = () => resolve(false);
+    } catch {
+      resolve(false);
+    }
+  });
+}
