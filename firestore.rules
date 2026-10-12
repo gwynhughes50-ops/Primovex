@@ -760,6 +760,17 @@ match /subject_access_requests/{requestId} {
       allow create, update, delete: if hasPermission("connect", "manageDevices") || isAdmin();
     }
 
+    // Primovex's own sensors (functions/services/sensorService.js). What was set up and the latest state is readable by
+    // those who see Connect; it is only ever written by the functions. The keys (hashed) are not readable by anyone in the
+    // app: the sensor reports to a Cloud Function, which checks the key.
+    match /sensor_config/{sensorId} {
+      allow get, list: if signedIn() && (hasPermission("connect", "view") || isAdmin());
+      allow create, update, delete: if false;
+    }
+    match /sensor_keys/{sensorId} {
+      allow read, write: if false;
+    }
+
     // Non-secret Connect provider config (region/accessId/projectId/deviceId).
     // The Tuya Access Secret never touches Firestore or React — it only lives
     // in Firebase Functions secrets, read server-side by connectCloudHealth /

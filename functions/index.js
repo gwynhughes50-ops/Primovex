@@ -1,7 +1,7 @@
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const crypto = require("crypto");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const { getProvider, listProviders } = require("./providers/providerFactory");
@@ -10,6 +10,8 @@ const { publishEvent } = require("./services/eventBus");
 const { getSyntheticPackDocument } = require("./config/clinflowSyntheticPack");
 const { clinFlowEnabledFor } = require("./services/moduleAccess");
 const { raiseComplianceAlert } = require("./services/complianceAlertService");
+const sensorService = require("./services/sensorService");
+const { rolesToTell } = require("./services/fridgeAlertService");
 const { API_VERSION, MODEL_ID, analyzeDocument, summariseAnalyzeResult } = require("./services/azureDocumentIntelligenceService");
 const { extractClinicalFacts } = require("./services/azureOpenAiExtractionService");
 const { appendGovernedAuditEvent } = require("./services/governedAuditService");
@@ -822,6 +824,47 @@ exports.sendDueNotificationsNow = onCall({ region: "europe-west2", timeoutSecond
   await assertAdmin(request);
   return sendDueNotifications({ db });
 });
+
+// ---------------------------------------------------------------------------
+// Primovex's own temperature sensors (see services/sensorService.js).
+// ---------------------------------------------------------------------------
+const SENSOR_REPORT_URL = "https://europe-west2-medtrak-b1cad.cloudfunctions.net/sensorReport";
+
+// The address to paste into the sensor's webhook. ${...} are filled in by the Shelly itself each time it reports.
+const sensorWebhookUrl = (id, key) =>
+  `${SENSOR_REPORT_URL}?d=${id}&k=${key}&t=\${status["temperature:0"].tC}&h=\${status["humidity:0"].rh}&b=\${status["devicepower:0"].battery.percent}&r=\${status.wifi.rssi}`;
+
+// Add a sensor, change it, give it a new key, or remove it. The key is only ever shown in the reply to a create or a rotate.
+exports.manageSensor = onCall({ region: "europe-west2", timeoutSeconds: 30 }, async (request) => {
+  await assertConnectManager(request);
+  const profile = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
+  const result = await sensorService.manageSensor({ db, callerUid: request.auth.uid, callerName: profile.displayName || profile.email || "", data: request.data || {} });
+  return result.key ? { ...result, webhookUrl: sensorWebhookUrl(result.id, result.key) } : result;
+});
+
+// What a sensor calls each time it reports. Open to the internet, so it answers little and trusts only a matching key.
+exports.sensorReport = onRequest({ region: "europe-west2", cors: false, maxInstances: 10, timeoutSeconds: 30 }, async (req, res) => {
+  if (req.method !== "GET" && req.method !== "POST") { res.status(405).send("No"); return; }
+  const parsed = sensorService.parseReport({ ...(req.query || {}), ...(typeof req.body === "object" && req.body ? req.body : {}) });
+  if (!parsed.ok) { res.status(parsed.error === "Unknown sensor." ? 401 : 400).send(parsed.error); return; }
+  try {
+    const keyDoc = await db.collection("sensor_keys").doc(parsed.id).get();
+    if (!keyDoc.exists || !sensorService.keyMatches(parsed.key, keyDoc.data()?.keyHash)) { res.status(401).send("Unknown sensor."); return; }
+    const result = await sensorService.applyReport({ db, id: parsed.id, report: parsed.value, roles: await rolesToTell(db) });
+    res.status(200).send(result.recorded ? "ok" : "ok (ignored)");
+  } catch (error) {
+    console.error("sensorReport failed", error?.message);
+    res.status(500).send("Try again.");
+  }
+});
+
+// Every ten minutes: tell the right people about any sensor that has stopped reporting.
+exports.scheduledSensorWatch = onSchedule(
+  { region: "europe-west2", schedule: "every 10 minutes", timeZone: "Europe/London" },
+  async () => {
+    await sensorService.checkSilentSensors({ db, roles: await rolesToTell(db) });
+  }
+);
 
 exports.scheduledConnectSimulatorSync = onSchedule(
   {

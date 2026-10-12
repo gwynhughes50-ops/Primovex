@@ -933,6 +933,27 @@ async function main() {
     await assertSucceeds(deleteObject(ref(caretakerStorage, "coshh_sds/s-care/a.pdf")));
   });
 
+  console.log("\n=== 21. Primovex's own sensors (sensor_config readable by Connect; sensor_keys and every write are server only) ===");
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), "sensor_config", "sensor-1"), { name: "Room 68", min: 2, max: 8 });
+    await setDoc(doc(context.firestore(), "sensor_keys", "sensor-1"), { keyHash: "abc" });
+  });
+  await check("Nobody can read a sensor's key from the app, not even an administrator or the practice manager", async () => {
+    for (const who of [admin, pm, caretaker, nurse, anon]) await assertFails(getDoc(doc(who, "sensor_keys", "sensor-1")));
+  });
+  await check("Nobody can write a sensor's key or settings from the app, so a reading cannot be faked by changing the key", async () => {
+    for (const who of [admin, pm, caretaker, nurse, anon]) {
+      await assertFails(setDoc(doc(who, "sensor_keys", "sensor-x"), { keyHash: "mine" }));
+      await assertFails(setDoc(doc(who, "sensor_config", "sensor-x"), { name: "x", min: 2, max: 8 }));
+      await assertFails(updateDoc(doc(who, "sensor_config", "sensor-1"), { min: -50, max: 50 }));
+      await assertFails(deleteDoc(doc(who, "sensor_config", "sensor-1")));
+    }
+  });
+  await check("An administrator can read sensor settings; anonymous cannot", async () => {
+    await assertSucceeds(getDoc(doc(admin, "sensor_config", "sensor-1")));
+    await assertFails(getDoc(doc(anon, "sensor_config", "sensor-1")));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);

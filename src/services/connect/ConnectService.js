@@ -24,6 +24,8 @@ export function normaliseDevice(docLike) {
       : 0;
 
   const provider = data.provider || data.providerId || DEFAULT_CONNECT_PROVIDER;
+  // a sensor that reports every hour is not offline after 30 minutes: twice its usual gap plus a quarter of an hour
+  const offlineAfterMin = Number(data.expectedEveryMin) > 0 ? Math.max(30, 2 * Number(data.expectedEveryMin) + 15) : 30;
 
   return {
     id,
@@ -32,7 +34,7 @@ export function normaliseDevice(docLike) {
     site: data.site || data.siteName || "Main Branch",
     room: data.room || data.location || "Unassigned",
     equipment: data.equipment || data.assetName || "Connected asset",
-    status: data.status || inferDeviceStatus({ currentValue, min, max, battery: data.battery, lastSeenMinutes }),
+    status: data.status || inferDeviceStatus({ currentValue, min, max, battery: data.battery, lastSeenMinutes, offlineAfterMin }),
     currentValue,
     humidity: data.humidity ?? data.relativeHumidity ?? null,
     unit: data.unit || "°C",
@@ -47,14 +49,15 @@ export function normaliseDevice(docLike) {
     providerLabel: data.providerLabel || getProviderSummary(provider)?.shortLabel || provider,
     integrationStatus: data.integrationStatus || "active",
     lastSeenMinutes,
+    offlineAfterMin,
     lastSeenLabel: formatLastSeen(lastSeenMinutes),
     raw: data,
   };
 }
 
-export function inferDeviceStatus({ currentValue, min, max, battery, lastSeenMinutes }) {
+export function inferDeviceStatus({ currentValue, min, max, battery, lastSeenMinutes, offlineAfterMin }) {
   const value = Number(currentValue);
-  if (Number(lastSeenMinutes) > 30) return "offline";
+  if (Number(lastSeenMinutes) > (Number(offlineAfterMin) || 30)) return "offline";
   if (battery != null && Number(battery) <= 20) return "warning";
   if (Number.isFinite(value) && (value < Number(min) || value > Number(max))) return "critical";
   return "online";

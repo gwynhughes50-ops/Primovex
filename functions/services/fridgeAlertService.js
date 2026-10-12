@@ -52,6 +52,19 @@ async function rolesToTell(db) {
   }
 }
 
+// Everyone active with one of the given roles (for alerts raised by a sensor rather than by a person)
+async function recipientUids(db, roles) {
+  const seen = new Set();
+  for (const role of roles) {
+    const people = await db.collection("users").where("role", "==", role).get();
+    for (const person of people.docs) {
+      if (person.data()?.active === false) continue;
+      seen.add(person.id);
+    }
+  }
+  return [...seen];
+}
+
 async function raiseFridgeAlert({ db, callerUid, data = {}, now = new Date() }) {
   const incidentId = tidy(data.incidentId, 128);
   if (!incidentId) throw new HttpsError("invalid-argument", "Say which incident to alert about.");
@@ -92,4 +105,4 @@ async function raiseFridgeAlert({ db, callerUid, data = {}, now = new Date() }) 
   return { sent: recipients.length, roles };
 }
 
-module.exports = { DEFAULT_ROLES, HOURLY_LIMIT, buildFridgeAlert, raiseFridgeAlert };
+module.exports = { DEFAULT_ROLES, HOURLY_LIMIT, buildFridgeAlert, raiseFridgeAlert, recipientUids, rolesToTell };

@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input";
 import useConnectedDevices from "@/hooks/useConnectedDevices";
 import { useAuth } from "@/contexts/AuthContext";
 import AccessDenied from "@/components/security/AccessDenied";
+import PrimovexSensors from "@/components/connect/PrimovexSensors";
 import { buildDeviceHistory, getDeviceStatus, listProviders } from "@/services/connectService";
 import { buildTuyaBackendContract } from "@/services/connect/providers/TuyaProvider";
 import { getConnectCloudHealth, syncConnectProvider, buildConnectCloudDeploymentNotes } from "@/services/connect/connectCloudClient";
@@ -909,6 +910,8 @@ export default function Connect() {
         updateProviderSettings={updateProviderSettings}
         canManageDevices={canManageDevices}
       />
+
+      <PrimovexSensors canManageDevices={canManageDevices} />
 
       <LocalThermometerManager canManageDevices={canManageDevices} />
 
