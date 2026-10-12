@@ -53,3 +53,38 @@ export function unmatchedWakeHint(pings = [], configs = []) {
   const ips = [...new Set(stray.map((p) => p.ip))];
   return `A device at ${ips.join(", ")} woke and called this PC, but no thermometer is set up with that address. If that is your sensor, its address has changed: remove and add it again with the new one.`;
 }
+
+// WiFi strength as the thermometer itself reports it (dBm, closer to zero is stronger) -> a percentage for the cards and
+// a word for the person.
+export const rssiToPercent = (rssi) => (Number.isFinite(Number(rssi)) ? Math.max(0, Math.min(100, Math.round(2 * (Number(rssi) + 100)))) : null);
+export function rssiLabel(rssi) {
+  const value = Number(rssi);
+  if (!Number.isFinite(value)) return "";
+  const word = value >= -60 ? "good" : value >= -70 ? "fair" : value >= -80 ? "weak" : "very weak";
+  return `${value} dBm, ${word}`;
+}
+
+const DAY_MS = 86400000;
+// Each time a thermometer goes from answering to not answering is a "drop". The log is a list of { at, up } changes.
+export function recordTransition(log = [], up, at = Date.now()) {
+  const last = log[log.length - 1];
+  if (last && last.up === up) return log;
+  return [...log, { at, up }].filter((entry) => at - entry.at < 7 * DAY_MS).slice(-60);
+}
+export const dropsSince = (log = [], since) => log.filter((entry) => !entry.up && entry.at >= since).length;
+
+// the extra lines that explain a flaky connection: how strong the signal is, a restart, how often it has dropped
+export function connectionLines(entry = {}, log = [], now = Date.now()) {
+  const lines = [];
+  if (Number.isFinite(Number(entry.lastRssi))) {
+    const weak = Number(entry.lastRssi) < -70;
+    lines.push({ tone: weak ? "warn" : "ok", text: `WiFi signal ${rssiLabel(entry.lastRssi)}${weak ? ". Move the thermometer closer to a router or access point, or add one nearby." : "."}` });
+  }
+  if (Number.isFinite(Number(entry.lastUptimeSec)) && entry.lastUptimeSec < 3600) {
+    lines.push({ tone: "warn", text: `It restarted ${Math.max(1, Math.round(entry.lastUptimeSec / 60))} min before that reading (power cut, unplugged, or it reset itself).` });
+  }
+  const day = dropsSince(log, now - DAY_MS);
+  const week = dropsSince(log, now - 7 * DAY_MS);
+  if (week > 0) lines.push({ tone: day > 1 ? "bad" : "warn", text: `Dropped off the network ${day} time${day === 1 ? "" : "s"} in the last 24 hours (${week} in the last 7 days).` });
+  return lines;
+}

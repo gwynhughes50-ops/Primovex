@@ -12,7 +12,7 @@ import {
 import { db } from "@/lib/firebase";
 import { CONNECTED_DEVICES_COLLECTION } from "./DeviceRegistry";
 import { SHELLY_LOCAL_PROVIDER_ID } from "./providers/ShellyLocalProvider";
-import { describeShellyError } from "./shellyDiagnostics";
+import { describeShellyError, recordTransition, rssiToPercent } from "./shellyDiagnostics";
 
 // Config for practice-owned local thermometers (name/room/local IP/safe
 // range). Kept separate from connected_devices — that collection holds the
@@ -28,6 +28,18 @@ const DEFAULT_POLL_INTERVAL_MS = 3 * 60 * 1000;
 const diagnostics = { polling: false, pollEveryMs: 0, lastRunAt: 0, thermometers: {}, wakes: [] };
 const diagnosticListeners = new Set();
 const notifyDiagnostics = () => diagnosticListeners.forEach((fn) => fn(diagnostics));
+const DROPS_KEY = "primovex.shelly.drops.v1";
+const readDrops = () => { try { return JSON.parse(window.localStorage.getItem(DROPS_KEY) || "{}") || {}; } catch { return {}; } };
+export const getShellyDropLog = (id) => readDrops()[id] || [];
+function noteTransition(id, up) {
+  try {
+    const all = readDrops();
+    const before = all[id] || [];
+    // the first thing seen for a thermometer is only a starting point; a drop is a change from answering to not
+    const next = before.length === 0 && up ? [{ at: Date.now(), up: true }] : before.length === 0 ? before : recordTransition(before, up);
+    if (next !== before) { all[id] = next; window.localStorage.setItem(DROPS_KEY, JSON.stringify(all)); }
+  } catch { /* storage unavailable: the live lines still work */ }
+}
 const noteThermometer = (id, patch) => { diagnostics.thermometers[id] = { ...diagnostics.thermometers[id], ...patch }; notifyDiagnostics(); };
 export function subscribeShellyDiagnostics(callback) {
   diagnosticListeners.add(callback);
@@ -136,7 +148,11 @@ export async function readShellyStatus(ip) {
   const powerKey = componentKey("devicepower");
   const batteryPercent = powerKey ? parsed[powerKey]?.battery?.percent : undefined;
 
+  const rssi = parsed.wifi?.rssi;
+  const uptime = parsed.sys?.uptime;
   return {
+    wifiRssi: Number.isFinite(Number(rssi)) ? Number(rssi) : null,
+    uptimeSec: Number.isFinite(Number(uptime)) ? Number(uptime) : null,
     tempC: Number(tC),
     humidityPct: Number.isFinite(Number(rh)) ? Number(rh) : null,
     batteryPercent: Number.isFinite(Number(batteryPercent)) ? Number(batteryPercent) : null,
@@ -152,15 +168,22 @@ export async function readShellyStatus(ip) {
 export async function pollShellyLocalThermometerOnce(config) {
   let reading;
   try {
-    reading = await readShellyStatus(config.ip);
+    try {
+      reading = await readShellyStatus(config.ip);
+    } catch (firstError) {
+      // one more go a moment later: a thermometer on a weak signal often misses the first call
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      reading = await readShellyStatus(config.ip);
+    }
   } catch (error) {
     const reason = describeShellyError(error, config);
+    noteTransition(config.id, false);
     noteThermometer(config.id, { lastAttemptAt: Date.now(), lastError: reason });
     const friendly = new Error(reason);
     friendly.cause = error;
     throw friendly;
   }
-  const { tempC, humidityPct, batteryPercent } = reading;
+  const { tempC, humidityPct, batteryPercent, wifiRssi, uptimeSec } = reading;
   await setDoc(
     doc(db, CONNECTED_DEVICES_COLLECTION, config.id),
     {
@@ -177,11 +200,13 @@ export async function pollShellyLocalThermometerOnce(config) {
       max: config.max,
       humidity: humidityPct,
       battery: batteryPercent,
+      ...(wifiRssi != null ? { signal: rssiToPercent(wifiRssi), wifiRssi } : {}),
       lastSeen: serverTimestamp(),
     },
     { merge: true }
   );
-  noteThermometer(config.id, { lastAttemptAt: Date.now(), lastOkAt: Date.now(), lastError: "" });
+  noteTransition(config.id, true);
+  noteThermometer(config.id, { lastAttemptAt: Date.now(), lastOkAt: Date.now(), lastError: "", lastRssi: wifiRssi, lastUptimeSec: uptimeSec });
   return tempC;
 }
 

@@ -33,8 +33,8 @@ import { buildTuyaBackendContract } from "@/services/connect/providers/TuyaProvi
 import { getConnectCloudHealth, syncConnectProvider, buildConnectCloudDeploymentNotes } from "@/services/connect/connectCloudClient";
 import DeviceAssignmentSheet from "@/components/temperature/DeviceAssignmentSheet";
 import { removeConnectedDevice } from "@/services/connect/DeviceRegistry";
-import { addShellyLocalThermometer, getShellyListenerStatus, getShellyWakeWebhookUrl, pollShellyLocalThermometerOnce, removeShellyLocalThermometer, subscribeShellyDiagnostics, subscribeShellyLocalThermometers } from "@/services/connect/shellyLocalPoller";
-import { summariseThermometer, unmatchedWakeHint } from "@/services/connect/shellyDiagnostics";
+import { addShellyLocalThermometer, getShellyDropLog, getShellyListenerStatus, getShellyWakeWebhookUrl, pollShellyLocalThermometerOnce, removeShellyLocalThermometer, subscribeShellyDiagnostics, subscribeShellyLocalThermometers } from "@/services/connect/shellyLocalPoller";
+import { connectionLines, summariseThermometer, unmatchedWakeHint } from "@/services/connect/shellyDiagnostics";
 
 function ConnectBadge({ device }) {
   const status = getDeviceStatus(device);
@@ -503,7 +503,7 @@ function LocalThermometerManager({ canManageDevices }) {
                 </p>
                 <p className="text-xs text-slate-400">{item.room} • {item.ip} • Safe range {item.min}-{item.max}°C</p>
                 {checkMessages[item.id] && <p className="mt-1 text-xs text-teal-300">{checkMessages[item.id]}</p>}
-                {diag && summariseThermometer(diag.thermometers[item.id], item, clock).map((line, i) => (
+                {diag && [...summariseThermometer(diag.thermometers[item.id], item, clock), ...connectionLines(diag.thermometers[item.id], getShellyDropLog(item.id), clock)].map((line, i) => (
                   <p key={i} className={`mt-1 text-xs ${line.tone === "ok" ? "text-emerald-300" : line.tone === "bad" ? "text-rose-300" : "text-amber-200"}`}>{line.text}</p>
                 ))}
               </div>

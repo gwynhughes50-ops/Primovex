@@ -70,7 +70,7 @@ async fn fetch_local_device_reading(url: String) -> Result<String, String> {
     return Err("Only http:// local-network URLs are supported.".to_string());
   }
   let client = reqwest::Client::builder()
-    .timeout(std::time::Duration::from_secs(5))
+    .timeout(std::time::Duration::from_secs(8))
     .build()
     .map_err(|e| e.to_string())?;
   let response = client.get(&url).send().await.map_err(|e| e.to_string())?;
