@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { ConcernContactCard, ConcernContactFields, QuickConcernSheet, useLoadedContact } from '@/modules/governance/components/ConcernContact';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, Plus, ShieldAlert, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -56,8 +57,10 @@ function getInitialForm() {
     dateOfBirth: '',
     source: 'patient',
     raisedByInitials: '',
-    raisedByContactMethod: 'none',
-    raisedByContactValue: '',
+    raisedByPhone: '',
+    raisedByEmail: '',
+    raisedByPreferred: 'either',
+    contactLoaded: false,
     receivedAt: formatDateInput(today),
     category: 'communication',
     priority: CONCERN_PRIORITIES.low,
@@ -97,8 +100,6 @@ function getFormFromConcern(concern) {
     dateOfBirth: concern.dateOfBirth || '',
     source: concern.source || 'patient',
     raisedByInitials: concern.raisedByInitials || '',
-    raisedByContactMethod: concern.raisedByContactMethod || 'none',
-    raisedByContactValue: concern.raisedByContactValue || '',
     category: concern.category || 'communication',
     priority: concern.priority || CONCERN_PRIORITIES.low,
     summary: concern.summary || '',
@@ -116,6 +117,7 @@ function NewConcernSheet({ actor, onClose, onCreated, users, concern }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const update = (patch) => setForm((current) => ({ ...current, ...patch }));
+  useLoadedContact(isEdit ? concern : null, update);
 
   const chooseOwner = (uid) => {
     const selected = users.find((u) => u.id === uid);
@@ -171,31 +173,10 @@ function NewConcernSheet({ actor, onClose, onCreated, users, concern }) {
             </select>
           </label>
 
-          {form.source !== 'patient' && (
-            <div className="space-y-2 rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-cyan-700">Raised by — anonymised contact details</p>
-              <p className="text-[11px] text-[var(--medtrak-muted)]">Initials only, plus a way to respond. Full name/address stay in the paper file, referenced by {form.reference || 'this case'}.</p>
-              <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Initials
-                <input value={form.raisedByInitials} onChange={(e) => update({ raisedByInitials: e.target.value.toUpperCase() })} placeholder="J.S." className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case" />
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Contact method
-                  <select value={form.raisedByContactMethod} onChange={(e) => update({ raisedByContactMethod: e.target.value, raisedByContactValue: e.target.value === 'none' ? '' : form.raisedByContactValue })} className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case">
-                    {CONCERN_RAISED_BY_CONTACT_METHODS.map((option) => <option key={option} value={option}>{option === 'none' ? 'Not recorded' : friendly(option)}</option>)}
-                  </select>
-                </label>
-                <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Contact details
-                  <input
-                    value={form.raisedByContactValue}
-                    onChange={(e) => update({ raisedByContactValue: e.target.value })}
-                    disabled={form.raisedByContactMethod === 'none'}
-                    placeholder={form.raisedByContactMethod === 'email' ? 'name@example.com' : form.raisedByContactMethod === 'mobile' ? '07…' : '—'}
-                    className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case disabled:opacity-50"
-                  />
-                </label>
-              </div>
-            </div>
-          )}
+          <div className="space-y-2 rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-cyan-700">Raised by{form.source === 'patient' ? ' (the patient)' : ''}: who to reply to</p>
+            <ConcernContactFields form={form} update={update} showInitials={form.source !== 'patient'} />
+          </div>
 
           <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Category
             <select value={form.category} onChange={(e) => update({ category: e.target.value })} className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case">
@@ -352,13 +333,7 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, isAdmi
             <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--medtrak-accent)]">{concern.reference}</p>
             <h2 className="mt-1 text-xl font-bold">{friendly(concern.status)}</h2>
             <p className="mt-1 text-xs text-[var(--medtrak-muted)]">{concern.emisNumber ? `EMIS ${concern.emisNumber}` : `${concern.patientInitials || 'Initials?'} · DOB ${concern.dateOfBirth || '?'}`}</p>
-            {concern.source && concern.source !== 'patient' && (
-              <p className="mt-0.5 text-xs text-[var(--medtrak-muted)]">
-                Raised by: {friendly(concern.source)}
-                {concern.raisedByInitials ? ` — ${concern.raisedByInitials}` : ''}
-                {concern.raisedByContactMethod && concern.raisedByContactMethod !== 'none' ? `, ${friendly(concern.raisedByContactMethod)}: ${concern.raisedByContactValue || 'not recorded'}` : ''}
-              </p>
-            )}
+            <div className="mt-2"><ConcernContactCard concern={concern} canSee={isTeam || (!!concern.ownerUid && concern.ownerUid === actor?.uid)} /></div>
             {concern.mddusRequired && <p className="mt-0.5 text-xs text-[var(--medtrak-muted)]">GMPI/solicitor: {concern.gmpiReference || 'Not yet recorded'}</p>}
           </div>
           <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-2xl border border-[var(--medtrak-border)]"><X className="h-5 w-5" /></button>
@@ -677,7 +652,7 @@ export default function MobileGovernanceConcerns() {
           onDeleted={() => setSelectedId('')}
         />
       )}
-      {creating && isTeam && <NewConcernSheet actor={actor} onClose={() => setCreating(false)} onCreated={() => {}} users={users} />}
+      {creating && isTeam && <QuickConcernSheet actor={actor} users={users} onClose={() => setCreating(false)} onCreated={(id) => setSelectedId(id)} />}
       {editingConcern && <NewConcernSheet actor={actor} concern={editingConcern} onClose={() => setEditingConcern(null)} onCreated={() => {}} users={users} />}
     </main>
   );

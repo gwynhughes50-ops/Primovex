@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ConcernContactCard, ConcernContactFields, QuickConcernSheet, useLoadedContact } from "@/modules/governance/components/ConcernContact";
 import { Printer } from "lucide-react";
 
 import PageHeader from "@/components/common/PageHeader";
@@ -75,8 +76,10 @@ function getInitialForm() {
     dateOfBirth: "",
     source: "patient",
     raisedByInitials: "",
-    raisedByContactMethod: "none",
-    raisedByContactValue: "",
+    raisedByPhone: "",
+    raisedByEmail: "",
+    raisedByPreferred: "either",
+    contactLoaded: false,
     externalReference: "",
     receivedAt: formatDateInput(today),
     acknowledgementDueAt: "",
@@ -143,8 +146,6 @@ function getFormFromConcern(concern) {
     dateOfBirth: concern.dateOfBirth || "",
     source: concern.source || "patient",
     raisedByInitials: concern.raisedByInitials || "",
-    raisedByContactMethod: concern.raisedByContactMethod || "none",
-    raisedByContactValue: concern.raisedByContactValue || "",
     externalReference: concern.externalReference || "",
     receivedAt: formatDateInput(toDate(concern.receivedAt)) || getInitialForm().receivedAt,
     category: concern.category || "communication",
@@ -172,8 +173,10 @@ function ConcernFormModal({ open, onClose, actor, onCreated, users, concern }) {
     if (open) setForm(isEdit ? getFormFromConcern(concern) : getInitialForm());
   }, [open, concern, isEdit]);
 
-  if (!open) return null;
   const update = (patch) => setForm((current) => ({ ...current, ...patch }));
+  useLoadedContact(open && isEdit ? concern : null, update);
+
+  if (!open) return null;
 
   const chooseOwner = (uid) => {
     const selected = users.find((u) => u.id === uid);
@@ -230,30 +233,10 @@ function ConcernFormModal({ open, onClose, actor, onCreated, users, concern }) {
             </select>
           </div>
 
-          {form.source !== "patient" && (
-            <div className="space-y-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/5 p-4 lg:col-span-3">
-              <p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Raised by — anonymised contact details</p>
-              <p className="text-xs text-slate-400">Initials only, plus a way to respond to them. Their full name and address stay in the paper file — reference it by {form.reference || "this case's reference"}.</p>
-              <div className="grid gap-4 pt-1 sm:grid-cols-3">
-                <div className="space-y-2"><label className="text-xs text-slate-300">Initials</label><Input value={form.raisedByInitials} onChange={(e) => update({ raisedByInitials: e.target.value.toUpperCase() })} placeholder="e.g. J.S." /></div>
-                <div className="space-y-2">
-                  <label className="text-xs text-slate-300">Contact method</label>
-                  <select value={form.raisedByContactMethod} onChange={(e) => update({ raisedByContactMethod: e.target.value, raisedByContactValue: e.target.value === "none" ? "" : form.raisedByContactValue })} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-white">
-                    {CONCERN_RAISED_BY_CONTACT_METHODS.map((option) => <option key={option} value={option}>{option === "none" ? "Not recorded" : friendly(option)}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-slate-300">Contact details</label>
-                  <Input
-                    value={form.raisedByContactValue}
-                    onChange={(e) => update({ raisedByContactValue: e.target.value })}
-                    disabled={form.raisedByContactMethod === "none"}
-                    placeholder={form.raisedByContactMethod === "email" ? "name@example.com" : form.raisedByContactMethod === "mobile" ? "07…" : "Select a method first"}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
+          <div className="space-y-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/5 p-4 lg:col-span-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Raised by{form.source === "patient" ? " (the patient)" : ""}: who to reply to</p>
+            <ConcernContactFields form={form} update={update} showInitials={form.source !== "patient"} />
+          </div>
 
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-200">Category</label>
@@ -449,13 +432,7 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
             </div>
             <p className="text-sm text-slate-300">{concern.summary}</p>
             <p className="text-xs text-slate-500">Identifier: {concern.emisNumber ? `EMIS ${concern.emisNumber}` : `${concern.patientInitials || "Initials missing"} | DOB ${concern.dateOfBirth || "missing"}`}</p>
-            {concern.source && concern.source !== "patient" && (
-              <p className="text-xs text-slate-500">
-                Raised by: {friendly(concern.source)}
-                {concern.raisedByInitials ? ` — ${concern.raisedByInitials}` : ""}
-                {concern.raisedByContactMethod && concern.raisedByContactMethod !== "none" ? `, ${friendly(concern.raisedByContactMethod)}: ${concern.raisedByContactValue || "not recorded"}` : ""}
-              </p>
-            )}
+            <ConcernContactCard concern={concern} canSee={isTeam || (!!concern.ownerUid && concern.ownerUid === actor?.uid)} />
             {concern.mddusRequired && <p className="text-xs text-slate-500">GMPI / solicitor: {concern.gmpiReference || "Not yet recorded"}</p>}
             {isTeam ? (
               <div className="flex items-center gap-2 pt-1">
@@ -818,7 +795,7 @@ export default function GovernanceConcerns() {
           />
         </div>
 
-        <ConcernFormModal open={openCreate} onClose={() => setOpenCreate(false)} actor={actor} users={users} />
+        {openCreate && <QuickConcernSheet actor={actor} users={users} onClose={() => setOpenCreate(false)} onCreated={(id) => setSelectedId(id)} />}
         <ConcernFormModal open={!!editingConcern} concern={editingConcern} onClose={() => setEditingConcern(null)} actor={actor} users={users} />
     </div>
   );

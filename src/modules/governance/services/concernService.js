@@ -5,6 +5,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
@@ -17,12 +18,16 @@ import {
 
 import { db } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
+import { cleanContact, contactFromForm, hasContact, legacyContact } from "@/modules/governance/concernContact";
 import { demoGovernanceCases, demoConcernTimeline, demoLearningActions } from "@/data/demoDataset";
 
 export const CONCERNS_COLLECTION = "governance_concerns";
 export const CONCERN_TIMELINE_COLLECTION = "governance_concern_timeline";
 export const CONCERN_LEARNING_COLLECTION = "governance_concern_learning_actions";
 export const CONCERN_CORRESPONDENCE_COLLECTION = "governance_concern_correspondence";
+// The phone number and email of whoever raised the concern. Its own record, readable only by the concerns team and the
+// case's owner (see firestore.rules), so it never shows in lists, search, the partner view, the Orb or a printed pack.
+export const CONCERN_CONTACTS_COLLECTION = "governance_concern_contacts";
 export const CONCERN_MEETINGS_COLLECTION = "governance_concern_meetings";
 export const CORRESPONDENCE_TYPES = ["letter", "meeting", "phone", "email", "other"];
 
@@ -198,8 +203,9 @@ export function buildConcernPayload(form, actor = {}) {
     dateOfBirth: form.dateOfBirth || "",
     source: form.source || "patient",
     raisedByInitials: String(form.raisedByInitials || "").trim().toUpperCase(),
-    raisedByContactMethod: CONCERN_RAISED_BY_CONTACT_METHODS.includes(form.raisedByContactMethod) ? form.raisedByContactMethod : "none",
-    raisedByContactValue: String(form.raisedByContactValue || "").trim(),
+    raisedByContactMethod: "none",
+    raisedByContactValue: "",
+    hasContactDetails: hasContact(contactFromForm(form)),
     externalReference: String(form.externalReference || "").trim(),
     receivedAt: Timestamp.fromDate(received),
     acknowledgementDueAt: Timestamp.fromDate(acknowledgementDue),
@@ -281,6 +287,8 @@ export async function createConcern(form, actor = {}) {
   // "already exists" (which reads as a failed save and invites a duplicate).
   const ref = doc(collection(db, CONCERNS_COLLECTION));
   await setDoc(ref, payload);
+  const contact = contactFromForm(form);
+  if (hasContact(contact)) await saveConcernContact(ref.id, contact, actor);
   await addConcernTimeline(ref.id, {
     type: "created",
     title: "Concern received",
@@ -311,6 +319,48 @@ export async function updateConcern(concernId, patch = {}, actor = {}) {
 // ownerUid/ownerName, involvedUserIds, createdAt/createdByUid or the
 // listening/learning timestamps, all of which have their own dedicated
 // controls already (assign owner, move-to-stage buttons, etc.).
+// Save (or, when everything is blank, clear) the contact details for a case. Never part of the case record itself.
+export async function saveConcernContact(concernId, contact, actor = {}) {
+  if (isSafeSyntheticMode() || !concernId) return;
+  const clean = cleanContact(contact);
+  if (!hasContact(clean)) {
+    await deleteDoc(doc(db, CONCERN_CONTACTS_COLLECTION, concernId)).catch(() => {});
+    return;
+  }
+  await setDoc(doc(db, CONCERN_CONTACTS_COLLECTION, concernId), {
+    concernId,
+    ...clean,
+    updatedByUid: actor.uid || null,
+    updatedByName: actor.displayName || actor.email || "Unknown",
+    updatedAt: serverTimestamp(),
+  });
+}
+
+// The contact details for a case, live. Calls back with null when none are recorded or the person may not see them
+// (the concerns team and the owner can; for an older case the value kept on the case itself is used as a fallback).
+export function subscribeConcernContact(concern, callback) {
+  if (isSafeSyntheticMode() || !concern?.id) { callback(null); return () => {}; }
+  return onSnapshot(
+    doc(db, CONCERN_CONTACTS_COLLECTION, concern.id),
+    (snap) => {
+      if (snap.exists()) return callback(cleanContact(snap.data()));
+      const old = legacyContact(concern);
+      callback(hasContact(old) ? old : null);
+    },
+    () => { const old = legacyContact(concern); callback(hasContact(old) ? old : null); },
+  );
+}
+
+export async function getConcernContact(concernId) {
+  if (isSafeSyntheticMode() || !concernId) return null;
+  try {
+    const snap = await getDoc(doc(db, CONCERN_CONTACTS_COLLECTION, concernId));
+    return snap.exists() ? cleanContact(snap.data()) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function updateConcernDetails(concernId, form, actor = {}) {
   const emisNumber = String(form.emisNumber || "").trim();
   await updateConcern(concernId, {
@@ -321,8 +371,9 @@ export async function updateConcernDetails(concernId, form, actor = {}) {
     dateOfBirth: form.dateOfBirth || "",
     source: form.source || "patient",
     raisedByInitials: String(form.raisedByInitials || "").trim().toUpperCase(),
-    raisedByContactMethod: CONCERN_RAISED_BY_CONTACT_METHODS.includes(form.raisedByContactMethod) ? form.raisedByContactMethod : "none",
-    raisedByContactValue: String(form.raisedByContactValue || "").trim(),
+    raisedByContactMethod: "none",
+    raisedByContactValue: "",
+    ...(form.contactLoaded ? { hasContactDetails: hasContact(contactFromForm(form)) } : {}),
     externalReference: String(form.externalReference || "").trim(),
     category: form.category || "other",
     priority: form.priority || CONCERN_PRIORITIES.low,
@@ -336,6 +387,8 @@ export async function updateConcernDetails(concernId, form, actor = {}) {
     mddusRequired: !!form.mddusRequired,
     gmpiReference: String(form.gmpiReference || "").trim(),
   }, actor);
+  // only when the existing details were read first, so a read that failed can never wipe them
+  if (form.contactLoaded) await saveConcernContact(concernId, contactFromForm(form), actor);
   await addConcernTimeline(concernId, { type: "edited", title: "Case details updated", message: "Intake details were edited.", actor });
 }
 

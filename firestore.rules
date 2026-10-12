@@ -332,6 +332,18 @@ match /governance_concerns/{concernId} {
   allow delete: if isAdmin();
 }
 
+// The phone number and email of whoever raised a concern. Kept apart from the case so it can be read by fewer people:
+// the concerns team and the case's owner only (not partners, not people merely involved in the case). The id is the case's id.
+match /governance_concern_contacts/{concernId} {
+  allow get: if signedIn() && (
+    isConcernsTeam()
+    || get(/databases/$(database)/documents/governance_concerns/$(concernId)).data.ownerUid == request.auth.uid
+  );
+  allow list: if false;
+  allow create, update: if isConcernsTeam();
+  allow delete: if isConcernsTeam();
+}
+
 match /governance_concern_timeline/{timelineId} {
   allow get, list: if signedIn() && (
     isConcernsTeam() || isGovernancePartner()

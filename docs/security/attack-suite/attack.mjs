@@ -954,6 +954,39 @@ async function main() {
     await assertFails(getDoc(doc(anon, "sensor_config", "sensor-1")));
   });
 
+  console.log("\n=== 22. Contact details of whoever raised a concern (governance_concern_contacts) ===");
+  const contact = (extra = {}) => ({ concernId: "concern-1", phone: "07123 456789", email: "jo@example.com", preferred: "either", ...extra });
+  await seed(async (db) => {
+    await setDoc(doc(db, "governance_concerns", "concern-owned"), { reference: "CN-OWNED", ownerUid: "nurse-uid", ownerName: "Nina", involvedUserIds: [], summary: "x", status: "received" });
+    await setDoc(doc(db, "governance_concern_contacts", "concern-1"), contact());
+    await setDoc(doc(db, "governance_concern_contacts", "concern-owned"), contact({ concernId: "concern-owned" }));
+  });
+  await check("The concerns team (Reception) and an administrator CAN read and save contact details", async () => {
+    await assertSucceeds(getDoc(doc(reception, "governance_concern_contacts", "concern-1")));
+    await assertSucceeds(getDoc(doc(admin, "governance_concern_contacts", "concern-1")));
+    await assertSucceeds(setDoc(doc(reception, "governance_concern_contacts", "concern-1"), contact({ phone: "01234 567890" })));
+  });
+  await check("The owner of the case CAN read its contact details but CANNOT change them", async () => {
+    await assertSucceeds(getDoc(doc(nurse, "governance_concern_contacts", "concern-owned")));
+    await assertFails(setDoc(doc(nurse, "governance_concern_contacts", "concern-owned"), contact({ concernId: "concern-owned", phone: "0" })));
+  });
+  await check("Someone merely involved in the case CANNOT read the contact details, nor the owner's other cases", async () => {
+    await assertFails(getDoc(doc(user, "governance_concern_contacts", "concern-1")));
+    await assertFails(getDoc(doc(nurse, "governance_concern_contacts", "concern-1")));
+  });
+  await check("A partner, a read-only user, a caretaker and anonymous CANNOT read contact details", async () => {
+    for (const who of [partner, readonly, caretaker, anon]) await assertFails(getDoc(doc(who, "governance_concern_contacts", "concern-1")));
+  });
+  await check("Nobody can list every contact record, even the concerns team", async () => {
+    await assertFails(getDocs(collection(reception, "governance_concern_contacts")));
+    await assertFails(getDocs(collection(admin, "governance_concern_contacts")));
+  });
+  await check("Only the concerns team can create or remove contact details", async () => {
+    for (const who of [partner, readonly, user, anon]) await assertFails(setDoc(doc(who, "governance_concern_contacts", "concern-x"), contact({ concernId: "concern-x" })));
+    await assertFails(deleteDoc(doc(partner, "governance_concern_contacts", "concern-1")));
+    await assertSucceeds(deleteDoc(doc(reception, "governance_concern_contacts", "concern-owned")));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);
