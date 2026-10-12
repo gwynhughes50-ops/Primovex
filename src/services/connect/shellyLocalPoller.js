@@ -12,6 +12,7 @@ import {
 import { db } from "@/lib/firebase";
 import { CONNECTED_DEVICES_COLLECTION } from "./DeviceRegistry";
 import { SHELLY_LOCAL_PROVIDER_ID } from "./providers/ShellyLocalProvider";
+import { describeShellyError } from "./shellyDiagnostics";
 
 // Config for practice-owned local thermometers (name/room/local IP/safe
 // range). Kept separate from connected_devices — that collection holds the
@@ -21,6 +22,29 @@ import { SHELLY_LOCAL_PROVIDER_ID } from "./providers/ShellyLocalProvider";
 export const SHELLY_LOCAL_THERMOMETERS_COLLECTION = "shelly_local_thermometers";
 
 const DEFAULT_POLL_INTERVAL_MS = 3 * 60 * 1000;
+
+// What this PC has seen since Primovex was opened, for the Connect page: when each thermometer last answered or failed
+// (and why, in plain words), every wake call heard, and whether polling is running. Kept in memory only.
+const diagnostics = { polling: false, pollEveryMs: 0, lastRunAt: 0, thermometers: {}, wakes: [] };
+const diagnosticListeners = new Set();
+const notifyDiagnostics = () => diagnosticListeners.forEach((fn) => fn(diagnostics));
+const noteThermometer = (id, patch) => { diagnostics.thermometers[id] = { ...diagnostics.thermometers[id], ...patch }; notifyDiagnostics(); };
+export function subscribeShellyDiagnostics(callback) {
+  diagnosticListeners.add(callback);
+  callback(diagnostics);
+  return () => diagnosticListeners.delete(callback);
+}
+
+// whether the little wake listener on this PC managed to open its port (false if something else is using it)
+export async function getShellyListenerStatus() {
+  if (!isTauriDesktop()) return null;
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    return Boolean(await invoke("shelly_listener_status"));
+  } catch {
+    return null;
+  }
+}
 
 // Must match SHELLY_WAKE_PORT in src-tauri/src/lib.rs.
 const SHELLY_WAKE_PORT = 47281;
@@ -126,7 +150,17 @@ export async function readShellyStatus(ip) {
 // page can offer a "Check now" button rather than waiting for the next
 // scheduled poll — handy right after adding a new thermometer.
 export async function pollShellyLocalThermometerOnce(config) {
-  const { tempC, humidityPct, batteryPercent } = await readShellyStatus(config.ip);
+  let reading;
+  try {
+    reading = await readShellyStatus(config.ip);
+  } catch (error) {
+    const reason = describeShellyError(error, config);
+    noteThermometer(config.id, { lastAttemptAt: Date.now(), lastError: reason });
+    const friendly = new Error(reason);
+    friendly.cause = error;
+    throw friendly;
+  }
+  const { tempC, humidityPct, batteryPercent } = reading;
   await setDoc(
     doc(db, CONNECTED_DEVICES_COLLECTION, config.id),
     {
@@ -147,6 +181,7 @@ export async function pollShellyLocalThermometerOnce(config) {
     },
     { merge: true }
   );
+  noteThermometer(config.id, { lastAttemptAt: Date.now(), lastOkAt: Date.now(), lastError: "" });
   return tempC;
 }
 
@@ -155,6 +190,8 @@ export async function pollShellyLocalThermometerOnce(config) {
 // the time. Those are read instead the moment their wake webhook fires; see
 // startShellyLocalPolling.
 async function pollOnce() {
+  diagnostics.lastRunAt = Date.now();
+  notifyDiagnostics();
   const snap = await getDocs(collection(db, SHELLY_LOCAL_THERMOMETERS_COLLECTION));
   await Promise.all(
     snap.docs
@@ -193,9 +230,14 @@ async function readAwakeThermometer(config) {
 // nothing needs to be embedded in the webhook URL itself.
 async function handleDeviceWoke(sourceIp) {
   if (!sourceIp) return;
+  diagnostics.wakes = [{ ip: sourceIp, at: Date.now() }, ...diagnostics.wakes].slice(0, 10);
+  notifyDiagnostics();
   const snap = await getDocs(collection(db, SHELLY_LOCAL_THERMOMETERS_COLLECTION));
   const config = snap.docs.map((row) => ({ id: row.id, ...row.data() })).find((row) => row.ip === sourceIp);
-  if (config) await readAwakeThermometer(config);
+  if (config) {
+    noteThermometer(config.id, { lastWakeAt: Date.now() });
+    await readAwakeThermometer(config);
+  }
 }
 
 // Starts the background polling loop and the wake-webhook listener together;
@@ -207,6 +249,9 @@ export function startShellyLocalPolling(intervalMs = DEFAULT_POLL_INTERVAL_MS) {
   if (!isTauriDesktop()) return () => {};
 
   let cancelled = false;
+  diagnostics.polling = true;
+  diagnostics.pollEveryMs = intervalMs;
+  notifyDiagnostics();
   pollOnce().catch((error) => console.warn("Initial local thermometer poll failed", error));
   const timer = setInterval(() => {
     if (!cancelled) pollOnce().catch((error) => console.warn("Local thermometer poll failed", error));
@@ -225,6 +270,8 @@ export function startShellyLocalPolling(intervalMs = DEFAULT_POLL_INTERVAL_MS) {
 
   return () => {
     cancelled = true;
+    diagnostics.polling = false;
+    notifyDiagnostics();
     clearInterval(timer);
     unlistenWake?.();
   };

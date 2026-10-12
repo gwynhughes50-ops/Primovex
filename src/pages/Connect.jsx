@@ -33,7 +33,8 @@ import { buildTuyaBackendContract } from "@/services/connect/providers/TuyaProvi
 import { getConnectCloudHealth, syncConnectProvider, buildConnectCloudDeploymentNotes } from "@/services/connect/connectCloudClient";
 import DeviceAssignmentSheet from "@/components/temperature/DeviceAssignmentSheet";
 import { removeConnectedDevice } from "@/services/connect/DeviceRegistry";
-import { addShellyLocalThermometer, getShellyWakeWebhookUrl, pollShellyLocalThermometerOnce, removeShellyLocalThermometer, subscribeShellyLocalThermometers } from "@/services/connect/shellyLocalPoller";
+import { addShellyLocalThermometer, getShellyListenerStatus, getShellyWakeWebhookUrl, pollShellyLocalThermometerOnce, removeShellyLocalThermometer, subscribeShellyDiagnostics, subscribeShellyLocalThermometers } from "@/services/connect/shellyLocalPoller";
+import { summariseThermometer, unmatchedWakeHint } from "@/services/connect/shellyDiagnostics";
 
 function ConnectBadge({ device }) {
   const status = getDeviceStatus(device);
@@ -381,6 +382,15 @@ function LocalThermometerManager({ canManageDevices }) {
 
   useEffect(() => subscribeShellyLocalThermometers(setThermometers), []);
 
+  // what this PC has actually seen: when each thermometer last answered, and why not when it didn't
+  const [diag, setDiag] = useState(null);
+  const [listenerUp, setListenerUp] = useState(null);
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => subscribeShellyDiagnostics((d) => { setDiag({ ...d, thermometers: { ...d.thermometers }, wakes: [...d.wakes] }); setClock(Date.now()); }), []);
+  useEffect(() => { getShellyListenerStatus().then(setListenerUp); }, []);
+  useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 30000); return () => window.clearInterval(timer); }, []);
+  const strayWake = unmatchedWakeHint(diag?.wakes || [], thermometers);
+
   async function submitAdd(event) {
     event.preventDefault();
     setBusy(true);
@@ -412,8 +422,7 @@ function LocalThermometerManager({ canManageDevices }) {
       const value = await pollShellyLocalThermometerOnce(item);
       setCheckMessages((c) => ({ ...c, [item.id]: `${value.toFixed(1)}°C — reachable` }));
     } catch (error) {
-      const hint = item.wakeOnly ? " This is normal for a battery sensor between wake-ups — it updates on its own each time it reports." : "";
-      setCheckMessages((c) => ({ ...c, [item.id]: (error?.message || "Could not reach this thermometer.") + hint }));
+      setCheckMessages((c) => ({ ...c, [item.id]: error?.message || "Could not reach this thermometer." }));
     } finally {
       setCheckingId(null);
     }
@@ -473,6 +482,15 @@ function LocalThermometerManager({ canManageDevices }) {
         </form>
       )}
 
+      {diag && (
+        <div className="mt-3 rounded-xl border border-white/10 bg-slate-950/40 p-3 text-xs text-slate-300" aria-label="What this PC is doing">
+          <p><span className={diag.polling ? "text-emerald-300" : "text-rose-300"}>{diag.polling ? "Checking" : "Not checking"}</span>{diag.polling ? ` mains thermometers every ${Math.round(diag.pollEveryMs / 60000)} minutes from this PC${diag.lastRunAt ? `, last at ${new Date(diag.lastRunAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}` : ""}.` : " from this PC. It only works in the desktop app, signed in, on the practice's WiFi."}</p>
+          {listenerUp !== null && <p className="mt-1"><span className={listenerUp ? "text-emerald-300" : "text-rose-300"}>{listenerUp ? "Listening" : "Not listening"}</span> for battery sensors waking{listenerUp ? "." : ": another program is using the port, so a battery sensor can never report. Close it, or restart this PC."}</p>}
+          {strayWake && <p className="mt-2 text-amber-200">{strayWake}</p>}
+          <p className="mt-2 text-slate-500">Readings only come in while Primovex is open on a PC on the same WiFi as the thermometers. If this PC is off or closed, they show Offline.</p>
+        </div>
+      )}
+
       <div className="mt-4 space-y-2">
         {thermometers.length === 0 && <p className="text-sm text-slate-500">No local thermometers configured yet.</p>}
         {thermometers.map((item) => (
@@ -485,6 +503,9 @@ function LocalThermometerManager({ canManageDevices }) {
                 </p>
                 <p className="text-xs text-slate-400">{item.room} • {item.ip} • Safe range {item.min}-{item.max}°C</p>
                 {checkMessages[item.id] && <p className="mt-1 text-xs text-teal-300">{checkMessages[item.id]}</p>}
+                {diag && summariseThermometer(diag.thermometers[item.id], item, clock).map((line, i) => (
+                  <p key={i} className={`mt-1 text-xs ${line.tone === "ok" ? "text-emerald-300" : line.tone === "bad" ? "text-rose-300" : "text-amber-200"}`}>{line.text}</p>
+                ))}
               </div>
               {canManageDevices && (
                 <div className="flex shrink-0 items-center gap-1">

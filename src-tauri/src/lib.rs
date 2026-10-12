@@ -211,6 +211,17 @@ fn show_alert(app: &tauri::AppHandle, payload: serde_json::Value) -> Result<(), 
 #[cfg(desktop)]
 const SHELLY_WAKE_PORT: u16 = 47281;
 
+// Whether the wake listener managed to open its port (another program may already be using it), so the Connect page
+// can say so instead of a battery sensor just silently never reporting.
+#[cfg(desktop)]
+static SHELLY_LISTENER_UP: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(desktop)]
+#[tauri::command]
+fn shelly_listener_status() -> bool {
+  SHELLY_LISTENER_UP.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 #[cfg(desktop)]
 fn start_shelly_wake_listener(app: tauri::AppHandle) {
   std::thread::spawn(move || {
@@ -221,6 +232,7 @@ fn start_shelly_wake_listener(app: tauri::AppHandle) {
         return;
       }
     };
+    SHELLY_LISTENER_UP.store(true, std::sync::atomic::Ordering::Relaxed);
     for request in server.incoming_requests() {
       let remote_ip = request.remote_addr().map(|addr| addr.ip().to_string());
       let is_wake_ping = request.url().starts_with("/shelly-wake");
@@ -527,6 +539,8 @@ pub fn run() {
       fetch_local_device_reading,
       #[cfg(desktop)]
       local_lan_ip,
+      #[cfg(desktop)]
+      shelly_listener_status,
       #[cfg(desktop)]
       show_alert_popup,
       #[cfg(desktop)]
