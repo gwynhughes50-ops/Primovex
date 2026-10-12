@@ -8,7 +8,7 @@ import { isSafeSyntheticMode } from "@/config/platformMode";
 import useNotifications from "@/hooks/useNotifications";
 import FridgeIncidentSheet from "@/components/temperature/FridgeIncidentSheet";
 import ComplianceIncidentSheet from "@/components/compliance/ComplianceIncidentSheet";
-import { QUICK_REPLIES, REPLY_MAX, SNOOZE_CHOICES, isActionAlert, isComplianceAlert, messageQueue, senderOf, validateReply, whenLabel } from "./messageCard";
+import { QUICK_REPLIES, REPLY_MAX, SNOOZE_CHOICES, isActionAlert, isCardMessage, isComplianceAlert, messageQueue, senderOf, validateReply, whenLabel } from "./messageCard";
 
 // A message from a colleague appears in the middle of the screen, on the desktop and the phone, as soon as
 // it arrives (or when the person signs in): who it is from, what it says, and Reply, Dismiss or Snooze.
@@ -25,6 +25,7 @@ export default function MessageCardHost() {
   const [hidden, setHidden] = useState(() => new Set());
   const [browsing, setBrowsing] = useState(false); // opened from "Messages": everything unread, newest first
   const [index, setIndex] = useState(0);
+  const [focusId, setFocusId] = useState(null); // "Open" on a notification: show that message, whether or not it has been read
   const [mode, setMode] = useState("read"); // read | reply | snooze
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -47,6 +48,12 @@ export default function MessageCardHost() {
     return () => window.removeEventListener("primovex:open-messages", open);
   }, []);
 
+  useEffect(() => {
+    const open = (event) => { if (event?.detail?.id) setFocusId(event.detail.id); };
+    window.addEventListener("primovex:open-message", open);
+    return () => window.removeEventListener("primovex:open-message", open);
+  }, []);
+
   // wakes snoozed messages while the app is open
   useEffect(() => {
     const timer = window.setInterval(() => setTick(Date.now()), 60 * 1000);
@@ -57,7 +64,8 @@ export default function MessageCardHost() {
   const waiting = useMemo(() => messageQueue(rows, { now, hidden }), [rows, now, hidden]);
   const everything = useMemo(() => messageQueue(rows, { now, hidden, everything: true }), [rows, now, hidden]);
   const queue = browsing ? everything : waiting;
-  const current = queue[browsing ? Math.min(index, Math.max(queue.length - 1, 0)) : 0] || null;
+  const focused = focusId ? rows.find((row) => row.id === focusId && isCardMessage(row)) || null : null;
+  const current = focused || queue[browsing ? Math.min(index, Math.max(queue.length - 1, 0)) : 0] || null;
 
   const reset = useCallback(() => { setMode("read"); setText(""); setError(""); setBusy(false); }, []);
   useEffect(() => { reset(); }, [current?.id, reset]);
@@ -66,9 +74,10 @@ export default function MessageCardHost() {
 
   const putAside = useCallback(() => {
     if (!current) return;
+    if (focused) { setFocusId(null); return; }
     if (browsing) { setBrowsing(false); return; }
     setHidden((old) => new Set(old).add(current.id));
-  }, [browsing, current]);
+  }, [browsing, current, focused]);
 
   useEffect(() => {
     if (!current) return undefined;
@@ -83,10 +92,11 @@ export default function MessageCardHost() {
     try { await work(); } catch (problem) { setError(problem?.message || "That didn't work. Try again."); } finally { setBusy(false); }
   };
 
-  const dismiss = () => run(() => markRead(current.id));
+  const dismiss = () => run(async () => { await markRead(current.id); setFocusId(null); });
   const snoozeFor = (option) => run(() => snooze(current.id, option));
   const sendReply = (payload) => run(async () => {
     const result = await httpsCallable(functions, "replyToMessage")({ notificationId: current.id, ...payload });
+    setFocusId(null);
     setToast(`Reply sent to ${result?.data?.toName || senderOf(current)}.`);
     window.setTimeout(() => setToast(""), 2800);
   });
@@ -138,7 +148,7 @@ export default function MessageCardHost() {
     {toastView}
     {incidentSheet}
     <div className="fixed inset-0 z-[160] grid place-items-center bg-black/45 p-4 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) putAside(); }}>
-      <section role="dialog" aria-modal="true" aria-labelledby="message-card-title" className="max-h-[calc(100dvh-2rem-var(--pvx-sheet-bottom-clearance,0px))] w-full max-w-md overflow-y-auto rounded-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-5 text-[var(--medtrak-text)] shadow-2xl">
+      <section role="dialog" aria-modal="true" aria-labelledby="message-card-title" className="max-h-[calc(100dvh-2rem-var(--pvx-sheet-bottom-clearance,0px))] w-full max-w-lg overflow-y-auto rounded-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-5 text-[var(--medtrak-text)] shadow-2xl">
         <header className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
             <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-full ${isAlert ? "bg-rose-500/15 text-rose-600" : "bg-[var(--medtrak-accent)]/15 text-[var(--medtrak-accent)]"}`}>{isAlert ? <ShieldAlert className="h-5 w-5" aria-hidden="true" /> : <BellRing className="h-5 w-5" aria-hidden="true" />}</span>
@@ -181,12 +191,12 @@ export default function MessageCardHost() {
           </div>
         ) : (
           <>
-            <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Quick replies">
+            <div className="mt-4 grid grid-cols-6 gap-2" role="group" aria-label="Quick replies">
               {QUICK_REPLIES.map((quick, i) => (
-                <button key={quick.key} ref={i === 0 ? firstButton : null} type="button" onClick={() => sendReply({ quick: quick.key })} disabled={busy} className="min-h-11 rounded-full border border-[var(--medtrak-accent)] px-4 text-sm font-bold text-[var(--medtrak-accent)] disabled:opacity-40">{quick.label}</button>
+                <button key={quick.key} ref={i === 0 ? firstButton : null} type="button" onClick={() => sendReply({ quick: quick.key })} disabled={busy} className={`min-h-11 min-w-0 whitespace-nowrap rounded-full border border-[var(--medtrak-accent)] px-2 text-sm font-bold text-[var(--medtrak-accent)] disabled:opacity-40 ${i < 3 ? "col-span-2" : "col-span-3"}`}>{quick.label}</button>
               ))}
             </div>
-            <div className="mt-3 grid grid-cols-3 gap-2">
+            <div className="mt-3 grid grid-cols-3 gap-2 [&>button]:min-w-0 [&>button]:whitespace-nowrap">
               <button type="button" onClick={() => setMode("reply")} disabled={busy} className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl bg-[var(--medtrak-accent)] px-2 text-sm font-bold text-white disabled:opacity-40"><MessageSquare className="h-4 w-4" aria-hidden="true" /> Reply</button>
               <button type="button" onClick={() => setMode("snooze")} disabled={busy} className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-[var(--medtrak-border)] px-2 text-sm font-bold"><Clock className="h-4 w-4" aria-hidden="true" /> Snooze</button>
               <button type="button" onClick={dismiss} disabled={busy} className="min-h-11 rounded-xl border border-[var(--medtrak-border)] px-2 text-sm font-bold">Dismiss</button>

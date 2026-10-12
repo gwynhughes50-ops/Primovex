@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { openNotification } from "../src/messaging/openNotification.js";
 import { QUICK_REPLIES, SNOOZE_CHOICES, isActionAlert, isCardMessage, isComplianceAlert, isFridgeAlert, isPersonMessage, messageQueue, senderOf, validateReply, whenLabel } from "../src/messaging/messageCard.js";
 
 let n = 0;
@@ -85,6 +86,21 @@ t("a typed reply is checked the way the server checks it", () => {
 t("the quick replies and snooze choices are the ones the server and the app know", () => {
   assert.deepEqual(QUICK_REPLIES.map((q) => q.key), ["done", "on_it", "will_do", "thanks", "cant_today"]);
   assert.deepEqual(SNOOZE_CHOICES.map((s) => s.option), ["one_hour", "later_today", "tomorrow"]);
+});
+
+t("'Open' on a message or a reply shows its card; anything else goes to its page", () => {
+  const seen = [];
+  globalThis.window = { dispatchEvent: (event) => seen.push(event.detail.id) };
+  const went = [];
+  const navigate = (url) => went.push(url);
+  openNotification(msg("reply1", { kind: "message-reply", actionUrl: "/notifications" }), navigate);
+  openNotification(msg("m2", { actionUrl: "/inventory" }), navigate);
+  assert.deepEqual(seen, ["reply1", "m2"], "a person's message opens the card, wherever its link points");
+  assert.deepEqual(went, []);
+  openNotification({ id: "n3", kind: "stock-alert", actionUrl: "/inventory" }, navigate);
+  assert.deepEqual(went, ["/inventory"]);
+  openNotification({ id: "n4", kind: "stock-alert" }, navigate);
+  assert.equal(went.length, 1, "nothing to open, nothing happens");
 });
 
 console.log(`\n${n} passed`);

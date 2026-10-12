@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { openNotification as openNotificationItem } from "@/messaging/openNotification";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import SectionCard from "@/components/common/SectionCard";
@@ -61,7 +62,7 @@ export default function OperationsCentre() {
   }), [firstName, summary, governanceMetrics, governancePrompts, connectIntelligence, stockItems]);
 
   const openNotification = (item) => {
-    if (item?.actionUrl) navigate(item.actionUrl);
+    openNotificationItem(item, navigate);
   };
 
   return (

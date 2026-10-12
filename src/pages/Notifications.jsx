@@ -15,6 +15,7 @@ import { Icons } from "@/config/medtrakIcons";
 import useNotificationSettings from "@/hooks/useNotificationSettings";
 import useNotifications from "@/hooks/useNotifications";
 import { normalizeNotification } from "@/services/notificationCentreService";
+import { openNotification as openNotificationItem } from "@/messaging/openNotification";
 import { isTauriRuntime } from "@/release/updateService";
 import { isDesktopAlertsEnabled, setDesktopAlertsEnabled } from "@/desktop/alerts/alertRules";
 
@@ -66,8 +67,7 @@ export default function Notifications() {
   const counts = summary?.counts || { critical: 0, high: 0, routine: 0, info: 0, total: 0 };
 
   const openNotification = (notification) => {
-    const item = normalizeNotification(notification);
-    if (item.actionUrl) navigate(item.actionUrl);
+    openNotificationItem(normalizeNotification(notification), navigate);
   };
 
   return (
