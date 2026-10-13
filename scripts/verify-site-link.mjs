@@ -1,7 +1,7 @@
 // Covers linking the Space Registry's sites to Practice Admin's
 // (src/modules/sense/services/siteLink.js).
 import assert from "node:assert/strict";
-import { createLinkedSite, linkSite, planSiteLinks, reconcileLinkedNames, spaceNamesForSite } from "../src/modules/sense/services/siteLink.js";
+import { createLinkedSite, linkSite, planSiteLinks, reconcileLinkedNames, roomsOfPractice, spaceNamesForSite } from "../src/modules/sense/services/siteLink.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n++; console.log("ok  " + name); };
@@ -76,6 +76,28 @@ t("spaceNamesForSite: a site that isn't linked yet offers every room, not none",
   assert.deepEqual(spaceNamesForSite(registry(), [main], "Main Surgery"), ["Store Room", "Treatment Room 1"]);
   assert.deepEqual(spaceNamesForSite(registry(), [main], "Something else"), ["Store Room", "Treatment Room 1"]);
   assert.deepEqual(spaceNamesForSite(registry(), [main], ""), ["Store Room", "Treatment Room 1"]);
+});
+
+t("every set-up room is listed with its site, so a room with no stock can still be counted", () => {
+  const registry = {
+    sites: [{ id: "SITE-MAIN", name: "Main", practiceSiteId: "p1" }, { id: "SITE-B", name: "Branch Site" }],
+    spaces: [
+      { id: "s1", name: "D95", siteId: "SITE-MAIN" },
+      { id: "s2", name: "Store Room", siteId: "SITE-MAIN" },
+      { id: "s3", name: "Dispensary", siteId: "SITE-B" },
+      { id: "s4", name: "Old Room", siteId: "SITE-MAIN", status: "archived" },
+      { id: "s5", name: "D95", siteId: "SITE-MAIN" },
+      { id: "s6", name: "Loose room", siteId: "SITE-GONE" },
+    ],
+  };
+  const rooms = roomsOfPractice(registry, [{ id: "p1", name: "Main Surgery" }]);
+  assert.deepEqual(rooms, [
+    { site: "", name: "Loose room" },
+    { site: "Branch Site", name: "Dispensary" },
+    { site: "Main Surgery", name: "D95" },
+    { site: "Main Surgery", name: "Store Room" },
+  ]);
+  assert.deepEqual(roomsOfPractice(null), []);
 });
 
 console.log(`\n${n} passed`);

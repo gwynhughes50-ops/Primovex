@@ -74,6 +74,27 @@ export function reconcileLinkedNames(state, practiceSites = []) {
   return next;
 }
 
+// Every room the practice has set up, with the site it belongs to: the Practice Admin site it is linked to, else the
+// space registry's own site name, else none. One entry per site and room, sorted. Used to offer a room for counting even
+// when no stock has been recorded in it yet.
+export function roomsOfPractice(registry, practiceSites = []) {
+  const registrySites = registry?.sites || [];
+  const seen = new Set();
+  const rooms = [];
+  for (const space of (registry?.spaces || []).filter(isActive)) {
+    const name = String(space.name || "").trim();
+    if (!name) continue;
+    const regSite = registrySites.find((site) => site.id === space.siteId);
+    const linked = regSite?.practiceSiteId ? practiceSites.find((p) => p.id === regSite.practiceSiteId) : null;
+    const site = String(linked?.name || regSite?.name || "").trim();
+    const key = `${norm(site)}|${norm(name)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rooms.push({ site, name });
+  }
+  return rooms.sort((a, b) => a.site.localeCompare(b.site) || a.name.localeCompare(b.name, "en", { numeric: true }));
+}
+
 // The spaces (rooms) that belong to a site, for a Location dropdown that's
 // narrowed by the chosen Site. Sites are matched by name. If the name isn't a
 // Practice Admin site, or hasn't been linked to a registry site yet, every

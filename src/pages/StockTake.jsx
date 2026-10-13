@@ -29,12 +29,8 @@ const ukDate = (key) => (key ? key.split("-").reverse().join("/") : "");
 function NewTake({ items, onCancel, onCreated }) {
   const { user, role } = useAuth();
   const creator = { uid: user?.uid || "", name: user?.displayName || user?.email || "Unknown" };
-  const { siteNames, spaceNames, spaceNamesFor } = useSiteSpaceNames(true);
+  const { rooms } = useSiteSpaceNames(true);
   // every room set up under Practice Admin can be counted, even before any stock is recorded in it
-  const rooms = useMemo(
-    () => (siteNames.length ? siteNames.flatMap((site) => spaceNamesFor(site).map((name) => ({ site, name }))) : spaceNames.map((name) => ({ site: "", name }))),
-    [siteNames, spaceNames, spaceNamesFor],
-  );
   const places = useMemo(() => buildPlaces(items, rooms), [items, rooms]);
   const [customRoles, setCustomRoles] = useState([]);
   useEffect(() => onSnapshot(collection(db, "roles"), (snap) => setCustomRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setCustomRoles([])), []);

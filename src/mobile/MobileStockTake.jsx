@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, CheckCircle2, ClipboardList, Lock, Plus, Search } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import useStock from "@/hooks/useStock";
+import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
 import { claimPlace, createStockTake, reopenPlace, sendForReview, useStockTake, useStockTakes } from "@/modules/stocktake/stockTakeService";
 import { PLACE_STATUS, TAKE_STATUS, buildPlaces, isAskedOf, placeAction, takeProgress } from "@/modules/stocktake/stockTake";
 import MobileStockTakeCount from "./MobileStockTakeCount";
@@ -24,7 +25,9 @@ function Progress({ places }) {
 }
 
 function StartOwn({ items, actor, onCreated, onCancel }) {
-  const places = useMemo(() => buildPlaces(items), [items]);
+  const { rooms } = useSiteSpaceNames(true);
+  // every room set up under Practice Admin, even one with no stock recorded yet
+  const places = useMemo(() => buildPlaces(items, rooms), [items, rooms]);
   const [search, setSearch] = useState("");
   const [chosen, setChosen] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -50,7 +53,7 @@ function StartOwn({ items, actor, onCreated, onCancel }) {
           <li key={p.key}>
             <label className={`flex min-h-14 items-center gap-3 rounded-2xl border px-4 ${chosen.includes(p.key) ? "border-[var(--medtrak-accent)] bg-[var(--medtrak-accent)]/10" : "border-[var(--medtrak-border)] bg-[var(--medtrak-panel)]"}`}>
               <input type="checkbox" className="h-5 w-5" checked={chosen.includes(p.key)} onChange={() => toggle(p.key)} />
-              <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span><span className="shrink-0 text-xs text-[var(--medtrak-muted)]">{p.itemCount} item{p.itemCount === 1 ? "" : "s"}</span>
+              <span className="min-w-0 flex-1 truncate font-semibold">{p.name}</span><span className="shrink-0 text-xs text-[var(--medtrak-muted)]">{p.itemCount === 0 ? "no stock yet" : `${p.itemCount} item${p.itemCount === 1 ? "" : "s"}`}</span>
             </label>
           </li>
         ))}

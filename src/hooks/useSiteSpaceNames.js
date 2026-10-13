@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { listActiveSites } from "@/lib/checklistsFirestore";
 import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry";
-import { spaceNamesForSite } from "@/modules/sense/services/siteLink";
+import { roomsOfPractice, spaceNamesForSite } from "@/modules/sense/services/siteLink";
 
 // The practice's real site and space names (Practice Admin > Sites / Spaces),
 // for Site and Location dropdowns. Sites come from Firestore (practice_sites);
@@ -12,6 +12,15 @@ export default function useSiteSpaceNames(enabled = true) {
   const [siteNames, setSiteNames] = useState([]);
   const [spaceNames, setSpaceNames] = useState([]);
   const [loaded, setLoaded] = useState(false);
+
+  // the rooms follow the space registry: one added or changed on another device arrives by sync after the screen opened
+  const [registryVersion, setRegistryVersion] = useState(0);
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const bump = () => setRegistryVersion((v) => v + 1);
+    window.addEventListener("primovex:space-registry-changed", bump);
+    return () => window.removeEventListener("primovex:space-registry-changed", bump);
+  }, [enabled]);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -29,7 +38,7 @@ export default function useSiteSpaceNames(enabled = true) {
       .catch(() => { if (active) { setPracticeSites([]); setSiteNames([]); } })
       .finally(() => { if (active) setLoaded(true); });
     return () => { active = false; };
-  }, [enabled]);
+  }, [enabled, registryVersion]);
 
   // The rooms belonging to the chosen site (all of them if that site hasn't
   // been linked to its rooms yet, so a Location list is never emptied by that).
@@ -38,5 +47,8 @@ export default function useSiteSpaceNames(enabled = true) {
     [practiceSites]
   );
 
-  return { siteNames, spaceNames, spaceNamesFor, loaded };
+  // every room with its site, for choosing a place to count
+  const rooms = useMemo(() => roomsOfPractice(loadSpaceRegistry(), practiceSites), [practiceSites, spaceNames, registryVersion]);
+
+  return { siteNames, spaceNames, spaceNamesFor, rooms, loaded };
 }

@@ -46,6 +46,8 @@ export function buildPlaces(items, rooms = []) {
     if (!name) continue;
     const key = storeKey(room.site, name);
     if (places.has(key)) continue;
+    // the same room already listed from stock under a differently written site name is not offered twice
+    if (!trim(room.site) && [...places.values()].some((p) => p.kind === "store" && norm(p.location) === norm(name))) continue;
     places.set(key, { key, kind: "store", name: [trim(room.site), name].filter(Boolean).join(" - "), site: trim(room.site), location: name, locationId: null, locationType: null, itemCount: 0 });
   }
   return [...places.values()].sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true, sensitivity: "base" }));
