@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import MedicineNameField from "@/components/stock/MedicineNameField";
 import { collection, onSnapshot, query } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -137,10 +138,12 @@ export default function StockItemEditDialog({ item, items = [], onClose }) {
           <div className="mt-4 space-y-3">
             <div>
               <p className="text-xs text-slate-400 mb-1">Item name *</p>
-              <Input
+              <MedicineNameField
                 value={editForm.name}
-                onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="e.g. Syringe 10ml"
+                onChange={(text) => setEditForm((f) => ({ ...f, name: text }))}
+                onPick={({ name, brand }) => setEditForm((f) => ({ ...f, name, brand: brand || f.brand }))}
+                placeholder="Search the NHS dm+d list, or type a name"
+                className="h-10 w-full rounded-xl border border-slate-700/70 bg-slate-900 px-3 text-sm"
               />
             </div>
 

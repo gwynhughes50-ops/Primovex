@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import {
-  buildAddition, buildCount, buildPlaces, buildTake, cleanAudience, countId, expectedAt, isAskedOf, isBigDifference, itemLabel, itemsForPlace, movementFor,
-  placeAction, reviewLines, reviewTotals, takeProgress, uncounted, validateAddition, validateTake,
+  additionLabel, buildAddition, buildCount, buildPlaces, buildTake, cleanAudience, countId, duplicateOfAddition, expectedAt, isAskedOf, isBigDifference, itemFromAddition, itemLabel, itemsForPlace, movementFor,
+  placeAction, planAdditions, reviewLines, reviewTotals, takeProgress, uncounted, validateAddition, validateTake,
 } from "../src/modules/stocktake/stockTake.js";
 
 let n = 0;
@@ -137,6 +137,50 @@ t("a thing typed in because it isn't in the system needs a name and a whole-numb
   assert.equal(validateAddition({ name: "x", quantity: 1.5 }).length, 1);
   const add = buildAddition({ place: store, name: " Thermometer ", barcode: " 123 ", quantity: "3", actor: { uid: "u", name: "N" } });
   assert.deepEqual([add.name, add.barcode, add.quantity, add.status, add.location, add.site], ["Thermometer", "123", 3, "new", "Store Room", "Main Surgery"]);
+});
+
+t("a first stock take can count rooms that have nothing recorded yet", () => {
+  const rooms = [{ site: "Main Surgery", name: "Store Room" }, { site: "Main Surgery", name: "Treatment Room 1" }, { site: "Branch", name: "Dispensary" }];
+  const places = buildPlaces([], rooms);
+  assert.deepEqual(places.map((p) => [p.name, p.itemCount, p.kind, p.site, p.location]), [
+    ["Branch - Dispensary", 0, "store", "Branch", "Dispensary"],
+    ["Main Surgery - Store Room", 0, "store", "Main Surgery", "Store Room"],
+    ["Main Surgery - Treatment Room 1", 0, "store", "Main Surgery", "Treatment Room 1"],
+  ]);
+  const withStock = buildPlaces([{ id: "i1", name: "Gloves", site: "Main Surgery", location: "Store Room", current_stock: 5 }], rooms);
+  assert.equal(withStock.length, 3, "a room that already holds stock is not listed twice");
+  assert.equal(withStock.find((p) => p.location === "Store Room").itemCount, 1);
+  assert.deepEqual(buildPlaces([], [{ site: "x", name: " " }, null]), []);
+});
+
+t("an addition carries every detail, with the site and room from the place", () => {
+  const place = { id: "p1", kind: "store", name: "Main Surgery - Store Room", site: "Main Surgery", location: "Store Room" };
+  const add = buildAddition({ place, name: " Adrenaline ", brand: "Epipen", strength: "300 micrograms", form: "Auto-injector", barcode: " 5012345678900 ", category: "Emergency", subcategory: "Anaphylaxis", quantity: "2", expiryDate: "2027-05-31", batchNumber: " B123 ", note: "boxed", actor: { uid: "u", name: "N" } });
+  assert.deepEqual([add.name, add.brand, add.strength, add.form, add.barcode, add.category, add.subcategory, add.quantity, add.expiryDate, add.batchNumber, add.site, add.location, add.status],
+    ["Adrenaline", "Epipen", "300 micrograms", "Auto-injector", "5012345678900", "Emergency", "Anaphylaxis", 2, "2027-05-31", "B123", "Main Surgery", "Store Room", "new"]);
+  assert.equal(additionLabel(add), "Adrenaline 300 micrograms Auto-injector");
+  assert.equal(additionLabel({}), "Unnamed item");
+});
+
+t("the item created from an addition has all the details and the counted stock", () => {
+  const add = { name: "Adrenaline", brand: "Epipen", strength: "300 micrograms", form: "Auto-injector", barcode: "5012345678900", category: "Emergency", subcategory: "Anaphylaxis", site: "Main Surgery", location: "Store Room", quantity: 2, expiryDate: "2027-05-31", batchNumber: "B123" };
+  const item = itemFromAddition(add);
+  assert.deepEqual([item.name, item.brand, item.strength, item.form, item.barcode, item.category, item.subcategory, item.site, item.location, item.current_stock, item.expiry_date, item.batch_number],
+    ["Adrenaline", "Epipen", "300 micrograms", "Auto-injector", "5012345678900", "Emergency", "Anaphylaxis", "Main Surgery", "Store Room", 2, "2027-05-31", "B123"]);
+  assert.equal(item.min_stock, 1);
+  assert.ok(item.max_stock >= 10);
+  assert.equal(itemFromAddition({ ...add, quantity: 40 }).max_stock, 40, "the maximum is never below what is counted");
+});
+
+t("creating from a whole take skips what is already in stock and what two people both found", () => {
+  const stock = [{ id: "s1", name: "Gloves", strength: "", form: "", site: "Main Surgery", location: "Store Room", current_stock: 3 }];
+  const mk = (id, name, over = {}) => ({ id, status: "new", name, strength: "", form: "", site: "Main Surgery", location: "Store Room", quantity: 1, ...over });
+  const additions = [mk("a1", "Syringes"), mk("a2", "Gloves"), mk("a3", "Syringes", { quantity: 4 }), mk("a4", "Syringes", { location: "Treatment Room 1" }), mk("a5", "Swabs", { status: "created" })];
+  const plan = planAdditions(stock, additions);
+  assert.deepEqual(plan.create.map((a) => a.id), ["a1", "a4"], "the same product in another room is a separate item");
+  assert.deepEqual(plan.skipped.map((s) => [s.addition.id, s.reason]), [["a2", "already-in-stock"], ["a3", "repeated-in-take"]]);
+  assert.equal(duplicateOfAddition(stock, mk("x", "gloves")).id, "s1", "names match whatever the capitals");
+  assert.equal(duplicateOfAddition(stock, mk("x", "Gloves", { location: "Elsewhere" })), null);
 });
 
 console.log(`\n${n} passed`);

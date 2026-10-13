@@ -1,9 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Check, Minus, PackagePlus, Plus, ScanLine, Search, X } from "lucide-react";
 import MobileBarcodeScanner from "@/components/ui/MobileBarcodeScanner";
 import { findStockItemByBarcode } from "@/services/stockService";
 import { addAddition, finishPlace, releasePlace, removeCount, saveCount } from "@/modules/stocktake/stockTakeService";
 import { buildAddition, buildCount, expectedAt, itemLabel, itemsForPlace, uncounted, validateAddition } from "@/modules/stocktake/stockTake";
+import MedicineNameField from "@/components/stock/MedicineNameField";
+import { STOCK_CATEGORIES, UNCATEGORISED_CATEGORY, getSubcategories } from "@/data/stockCategories";
+import { buildFormOptions, matchOption } from "@/lib/stockPickerOptions";
 
 // Counting one place on the phone. The list shows what the place should hold by name only: the figure the system
 // expects is never shown, so people count what is really there. Scan a barcode or search by name, enter the number,
@@ -52,23 +55,65 @@ function CountSheet({ item, place, existing, onSave, onRemove, onClose, busy, er
   );
 }
 
-function AdditionSheet({ place, barcode, onSave, onClose, busy, error }) {
-  const [form, setForm] = useState({ name: "", barcode: barcode || "", quantity: "1", expiryDate: "", note: "" });
+// A product not in the system: everything needed to create it as stock. The name comes from the NHS dm+d list or is typed in
+// by hand; the site and room are the place being counted. The manager checks it, then it becomes a stock item with the
+// number counted.
+function AdditionSheet({ place, barcode, items = [], onSave, onClose, onScan, busy, error }) {
+  const [form, setForm] = useState({ name: "", brand: "", strength: "", form: "", barcode: barcode || "", category: "", subcategory: "", quantity: "1", expiryDate: "", batchNumber: "", note: "" });
   const [problems, setProblems] = useState([]);
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
+  // a barcode scanned while this sheet is open fills the box
+  useEffect(() => { if (barcode) set({ barcode }); }, [barcode]);
+  const formOptions = useMemo(() => buildFormOptions(items.map((i) => i.form), form.form), [items, form.form]);
+  const subcategories = useMemo(() => (form.category ? getSubcategories(form.category) : []), [form.category]);
   const save = () => {
     const found = validateAddition(form);
     setProblems(found);
-    if (!found.length) onSave(form);
+    if (!found.length) onSave({ ...form, category: form.category || UNCATEGORISED_CATEGORY });
   };
   return (
-    <Sheet title="Something not in the system" onClose={onClose}>
-      <p className="text-sm text-[var(--medtrak-muted)]">Check you've searched for it first. This goes to the manager, who adds it to stock. It does not change any stock figure by itself.</p>
+    <Sheet title="Add an item that isn't in the system" onClose={onClose}>
+      <p className="text-sm text-[var(--medtrak-muted)]">Search for it first. Fill in what you can: this goes to the manager, who creates it as a stock item with the number you counted. It does not change any stock figure by itself.</p>
+      <p className="mt-2 rounded-xl bg-black/5 px-3 py-2 text-sm"><b>Where:</b> {place.name}</p>
       <div className="mt-3 space-y-3">
-        <label className="block text-sm font-bold">What is it?<input className={FIELD} value={form.name} onChange={(e) => set({ name: e.target.value })} placeholder="Name as on the box" /></label>
-        <label className="block text-sm font-bold">How many?<input className={FIELD} type="number" inputMode="numeric" min="1" value={form.quantity} onChange={(e) => set({ quantity: e.target.value })} /></label>
-        <label className="block text-sm font-bold">Barcode (if it has one)<input className={FIELD} value={form.barcode} onChange={(e) => set({ barcode: e.target.value })} inputMode="numeric" /></label>
-        <label className="block text-sm font-bold">Expiry date (if shown)<input className={FIELD} type="date" value={form.expiryDate} onChange={(e) => set({ expiryDate: e.target.value })} /></label>
+        <div className="text-sm font-bold">What is it?
+          <MedicineNameField value={form.name} onChange={(name) => set({ name })} onPick={({ name, brand }) => set({ name, brand: brand || form.brand })} className={FIELD} placeholder="Type a name, e.g. adrenaline, or gloves" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-sm font-bold">Strength<input className={FIELD} value={form.strength} onChange={(e) => set({ strength: e.target.value })} placeholder="e.g. 500 mg" /></label>
+          <label className="block text-sm font-bold">Form
+            <select className={FIELD} value={matchOption(formOptions, form.form)} onChange={(e) => set({ form: e.target.value })}>
+              <option value="">Choose</option>
+              {formOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </label>
+        </div>
+        <label className="block text-sm font-bold">Brand (if any)<input className={FIELD} value={form.brand} onChange={(e) => set({ brand: e.target.value })} /></label>
+        <div className="text-sm font-bold">Barcode (if it has one)
+          <div className="flex gap-2">
+            <input className={FIELD} value={form.barcode} onChange={(e) => set({ barcode: e.target.value })} inputMode="numeric" />
+            <button type="button" onClick={onScan} className="grid min-h-12 w-14 shrink-0 place-items-center rounded-2xl border border-[var(--medtrak-border)]" aria-label="Scan the barcode"><ScanLine className="h-5 w-5" /></button>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-sm font-bold">Category
+            <select className={FIELD} value={form.category} onChange={(e) => set({ category: e.target.value, subcategory: "" })}>
+              <option value="">Not sure</option>
+              {STOCK_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </label>
+          <label className="block text-sm font-bold">Subcategory
+            <select className={FIELD} value={form.subcategory} disabled={!subcategories.length} onChange={(e) => set({ subcategory: e.target.value })}>
+              <option value="">{subcategories.length ? "Choose" : "Pick a category first"}</option>
+              {subcategories.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </label>
+        </div>
+        <label className="block text-sm font-bold">How many are there?<input className={FIELD} type="number" inputMode="numeric" min="1" value={form.quantity} onChange={(e) => set({ quantity: e.target.value })} /></label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block text-sm font-bold">Expiry date<input className={FIELD} type="date" value={form.expiryDate} onChange={(e) => set({ expiryDate: e.target.value })} /></label>
+          <label className="block text-sm font-bold">Batch number<input className={FIELD} value={form.batchNumber} onChange={(e) => set({ batchNumber: e.target.value })} /></label>
+        </div>
         <label className="block text-sm font-bold">Anything the manager should know<input className={FIELD} value={form.note} onChange={(e) => set({ note: e.target.value })} /></label>
       </div>
       {problems.length > 0 && <ul className="mt-3 list-disc rounded-xl border border-rose-400/40 bg-rose-500/10 p-3 pl-7 text-sm font-semibold text-rose-700" role="alert">{problems.map((p) => <li key={p}>{p}</li>)}</ul>}
@@ -101,8 +146,10 @@ export default function MobileStockTakeCount({ take, place, items, counts, actor
     try { await work(); after?.(); } catch (problem) { setError(problem?.message || "That didn't save. Check your connection and try again."); } finally { setBusy(false); }
   };
 
+  const addScanRef = useRef(false);
   const scanned = async (code) => {
     setError(""); setNotice("");
+    if (addScanRef.current) { addScanRef.current = false; setSheet((s) => (s?.type === "add" ? { ...s, barcode: code } : s)); return; }
     try {
       const item = await findStockItemByBarcode(code);
       setSheet({ type: "count", item });
@@ -138,14 +185,14 @@ export default function MobileStockTakeCount({ take, place, items, counts, actor
           {found.map((item) => <li key={item.id}><button type="button" onClick={() => open(item)} className="min-h-12 w-full rounded-xl px-3 text-left text-base font-semibold active:bg-[var(--medtrak-bg)]">{itemLabel(item)}</button></li>)}
         </ul>
       )}
-      {search && found.length === 0 && <p className="text-sm text-[var(--medtrak-muted)]">Nothing by that name. If it really isn't in the system, use "Something not in the system" below.</p>}
+      {search && found.length === 0 && <p className="text-sm text-[var(--medtrak-muted)]">Nothing by that name. If it really isn't in the system, use "Add an item that isn't in the system" below.</p>}
 
       {notice && <p className="rounded-xl border border-emerald-400/40 bg-emerald-500/10 p-3 text-sm font-semibold text-emerald-700" role="status">{notice}</p>}
       {error && !sheet && <p className="text-sm font-semibold text-rose-700" role="alert">{error}</p>}
 
       <section aria-label="Items to count">
         <h3 className="mb-1.5 text-xs font-bold uppercase tracking-[.14em] text-[var(--medtrak-muted)]">Should be here</h3>
-        {listed.length === 0 ? <p className="text-sm text-[var(--medtrak-muted)]">Nothing is recorded here. Scan or search for anything you find.</p> : (
+        {listed.length === 0 ? <p className="text-sm text-[var(--medtrak-muted)]">Nothing is recorded here yet. Scan each product you find, or use "Add an item" below to enter it.</p> : (
           <ul className="space-y-1.5">
             {listed.map((item) => {
               const c = byItem.get(item.id);
@@ -180,7 +227,7 @@ export default function MobileStockTakeCount({ take, place, items, counts, actor
         </section>
       )}
 
-      <button type="button" onClick={() => setSheet({ type: "add", barcode: "" })} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] text-base font-bold"><PackagePlus className="h-5 w-5" aria-hidden="true" /> Something not in the system</button>
+      <button type="button" onClick={() => setSheet({ type: "add", barcode: "" })} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] text-base font-bold"><PackagePlus className="h-5 w-5" aria-hidden="true" /> Add an item that isn't in the system</button>
 
       <div className="grid grid-cols-2 gap-2 pt-2">
         <button type="button" disabled={busy} onClick={() => run(() => releasePlace(take.id, place.id), onBack)} className="min-h-12 rounded-2xl border border-[var(--medtrak-border)] text-sm font-bold disabled:opacity-40">Give this place back</button>
@@ -193,7 +240,7 @@ export default function MobileStockTakeCount({ take, place, items, counts, actor
           onRemove={() => run(() => removeCount(take.id, byItem.get(sheet.item.id).id), () => setSheet(null))} />
       )}
       {sheet?.type === "add" && (
-        <AdditionSheet place={place} barcode={sheet.barcode} busy={busy} error={error} onClose={() => { setSheet(null); setError(""); }}
+        <AdditionSheet place={place} barcode={sheet.barcode} items={items} onScan={() => { addScanRef.current = true; document.querySelector(`[${SCAN_ATTR}]`)?.click(); }} busy={busy} error={error} onClose={() => { setSheet(null); setError(""); }}
           onSave={(form) => run(() => addAddition(take.id, buildAddition({ place, ...form, actor })), () => { setNotice(`${form.name} sent to the manager.`); setSheet(null); })} />
       )}
       {sheet?.type === "finish" && (

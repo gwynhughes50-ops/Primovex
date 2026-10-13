@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { X, Save, PackagePlus, CheckCircle2 } from "lucide-react";
+import { X, Save, PackagePlus, CheckCircle2, BookOpen } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { STOCK_CATEGORIES, UNCATEGORISED_CATEGORY, getSubcategories } from "@/data/stockCategories";
@@ -7,6 +7,8 @@ import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
 import { buildFormOptions, matchOption, namesWithCurrent } from "@/lib/stockPickerOptions";
 import { findSameProduct, receiveDefaults, stockAfterReceive, suggestStock, suggestionDetail } from "@/lib/stockSuggestions";
 import { matchStockByScan, parseGs1 } from "@/lib/gs1";
+import useMedicineList from "@/hooks/useMedicineList";
+import { searchMedicines } from "@/lib/medicineLookup";
 
 const dmy = (iso) => (/^\d{4}-\d{2}-\d{2}$/.test(iso || "") ? iso.split("-").reverse().join("/") : iso);
 // A scanner "types" the code and presses Enter into whichever box has focus.
@@ -60,6 +62,8 @@ export default function ManualAddItemDialog({
   const [recv, setRecv] = useState({ qty: "1", batch_number: "", expiry_date: "", barcode: "" });
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
+  const [dmdHighlight, setDmdHighlight] = useState(-1);
+  const dmdList = useMedicineList(open);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
@@ -97,7 +101,9 @@ export default function ManualAddItemDialog({
     () => (mode === "new" && suggestOpen ? suggestStock(items, form.name) : []),
     [mode, suggestOpen, items, form.name]
   );
-  useEffect(() => setHighlight(0), [form.name]);
+  useEffect(() => { setHighlight(0); setDmdHighlight(-1); }, [form.name]);
+  // names from the NHS dm+d list; picking one fills in the name (and the brand, when a brand was typed)
+  const dmdResults = useMemo(() => (mode === "new" && suggestOpen ? searchMedicines(dmdList, form.name, { limit: 6 }) : []), [mode, suggestOpen, dmdList, form.name]);
 
   if (!open) return null;
 
@@ -108,6 +114,11 @@ export default function ManualAddItemDialog({
   // The same product already at this place: adding it again would duplicate it.
   const duplicate = mode === "new" ? findSameProduct(items, form) : null;
   const canSave = form.name.trim().length > 0 && !duplicate && !busy;
+
+  function pickMedicine(result) {
+    setForm((p) => ({ ...p, name: result.name, brand: result.brand || p.brand }));
+    setSuggestOpen(false);
+  }
 
   function chooseExisting(item, details = {}) {
     const defaults = receiveDefaults(item);
@@ -242,7 +253,14 @@ export default function ManualAddItemDialog({
       handleScan(scanned);
       return;
     }
-    if (!suggestions.length) return;
+    if (!suggestions.length) {
+      if (!dmdResults.length) return;
+      if (event.key === "ArrowDown") { event.preventDefault(); setDmdHighlight((h) => Math.min(h + 1, dmdResults.length - 1)); }
+      else if (event.key === "ArrowUp") { event.preventDefault(); setDmdHighlight((h) => Math.max(h - 1, 0)); }
+      else if (event.key === "Enter" && dmdHighlight >= 0) { event.preventDefault(); pickMedicine(dmdResults[dmdHighlight]); }
+      else if (event.key === "Escape") { event.stopPropagation(); setSuggestOpen(false); }
+      return;
+    }
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setHighlight((h) => Math.min(h + 1, suggestions.length - 1));
@@ -368,8 +386,9 @@ export default function ManualAddItemDialog({
                   onBlur={() => window.setTimeout(() => setSuggestOpen(false), 150)}
                   onKeyDown={onNameKeyDown}
                 />
-                {suggestions.length > 0 && (
-                  <div role="listbox" aria-label="Products already on file" className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 shadow-xl">
+                {(suggestions.length > 0 || dmdResults.length > 0) && (
+                  <div role="listbox" aria-label="Product suggestions" className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 shadow-xl">
+                    {suggestions.length > 0 && (<div role="group" aria-label="Products already on file">
                     <p className="px-3 pt-2 text-[11px] uppercase tracking-wide text-slate-500">Already on file - pick one to receive it</p>
                     {suggestions.map((item, index) => (
                       <button
@@ -388,6 +407,27 @@ export default function ManualAddItemDialog({
                         </span>
                       </button>
                     ))}
+                    </div>)}
+                    {dmdResults.length > 0 && (
+                      <div role="group" aria-label="NHS dm+d medicine names">
+                        <p className="flex items-center gap-1.5 px-3 pt-2 text-[11px] uppercase tracking-wide text-slate-500"><BookOpen className="h-3 w-3" aria-hidden="true" /> NHS dm+d list - pick one to fill in the name</p>
+                        {dmdResults.map((result, index) => (
+                          <button
+                            key={`${result.name}|${result.brand}`}
+                            type="button"
+                            role="option"
+                            aria-selected={suggestions.length === 0 && index === dmdHighlight}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => pickMedicine(result)}
+                            className={`flex w-full items-center px-3 py-2 text-left text-sm text-white hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_14%,transparent)] ${suggestions.length === 0 && index === dmdHighlight ? "bg-slate-800" : ""}`}
+                          >
+                            <span className="min-w-0 truncate">{result.label}</span>
+                            {result.kind === "brand" && <span className="ml-2 shrink-0 text-[10px] uppercase text-slate-400">brand</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <p className="px-3 pb-2 pt-1 text-[11px] text-slate-500">Not in the list (gloves, syringes...)? Keep what you typed.</p>
                   </div>
                 )}
                 {duplicate && (

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { collection, doc, getDoc, onSnapshot, runTransaction, serverTimestamp, setDoc, updateDoc, writeBatch, deleteDoc, addDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { applyStockMovement, createStockItem } from "@/services/stockService";
-import { TAKE_STATUS, PLACE_STATUS, buildTake, movementFor, validateTake } from "./stockTake";
+import { TAKE_STATUS, PLACE_STATUS, buildTake, itemFromAddition, movementFor, planAdditions, validateTake } from "./stockTake";
 
 const TAKES = "stock_takes";
 const toMillis = (value) => (value?.toMillis ? value.toMillis() : value ? new Date(value).getTime() || 0 : 0);
@@ -99,14 +99,29 @@ export async function applyReviewedLines(take, lines, actor) {
   return { done, failed };
 }
 
-// A minimal stock item from something found in the take; it lands as Uncategorised for the manager to complete in Inventory.
+// A stock item from something found in the take, with every detail the counter entered (name, brand, strength, form,
+// barcode, category, subcategory, site and room from the place) and the number counted as its stock.
 export async function createItemFromAddition(take, addition, actor) {
-  const created = await createStockItem({
-    name: addition.name, barcode: addition.barcode, site: addition.site, location: addition.location, current_stock: addition.quantity,
-    expiry_date: addition.expiryDate,
-  });
+  const created = await createStockItem(itemFromAddition(addition));
   await updateDoc(doc(db, TAKES, take.id, "additions", addition.id), { status: "created", handledByName: actor.displayName || actor.name || "", handledAt: serverTimestamp(), itemId: created || "" });
   return created;
+}
+
+// Create every waiting addition in one go. Anything that is already in stock at that place, or that two people both
+// found, is left for the manager to decide. One failing does not stop the rest.
+export async function createItemsFromAdditions(take, additions, items, actor) {
+  const plan = planAdditions(items, additions);
+  const created = [];
+  const failed = [];
+  for (const addition of plan.create) {
+    try {
+      await createItemFromAddition(take, addition, actor);
+      created.push(addition);
+    } catch (error) {
+      failed.push({ addition, message: error?.message || "could not be created" });
+    }
+  }
+  return { created, failed, skipped: plan.skipped };
 }
 
 export const dismissAddition = (takeId, additionId, actorName) => updateDoc(doc(db, TAKES, takeId, "additions", additionId), { status: "dismissed", handledByName: actorName, handledAt: serverTimestamp() });

@@ -6,10 +6,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ROLE_TEMPLATES } from "@/core/identity/capabilities";
 import useStock from "@/hooks/useStock";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
-import { PLACE_STATUS, TAKE_STATUS, buildPlaces, reviewLines, reviewTotals, takeProgress, validateTake } from "@/modules/stocktake/stockTake";
+import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
+import { PLACE_STATUS, TAKE_STATUS, additionLabel, buildPlaces, duplicateOfAddition, planAdditions, reviewLines, reviewTotals, takeProgress, validateTake } from "@/modules/stocktake/stockTake";
 import { stockTakeReportHtml } from "@/modules/stocktake/stockTakeReport";
 import {
-  applyReviewedLines, cancelTake, closeTake, createItemFromAddition, createStockTake, dismissAddition, reopenTake, resetPlace, sendForReview, useStockTake, useStockTakes,
+  applyReviewedLines, cancelTake, closeTake, createItemFromAddition, createItemsFromAdditions, createStockTake, dismissAddition, reopenTake, resetPlace, sendForReview, useStockTake, useStockTakes,
 } from "@/modules/stocktake/stockTakeService";
 
 // Stock take (Inventory > Stock take): request a physical count for the team (they do it on their phones), watch
@@ -28,7 +29,13 @@ const ukDate = (key) => (key ? key.split("-").reverse().join("/") : "");
 function NewTake({ items, onCancel, onCreated }) {
   const { user, role } = useAuth();
   const creator = { uid: user?.uid || "", name: user?.displayName || user?.email || "Unknown" };
-  const places = useMemo(() => buildPlaces(items), [items]);
+  const { siteNames, spaceNames, spaceNamesFor } = useSiteSpaceNames(true);
+  // every room set up under Practice Admin can be counted, even before any stock is recorded in it
+  const rooms = useMemo(
+    () => (siteNames.length ? siteNames.flatMap((site) => spaceNamesFor(site).map((name) => ({ site, name }))) : spaceNames.map((name) => ({ site: "", name }))),
+    [siteNames, spaceNames, spaceNamesFor],
+  );
+  const places = useMemo(() => buildPlaces(items, rooms), [items, rooms]);
   const [customRoles, setCustomRoles] = useState([]);
   useEffect(() => onSnapshot(collection(db, "roles"), (snap) => setCustomRoles(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setCustomRoles([])), []);
   // only roles that can take part are worth asking
@@ -40,14 +47,16 @@ function NewTake({ items, onCancel, onCreated }) {
   const [title, setTitle] = useState(`Stock take, ${new Date().toLocaleDateString("en-GB", { month: "long", year: "numeric" })}`);
   const [note, setNote] = useState("");
   const [dueDate, setDueDate] = useState("");
-  const [chosen, setChosen] = useState(() => places.map((p) => p.key));
+  const [chosen, setChosen] = useState(null);
   const [who, setWho] = useState("everyone");
   const [pickedRoles, setPickedRoles] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const toggle = (list, setList, key) => setList(list.includes(key) ? list.filter((k) => k !== key) : [...list, key]);
-  const picked = places.filter((p) => chosen.includes(p.key));
+  // until a choice is made, every place is chosen (the rooms arrive a moment after the page opens)
+  const chosenKeys = chosen ?? places.map((p) => p.key);
+  const picked = places.filter((p) => chosenKeys.includes(p.key));
 
   async function submit() {
     const problems = validateTake({ title, places: picked, dueDate });
@@ -85,11 +94,11 @@ function NewTake({ items, onCancel, onCreated }) {
         <div className="mt-2 grid max-h-72 gap-1 overflow-y-auto sm:grid-cols-2">
           {places.map((p) => (
             <label key={p.key} className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm text-slate-200 hover:bg-white/5">
-              <input type="checkbox" checked={chosen.includes(p.key)} onChange={() => toggle(chosen, setChosen, p.key)} />
-              <span className="min-w-0 flex-1 truncate">{p.name}</span><span className="shrink-0 text-xs text-slate-500">{p.itemCount} item{p.itemCount === 1 ? "" : "s"}</span>
+              <input type="checkbox" checked={chosenKeys.includes(p.key)} onChange={() => toggle(chosenKeys, setChosen, p.key)} />
+              <span className="min-w-0 flex-1 truncate">{p.name}</span><span className="shrink-0 text-xs text-slate-500">{p.itemCount === 0 ? "nothing recorded yet" : `${p.itemCount} item${p.itemCount === 1 ? "" : "s"}`}</span>
             </label>
           ))}
-          {places.length === 0 && <p className="text-sm text-slate-400">No stock is recorded yet, so there is nothing to count.</p>}
+          {places.length === 0 && <p className="text-sm text-slate-400">No rooms are set up yet. Add your sites and rooms under Practice Admin, then start the stock take.</p>}
         </div>
       </fieldset>
       {error && <p className="mt-3 text-sm text-rose-300" role="alert">{error}</p>}
@@ -204,16 +213,36 @@ function TakeDetail({ takeId, items }) {
 
       {additions.length > 0 && (
         <section className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
-          <h3 className="font-semibold text-slate-100">Items found that aren't in the system ({newAdditions.length} waiting)</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold text-slate-100">New items found ({newAdditions.length} waiting)</h3>
+            {newAdditions.length > 0 && (
+              <button type="button" disabled={busy} className={PRIMARY} onClick={() => run(async () => {
+                const result = await createItemsFromAdditions(take, additions, items, actor);
+                const left = result.skipped.length ? ` ${result.skipped.length} left for you to check (already in stock, or found twice).` : "";
+                if (result.failed.length) throw new Error(`${result.created.length} created. ${result.failed.length} could not be: ${result.failed.map((f) => `${additionLabel(f.addition)} (${f.message})`).join("; ")}.${left}`);
+                setMessage(`${result.created.length} item${result.created.length === 1 ? "" : "s"} created with their stock.${left}`);
+              })}>{busy ? "Creating…" : `Create all ${planAdditions(items, additions).create.length} as stock items`}</button>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-slate-400">Each one is created with the details the counter entered and the number counted as its stock, in the room they counted it. Check the details first; you can still edit any item in Inventory afterwards.</p>
           <ul className="mt-2 divide-y divide-white/5 text-sm">
-            {additions.map((a) => (
-              <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <span className="text-slate-200"><strong>{a.name}</strong> × {a.quantity} in {a.placeName}{a.barcode ? ` · barcode ${a.barcode}` : ""}{a.expiryDate ? ` · expires ${ukDate(a.expiryDate)}` : ""}{a.note ? ` · ${a.note}` : ""} <span className="text-slate-500">found by {a.addedByName}</span></span>
-                {a.status === "new"
-                  ? <span className="flex gap-2"><button type="button" disabled={busy} className={BTN} onClick={() => run(() => createItemFromAddition(take, a, actor), `${a.name} added to stock. Complete its details in Inventory.`)}>Add to stock</button><button type="button" disabled={busy} className={BTN} onClick={() => run(() => dismissAddition(take.id, a.id, actor.name), "Dismissed.")}>Dismiss</button></span>
-                  : <span className="text-slate-400">{a.status === "created" ? "Added to stock" : "Dismissed"}</span>}
-              </li>
-            ))}
+            {additions.map((a) => {
+              const duplicate = a.status === "new" ? duplicateOfAddition(items, a) : null;
+              const detail = [a.brand && `brand ${a.brand}`, [a.category, a.subcategory].filter(Boolean).join(" › "), a.barcode && `barcode ${a.barcode}`, a.batchNumber && `batch ${a.batchNumber}`, a.expiryDate && `expires ${ukDate(a.expiryDate)}`, a.note].filter(Boolean).join(" · ");
+              return (
+                <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                  <span className="min-w-0 text-slate-200">
+                    <strong>{additionLabel(a)}</strong> × {a.quantity} in {a.placeName}
+                    {detail && <span className="block text-xs text-slate-400">{detail}</span>}
+                    <span className="block text-xs text-slate-500">found by {a.addedByName || "someone"}</span>
+                    {duplicate && <span className="block text-xs text-amber-300">Already in stock at this place ({duplicate.current_stock ?? 0} recorded). Dismiss this, or add it anyway.</span>}
+                  </span>
+                  {a.status === "new"
+                    ? <span className="flex gap-2"><button type="button" disabled={busy} className={BTN} onClick={() => run(() => createItemFromAddition(take, a, actor), `${additionLabel(a)} added to stock.`)}>{duplicate ? "Add anyway" : "Add to stock"}</button><button type="button" disabled={busy} className={BTN} onClick={() => run(() => dismissAddition(take.id, a.id, actor.name), `${a.name} dismissed.`)}>Dismiss</button></span>
+                    : <span className="text-slate-400">{a.status === "created" ? "Added to stock" : "Dismissed"}</span>}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}

@@ -3,6 +3,7 @@
 // differences wait for a manager to review before any stock figure changes.
 
 import { toNumber, unassignedQty, mainStoreName } from "../../lib/stockLocations.js";
+import { findSameProduct } from "../../lib/stockSuggestions.js";
 
 export const TAKE_STATUS = { open: "open", review: "review", closed: "closed", cancelled: "cancelled" };
 export const PLACE_STATUS = { free: "free", claimed: "claimed", done: "done" };
@@ -21,7 +22,9 @@ export const locationKey = (locationId) => `loc:${locationId}`;
 
 // Every place stock is recorded: the main store of each room (an item's own site and room, less anything it has
 // moved elsewhere) and every other place it has been moved to (a kit, a box, a piece of equipment).
-export function buildPlaces(items) {
+// rooms: [{ site, name }] from Practice Admin (sites and spaces), so a room with nothing recorded yet can still be counted:
+// the first stock take of a practice starts with no stock on the system at all.
+export function buildPlaces(items, rooms = []) {
   const places = new Map();
   for (const item of live(items)) {
     if (unassignedQty(item) > 0) {
@@ -37,6 +40,13 @@ export function buildPlaces(items) {
       place.itemCount += 1;
       places.set(key, place);
     }
+  }
+  for (const room of rooms || []) {
+    const name = trim(room?.name);
+    if (!name) continue;
+    const key = storeKey(room.site, name);
+    if (places.has(key)) continue;
+    places.set(key, { key, kind: "store", name: [trim(room.site), name].filter(Boolean).join(" - "), site: trim(room.site), location: name, locationId: null, locationType: null, itemCount: 0 });
   }
   return [...places.values()].sort((a, b) => a.name.localeCompare(b.name, "en", { numeric: true, sensitivity: "base" }));
 }
@@ -200,7 +210,9 @@ export function movementFor(line) {
   };
 }
 
-// Anyone typing a new item in: the minimum a manager needs to turn it into stock.
+// Anyone typing a new item in: the minimum a manager needs to turn it into stock. Everything else is optional but is
+// carried through, so the manager can create the item complete (name, strength, form, brand, barcode, category and
+// subcategory, with the site and room taken from the place being counted) without retyping any of it.
 export function validateAddition({ name, quantity }) {
   const problems = [];
   if (!trim(name)) problems.push("Enter what the item is.");
@@ -209,12 +221,50 @@ export function validateAddition({ name, quantity }) {
   return problems;
 }
 
-export function buildAddition({ place, name, barcode = "", quantity, expiryDate = "", note = "", actor = {} }) {
+export function buildAddition({ place, name, brand = "", strength = "", form = "", barcode = "", category = "", subcategory = "", quantity, expiryDate = "", batchNumber = "", note = "", actor = {} }) {
   return {
     placeId: place.id, placeName: place.name, site: place.site || "", location: place.kind === "store" ? place.location : place.name,
-    name: trim(name), barcode: trim(barcode), quantity: Math.floor(Number(quantity)), expiryDate: expiryDate || "", note: trim(note),
+    name: trim(name), brand: trim(brand), strength: trim(strength), form: trim(form), barcode: trim(barcode),
+    category: trim(category), subcategory: trim(subcategory),
+    quantity: Math.floor(Number(quantity)), expiryDate: expiryDate || "", batchNumber: trim(batchNumber), note: trim(note),
     status: "new", addedByUid: actor.uid || "", addedByName: actor.name || "",
   };
+}
+
+export const additionLabel = (addition) => [addition?.name, addition?.strength, addition?.form].map(trim).filter(Boolean).join(" ") || "Unnamed item";
+
+// What to send to the stock service to create the item from an addition.
+export function itemFromAddition(addition) {
+  return {
+    name: trim(addition.name), strength: trim(addition.strength), form: trim(addition.form), brand: trim(addition.brand), barcode: trim(addition.barcode),
+    category: trim(addition.category), subcategory: trim(addition.subcategory),
+    site: trim(addition.site), location: trim(addition.location),
+    batch_number: trim(addition.batchNumber), expiry_date: addition.expiryDate || "",
+    current_stock: Math.floor(toNumber(addition.quantity, 0)),
+    min_stock: 1, max_stock: Math.max(10, Math.floor(toNumber(addition.quantity, 0))),
+  };
+}
+
+// The item already in the system that this would duplicate (the same product at the same place), if any.
+export function duplicateOfAddition(items, addition) {
+  return findSameProduct(live(items), { name: addition.name, strength: addition.strength, form: addition.form, site: addition.site, location: addition.location });
+}
+
+// Which waiting additions can be created in one go: those that are new and don't repeat something already in stock or
+// each other (two people finding the same thing in the same room); the rest are left for the manager to decide.
+export function planAdditions(items, additions) {
+  const create = [];
+  const skipped = [];
+  const seen = new Set();
+  for (const addition of additions || []) {
+    if (addition.status !== "new") continue;
+    const key = [additionLabel(addition), addition.site, addition.location].map(norm).join("|");
+    const duplicate = duplicateOfAddition(items, addition);
+    if (duplicate) skipped.push({ addition, reason: "already-in-stock", item: duplicate });
+    else if (seen.has(key)) skipped.push({ addition, reason: "repeated-in-take" });
+    else { seen.add(key); create.push(addition); }
+  }
+  return { create, skipped };
 }
 
 export { mainStoreName };
