@@ -25,7 +25,11 @@ const ORB = { key: "orb", label: "Ask Orb", helper: "Type or speak", Icon: Spark
 export function getRoleHome(role, capabilities = []) {
   const key = norm(role);
 
-  if (key.includes("practice manager") || key.includes("system admin") || key === "manager" || key.includes("manager")) {
+  // A nurse manager (or any clinical lead with "manager" in the name) works on the ward, so gets the clinical home with the
+  // practice's attention strip and briefing added, not the Practice Manager's office home.
+  const clinicalLead = key.includes("manager") && /nurse|hca|clinician|clinical/.test(key) && !key.includes("practice manager");
+
+  if (!clinicalLead && (key.includes("practice manager") || key.includes("system admin") || key === "manager" || key.includes("manager"))) {
     return {
       id: "manager", eyebrow: "Operational command", headline: "See what needs attention, then act", attention: true, primary: ORB,
       actions: [
@@ -47,7 +51,7 @@ export function getRoleHome(role, capabilities = []) {
 
   if (key.includes("nurse") || key.includes("hca") || key.includes("clinician")) {
     return {
-      id: "clinical", eyebrow: "Clinical", headline: "Quick actions for the clinic day", attention: false,
+      id: "clinical", eyebrow: "Clinical", headline: clinicalLead ? "The clinic day and what needs attention" : "Quick actions for the clinic day", attention: clinicalLead,
       primary: { key: "scan-stock", label: "Scan stock", helper: "Use 1, 2 or more in seconds", Icon: ScanLine },
       actions: [
         { key: "orb-voice", label: "Take items by voice", helper: "Say what you took", Icon: Mic },
@@ -57,8 +61,10 @@ export function getRoleHome(role, capabilities = []) {
         { key: "fridge-check", label: "Fridge check", helper: "Scan the tag on the fridge", Icon: Thermometer, capability: "temperature.write" },
         { key: "issue", label: "Report an issue", helper: "To the right person", Icon: Wrench },
         { key: "stocktake", label: "Stock take", helper: "Count with the team", Icon: ClipboardList, capability: "stocktake.count" },
+        { key: "significant-events", label: "Significant event", helper: "Report something that happened", Icon: TriangleAlert },
         { key: "quick-note", label: "Quick note", helper: "A reminder for yourself", Icon: NotebookPen },
         { key: "messages", label: "Messages", helper: "From colleagues", Icon: MessageSquare },
+        ...(clinicalLead ? [{ key: "briefing", label: "What needs attention?", helper: "Your briefing from the Orb", Icon: ListChecks }] : []),
       ],
       nav: ["home", "stock", "checks", "me"],
     };

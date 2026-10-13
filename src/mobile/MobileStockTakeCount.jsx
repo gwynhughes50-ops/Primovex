@@ -29,7 +29,7 @@ function Sheet({ title, onClose, children }) {
   );
 }
 
-function CountSheet({ item, place, existing, onSave, onRemove, onClose, busy, error }) {
+function CountSheet({ item, place, existing, onSave, onRemove, onClose, onAddHere, busy, error }) {
   const [value, setValue] = useState(existing ? String(existing.counted) : "");
   const box = Number(item.units_per_box || 0);
   const number = value === "" ? null : Math.max(0, Math.floor(Number(value)));
@@ -38,7 +38,13 @@ function CountSheet({ item, place, existing, onSave, onRemove, onClose, busy, er
   return (
     <Sheet title={itemLabel(item)} onClose={onClose}>
       <p className="text-sm text-[var(--medtrak-muted)]">How many are there in {place.name}?</p>
-      {!listedHere && <p className="mt-2 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-sm font-semibold text-amber-800">This isn't listed for this place. Count it anyway and the manager will see it as a find.</p>}
+      {!listedHere && (
+        <div className="mt-2 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-900">
+          <p className="font-semibold">This product is recorded {[item.site, item.location].filter(Boolean).length ? `in ${[item.site, item.location].filter(Boolean).join(" - ")}` : "somewhere else"}, not in {place.name}.</p>
+          <p className="mt-1">If {place.name} holds its own supply, add it here as stock of its own. Otherwise count it as a find and the manager will see it.</p>
+          <button type="button" onClick={onAddHere} className="mt-2 min-h-12 w-full rounded-2xl bg-[var(--medtrak-accent)] text-base font-bold text-white">Add it to {place.name}</button>
+        </div>
+      )}
       <div className="mt-4 grid grid-cols-[4rem_1fr_4rem] gap-2">
         <button type="button" onClick={() => step(-1)} className="grid min-h-16 place-items-center rounded-2xl border border-[var(--medtrak-border)]" aria-label="One fewer"><Minus className="h-6 w-6" /></button>
         <input type="number" inputMode="numeric" min="0" autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="0" aria-label="How many" className="min-h-16 w-full rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] text-center text-3xl font-bold" />
@@ -58,8 +64,8 @@ function CountSheet({ item, place, existing, onSave, onRemove, onClose, busy, er
 // A product not in the system: everything needed to create it as stock. The name comes from the NHS dm+d list or is typed in
 // by hand; the site and room are the place being counted. The manager checks it, then it becomes a stock item with the
 // number counted.
-function AdditionSheet({ place, barcode, items = [], onSave, onClose, onScan, busy, error }) {
-  const [form, setForm] = useState({ name: "", brand: "", strength: "", form: "", barcode: barcode || "", category: "", subcategory: "", quantity: "1", expiryDate: "", batchNumber: "", note: "" });
+function AdditionSheet({ place, barcode, prefill = null, items = [], onSave, onClose, onScan, busy, error }) {
+  const [form, setForm] = useState({ name: prefill?.name || "", brand: prefill?.brand || "", strength: prefill?.strength || "", form: prefill?.form || "", barcode: barcode || "", category: prefill?.category || "", subcategory: prefill?.subcategory || "", quantity: "1", expiryDate: "", batchNumber: "", note: "" });
   const [problems, setProblems] = useState([]);
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   // a barcode scanned while this sheet is open fills the box
@@ -236,11 +242,12 @@ export default function MobileStockTakeCount({ take, place, items, counts, actor
 
       {sheet?.type === "count" && (
         <CountSheet item={sheet.item} place={place} existing={byItem.get(sheet.item.id)} busy={busy} error={error}
+          onAddHere={() => { const it = sheet.item; setError(""); setSheet({ type: "add", barcode: it.barcode || "", prefill: { name: it.name, brand: it.brand, strength: it.strength, form: it.form, category: it.category, subcategory: it.subcategory } }); }}
           onClose={() => { setSheet(null); setError(""); }} onSave={(number) => saveItem(sheet.item, number)}
           onRemove={() => run(() => removeCount(take.id, byItem.get(sheet.item.id).id), () => setSheet(null))} />
       )}
       {sheet?.type === "add" && (
-        <AdditionSheet place={place} barcode={sheet.barcode} items={items} onScan={() => { addScanRef.current = true; document.querySelector(`[${SCAN_ATTR}]`)?.click(); }} busy={busy} error={error} onClose={() => { setSheet(null); setError(""); }}
+        <AdditionSheet place={place} barcode={sheet.barcode} prefill={sheet.prefill} items={items} onScan={() => { addScanRef.current = true; document.querySelector(`[${SCAN_ATTR}]`)?.click(); }} busy={busy} error={error} onClose={() => { setSheet(null); setError(""); }}
           onSave={(form) => run(() => addAddition(take.id, buildAddition({ place, ...form, actor })), () => { setNotice(`${form.name} sent to the manager.`); setSheet(null); })} />
       )}
       {sheet?.type === "finish" && (

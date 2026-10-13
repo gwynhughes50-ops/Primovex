@@ -164,4 +164,20 @@ t("expired and running-out certificates are on the strip for the people who keep
   assert.equal(buildAttention({ certificates: null, now })[0].key, "clear");
 });
 
+t("a nurse manager gets the clinical home with the briefing and the attention strip, not the Practice Manager's office home", () => {
+  const caps = ["inventory.read", "inventory.write", "temperature.write", "stocktake.count"];
+  const lead = getRoleHome("Nurse Manager", caps);
+  assert.equal(lead.id, "clinical");
+  assert.equal(lead.attention, true);
+  const keys = visibleActions(lead, caps).map((a) => a.key);
+  for (const key of ["stock", "kits", "fridge-check", "stocktake", "significant-events", "briefing"]) assert.ok(keys.includes(key), key);
+  assert.equal(getRoleHome("Practice Manager", caps).id, "manager", "a practice manager is unchanged");
+  assert.equal(getRoleHome("Nurse", caps).attention, false, "an ordinary nurse has no strip");
+  assert.ok(!getRoleHome("Nurse", caps).actions.some((a) => a.key === "briefing"));
+});
+
+t("nurses and HCAs can report a significant event from the phone", () => {
+  for (const role of ["Nurse", "HCA"]) assert.ok(getRoleHome(role, ["inventory.read"]).actions.some((a) => a.key === "significant-events"), role);
+});
+
 console.log(`\n${n} passed`);
