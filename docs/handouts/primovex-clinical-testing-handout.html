@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Primovex on your phone: testing guide for HCAs and nurses</title>
+<style>
+  @page { size: A4; margin: 14mm 15mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10.5pt; line-height: 1.38; color: #14213d; margin: 0; }
+  h1 { font-size: 21pt; margin: 0; color: #0b3b7a; }
+  h2 { font-size: 13.5pt; margin: 14px 0 5px; color: #0b3b7a; border-bottom: 2px solid #1fb5a8; padding-bottom: 2px; }
+  h3 { font-size: 11pt; margin: 9px 0 3px; color: #14213d; }
+  p { margin: 4px 0; }
+  ul, ol { margin: 3px 0 3px 18px; padding: 0; }
+  li { margin: 1.5px 0; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 3px solid #0b3b7a; padding-bottom: 8px; }
+  .top img { height: 38px; }
+  .sub { color: #4a5a78; font-size: 10.5pt; margin-top: 2px; }
+  .box { border: 1.5px solid #1fb5a8; background: #eefaf8; border-radius: 8px; padding: 7px 10px; margin: 8px 0; }
+  .warn { border-color: #d9822b; background: #fff6ea; }
+  .rule { border-color: #c0392b; background: #fdeeee; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px 8px; margin: 5px 0; }
+  .tile { border: 1px solid #b9c6dc; border-radius: 7px; padding: 4px 7px; font-size: 9.5pt; }
+  .tile b { display: block; color: #0b3b7a; }
+  .job { break-inside: avoid; margin-bottom: 4px; }
+  table { border-collapse: collapse; width: 100%; margin: 4px 0; }
+  th, td { border: 1px solid #b9c6dc; padding: 4px 6px; text-align: left; vertical-align: top; font-size: 9.8pt; }
+  th { background: #e6edf8; color: #0b3b7a; }
+  td.tick { width: 22px; text-align: center; font-size: 12pt; }
+  td.note { width: 38%; }
+  .small { font-size: 9pt; color: #4a5a78; }
+  .pb { break-before: page; }
+  .nm { border-left: 4px solid #6b4bd6; padding-left: 9px; margin: 6px 0; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <h1>Primovex on your phone</h1>
+    <div class="sub">Testing guide for HCAs and nurses &nbsp;·&nbsp; Thursday meeting</div>
+  </div>
+  <img src="../../public/branding/primovex-logo-approved.png" alt="Primovex">
+</div>
+
+<p style="margin-top:8px">Thank you for helping to test Primovex. It is the practice's own system for stock, fridge checks, kits and boxes, and everyday reporting. You do the job on your phone, and Primovex keeps the record: who did it, what, and when. <b>You are testing the system, not being tested.</b> If something is confusing, slow or wrong, that is exactly what we need to hear.</p>
+
+<div class="box rule">
+  <b>Two golden rules</b>
+  <ul>
+    <li><b>Never type a patient's name</b> into Primovex: not in a note, a message, an issue or the Orb. Use the EMIS number or initials only.</li>
+    <li>Do the real job properly. Fridge readings, kit checks and stock counts you save are real records. If you want to practise an <b>out-of-range</b> fridge reading, tell the Practice Manager first, because it sends an alert.</li>
+  </ul>
+</div>
+
+<h2>1. Signing in</h2>
+<ol>
+  <li>Install Primovex from the invite email sent to you, and open it.</li>
+  <li>The first time, sign in with your email address and the password you set from your invite link.</li>
+  <li>Choose a <b>6-digit PIN</b> (and fingerprint or face if you want). After that you only need the PIN or your fingerprint.</li>
+  <li>Primovex locks itself after 15 minutes without use. Enter your PIN to carry on; whatever you were doing is still there.</li>
+</ol>
+<p class="small">Forgotten your PIN? Choose "sign out instead" and sign in again with your password.</p>
+
+<h2>2. Your home screen</h2>
+<p>The big blue button scans stock. The tiles below it are your everyday jobs. The round <b>Orb</b> in the middle of the bottom bar is the assistant: tap it and type or speak a question (for example "how many saline are in the treatment room?"). The bottom bar also has <b>Home</b>, <b>Stock</b>, <b>Checks</b> and <b>Me</b>.</p>
+<div class="tiles">
+  <div class="tile"><b>Scan stock</b>Use 1, 2 or more items in seconds</div>
+  <div class="tile"><b>Take items by voice</b>Say what you took</div>
+  <div class="tile"><b>Stock</b>Find, use or receive an item</div>
+  <div class="tile"><b>Kits and boxes</b>Check emergency and anaphylaxis kits</div>
+  <div class="tile"><b>Temperature</b>See the fridge readings</div>
+  <div class="tile"><b>Fridge check</b>Scan the tag on the fridge</div>
+  <div class="tile"><b>Report an issue</b>To the right person</div>
+  <div class="tile"><b>Significant event</b>Report something that happened</div>
+  <div class="tile"><b>Stock take</b>Count with the team</div>
+  <div class="tile"><b>Quick note</b>A reminder for yourself</div>
+  <div class="tile"><b>Messages</b>From colleagues</div>
+  <div class="tile"><b>Me</b>Your PIN and account</div>
+</div>
+
+<h2>3. The jobs, step by step</h2>
+
+<div class="job">
+<h3>Using stock</h3>
+<ol>
+  <li>Tap <b>Scan stock</b> and point the camera at the barcode (or tap <b>Stock</b> and search by name).</li>
+  <li>Choose how many you used, and confirm. Stock goes down by that number and Primovex records who used it.</li>
+</ol>
+</div>
+
+<div class="job">
+<h3>Fridge check (twice a day)</h3>
+<ol>
+  <li>Tap <b>Fridge check</b> and scan the tag on the fridge (or tap the tag with the phone). You cannot pick the fridge from a list: scanning shows you were there.</li>
+  <li>Answer one question at a time: <b>what it reads now</b>, the <b>minimum</b> (press MIN on the thermometer), the <b>maximum</b> (press MAX), then press <b>reset</b> on the thermometer.</li>
+  <li>The last screen says in range or out of range. Tap <b>Save check</b>. Your name and the time are added for you.</li>
+  <li>If it is out of range, tick what you did about it. Primovex opens an incident and alerts the people who deal with them.</li>
+</ol>
+<p class="small">If the fridge has already been checked this morning or afternoon, Primovex tells you who did it.</p>
+</div>
+
+<div class="job">
+<h3>Kits and boxes (emergency and anaphylaxis)</h3>
+<ol>
+  <li>Tap <b>Kits and boxes</b> and choose the kit.</li>
+  <li>Go through the items one at a time. If an item is fine, confirm it. If it is <b>Missing</b> or <b>Expired</b>, Primovex asks what you will do: replace it from stock, borrow from another box, request an urgent order, or follow up later (you can also message a colleague).</li>
+  <li>Review and save. This is the record that the kit was checked.</li>
+</ol>
+</div>
+
+<div class="job">
+<h3>Stock take: counting a room</h3>
+<ol>
+  <li>Tap <b>Stock take</b>. If a manager has asked for one you will see it. Otherwise choose <b>Start my own</b> and pick the rooms you will count.</li>
+  <li>Tap a room to <b>claim</b> it, so nobody else counts the same room. You do not see what the system expects: count what is really there.</li>
+  <li>Scan each product (or search by name) and enter how many there are. Scan the next one.</li>
+  <li>Something not in the system? Tap <b>Add an item that isn't in the system</b>. Pick the name from the NHS medicine list as you type, or type it yourself (gloves, syringes). Add the strength, form, brand, barcode, category, how many, expiry and batch if you can.</li>
+  <li>If a scan says the product is recorded in another room, and this room keeps its own supply, tap <b>Add it to this room</b>.</li>
+  <li>When the room is done, tap <b>Finish this place</b>. The manager then reviews the differences. <b>No stock figure changes until they apply it.</b></li>
+</ol>
+</div>
+
+<div class="job">
+<h3>Report an issue, a significant event, a quick note, messages</h3>
+<ul>
+  <li><b>Report an issue</b> (a fault, something missing, a room problem): say what and where. It goes to the right person.</li>
+  <li><b>Significant event</b>: something that happened or nearly happened. Describe it factually using roles ("the nurse"), not names. Add an EMIS number only if needed.</li>
+  <li><b>Quick note</b> is a private reminder for yourself on your own phone.</li>
+  <li><b>Messages</b> from colleagues appear in the middle of the screen. Reply with one tap (Done, On it, Will do, Thanks, Can't today) or type a short reply, or snooze it.</li>
+</ul>
+</div>
+
+<h2 class="pb">4. Things to try on Thursday</h2>
+<p>Tick each one when you have tried it, and write down anything that surprised or slowed you. Be blunt.</p>
+<table>
+  <tr><th></th><th>Try this</th><th>What happened / what would make it easier?</th></tr>
+  <tr><td class="tick">☐</td><td>Sign in, set a PIN, lock the phone and unlock it again</td><td class="note"></td></tr>
+  <tr><td class="tick">☐</td><td>Scan a product and use 1; then search for another by name and use 2</td><td class="note"></td></tr>
+  <tr><td class="tick">☐</td><td>Do a fridge check by scanning the fridge's tag (all the steps)</td><td class="note"></td></tr>
+  <tr><td class="tick">☐</td><td>Check a kit or box: confirm items, and mark one Missing or Expired to see the choices</td><td class="note"></td></tr>
+  <tr><td class="tick">☐</td><td>Start a stock take, claim a room, count three products</td><td class="note"></td></tr>
+  <tr><td class="tick">☐</td><td>In that room, add a product that is not in the system (use the NHS list for the name)</td><td class="note"></td></tr>
+  <tr><td class="tick">☐</td><td>Finish the room</td><td class="note"></td></tr>
+  <tr><td class="tick">☐</td><td>Report an issue about a room</td><td class="note"></td></tr>
+  <tr><td class="tick">☐</td><td>Ask the Orb a question, by typing and by speaking</td><td class="note"></td></tr>
+  <tr><td class="tick">☐</td><td>Send and answer a message with a colleague</td><td class="note"></td></tr>
+</table>
+
+<div class="box warn">
+  <b>Tell us straight away if</b>
+  <ul>
+    <li>a button does nothing, a screen goes blank, or the app closes;</li>
+    <li>something you saved does not appear, or a number looks wrong;</li>
+    <li>you cannot find where to do something you expected to do;</li>
+    <li>anything shows a patient's name, or someone can see something they should not.</li>
+  </ul>
+</div>
+
+<h2>5. Nurse manager extras</h2>
+<div class="nm">
+  <ul>
+    <li><b>Request a stock take</b> (on the desktop, Inventory &gt; Stock take): choose a name, who is asked, a finish-by date, and the rooms. Every room set up in Practice Admin is offered, even one with nothing recorded yet, so a first count can start from nothing.</li>
+    <li><b>Review and apply</b>: counts wait for you. Differences are listed biggest first. Tick the ones you accept, then apply them to stock. Nothing changes before that.</li>
+    <li><b>Items found that aren't in the system</b> arrive with everything the counter entered. Press <b>Create all as stock items</b> to make them in one go, each in the room it was counted with the number counted as its stock. Any that are already in stock, or were found twice, are held back for you to decide.</li>
+    <li><b>Fridge incidents</b>: out-of-range checks open an incident. You can take action on it (quarantine, record the stock, clear it).</li>
+    <li>Your home shows <b>what needs attention</b> (such as fridge incidents, expired and low stock) and the Orb gives you a briefing. The Orb's colour tells you at a glance: green all fine, amber something coming up, red something failed or overdue.</li>
+  </ul>
+</div>
+
+<h2>6. Who to ask</h2>
+<p>Gwyn Hughes, Practice Manager: ______________________________ &nbsp;&nbsp; Phone / email: ______________________________</p>
+<p class="small">In the app, ask the Orb "how do I…" and it will show you the steps. This is a test version: expect rough edges, and please tell us about them.</p>
+
+</body>
+</html>
