@@ -77,3 +77,13 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+/* iPhone Safari zooms the page whenever a text box smaller than 16px is tapped and never zooms back. Phone web users
+   (the app added to the Home Screen) get 16px text boxes. */
+@supports (-webkit-touch-callout: none) {
+  html[data-primovex-client="mobile-web"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  html[data-primovex-client="mobile-web"] select,
+  html[data-primovex-client="mobile-web"] textarea {
+    font-size: 16px !important;
+  }
+}
