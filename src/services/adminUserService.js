@@ -84,6 +84,13 @@ export async function createPasswordLink(uid) {
 // lost or stolen phone - admin-only, audited, not available for your own
 // account, and only a System Admin can do it for another System Admin.
 // Returns { uid, email, removed }.
+// A test alert to one person's phone(s): { phones, sent, name }. phones is 0 when they haven't turned alerts on.
+export async function sendTestAlert(uid) {
+  const call = httpsCallable(functions, "sendTestAlert");
+  const response = await call({ uid });
+  return response.data;
+}
+
 export async function resetUserMfa(uid) {
   const call = httpsCallable(functions, "resetUserMfa");
   const response = await call({ uid });

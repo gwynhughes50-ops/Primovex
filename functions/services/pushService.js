@@ -49,4 +49,32 @@ async function sendPushForNotification({ db, messaging, uid, notificationId, not
   return { sent: response.successCount, removed };
 }
 
-module.exports = { buildPush, sendPushForNotification };
+// An administrator checking that one person's phone gets alerts: a harmless notification that says so. Returns how many phones
+// the person has registered (0 means they have not turned alerts on yet, and nothing would arrive).
+async function sendTestAlert({ db, FieldValue, uid, callerName = "" }) {
+  const id = tidy(uid, 128);
+  if (!id) throw new Error("Say whose phone to test.");
+  const user = await db.collection("users").doc(id).get();
+  if (!user.exists) throw new Error("That person's account isn't there.");
+  const profile = user.data() || {};
+  const phones = (await db.collection("users").doc(id).collection("push_tokens").get()).size;
+  if (!phones) return { phones: 0, sent: false, name: tidy(profile.displayName || profile.email, 80) };
+  await db.collection("users").doc(id).collection("notifications").add({
+    recipientUid: id,
+    module: "connect",
+    kind: "test-alert",
+    title: "Primovex test alert",
+    message: `Sent by ${tidy(callerName, 60) || "an administrator"}. If you can see this on your phone, alerts are working.`,
+    priority: "high",
+    read: false,
+    status: "open",
+    actionUrl: "/notifications",
+    automated: true,
+    createdByName: "Primovex",
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  return { phones, sent: true, name: tidy(profile.displayName || profile.email, 80) };
+}
+
+module.exports = { buildPush, sendPushForNotification, sendTestAlert };

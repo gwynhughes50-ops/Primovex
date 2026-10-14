@@ -66,3 +66,28 @@ test("nothing is sent for a read notification or to someone with no phone regist
   assert.deepEqual(await sendPushForNotification({ db: fakeDb([]), messaging, uid: "u", notificationId: "n", notification: { module: "temperature", title: "T" } }), { sent: 0, removed: 0 });
   assert.equal(messaging.calls.length, 0);
 });
+
+test("a test alert is only written when the person has a phone registered, and says who sent it", async () => {
+  const { sendTestAlert } = require("../services/pushService");
+  const written = [];
+  const make = (tokens) => ({
+    collection: (name) => ({
+      doc: () => ({
+        get: async () => ({ exists: true, data: () => ({ displayName: "Craig M" }) }),
+        collection: (sub) => (sub === "push_tokens"
+          ? { get: async () => ({ size: tokens }) }
+          : { add: async (doc) => { written.push(doc); } }),
+      }),
+    }),
+  });
+  const FieldValue = { serverTimestamp: () => "now" };
+  assert.deepEqual(await sendTestAlert({ db: make(0), FieldValue, uid: "craig", callerName: "Gwyn" }), { phones: 0, sent: false, name: "Craig M" });
+  assert.equal(written.length, 0, "nothing is sent where nothing could arrive");
+  const result = await sendTestAlert({ db: make(2), FieldValue, uid: "craig", callerName: "Gwyn" });
+  assert.deepEqual(result, { phones: 2, sent: true, name: "Craig M" });
+  assert.equal(written[0].kind, "test-alert");
+  assert.match(written[0].message, /Sent by Gwyn/);
+  const push = buildPush(written[0], "n9");
+  assert.deepEqual([push.title, push.url], ["Primovex test alert", "/notifications"]);
+  await assert.rejects(() => sendTestAlert({ db: make(1), FieldValue, uid: "" }), /whose phone/);
+});

@@ -12,7 +12,7 @@ const { getSyntheticPackDocument } = require("./config/clinflowSyntheticPack");
 const { clinFlowEnabledFor } = require("./services/moduleAccess");
 const { raiseComplianceAlert } = require("./services/complianceAlertService");
 const sensorService = require("./services/sensorService");
-const { sendPushForNotification } = require("./services/pushService");
+const { sendPushForNotification, sendTestAlert } = require("./services/pushService");
 const { rolesToTell } = require("./services/fridgeAlertService");
 const { API_VERSION, MODEL_ID, analyzeDocument, summariseAnalyzeResult } = require("./services/azureDocumentIntelligenceService");
 const { extractClinicalFacts } = require("./services/azureOpenAiExtractionService");
@@ -879,6 +879,17 @@ exports.pushOnNotification = onDocumentCreated({ document: "users/{uid}/notifica
   } catch (error) {
     // an alert that could not be sent must never stop the notification itself
     console.error("pushOnNotification failed", error?.message);
+  }
+});
+
+// An administrator sends a test alert to one person's phone(s) to check alerts are working for them.
+exports.sendTestAlert = onCall({ region: "europe-west2", timeoutSeconds: 20 }, async (request) => {
+  await assertAdmin(request);
+  const caller = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
+  try {
+    return await sendTestAlert({ db, FieldValue, uid: request.data?.uid, callerName: caller.displayName || caller.email || "" });
+  } catch (error) {
+    throw new HttpsError("failed-precondition", error?.message || "Could not send the test alert.");
   }
 });
 

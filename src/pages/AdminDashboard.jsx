@@ -80,7 +80,7 @@ import { sendDueNotificationsNow } from "@/services/dueNotificationsService";
 import { describeDueRun } from "@/lib/dueNotificationsText";
 import { useAuth } from "@/contexts/AuthContext";
 import ViewAsPanel from "@/components/admin/ViewAsPanel";
-import { subscribeUsers, updateUserRole, updateUserOrbScope, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa } from "@/services/adminUserService";
+import { subscribeUsers, updateUserRole, updateUserOrbScope, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa, sendTestAlert } from "@/services/adminUserService";
 import { ORB_TOPICS, describeOrbScope, normaliseOrbScope } from "@/lib/orbScope";
 
 // --------------------------
@@ -455,6 +455,21 @@ export default function AdminDashboard() {
 
   // Lost phone: remove someone's authenticator app so they can set up a new one.
   const [mfaResetTarget, setMfaResetTarget] = useState(null);
+  const [testAlertUid, setTestAlertUid] = useState("");
+  // send one person a test alert, and say whether any phone of theirs could receive it
+  const runTestAlert = async (target) => {
+    setTestAlertUid(target.id);
+    try {
+      const result = await sendTestAlert(target.id);
+      window.alert(result.sent
+        ? `Test alert sent to ${result.name || "them"} (${result.phones} phone${result.phones === 1 ? "" : "s"}). It should arrive within a few seconds.`
+        : `${result.name || "That person"} has not turned alerts on for any phone yet. Ask them to open Primovex from their Home Screen, then Me, then Phone alerts, and turn them on.`);
+    } catch (problem) {
+      window.alert(problem?.message || "Could not send the test alert.");
+    } finally {
+      setTestAlertUid("");
+    }
+  };
   const [mfaResetBusy, setMfaResetBusy] = useState(false);
   const [mfaResetError, setMfaResetError] = useState("");
   const [mfaResetDone, setMfaResetDone] = useState(false);
@@ -823,6 +838,15 @@ export default function AdminDashboard() {
                                       onClick={() => setNotifCheckTarget(u)}
                                     >
                                       <BellRing className="h-4 w-4 mr-2" /> Notifications
+                                    </Button>
+                                    <Button
+                                      variant="outline"
+                                      className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60 disabled:opacity-40"
+                                      disabled={isInactive || testAlertUid === u.id}
+                                      title="Send a test alert to this person's phone"
+                                      onClick={() => runTestAlert(u)}
+                                    >
+                                      <BellRing className="h-4 w-4 mr-2" /> {testAlertUid === u.id ? "Sending…" : "Test alert"}
                                     </Button>
                                     <Button
                                       variant="outline"
