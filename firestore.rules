@@ -124,6 +124,13 @@ service cloud.firestore {
            // -------------------------
       // PER-USER NOTIFICATIONS FEED (subcollection)
       // -------------------------
+      // Phones this person has turned alerts on for: their own to add and remove, and only the server reads them to send.
+      match /push_tokens/{tokenId} {
+        allow read: if false;
+        allow create, update: if isOwner(uid) && request.resource.data.keys().hasOnly(["token", "platform", "installed", "createdAt"]) && request.resource.data.token is string && request.resource.data.token.size() < 600;
+        allow delete: if isOwner(uid);
+      }
+
       match /notifications/{nid} {
         allow read: if isOwner(uid);
 

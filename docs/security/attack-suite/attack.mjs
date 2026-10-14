@@ -987,6 +987,25 @@ async function main() {
     await assertSucceeds(deleteDoc(doc(reception, "governance_concern_contacts", "concern-owned")));
   });
 
+  console.log("\n=== 23. Phone alerts (users/{uid}/push_tokens) ===");
+  const pushDoc = (extra = {}) => ({ token: "tok-123", platform: "ios-web", installed: true, createdAt: serverTimestamp(), ...extra });
+  await check("Someone can register and remove their own phone for alerts", async () => {
+    await assertSucceeds(setDoc(doc(nurse, "users", "nurse-uid", "push_tokens", "t1"), pushDoc()));
+    await assertSucceeds(deleteDoc(doc(nurse, "users", "nurse-uid", "push_tokens", "t1")));
+  });
+  await check("Nobody can add a phone to someone else's account, so alerts can't be redirected", async () => {
+    for (const who of [pm, caretaker, partner, anon, admin]) await assertFails(setDoc(doc(who, "users", "nurse-uid", "push_tokens", "t2"), pushDoc()));
+  });
+  await check("Nobody can read phone tokens from the app, not even their own or an administrator's", async () => {
+    await seed(async (db) => { await setDoc(doc(db, "users", "nurse-uid", "push_tokens", "t3"), pushDoc({ createdAt: new Date() })); });
+    for (const who of [nurse, admin, pm, anon]) await assertFails(getDoc(doc(who, "users", "nurse-uid", "push_tokens", "t3")));
+  });
+  await check("A phone record holds only the expected fields and a sensible token", async () => {
+    await assertFails(setDoc(doc(nurse, "users", "nurse-uid", "push_tokens", "t4"), pushDoc({ extra: "x" })));
+    await assertFails(setDoc(doc(nurse, "users", "nurse-uid", "push_tokens", "t5"), pushDoc({ token: "x".repeat(700) })));
+    await assertFails(setDoc(doc(nurse, "users", "nurse-uid", "push_tokens", "t6"), pushDoc({ token: 5 })));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);

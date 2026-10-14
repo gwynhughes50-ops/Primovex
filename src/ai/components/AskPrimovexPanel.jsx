@@ -3,6 +3,7 @@ import { ArrowRight, Bot, CheckCircle2, ExternalLink, Meh, Mic, MicOff, RotateCc
 import { useNavigate } from 'react-router-dom';
 import usePrimovexAI from '../hooks/usePrimovexAI';
 import PulseOrbFace from '@/components/pulse/PulseOrbFace';
+import { isIosHomeScreenApp } from '@/lib/platformInfo';
 import { useOrbStatus } from '@/orb/OrbStatusContext';
 import OrbStatusPanel from '@/orb/OrbStatusPanel';
 import { AI_STATES } from '../types/responseContract';
@@ -38,6 +39,8 @@ const VOICE_STATES = {
 
 function getSpeechRecognition() {
   if (typeof window === 'undefined') return null;
+  // the iPhone Home Screen web app has no speech recognition (the browser does): say so instead of failing on a tap
+  if (isIosHomeScreenApp()) return null;
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
@@ -416,7 +419,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
               <PulseOrbFace level={orbStatus.level} size={150} active={voiceState === VOICE_STATES.LISTENING || voiceState === VOICE_STATES.THINKING || voiceState === VOICE_STATES.WAKING} still={voiceState === VOICE_STATES.SLEEPING} />
             </button>
             <strong>{orbLabel}</strong>
-            <span>{voiceError || partialTranscript || (voiceSupported ? (orbAwake ? 'Keep talking. Say “that’s all” when you are finished.' : 'Tap the Orb and talk. It keeps listening until you say “that’s all” or go quiet.') : 'Voice recognition is unavailable on this device. You can still type below.')}</span>
+            <span>{voiceError || partialTranscript || (voiceSupported ? (orbAwake ? 'Keep talking. Say “that’s all” when you are finished.' : 'Tap the Orb and talk. It keeps listening until you say “that’s all” or go quiet.') : (isIosHomeScreenApp() ? 'Voice is not available in the iPhone Home Screen app. Tap the microphone on your keyboard to dictate, or type below.' : 'Voice recognition is unavailable on this device. You can still type below.'))}</span>
             {voiceSupported && (
               <button type="button" onClick={toggleSpeak} className="primovex-ai-muted mt-2 text-xs underline" aria-pressed={speakAnswers}>
                 {speakAnswers ? 'Spoken answers: on' : 'Spoken answers: off'}

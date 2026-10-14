@@ -18,7 +18,7 @@ const firebaseConfig = {
 };
 
 // 🚀 Initialise Firebase app (singleton)
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
 
 // 📦 Firestore database
 export const db = getFirestore(app);

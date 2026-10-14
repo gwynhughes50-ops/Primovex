@@ -2,6 +2,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const crypto = require("crypto");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
+const { onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const { getProvider, listProviders } = require("./providers/providerFactory");
@@ -11,6 +12,7 @@ const { getSyntheticPackDocument } = require("./config/clinflowSyntheticPack");
 const { clinFlowEnabledFor } = require("./services/moduleAccess");
 const { raiseComplianceAlert } = require("./services/complianceAlertService");
 const sensorService = require("./services/sensorService");
+const { sendPushForNotification } = require("./services/pushService");
 const { rolesToTell } = require("./services/fridgeAlertService");
 const { API_VERSION, MODEL_ID, analyzeDocument, summariseAnalyzeResult } = require("./services/azureDocumentIntelligenceService");
 const { extractClinicalFacts } = require("./services/azureOpenAiExtractionService");
@@ -865,6 +867,20 @@ exports.scheduledSensorWatch = onSchedule(
     await sensorService.checkSilentSensors({ db, roles: await rolesToTell(db) });
   }
 );
+
+// A new notification for someone (only ever written here, on the server): tell their phone. Each phone they turned alerts on
+// for gets a short alert (see services/pushService.js for what is and is not shown).
+exports.pushOnNotification = onDocumentCreated({ document: "users/{uid}/notifications/{nid}", region: "europe-west2" }, async (event) => {
+  const snapshot = event.data;
+  if (!snapshot) return;
+  try {
+    const { getMessaging } = require("firebase-admin/messaging");
+    await sendPushForNotification({ db, messaging: getMessaging(), uid: event.params.uid, notificationId: event.params.nid, notification: snapshot.data() });
+  } catch (error) {
+    // an alert that could not be sent must never stop the notification itself
+    console.error("pushOnNotification failed", error?.message);
+  }
+});
 
 exports.scheduledConnectSimulatorSync = onSchedule(
   {

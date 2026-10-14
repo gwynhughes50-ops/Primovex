@@ -30,6 +30,10 @@ const isMobileBrowser =
 const useMobileApplication = isAndroidBuild || isAndroidRuntime || isMobileBrowser || isSenseDeepLink;
 const Application = useMobileApplication ? MobileApp : DesktopApp;
 
+// Ask the browser not to clear this site's saved data (the PIN, the signed-in session) when the phone is short of space or
+// the app has not been opened for a while. An iPhone Home Screen web app is already protected; a plain browser tab is not.
+try { navigator.storage?.persist?.(); } catch { /* optional */ }
+
 document.documentElement.dataset.primovexClient = isAndroidBuild || isAndroidRuntime
   ? "android"
   : isMobileBrowser || isSenseDeepLink
