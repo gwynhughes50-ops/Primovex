@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import usePrimovexAI from '../hooks/usePrimovexAI';
 import PulseOrbFace from '@/components/pulse/PulseOrbFace';
 import { isIosHomeScreenApp } from '@/lib/platformInfo';
+import { startRecording } from '@/lib/audioRecorder';
+import { transcribeSpeech } from '@/lib/speechToText';
 import { useOrbStatus } from '@/orb/OrbStatusContext';
 import OrbStatusPanel from '@/orb/OrbStatusPanel';
 import { AI_STATES } from '../types/responseContract';
@@ -112,6 +114,12 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
   const utteranceRef = useRef(() => {});
   const startSessionRef = useRef(() => {});
   const processTextRef = useRef(async () => 'done');
+  // The iPhone Home Screen app has no browser speech recognition, so the person's question is recorded on the phone and turned
+  // into words on the server (src/lib/audioRecorder.js, the transcribeSpeech function). One tap to start, it stops when they stop talking.
+  const dictationMode = isIosHomeScreenApp();
+  const [dictation, setDictation] = useState('idle'); // idle | recording | working
+  const recorderRef = useRef(null);
+  const finishDictationRef = useRef(async () => {});
   const endRef = useRef(null);
   const busy = status === AI_STATES.SEARCHING || status === AI_STATES.REASONING;
   const isMobile = variant === 'mobile';
@@ -143,7 +151,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     setPartialTranscript('');
     setVoiceState(VOICE_STATES.SLEEPING);
   }, [muteBeeps, stopRecognition]);
-  const sleepOrb = endSession;
+  const sleepOrb = () => { if (recorderRef.current) { recorderRef.current.cancel(); recorderRef.current = null; setDictation('idle'); } endSession(); };
 
   // A listen has finished (with words, or without): open the microphone again, or finish if it has been quiet.
   const afterTurn = useCallback(() => {
@@ -275,7 +283,35 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     if (nativeVoiceAvailable()) requestNativeMicrophonePermission();
     timerRef.current = window.setTimeout(() => listenOnceRef.current(), 240);
   }, [muteBeeps]);
-  const wakeOrb = startSession;
+  finishDictationRef.current = async () => {
+    const recording = recorderRef.current;
+    if (!recording) return;
+    recorderRef.current = null;
+    setDictation('working');
+    try {
+      const { base64, heard } = recording.stop();
+      if (!heard) { setVoiceError("I didn't hear anything. Tap the Orb and try again."); return; }
+      const { text } = await transcribeSpeech(base64);
+      if (!text) { setVoiceError("I couldn't make that out. Tap the Orb and try again, or type below."); return; }
+      await processTextRef.current(text);
+    } catch (error) {
+      setVoiceError(error?.message || 'That did not work. Type your question below.');
+    } finally {
+      setDictation('idle');
+    }
+  };
+  const dictate = async () => {
+    if (dictation === 'recording') { await finishDictationRef.current(); return; }
+    if (dictation !== 'idle') return;
+    setVoiceError('');
+    try {
+      recorderRef.current = await startRecording({ onAutoStop: () => finishDictationRef.current() });
+      setDictation('recording');
+    } catch (error) {
+      setVoiceError(error?.message || 'The microphone could not start. Type your question below.');
+    }
+  };
+  const wakeOrb = dictationMode ? dictate : startSession;
 
   useEffect(() => {
     utteranceRef.current = handleUtterance;
@@ -390,8 +426,9 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     ? 'fixed inset-x-0 z-[140] rounded-t-[2rem]'
     : 'fixed bottom-6 right-6 top-6 z-[140] w-[min(470px,calc(100vw-3rem))]';
 
-  const orbAwake = voiceState !== VOICE_STATES.SLEEPING;
-  const orbLabel = voiceState === VOICE_STATES.LISTENING ? 'Listening' : voiceState === VOICE_STATES.THINKING ? 'Thinking' : voiceState === VOICE_STATES.FOLLOW_UP ? 'Anything else?' : voiceState === VOICE_STATES.WAKING ? 'Starting…' : 'Tap to talk';
+  const recordingNow = dictation === 'recording';
+  const orbAwake = voiceState !== VOICE_STATES.SLEEPING || dictation !== 'idle';
+  const orbLabel = recordingNow ? 'Listening… tap when finished' : dictation === 'working' ? 'Working out what you said…' : voiceState === VOICE_STATES.LISTENING ? 'Listening' : voiceState === VOICE_STATES.THINKING ? 'Thinking' : voiceState === VOICE_STATES.FOLLOW_UP ? 'Anything else?' : voiceState === VOICE_STATES.WAKING ? 'Starting…' : 'Tap to talk';
 
   return (
     <aside
@@ -415,11 +452,11 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {isMobile && (
           <section className={`primovex-voice-stage ${orbAwake ? 'is-awake' : 'is-sleeping'}`} aria-live="polite">
-            <button type="button" onClick={orbAwake ? sleepOrb : wakeOrb} className={`primovex-pulse-voice-orb state-${voiceState}`} aria-label={orbAwake ? 'Put Orb to sleep' : 'Wake Orb'}>
-              <PulseOrbFace level={orbStatus.level} size={150} active={voiceState === VOICE_STATES.LISTENING || voiceState === VOICE_STATES.THINKING || voiceState === VOICE_STATES.WAKING} still={voiceState === VOICE_STATES.SLEEPING} />
+            <button type="button" onClick={dictationMode ? dictate : (orbAwake ? sleepOrb : wakeOrb)} className={`primovex-pulse-voice-orb state-${voiceState}`} aria-label={orbAwake ? 'Put Orb to sleep' : 'Wake Orb'}>
+              <PulseOrbFace level={orbStatus.level} size={150} active={recordingNow || dictation === 'working' || voiceState === VOICE_STATES.LISTENING || voiceState === VOICE_STATES.THINKING || voiceState === VOICE_STATES.WAKING} still={voiceState === VOICE_STATES.SLEEPING && dictation === 'idle'} />
             </button>
             <strong>{orbLabel}</strong>
-            <span>{voiceError || partialTranscript || (voiceSupported ? (orbAwake ? 'Keep talking. Say “that’s all” when you are finished.' : 'Tap the Orb and talk. It keeps listening until you say “that’s all” or go quiet.') : (isIosHomeScreenApp() ? 'Voice is not available in the iPhone Home Screen app. Tap the microphone on your keyboard to dictate, or type below.' : 'Voice recognition is unavailable on this device. You can still type below.'))}</span>
+            <span>{voiceError || partialTranscript || (dictationMode ? (recordingNow ? 'Say your question. It stops when you stop talking, or tap the Orb.' : dictation === 'working' ? 'One moment…' : 'Tap the Orb, then say your question. It is sent for the Orb to answer.') : voiceSupported ? (orbAwake ? 'Keep talking. Say “that’s all” when you are finished.' : 'Tap the Orb and talk. It keeps listening until you say “that’s all” or go quiet.') : 'Voice recognition is unavailable on this device. You can still type below.')}</span>
             {voiceSupported && (
               <button type="button" onClick={toggleSpeak} className="primovex-ai-muted mt-2 text-xs underline" aria-pressed={speakAnswers}>
                 {speakAnswers ? 'Spoken answers: on' : 'Spoken answers: off'}
@@ -535,7 +572,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
 
       <form onSubmit={submit} className="primovex-ai-divider primovex-ai-form p-4">
         <div className="primovex-ai-composer flex items-end gap-2 rounded-2xl p-2">
-          {isMobile && <button type="button" onClick={orbAwake ? sleepOrb : wakeOrb} className="primovex-ai-mic grid h-10 w-10 shrink-0 place-items-center rounded-xl" aria-label={orbAwake ? 'Stop listening' : 'Talk to Orb'}>{orbAwake ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>}
+          {isMobile && <button type="button" onClick={dictationMode ? dictate : (orbAwake ? sleepOrb : wakeOrb)} className="primovex-ai-mic grid h-10 w-10 shrink-0 place-items-center rounded-xl" aria-label={orbAwake ? 'Stop listening' : 'Talk to Orb'}>{orbAwake ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>}
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) submit(event); }} rows={1} placeholder="Ask Orb…" className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none" />
           <button type="submit" disabled={!prompt.trim() || busy} className="primovex-ai-submit grid h-10 w-10 place-items-center rounded-xl disabled:cursor-not-allowed disabled:opacity-30"><ArrowRight className="h-4 w-4" /></button>
         </div>

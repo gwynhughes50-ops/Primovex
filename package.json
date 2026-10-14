@@ -87,6 +87,7 @@
     "test:shelly-diagnostics": "esbuild scripts/verify-shelly-diagnostics.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-shelly-diagnostics.bundle.mjs && node work/verify-shelly-diagnostics.bundle.mjs",
     "test:concern-contact": "esbuild scripts/verify-concern-contact.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-concern-contact.bundle.mjs && node work/verify-concern-contact.bundle.mjs",
     "test:medicine-lookup": "esbuild scripts/verify-medicine-lookup.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-medicine-lookup.bundle.mjs && node work/verify-medicine-lookup.bundle.mjs",
+    "test:audio-recorder": "esbuild scripts/verify-audio-recorder.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-audio-recorder.bundle.mjs && node work/verify-audio-recorder.bundle.mjs",
     "test:staff-picker": "esbuild scripts/verify-staff-picker.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-staff-picker.bundle.mjs && node work/verify-staff-picker.bundle.mjs",
     "test:orb-status": "esbuild scripts/verify-orb-status.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-status.bundle.mjs && node work/verify-orb-status.bundle.mjs",
     "test:coshh": "esbuild scripts/verify-coshh.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-coshh.bundle.mjs && node work/verify-coshh.bundle.mjs",

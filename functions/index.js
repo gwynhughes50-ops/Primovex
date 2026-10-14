@@ -13,6 +13,7 @@ const { clinFlowEnabledFor } = require("./services/moduleAccess");
 const { raiseComplianceAlert } = require("./services/complianceAlertService");
 const sensorService = require("./services/sensorService");
 const { sendPushForNotification, sendTestAlert } = require("./services/pushService");
+const speechService = require("./services/speechService");
 const { rolesToTell } = require("./services/fridgeAlertService");
 const { API_VERSION, MODEL_ID, analyzeDocument, summariseAnalyzeResult } = require("./services/azureDocumentIntelligenceService");
 const { extractClinicalFacts } = require("./services/azureOpenAiExtractionService");
@@ -26,7 +27,7 @@ const { listStaffDirectory } = require("./services/staffDirectoryService");
 const { sendDueNotifications } = require("./services/dueNotificationService");
 const { sendKitNotification, replaceKitItemBatch } = require("./services/kitCheckService");
 const { recordUsage } = require("./services/usageService");
-const { routeQuestion } = require("./services/orbRouterService");
+const { routeQuestion, countRequest } = require("./services/orbRouterService");
 const { phraseAnswer } = require("./services/orbPhraseService");
 const { runRetention } = require("./services/retentionService");
 const { sendTeamMessage, findColleagues } = require("./services/teamMessageService");
@@ -890,6 +891,23 @@ exports.sendTestAlert = onCall({ region: "europe-west2", timeoutSeconds: 20 }, a
     return await sendTestAlert({ db, FieldValue, uid: request.data?.uid, callerName: caller.displayName || caller.email || "" });
   } catch (error) {
     throw new HttpsError("failed-precondition", error?.message || "Could not send the test alert.");
+  }
+});
+
+// A spoken question turned into words (see services/speechService.js). Signed-in people only, and limited per person and per day.
+exports.transcribeSpeech = onCall({ region: "europe-west2", timeoutSeconds: 30, memory: "512MiB" }, async (request) => {
+  assertSignedIn(request);
+  const checked = speechService.checkRecording(request.data?.audio);
+  if (!checked.ok) throw new HttpsError("invalid-argument", checked.error);
+  await countRequest({ db, uid: request.auth.uid, now: new Date(), prefix: "stt_", hourlyLimit: speechService.HOURLY_LIMIT, dailyLimit: speechService.DAILY_LIMIT });
+  try {
+    const { SpeechClient } = require("@google-cloud/speech");
+    // the EU endpoint, so the audio is processed within the EU
+    const client = new SpeechClient({ apiEndpoint: "eu-speech.googleapis.com" });
+    return await speechService.transcribe({ client, base64: request.data.audio, phrases: request.data?.phrases });
+  } catch (error) {
+    console.error("transcribeSpeech failed", String(error?.message || "").slice(0, 200));
+    throw new HttpsError("unavailable", "The microphone couldn't be turned into words just now. Type your question instead.");
   }
 });
 
