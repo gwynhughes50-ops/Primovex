@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="en-GB"><head><meta charset="utf-8"><title>Primovex how-to guide</title>
+<style>
+  @page { size: A4; margin: 15mm 16mm 16mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10.5pt; line-height: 1.4; color: #14213d; margin: 0; }
+  .cover { min-height: 255mm; display: flex; flex-direction: column; justify-content: center; align-items: flex-start; break-after: page; }
+  .cover img { height: 62px; margin-bottom: 26px; }
+  .cover h1 { font-size: 34pt; margin: 0; color: #0b3b7a; }
+  .cover .sub { font-size: 14pt; color: #4a5a78; margin-top: 8px; }
+  .cover .note { margin-top: 36px; border-left: 4px solid #1fb5a8; padding: 4px 12px; color: #34445f; max-width: 125mm; }
+  h2.section { font-size: 18pt; color: #0b3b7a; border-bottom: 3px solid #1fb5a8; padding-bottom: 3px; margin: 0 0 8px; break-before: page; }
+  .toc { break-after: page; }
+  .toc h2 { font-size: 18pt; color: #0b3b7a; border-bottom: 3px solid #1fb5a8; padding-bottom: 3px; margin: 0 0 8px; }
+  .toc h3 { font-size: 11.5pt; margin: 10px 0 2px; color: #0b3b7a; }
+  .toc ul { list-style: none; margin: 0; padding: 0; columns: 1; }
+  .toc li { margin: 1px 0; font-size: 10pt; }
+  .toc a { color: #14213d; text-decoration: none; }
+  .art { break-inside: avoid; border: 1px solid #c9d4e8; border-radius: 8px; padding: 8px 12px 8px; margin: 0 0 10px; }
+  .art h3 { margin: 0 0 3px; font-size: 12pt; color: #14213d; }
+  .meta { margin: 0 0 4px; font-size: 9pt; color: #4a5a78; }
+  .where { display: inline-block; background: #e6edf8; color: #0b3b7a; border-radius: 10px; padding: 0 8px; font-weight: 600; }
+  .needs { margin-left: 6px; }
+  ol { margin: 3px 0 3px 20px; padding: 0; }
+  li { margin: 2px 0; }
+  .tip { margin: 5px 0 2px; background: #eefaf8; border-radius: 6px; padding: 4px 8px; font-size: 9.8pt; }
+  .open { margin: 4px 0 0; font-size: 9pt; color: #4a5a78; }
+  .foot { margin-top: 14px; font-size: 9pt; color: #4a5a78; }
+</style></head><body>
+
+<section class="cover">
+  <img src="../../public/branding/primovex-logo-approved.png" alt="Primovex">
+  <h1>How to use Primovex</h1>
+  <div class="sub">The step-by-step guide for the desktop and the phone</div>
+  <div class="note">49 short guides on every part of Primovex, written from the app's own screens and buttons. Names in <b>&ldquo;quotes&rdquo;</b> are real menu items and buttons. You can also ask the Orb &ldquo;how do I&hellip;&rdquo; at any time, or open <b>Help</b> in the menu.<br><br>Produced 14 October 2026. Never put a patient's name into Primovex: use the EMIS number or initials only.</div>
+</section>
+
+<section class="toc">
+  <h2>Contents</h2>
+  <h3>Stock</h3><ul><li><a href="#a-add-stock-item">Add a new product to stock, or record a delivery of something new</a></li><li><a href="#a-receive-delivery">Receive a delivery of something we already stock</a></li><li><a href="#a-use-stock">Record stock being used</a></li><li><a href="#a-scan-barcode">Scan a barcode to find or receive a product</a></li><li><a href="#a-move-stock-to-kit">Move stock from the store room into a kit or box</a></li><li><a href="#a-reorder-stock">Ask for more of something to be ordered</a></li><li><a href="#a-stock-photo">Add or change a photo of a stock item</a></li><li><a href="#a-archive-delete-item">Archive or permanently delete a stock item</a></li><li><a href="#a-expiry-warning-days">Change how soon before expiry Primovex warns about stock</a></li><li><a href="#a-stock-take">Do a full stock take with the team on their phones</a></li><li><a href="#a-stock-review-alerts">How do I see stock that is not being used, or that we have too much or too little of?</a></li></ul><h3>Kits and boxes</h3><ul><li><a href="#a-manage-kit">Add or change what's in an emergency kit or anaphylaxis box</a></li><li><a href="#a-check-kit-phone">Check an emergency kit or anaphylaxis box on the phone</a></li><li><a href="#a-print-box-label">Print the QR label for a box, or its contents list</a></li><li><a href="#a-anaphylaxis-guidance">Find the current anaphylaxis guidance</a></li></ul><h3>Fridges and temperature</h3><ul><li><a href="#a-log-temperature">Record a fridge or freezer temperature</a></li><li><a href="#a-fridge-out-of-range">What to do when a fridge is out of range</a></li><li><a href="#a-record-fridge-temperature">Record a fridge temperature on the phone</a></li><li><a href="#a-fridge-alerts-setup">Set up the fridges and who is alerted when one is out of range</a></li><li><a href="#a-primovex-sensors">How do I connect a temperature sensor to Primovex?</a></li></ul><h3>Compliance and facilities</h3><ul><li><a href="#a-coshh-register">Keep the COSHH register: hazardous products, PPE, first aid and safety data sheets</a></li><li><a href="#a-failed-compliance-check">A fire or water check failed: what happens and what to do</a></li><li><a href="#a-report-maintenance-issue">Report something that needs fixing (a light, a tap, a door)</a></li><li><a href="#a-certificates-register">Keep track of gas, electrical, fire and other certificates</a></li></ul><h3>SARs, concerns and governance</h3><ul><li><a href="#a-new-sar">Log a new subject access request (SAR)</a></li><li><a href="#a-new-concern">Log a new concern or complaint</a></li><li><a href="#a-report-significant-event">How do I report a significant event?</a></li><li><a href="#a-run-significant-event">How do I investigate and review a significant event, and record the meeting?</a></li><li><a href="#a-sars-on-phone">How do I see SARs on my phone?</a></li></ul><h3>Reports and inspections</h3><ul><li><a href="#a-inspection-pack">Get ready for a HEIW visit or a Health and Safety visit</a></li></ul><h3>The Orb</h3><ul><li><a href="#a-orb-ai-settings">Turn the Orb's AI on or off</a></li><li><a href="#a-what-can-orb-do">What can I ask the Orb?</a></li><li><a href="#a-orb-colour">What do the Orb's colours mean?</a></li><li><a href="#a-talk-to-orb-phone">Talk to the Orb on the phone when your hands are busy</a></li><li><a href="#a-find-notifications">Where do I see my notifications and reminders?</a></li><li><a href="#a-orb-stock-actions">Can the Orb find stock, message a team or raise a reorder?</a></li><li><a href="#a-orb-teach-names">How do I teach the Orb the names we use for our stock?</a></li><li><a href="#a-orb-record-stock-used">How do I record stock I've used with the Orb?</a></li></ul><h3>People, access and admin</h3><ul><li><a href="#a-add-user">Add a new member of staff</a></li><li><a href="#a-import-staff">Add many staff at once from a spreadsheet</a></li><li><a href="#a-reset-password">Give someone a new sign-in link (or reset their password)</a></li><li><a href="#a-add-role">Create a role, or give someone different permissions</a></li><li><a href="#a-set-department">Put someone in a department, or change who they report to</a></li><li><a href="#a-print-org-chart">Print the organisation chart, or a staff list by department</a></li><li><a href="#a-limit-orb-topics">How do I limit what the Orb and Pulse orb show a person?</a></li></ul><h3>Security</h3><ul><li><a href="#a-activity-report">See who has signed in and what they used</a></li><li><a href="#a-view-audit-log">See the audit log of who did what</a></li><li><a href="#a-two-step-sign-in">Set up two-step sign-in (authenticator app)</a></li><li><a href="#a-screen-locked">My screen locked and asks for a PIN</a></li></ul>
+</section>
+
+<h2 class="section" id="s-stock">Stock</h2>
+  <article class="art" id="a-add-stock-item">
+    <h3>Add a new product to stock, or record a delivery of something new</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Create/edit stock</span></p>
+    <ol><li>Go to Inventory and press <b>&ldquo;Add item&rdquo;</b>.</li><li>Start typing the product name in the first box, for example <b>&ldquo;eclipse&rdquo;</b>. Primovex suggests products you have had before. Pick one if it's the same, then press <b>&ldquo;Receive into it instead&rdquo;</b> so you don't create a duplicate. It also suggests names from the NHS dm+d medicine list: pick one to fill in the name (and the brand, if you typed one), or keep what you typed for anything not in the list.</li><li>Or scan the delivery barcode (box or pack) in the scan box at the top, and it fills in what it can.</li><li>Fill in the quantity, batch number and expiry date from the box. Choose the Site and Location from the lists.</li><li>Save. The window stays open so you can add the next item from the same delivery.</li></ol>
+    <p class="tip"><b>Good to know:</b> Every batch keeps its own expiry date, and stock is used soonest-expiring first.</p>
+    <p class="open">In the app: Open Inventory (/inventory)</p>
+  </article>
+  <article class="art" id="a-receive-delivery">
+    <h3>Receive a delivery of something we already stock</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Create/edit stock</span></p>
+    <ol><li>Go to Inventory and find the item (use the search box if you need to).</li><li>Press <b>&ldquo;+ Receive&rdquo;</b> on its card.</li><li>Enter the quantity, and the batch number and expiry date from the box. If the item has no barcode recorded yet you can add the one on the box.</li><li>Save. The new batch is added alongside any existing ones.</li></ol>
+    <p class="tip"><b>Good to know:</b> Receiving stock into an archived item brings it back.</p>
+    <p class="open">In the app: Open Inventory (/inventory)</p>
+  </article>
+  <article class="art" id="a-use-stock">
+    <h3>Record stock being used</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Create/edit stock</span></p>
+    <ol><li>Go to Inventory and find the item.</li><li>Press <b>&ldquo;- Use&rdquo;</b> on its card.</li><li>Enter the quantity and choose a reason (routine use, expired or damaged, stock audit or other).</li><li>Save. Primovex takes it from the soonest-expiring batch first.</li></ol>
+    
+    <p class="open">In the app: Open Inventory (/inventory)</p>
+  </article>
+  <article class="art" id="a-scan-barcode">
+    <h3>Scan a barcode to find or receive a product</h3>
+    <p class="meta"><span class="where">Desktop and phone</span> <span class="needs">You need: View inventory</span></p>
+    <ol><li>On a computer: in <b>&ldquo;Add item&rdquo;</b>, scan into the box that says <b>&ldquo;Scan the delivery barcode (box or pack)&rdquo;</b>.</li><li>On the phone: open the Primovex app, go to the <b>&ldquo;Scan&rdquo;</b> tab and point the camera at the barcode.</li><li>Primovex reads the product details from the code. A single pack and the box it came in have different codes but belong to the same product, and it knows that.</li></ol>
+    <p class="tip"><b>Good to know:</b> If a barcode isn't recognised, search for the product by name and receive it that way; the barcode is saved so it works next time.</p>
+    <p class="open">In the app: Open Inventory (/inventory)</p>
+  </article>
+  <article class="art" id="a-move-stock-to-kit">
+    <h3>Move stock from the store room into a kit or box</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Create/edit stock</span></p>
+    <ol><li>Go to Inventory and find the item.</li><li>Press <b>&ldquo;Locations&rdquo;</b> on its card.</li><li>Next to where it is now (for example the main store), press <b>&ldquo;Move&rdquo;</b>.</li><li>Choose where it's going: an emergency kit, an anaphylaxis box, or a room or equipment. Enter the quantity.</li><li>Confirm. The store loses that quantity and the kit gains it.</li></ol>
+    <p class="tip"><b>Good to know:</b> This is how you record taking something from the store and putting it in a kit, so the stock levels stay right in both places.</p>
+    <p class="open">In the app: Open Inventory (/inventory)</p>
+  </article>
+  <article class="art" id="a-reorder-stock">
+    <h3>Ask for more of something to be ordered</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Create/edit stock</span></p>
+    <ol><li>Go to Inventory and find the item.</li><li>Press <b>&ldquo;Reorder&rdquo;</b> on its card.</li><li>Check the quantity and supplier, add a note if needed, and send the request.</li><li>The Reorder Centre in the left menu shows requests that are waiting.</li></ol>
+    
+    <p class="open">In the app: Open Reorder Centre (/reorder-centre)</p>
+  </article>
+  <article class="art" id="a-stock-photo">
+    <h3>Add or change a photo of a stock item</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Create/edit stock</span></p>
+    <ol><li>Go to Inventory and find the item.</li><li>Press <b>&ldquo;Photo&rdquo;</b> on its card (or <b>&ldquo;Replace&rdquo;</b> if it already has one) and choose or take the picture.</li><li>To take it off, press <b>&ldquo;Remove&rdquo;</b> next to the photo.</li></ol>
+    
+    <p class="open">In the app: Open Inventory (/inventory)</p>
+  </article>
+  <article class="art" id="a-archive-delete-item">
+    <h3>Archive or permanently delete a stock item</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Create/edit stock</span></p>
+    <ol><li>To archive (hide it but keep its history): go to Inventory, find the item and press the archive icon on its card. It asks you first. Archived items are hidden; use the archived-items toggle to show them, and <b>&ldquo;Restore&rdquo;</b> to bring one back.</li><li>To delete for good: only people given the permanent-delete permission see <b>&ldquo;Delete permanently&rdquo;</b>. It asks you to type the item's name to confirm, and it can't be undone.</li></ol>
+    <p class="tip"><b>Good to know:</b> Archive is almost always the right choice, because it keeps the stock history. If you need permanent delete and can't see it, ask an administrator.</p>
+    <p class="open">In the app: Open Inventory (/inventory)</p>
+  </article>
+  <article class="art" id="a-expiry-warning-days">
+    <h3>Change how soon before expiry Primovex warns about stock</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Manage system settings</span></p>
+    <ol><li>Go to Alerts in the left menu and open its Settings.</li><li>Set the number of days before expiry that counts as <b>&ldquo;expiring soon&rdquo;</b>. The default is 30 days. You can set a different number for a category, for example vaccines.</li><li>Save. The Alerts page, the stock cards, the desktop pop-up and the Orb all use the same setting.</li></ol>
+    
+    <p class="open">In the app: Open Alerts (/alerts)</p>
+  </article>
+  <article class="art" id="a-stock-take">
+    <h3>Do a full stock take with the team on their phones</h3>
+    <p class="meta"><span class="where">On the phone</span> <span class="needs">You need: Take part in a stock take (claim places, count, add items found)</span></p>
+    <ol><li>To count (phone): open the Stock take tile on the home screen, or tap the banner that says a stock take needs your help. Pick the stock take, then tap <b>&ldquo;Count this&rdquo;</b> on a room or cupboard that is free. Others see it is yours, so nobody counts it twice.</li><li>Scan each product's barcode or search for it by name, then type how many are really there. The number the system expects is hidden on purpose. If nothing is there, tap <b>&ldquo;None here (0)&rdquo;</b>.</li><li>If you find something that is not in the system, tap <b>&ldquo;Something not in the system&rdquo;</b> and enter what it is and how many. It goes to the manager; it does not change stock by itself.</li><li>Tap <b>&ldquo;Finish this place&rdquo;</b> when you are done. If items on the list were not counted it tells you. Take another place, or <b>&ldquo;Give this place back&rdquo;</b> if you cannot finish.</li><li>To do one yourself without being asked: Stock take, then <b>&ldquo;Start my own stock take&rdquo;</b>, choose the places and count them the same way.</li><li>To request one (Practice Manager, or a role given <b>&ldquo;Request, review and apply a stock take&rdquo;</b>): on the desktop go to Stock take, press <b>&ldquo;Request a stock take&rdquo;</b>, choose the places, who is asked and a finish-by date.</li><li>To review: open the stock take on the desktop. Large differences are marked. Tick the changes you accept and press <b>&ldquo;Apply&rdquo;</b>; stock only changes then, and each change is logged. <b>&ldquo;Print results&rdquo;</b> gives a sheet for your records.</li></ol>
+    <p class="tip"><b>Good to know:</b> A find in a room's main store that is recorded in another place is only reported; move it with Inventory afterwards. Stock moves while people count, so the review compares to what is recorded now.</p>
+    <p class="open">In the app: Open Stock take (/stocktake)</p>
+  </article>
+  <article class="art" id="a-stock-review-alerts">
+    <h3>How do I see stock that is not being used, or that we have too much or too little of?</h3>
+    <p class="meta"><span class="where">On the desktop</span></p>
+    <ol><li>Open Alerts and scroll to Stock review. It is checked every morning against how fast each item has really been used over the past year.</li><li>Needs a stock take: nothing has been recorded for six months or more. The person who last handled it gets a message asking them to count what is on the shelf and update Primovex. Open the item and set the count.</li><li>Looks like too much: it would last more than a year at the usual rate. Around that many would do. May run short: it would last under three weeks, or the minimum is too low for how fast it goes.</li><li>Stock controllers also get a short summary every Monday. Emergency drugs, emergency equipment and kit stock are left out because they are meant to sit unused.</li></ol>
+    
+    <p class="open">In the app: Open Alerts (/alerts)</p>
+  </article>
+<h2 class="section" id="s-kits-and-boxes">Kits and boxes</h2>
+  <article class="art" id="a-manage-kit">
+    <h3>Add or change what's in an emergency kit or anaphylaxis box</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Delete/archive stock</span></p>
+    <ol><li>Go to Inventory and open <b>&ldquo;Anaphylaxis Emergency Boxes&rdquo;</b> or &quot;Emergency Drugs &amp; Equipment (Monthly)&quot;.</li><li>Choose the box, then press <b>&ldquo;Manage&rdquo;</b>. To make a new one press <b>&ldquo;Add box&rdquo;</b>.</li><li>To add an item, start typing its name and choose it from your stock. Its barcode, batch and expiry fill in for you.</li><li>Choose which batch goes in the kit: follow the soonest-expiring batch in stock (it updates itself), or pick a specific one.</li><li>Save the changes.</li></ol>
+    <p class="tip"><b>Good to know:</b> Items you pick from stock stay linked to it, so the kit shows the right batch and expiry automatically.</p>
+    <p class="open">In the app: Open Inventory (/inventory?tab=anaphylaxis)</p>
+  </article>
+  <article class="art" id="a-check-kit-phone">
+    <h3>Check an emergency kit or anaphylaxis box on the phone</h3>
+    <p class="meta"><span class="where">On the phone</span> <span class="needs">You need: Complete stock verification</span></p>
+    <ol><li>Open the Primovex app and scan the QR label on the box (use the <b>&ldquo;Scan&rdquo;</b> tab, or the phone's camera). The check starts straight away.</li><li>Go through the items one at a time. Press <b>&ldquo;Present&rdquo;</b> (it moves to the next one), or mark one <b>&ldquo;Missing&rdquo;</b>, <b>&ldquo;Expired&rdquo;</b> or <b>&ldquo;Not required&rdquo;</b>.</li><li>For anything that needs dealing with: <b>&ldquo;Replace&rdquo;</b> swaps it for a new one (pick a batch from stock or type its batch and expiry), <b>&ldquo;Message&rdquo;</b> sends a note to a colleague, <b>&ldquo;Later&rdquo;</b> sets a reminder for later today, tomorrow morning or next week.</li><li>At the end press <b>&ldquo;Review and save&rdquo;</b>.</li></ol>
+    <p class="tip"><b>Good to know:</b> The check is saved as an audit record. Use the notes to explain anything missing or replaced.</p>
+    <p class="open">In the app: Open the boxes (/inventory?tab=anaphylaxis)</p>
+  </article>
+  <article class="art" id="a-print-box-label">
+    <h3>Print the QR label for a box, or its contents list</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: View inventory</span></p>
+    <ol><li>Go to Inventory and open the box's tab (<b>&ldquo;Anaphylaxis Emergency Boxes&rdquo;</b> or &quot;Emergency Drugs &amp; Equipment (Monthly)&quot;) and choose the box.</li><li>For the label: press <b>&ldquo;Print / save label&rdquo;</b> under the QR code on the right.</li><li>For the list of contents: press <b>&ldquo;Print contents list&rdquo;</b> at the top.</li></ol>
+    <p class="tip"><b>Good to know:</b> Stick the label on the box. Scanning it with the Primovex app starts that box's check.</p>
+    <p class="open">In the app: Open the boxes (/inventory?tab=anaphylaxis)</p>
+  </article>
+  <article class="art" id="a-anaphylaxis-guidance">
+    <h3>Find the current anaphylaxis guidance</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: View inventory</span></p>
+    <ol><li>Go to Inventory and open <b>&ldquo;Anaphylaxis Emergency Boxes&rdquo;</b>.</li><li>Scroll down to the <b>&ldquo;Anaphylaxis guidance&rdquo;</b> panel. It links to the Resuscitation Council UK, NICE and other guidance, with the date each was published and when the list was last checked.</li></ol>
+    <p class="tip"><b>Good to know:</b> These are links to the publishers. Always read doses and algorithms from the source.</p>
+    <p class="open">In the app: Open the boxes (/inventory?tab=anaphylaxis)</p>
+  </article>
+<h2 class="section" id="s-fridges-and-temperature">Fridges and temperature</h2>
+  <article class="art" id="a-log-temperature">
+    <h3>Record a fridge or freezer temperature</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Record temperature logs</span></p>
+    <ol><li>Go to Temperature in the left menu.</li><li>Press <b>&ldquo;Log temperature&rdquo;</b> and choose the fridge or freezer.</li><li>Enter the reading and save. If it's outside the unit's range Primovex flags it.</li></ol>
+    <p class="tip"><b>Good to know:</b> Connected sensors record readings by themselves where they're set up.</p>
+    <p class="open">In the app: Open Temperature (/temperature)</p>
+  </article>
+  <article class="art" id="a-fridge-out-of-range">
+    <h3>What to do when a fridge is out of range</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Record temperature logs</span></p>
+    <ol><li>Check the fridge and the stock inside it, and follow the practice's cold chain procedure first.</li><li>In Primovex go to Temperature and press <b>&ldquo;New incident&rdquo;</b> to record it, with the affected stock and the actions you took.</li><li>When it's dealt with, open the incident and press <b>&ldquo;Resolve incident&rdquo;</b> and add the resolution notes (they're required).</li></ol>
+    <p class="tip"><b>Good to know:</b> Primovex records and reminds; the clinical decision about the stock is yours and the practice's procedure.</p>
+    <p class="open">In the app: Open Temperature (/temperature)</p>
+  </article>
+  <article class="art" id="a-record-fridge-temperature">
+    <h3>Record a fridge temperature on the phone</h3>
+    <p class="meta"><span class="where">On the phone</span> <span class="needs">You need: Record temperature logs</span></p>
+    <ol><li>Tap the NFC tag on the fridge with your phone, or press <b>&ldquo;Fridge check&rdquo;</b> on your home screen and scan the QR code stuck on the fridge.</li><li>Read the thermometer on the fridge. Type the current temperature, then press Next. Use the ± button for a minus.</li><li>Press MIN on the thermometer and type the minimum, then MAX and type the maximum.</li><li>Press the reset button on the thermometer and tick <b>&ldquo;I've pressed reset&rdquo;</b>.</li><li>Check the summary. It says in range or outside the safe range. Press <b>&ldquo;Save check&rdquo;</b>. Your name and the time are added for you.</li><li>If it is outside the safe range, tick what you have done (checked the door, moved the stock, and so on). The Practice Manager and the nurse lead are told straight away, so you don't need to go and find them.</li></ol>
+    <p class="tip"><b>Good to know:</b> There is one check each morning and each afternoon per fridge. A second one is only allowed after a reading that was out of range, to show it has recovered.</p>
+    
+  </article>
+  <article class="art" id="a-fridge-alerts-setup">
+    <h3>Set up the fridges and who is alerted when one is out of range</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Update practice admin</span></p>
+    <ol><li>Go to Temperature and open the <b>&ldquo;Fridges&rdquo;</b> tab (you only see it if you can set fridges up).</li><li>Press <b>&ldquo;Add a fridge&rdquo;</b>, give it a name, choose its site and kind. The usual safe range is filled in (2 to 8 °C for a fridge); change it if the fridge needs a different one.</li><li>Press <b>&ldquo;Print QR label&rdquo;</b> on a fridge (or <b>&ldquo;Print all QR labels&rdquo;</b>) and stick the label on the fridge. Scanning it with the Primovex app opens that fridge's temperature check. For an NFC tag instead, open the phone app, go to Facilities &gt; Practice spaces &gt; Fridges, choose the fridge and press <b>&ldquo;Write this fridge to an NFC tag&rdquo;</b>.</li><li>Under <b>&ldquo;Who is alerted&rdquo;</b>, tick the roles that should be told when a reading is out of range. The Practice Manager is ticked to start with. Add a Nurse Manager role under Practice Admin &gt; Roles, give it <b>&ldquo;Resolve temperature incidents&rdquo;</b>, then tick it here.</li><li>When a reading is out of range, the people ticked get a message on their screen with <b>&ldquo;Take action&rdquo;</b>: Quarantine this fridge, Record stock moved or discarded, and Clear it and return to use. A fridge can only be cleared after a recheck that is back in range.</li></ol>
+    
+    <p class="open">In the app: Open Temperature (/temperature)</p>
+  </article>
+  <article class="art" id="a-primovex-sensors">
+    <h3>How do I connect a temperature sensor to Primovex?</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Add/edit connected devices</span></p>
+    <ol><li>Open Connect and press Add sensor under Primovex Sensors. Choose the room, what it watches (fridge, freezer or room), the safe range, how often it reports and when to alert.</li><li>Primovex shows an address once. Copy it. In the Shelly app open the sensor, go to Actions (webhooks), add one for Temperature change (any change, with a minimum interval of a few minutes), choose Call URL and paste the address.</li><li>Press the sensor's button to wake it. Its first reading appears on Connect within a minute.</li><li>From then on the sensor reports straight to Primovex over your WiFi and the internet. No PC has to be on.</li><li>If a reading stays out of range for the time you chose, Primovex opens a fridge incident and alerts the people ticked under Practice Admin. If a sensor stops reporting, it tells them once.</li></ol>
+    <p class="tip"><b>Good to know:</b> Treat the address like a password. If it gets out, press New key on the sensor and paste the new address into the Shelly app. The old one stops working at once.</p>
+    <p class="open">In the app: Open Connect (/connect)</p>
+  </article>
+<h2 class="section" id="s-compliance-and-facilities">Compliance and facilities</h2>
+  <article class="art" id="a-coshh-register">
+    <h3>Keep the COSHH register: hazardous products, PPE, first aid and safety data sheets</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Maintain the COSHH register and upload safety data sheets</span></p>
+    <ol><li>Go to Compliance and open the <b>&ldquo;COSHH&rdquo;</b> tab.</li><li>Press <b>&ldquo;Add a substance&rdquo;</b>. Type the product name as it is on the label, choose the supplier, tick the hazards, the protective equipment and the first aid steps, and choose where it is kept (the site and room come from Practice Admin).</li><li>Attach the supplier's safety data sheet (a PDF; the supplier gives you this and it is on their website) and check the review date. A year from today is filled in.</li><li>Press <b>&ldquo;Print cupboard labels&rdquo;</b> and stick the QR label on each cupboard. Scanning it with the Primovex app lists what is kept in that cupboard, what to wear, and what to do if there is a splash or a spill.</li><li>When you have looked at a product again, press <b>&ldquo;Mark as reviewed&rdquo;</b> and the next review moves on a year. The Practice Manager, partners and you are told on the phone home when a review is overdue or coming up in the next 30 days.</li><li>Cleaners, partners and the practice manager look things up on their phone under <b>&ldquo;Chemicals (COSHH)&rdquo;</b>. Nobody can delete a product, only archive it, so the history stays.</li></ol>
+    <p class="tip"><b>Good to know:</b> COSHH means Control of Substances Hazardous to Health. Review each product at least once a year, or sooner if the product or how it is used changes.</p>
+    <p class="open">In the app: Open Compliance (/compliance)</p>
+  </article>
+  <article class="art" id="a-failed-compliance-check">
+    <h3>A fire or water check failed: what happens and what to do</h3>
+    <p class="meta"><span class="where">Desktop and phone</span> <span class="needs">You need: Update compliance</span></p>
+    <ol><li>When a check fails (a water outlet outside its temperature range, a fire door that won't close) Primovex opens a failed check and sends the caretaker and the practice manager a card on their screen straight away.</li><li>Tap <b>&ldquo;Take action&rdquo;</b> on the card, or open Compliance (the Checks tab on the phone). Under <b>&ldquo;What needs doing&rdquo;</b> the failed check heads the list.</li><li>Choose what was done (ran the outlet, adjusted the thermostat, reported it to the contractor, taken out of use...) and add a note if you want. You can record several things.</li><li>Check the asset again by scanning its tag. It has to pass before the failed check can be closed, so there is proof it was put right.</li><li>Press <b>&ldquo;Close this failed check&rdquo;</b>. If the asset was removed or replaced, retire it under Assets and tags and the recheck isn't needed.</li></ol>
+    <p class="tip"><b>Good to know:</b> Everything is recorded with who and when, so it is the evidence an inspector asks for. The practice manager can see every open one on the Compliance Overview.</p>
+    <p class="open">In the app: Open Compliance (/compliance)</p>
+  </article>
+  <article class="art" id="a-report-maintenance-issue">
+    <h3>Report something that needs fixing (a light, a tap, a door)</h3>
+    <p class="meta"><span class="where">Desktop and phone</span></p>
+    <ol><li>On the phone: tap <b>&ldquo;Report an issue&rdquo;</b> (or the issue button if you are a cleaner), choose the room, say what is wrong, and tick Urgent if it is a safety risk or the room can't be used. It goes to the caretaker's list and they are told.</li><li>On the desktop: Compliance &gt; Maintenance &gt; Report an issue, or the Report an issue box on a room in Facilities.</li><li>The caretaker (and the practice manager) open Compliance &gt; Maintenance, press <b>&ldquo;Start work&rdquo;</b> when they begin, and <b>&ldquo;Mark complete&rdquo;</b> with a note of what was done. Urgent ones are listed first.</li><li>The list is the same on every phone and computer. Completed issues are kept: press <b>&ldquo;Show completed&rdquo;</b>.</li></ol>
+    
+    <p class="open">In the app: Open Maintenance (/compliance)</p>
+  </article>
+  <article class="art" id="a-certificates-register">
+    <h3>Keep track of gas, electrical, fire and other certificates</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Manage QR/NFC compliance assets</span></p>
+    <ol><li>Go to Compliance and open the <b>&ldquo;Certificates&rdquo;</b> tab, then press <b>&ldquo;Add a certificate&rdquo;</b>.</li><li>Choose what it is (gas safety, electrical test, fire risk assessment, extinguisher service, legionella risk assessment, boiler service, insurance and so on, or <b>&ldquo;Other&rdquo;</b> to name your own), the site and who did it.</li><li>Enter the date it was done. Primovex fills in the usual expiry for that kind (a year for gas, five years for electrical, and so on); change it if the certificate says different.</li><li>Attach the certificate as a PDF. Anyone with compliance access can open it later, on the desktop or the phone.</li><li>When it is renewed press <b>&ldquo;Record a renewal&rdquo;</b>: the new dates and PDF replace the old, and the old one stays in its history under <b>&ldquo;Show earlier&rdquo;</b>.</li><li>A certificate shows as running out 60 days before it expires, and as expired after. Those show on the Compliance Overview, on the phone home for the caretaker and practice manager, and on the HEIW and Health and Safety inspection sheets. <b>&ldquo;Print register&rdquo;</b> gives a sheet for the inspector.</li></ol>
+    <p class="tip"><b>Good to know:</b> A certificate you no longer need can be retired; it stays on record. The new fire and water checks (emergency lighting, extinguishers, fire drill, alarm panel, TMVs, flushing little-used outlets) are added under Assets and tags.</p>
+    <p class="open">In the app: Open Compliance (/compliance)</p>
+  </article>
+<h2 class="section" id="s-sars-concerns-and-governance">SARs, concerns and governance</h2>
+  <article class="art" id="a-new-sar">
+    <h3>Log a new subject access request (SAR)</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Manage SARs</span></p>
+    <ol><li>Go to SARs in the left menu and press <b>&ldquo;New SAR&rdquo;</b>.</li><li>Fill in the date received, the request type and the patient's EMIS number (the system never stores the patient's name).</li><li>Choose who it's assigned to, and the manager for escalation, from the list of colleagues.</li><li>Save. Primovex works out the due date and reminds the person it's assigned to as the deadline approaches.</li></ol>
+    
+    <p class="open">In the app: Open SARs (/governance/sars)</p>
+  </article>
+  <article class="art" id="a-new-concern">
+    <h3>Log a new concern or complaint</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Manage Listening to People concerns</span></p>
+    <ol><li>Go to Concerns in the left menu and press <b>&ldquo;New concern&rdquo;</b>.</li><li>Fill in the details. Use the patient's EMIS number or initials and date of birth, never their name.</li><li>Save, and keep the Primovex reference number with the paper file.</li></ol>
+    
+    <p class="open">In the app: Open Concerns (/governance/concerns)</p>
+  </article>
+  <article class="art" id="a-report-significant-event">
+    <h3>How do I report a significant event?</h3>
+    <p class="meta"><span class="where">Desktop and phone</span></p>
+    <ol><li>Anyone can do this. On a computer: Significant events in the left menu, then Report. On the phone: Significant events on the Home screen, then Report.</li><li>Give it a short title, the date, where it happened (pick the room) and how much harm it caused. Say what happened and what was done straight away.</li><li>Never use anyone's name. Use roles (the nurse, a receptionist). If a patient was involved, give their EMIS number, or initials and date of birth if there isn't one.</li><li>Or tell the Orb: say <b>&ldquo;report a significant event: the wrong vaccine was drawn up in Treatment Room 1 yesterday, no harm&rdquo;</b>. It sets the report up for you to check, and nothing is sent until you press Report event. No names, and use an EMIS number for any patient.</li><li>The significant events team is told. You can follow what happens to it under <b>&ldquo;Reported by me&rdquo;</b>, and add notes.</li></ol>
+    
+    <p class="open">In the app: Open Significant events (/governance/significant-events)</p>
+  </article>
+  <article class="art" id="a-run-significant-event">
+    <h3>How do I investigate and review a significant event, and record the meeting?</h3>
+    <p class="meta"><span class="where">Desktop and phone</span></p>
+    <ol><li>You need the significant events team permission. Open the event and choose Investigate, or No investigation needed (and say why). Pick who leads the investigation.</li><li>When the investigation is finished, press Ask for reviews. People in your usual reviewer roles are ticked for you; add or remove anyone. Each reviewer writes their own view. Set the usual roles under the Settings tab.</li><li>Press Ready for the meeting, then create a meeting under Meetings, add the events to its agenda, write the discussion for each event and the minutes, add actions (who, by when), and press The meeting has been held. Copy or print the minutes.</li><li>Actions can be ticked off by their owner. When none are open, press Close on the event.</li></ol>
+    
+    <p class="open">In the app: Open Significant events (/governance/significant-events)</p>
+  </article>
+  <article class="art" id="a-sars-on-phone">
+    <h3>How do I see SARs on my phone?</h3>
+    <p class="meta"><span class="where">On the phone</span></p>
+    <ol><li>On the Home screen of the phone app, press SARs. You need access to governance to see the tile.</li><li>The SAR team sees every request, can add one with +, change its status, tick the checks and add notes. Anyone else sees only requests assigned to them.</li><li>It uses the same PIN or fingerprint lock as Concerns, because SARs hold patient information.</li></ol>
+    
+    
+  </article>
+<h2 class="section" id="s-reports-and-inspections">Reports and inspections</h2>
+  <article class="art" id="a-inspection-pack">
+    <h3>Get ready for a HEIW visit or a Health and Safety visit</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Prepare inspection evidence reports (HEIW, Health and Safety)</span></p>
+    <ol><li>Ask the Orb on the desktop: <b>&ldquo;We have a HEIW visit, print off a report ready&rdquo;</b>. It opens the Inspection pack for that visit. Or open Inspection pack from the menu and choose the visit.</li><li>Read <b>&ldquo;To put right before the visit&rdquo;</b> at the top. Each line says what is out of date or missing, such as a fire check that is overdue, a fridge incident still open, or a COSHH review that is overdue.</li><li>Each area below shows the evidence Primovex holds: how many checks, when the last one was, and anything that failed. An area marked <b>&ldquo;Not shown&rdquo;</b> is one your role can't read; ask the Practice Manager to run it.</li><li>Press <b>&ldquo;Print or save as PDF&rdquo;</b>. In the print window choose <b>&ldquo;Save as PDF&rdquo;</b> as the printer to keep a copy, or your printer to print it.</li><li>The sheet ends with what is kept outside Primovex (risk assessments in Croner, the training matrix) so you remember to bring it.</li></ol>
+    <p class="tip"><b>Good to know:</b> Concerns, SARs and significant events are shown as counts only, never names or patient details. Press Refresh after you fix something to see the sheet update.</p>
+    <p class="open">In the app: Open Inspection pack (/inspection)</p>
+  </article>
+<h2 class="section" id="s-the-orb">The Orb</h2>
+  <article class="art" id="a-orb-ai-settings">
+    <h3>Turn the Orb's AI on or off</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Access admin area</span></p>
+    <ol><li>Go to Advanced Administration and open <b>&ldquo;Orb Learning&rdquo;</b>.</li><li>At the top are two switches: one lets the Orb understand questions in your own words, the other lets it reword its answers. Each has its own tick-box confirming you've checked the Azure region and the DPIA.</li><li><b>&ldquo;Turn off&rdquo;</b> takes effect straight away.</li></ol>
+    
+    <p class="open">In the app: Open Orb Learning (/admin/orb-learning)</p>
+  </article>
+  <article class="art" id="a-what-can-orb-do">
+    <h3>What can I ask the Orb?</h3>
+    <p class="meta"><span class="where">Desktop and phone</span></p>
+    <ol><li>Ask in your own words about stock (<b>&ldquo;is anything low?&rdquo;</b>, <b>&ldquo;what's expiring?&rdquo;</b>, <b>&ldquo;do we have any dressings?&rdquo;</b>), fridges (<b>&ldquo;are the fridges OK?&rdquo;</b>), cleaning (<b>&ldquo;which rooms haven't been cleaned?&rdquo;</b>), alerts, tasks, maintenance, emergency kits and anaphylaxis boxes, and how the practice is doing overall.</li><li>Ask <b>&ldquo;how do I...&rdquo;</b> for step-by-step help, for example <b>&ldquo;how do I move stock into a kit?&rdquo;</b>.</li><li>Managers can ask management questions: <b>&ldquo;when was the last fire alarm test?&rdquo;</b>, <b>&ldquo;what are the tap water temps in the last month?&rdquo;</b>, <b>&ldquo;when did Craig last log in?&rdquo;</b>, <b>&ldquo;how many SARs does he have outstanding?&rdquo;</b>, <b>&ldquo;where are we up to with concerns?&rdquo;</b>, or <b>&ldquo;what needs attention before I leave?&rdquo;</b> for an end-of-day briefing.</li><li>It can also get things ready for you to confirm: <b>&ldquo;I've taken two gloves from the store cupboard&rdquo;</b>, <b>&ldquo;I've received 20 chlorphenamine, batch 4471, expires March 2028&rdquo;</b>, <b>&ldquo;count the nurses room: gloves 12, syringes 40&rdquo;</b>, <b>&ldquo;take the expired stock off&rdquo;</b>, <b>&ldquo;remind me to check the fridge tomorrow at 9&rdquo;</b> or <b>&ldquo;tell Ben the vaccine fridge needs checking&rdquo;</b>. It shows a card and nothing changes until you press Confirm (or say <b>&ldquo;yes&rdquo;</b>).</li><li>Say <b>&ldquo;go to purchase orders&rdquo;</b> or <b>&ldquo;open the alerts&rdquo;</b> and it takes you there.</li><li>Answers show where they came from, and it only tells you and does what your permissions allow.</li></ol>
+    
+    
+  </article>
+  <article class="art" id="a-orb-colour">
+    <h3>What do the Orb's colours mean?</h3>
+    <p class="meta"><span class="where">Desktop and phone</span></p>
+    <ol><li>Green means everything of yours is in order. Amber means something is coming up or is just late. Red means something has failed or is properly overdue.</li><li>It is personal to you. The Practice Manager's Orb watches the whole practice. The Caretaker's only watches compliance. A nurse's watches the fridges and expired stock. Reception and cleaners have nothing to watch, so theirs stays green.</li><li>Hover over the Orb on the desktop for a short message, or open it and it tells you what is wrong at the top, with a line for each thing. Press a line to go straight to it.</li><li>The pulse is a little quicker for amber and a little firmer for red, but never alarming. If you have reduced motion switched on, red shows as a firmer ring instead.</li></ol>
+    <p class="tip"><b>Good to know:</b> A check counts as red a week after it was due (the weekly fire alarm test, a fortnight after the last one). Anything failed, such as a fridge out of range or a failed fire or water check, is red straight away.</p>
+    
+  </article>
+  <article class="art" id="a-talk-to-orb-phone">
+    <h3>Talk to the Orb on the phone when your hands are busy</h3>
+    <p class="meta"><span class="where">On the phone</span></p>
+    <ol><li>Open the Orb and tap the glowing orb (or the microphone) once. It says <b>&ldquo;Listening&rdquo;</b> and keeps listening after every answer, so you can carry on without tapping again.</li><li>Take several items in one go: <b>&ldquo;I've taken two chlorphenamine, one adrenaline and a box of gloves from the store cupboard&rdquo;</b>. You get one card. Say <b>&ldquo;and two more gloves&rdquo;</b> to add to it.</li><li>When a card appears, say <b>&ldquo;yes&rdquo;</b> or <b>&ldquo;go ahead&rdquo;</b> to confirm, or <b>&ldquo;cancel&rdquo;</b>. When it asks you to choose (a batch, a place, how much harm), say what's on the button, like <b>&ldquo;low harm&rdquo;</b> or <b>&ldquo;the second one&rdquo;</b>.</li><li>To finish, say <b>&ldquo;that's all&rdquo;</b>, <b>&ldquo;thanks&rdquo;</b> or <b>&ldquo;stop&rdquo;</b>, or just stay quiet for about 15 seconds. Tap the orb to end it at any time.</li><li>Under the orb, <b>&ldquo;Spoken answers&rdquo;</b> switches on short spoken replies.</li></ol>
+    <p class="tip"><b>Good to know:</b> The phone app listens when you tap it. It doesn't wake up to the word <b>&ldquo;Orb&rdquo;</b>.</p>
+    
+  </article>
+  <article class="art" id="a-find-notifications">
+    <h3>Where do I see my notifications and reminders?</h3>
+    <p class="meta"><span class="where">Desktop and phone</span></p>
+    <ol><li>A message from a colleague appears in the middle of the screen, on the desktop app and on the phone, when it arrives or when you sign in. It shows who sent it and what it says.</li><li>Press a quick reply (<b>&ldquo;Done&rdquo;</b>, <b>&ldquo;On it&rdquo;</b>, <b>&ldquo;Will do&rdquo;</b>), or <b>&ldquo;Reply&rdquo;</b> to type a short one. Replies can't contain numbers, dates, email addresses or phone numbers, so patient details can't go in by mistake. Press <b>&ldquo;Dismiss&rdquo;</b> when you've read it, or <b>&ldquo;Snooze&rdquo;</b> to be reminded in an hour, later today or tomorrow morning.</li><li>The cross just puts it aside for now. On the phone a <b>&ldquo;Messages&rdquo;</b> button brings it back.</li><li>On a computer you can also press the <b>&ldquo;Notifications&rdquo;</b> bell at the top right to see everything, including deadline reminders (SARs and concerns) and your own <b>&ldquo;remind me later&rdquo;</b> reminders.</li></ol>
+    
+    <p class="open">In the app: Open notifications (/notifications)</p>
+  </article>
+  <article class="art" id="a-orb-stock-actions">
+    <h3>Can the Orb find stock, message a team or raise a reorder?</h3>
+    <p class="meta"><span class="where">On the desktop</span></p>
+    <ol><li>Where is it: ask <b>&ldquo;where are the blue needles?&rdquo;</b>, <b>&ldquo;how many adrenaline are in anaphylaxis box 3?&rdquo;</b> or <b>&ldquo;what's in the emergency trolley?&rdquo;</b>. This only looks, it changes nothing.</li><li>Message a team: say <b>&ldquo;tell the HCA team BD blue needles need ordering&rdquo;</b>. A team is everyone with that role in Primovex. The Orb shows the message on a card and sends it only when you press Send message.</li><li>Reorder: say <b>&ldquo;BD blue needles need ordering&rdquo;</b> or <b>&ldquo;reorder 5 chlorphenamine&rdquo;</b>. The card shows the product and quantity; Request reorder puts it in the Reorder Centre for approval. Nothing is ordered from a supplier.</li><li>You need permission to change stock for the last two. Messages can't contain numbers, dates, emails or phone numbers, so never put patient details in one. Team messages show in the desktop notifications bell.</li></ol>
+    
+    <p class="open">In the app: Open Reorder Centre (/reorder-centre)</p>
+  </article>
+  <article class="art" id="a-orb-teach-names">
+    <h3>How do I teach the Orb the names we use for our stock?</h3>
+    <p class="meta"><span class="where">On the desktop</span></p>
+    <ol><li>The Orb already knows common medicine names: generic and brand names (for example Piriton for chlorphenamine), US spellings and small spelling slips.</li><li>For names only your practice uses, go to Admin, then Orb, and find Names for your stock.</li><li>Type what people say (for example <b>&ldquo;emergency injector&rdquo;</b>), pick the product it means from the list, and press Teach it. You need permission to verify stock.</li><li>From then on the Orb treats that phrase as that product when someone asks about it or records using it.</li></ol>
+    
+    <p class="open">In the app: Open Orb settings (/admin/orb-learning)</p>
+  </article>
+  <article class="art" id="a-orb-record-stock-used">
+    <h3>How do I record stock I've used with the Orb?</h3>
+    <p class="meta"><span class="where">Desktop and phone</span></p>
+    <ol><li>Tell the Orb what you took, for example <b>&ldquo;I've just taken one adrenaline from room D62&rdquo;</b> or <b>&ldquo;one adrenaline ampoule from the store cupboard&rdquo;</b>. You need permission to change stock.</li><li>If you haven't said where from, it lists the places that have it. If there is more than one batch, it asks which: tap the one whose batch number ends the same as the pack in your hand.</li><li>It shows a card: the product, how many, where from, the batch and the stock left afterwards. Press Take it off stock to record it. Nothing changes until you do.</li><li>It's recorded the same as using stock on the Inventory page, with the batch you chose, and shows in the stock history.</li></ol>
+    
+    <p class="open">In the app: Open Inventory (/inventory)</p>
+  </article>
+<h2 class="section" id="s-people-access-and-admin">People, access and admin</h2>
+  <article class="art" id="a-add-user">
+    <h3>Add a new member of staff</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Manage users</span></p>
+    <ol><li>Go to Advanced Administration and open <b>&ldquo;Add User&rdquo;</b>.</li><li>Enter their name, work email address and role, then create the account.</li><li>Nobody is emailed. To let them in, go to Users, find them and press <b>&ldquo;Reset password&rdquo;</b> to make a sign-in link, then send it to them yourself. The link only lasts an hour, so make it when you're ready to send.</li></ol>
+    <p class="tip"><b>Good to know:</b> To add lots of people at once, use <b>&ldquo;Import staff&rdquo;</b> instead.</p>
+    <p class="open">In the app: Open Add User (/admin/users/add)</p>
+  </article>
+  <article class="art" id="a-import-staff">
+    <h3>Add many staff at once from a spreadsheet</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Manage users</span></p>
+    <ol><li>Go to Advanced Administration and open <b>&ldquo;Import staff&rdquo;</b>, then choose your staff spreadsheet (a .csv file with name, email, role, department and who they report to).</li><li>Read the preview. It shows new accounts, people who already have one (only their department and reporting line are set) and anything that needs fixing. You can edit a name or role in the preview.</li><li>Press the green button to create the accounts. No emails are sent.</li><li>Later, give people their sign-in links yourself: Users, then <b>&ldquo;Reset password&rdquo;</b> next to each person.</li></ol>
+    
+    <p class="open">In the app: Open Import staff (/admin/users/import)</p>
+  </article>
+  <article class="art" id="a-reset-password">
+    <h3>Give someone a new sign-in link (or reset their password)</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Manage users</span></p>
+    <ol><li>Go to Advanced Administration, open Users and find the person.</li><li>Press <b>&ldquo;Reset password&rdquo;</b>. Primovex makes a link for them to set a new password; copy it and send it to them yourself.</li><li>The link only lasts an hour. If it runs out, make another.</li></ol>
+    <p class="tip"><b>Good to know:</b> If they have lost the phone with their authenticator app, press <b>&ldquo;Reset two-step&rdquo;</b> for them as well.</p>
+    <p class="open">In the app: Open Users (/admin/users)</p>
+  </article>
+  <article class="art" id="a-add-role">
+    <h3>Create a role, or give someone different permissions</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Manage roles and permissions</span></p>
+    <ol><li>Go to Advanced Administration and open &quot;Roles &amp; Permissions<b>&ldquo;, then press &rdquo;</b>Add Role&quot;.</li><li>Name the role. Use <b>&ldquo;Start from&rdquo;</b> to begin with a ready-made set (for example Stock Controller) and then tick or untick what it can do.</li><li>Save, then go to Users and assign the role to the people who need it.</li></ol>
+    
+    <p class="open">In the app: Open Roles &amp; Permissions (/admin/roles)</p>
+  </article>
+  <article class="art" id="a-set-department">
+    <h3>Put someone in a department, or change who they report to</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: Update practice admin</span></p>
+    <ol><li>Go to Practice Admin and open the Departments tab. To add a department, type its name at the top and press <b>&ldquo;Add&rdquo;</b>.</li><li>Scroll down to the Organisation chart. Click the person (in the chart, or under <b>&ldquo;By department&rdquo;</b>), choose their Department, and tick who they report to.</li><li>Changes save straight away.</li></ol>
+    <p class="tip"><b>Good to know:</b> Importing staff from a spreadsheet sets departments and reporting lines for everyone in one go.</p>
+    <p class="open">In the app: Open Practice Admin (/practice-admin)</p>
+  </article>
+  <article class="art" id="a-print-org-chart">
+    <h3>Print the organisation chart, or a staff list by department</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: View practice admin</span></p>
+    <ol><li>Go to Practice Admin, open the Departments tab and scroll to the Organisation chart.</li><li>Pick the paper (A4, or A3 for a big chart).</li><li>Press <b>&ldquo;Print chart&rdquo;</b> for everyone (or choose one department first and print just that), <b>&ldquo;Print each department&rdquo;</b> for one page per department, or <b>&ldquo;Print staff list&rdquo;</b> for a table by department.</li></ol>
+    <p class="tip"><b>Good to know:</b> Large teams are shown as a list under their manager so the chart stays readable.</p>
+    <p class="open">In the app: Open Practice Admin (/practice-admin)</p>
+  </article>
+  <article class="art" id="a-limit-orb-topics">
+    <h3>How do I limit what the Orb and Pulse orb show a person?</h3>
+    <p class="meta"><span class="where">On the desktop</span></p>
+    <ol><li>Go to Admin, then Users, and press <b>&ldquo;Orb&rdquo;</b> next to the person's name.</li><li>Choose <b>&ldquo;Only these topics&rdquo;</b> and tick what they should have, for example just SARs and concerns, or just Compliance. Press Save.</li><li>From then on the Orb only answers questions about those topics for them, and their Pulse orb only shows and scores those areas. <b>&ldquo;How do I...?&rdquo;</b> help always stays.</li><li>This only narrows what their role allows; it never gives anyone more. To give them more access, change their role instead. Choose <b>&ldquo;Everything their role allows&rdquo;</b> to remove the limit.</li></ol>
+    
+    <p class="open">In the app: Open Users (/admin/users)</p>
+  </article>
+<h2 class="section" id="s-security">Security</h2>
+  <article class="art" id="a-activity-report">
+    <h3>See who has signed in and what they used</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: View audit logs</span></p>
+    <ol><li>Go to Security in the left menu.</li><li>Press &quot;Sign-in &amp; activity report&quot; and choose the period.</li><li>You'll see each person's sign-ins, time in the app and the areas they used. Click a name for each session. Anything unusual (a sign-in at night, a very long session, two devices at once) is flagged.</li><li><b>&ldquo;Export CSV&rdquo;</b> saves it. Viewing and exporting are themselves recorded.</li></ol>
+    <p class="tip"><b>Good to know:</b> It records the areas of the app, never what was typed or which record was opened.</p>
+    <p class="open">In the app: Open Security (/security-centre)</p>
+  </article>
+  <article class="art" id="a-view-audit-log">
+    <h3>See the audit log of who did what</h3>
+    <p class="meta"><span class="where">On the desktop</span> <span class="needs">You need: View audit logs</span></p>
+    <ol><li>Go to Security in the left menu and press <b>&ldquo;View audit events&rdquo;</b>.</li><li>Choose a period, then search by action, person or record.</li><li><b>&ldquo;Evidence JSON&rdquo;</b> or <b>&ldquo;CSV&rdquo;</b> saves what you're looking at.</li></ol>
+    
+    <p class="open">In the app: Open Security (/security-centre)</p>
+  </article>
+  <article class="art" id="a-two-step-sign-in">
+    <h3>Set up two-step sign-in (authenticator app)</h3>
+    <p class="meta"><span class="where">Desktop and phone</span></p>
+    <ol><li>Two-step sign-in is built but hasn't been switched on for the practice yet, so you can't set it up today.</li><li>When it is, you'll find it under Security (<b>&ldquo;Your sign-in security&rdquo;</b>) on a computer, and on the <b>&ldquo;Me&rdquo;</b> tab on the phone.</li></ol>
+    <p class="tip"><b>Good to know:</b> Ask an administrator when it's planned.</p>
+    
+  </article>
+  <article class="art" id="a-screen-locked">
+    <h3>My screen locked and asks for a PIN</h3>
+    <p class="meta"><span class="where">Desktop and phone</span></p>
+    <ol><li>Primovex locks itself after 15 minutes without use, to protect patient and practice information on a shared screen.</li><li>Enter the PIN you set to carry on. If you've forgotten it, use <b>&ldquo;Sign out instead&rdquo;</b> and sign in again with your password.</li><li>Whatever you were doing is still there afterwards. Everyone is signed out automatically after 12 hours.</li></ol>
+    
+    
+  </article>
+
+<p class="foot">This guide is built from the Help in Primovex, so it matches the app. If a screen has changed since 14 October 2026, the Help page in the app is always the latest.</p>
+</body></html>

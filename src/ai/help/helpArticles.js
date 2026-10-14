@@ -34,7 +34,7 @@ export const HELP_ARTICLES = [
     where: "desktop",
     steps: [
       "Go to Inventory and press \"Add item\".",
-      "Start typing the product name in the first box, for example \"eclipse\". Primovex suggests products you have had before. Pick one if it's the same, then press \"Receive into it instead\" so you don't create a duplicate.",
+      "Start typing the product name in the first box, for example \"eclipse\". Primovex suggests products you have had before. Pick one if it's the same, then press \"Receive into it instead\" so you don't create a duplicate. It also suggests names from the NHS dm+d medicine list: pick one to fill in the name (and the brand, if you typed one), or keep what you typed for anything not in the list.",
       "Or scan the delivery barcode (box or pack) in the scan box at the top, and it fills in what it can.",
       "Fill in the quantity, batch number and expiry date from the box. Choose the Site and Location from the lists.",
       "Save. The window stays open so you can add the next item from the same delivery.",
