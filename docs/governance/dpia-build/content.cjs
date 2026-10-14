@@ -95,6 +95,24 @@ module.exports = {
       "Free-text risk: staff could type a patient's name into the Orb. Numbers and dates are removed automatically, but names cannot be reliably detected. Staff guidance is required (Step 6).",
     ] },
 
+    { type: "h2", text: "D2. Speaking to the Orb on an iPhone (new)" },
+    { type: "p", text: "On an iPhone the Home Screen web app has no speech recognition of its own. A person taps the Orb, says a question, and the recording is turned into words so the Orb can answer as if it had been typed." },
+    { type: "bullets", items: [
+      "What is sent: one short recording (up to 20 seconds, 16 kHz, no more than a sentence or two) from the person's phone to a Primovex Cloud Function, and from there to Google Cloud Speech-to-Text through its EU endpoint. Optional hints are the practice's own stock names.",
+      "What is kept: nothing. The recording is held in memory for that one request and is not stored by Primovex or written to any log. The words that come back are used exactly like typed text and are not stored by the speech step.",
+      "Processor: Google Cloud (the same project and data processing addendum as Firebase). Processing is in the EU, not specifically the UK. " + TBC + ": confirm this is acceptable under the UK-only hosting decision, and confirm Google's retention terms for Speech-to-Text requests that do not opt in to data logging.",
+      "Risk: staff could say a patient's name aloud. The same notice and guidance as for typing applies (Step 6): do not say patient names; use EMIS numbers only. Spoken numbers are not removed by the speech step.",
+      "Limits: 60 per person per hour and 400 per day for the practice. Only signed-in people can use it.",
+    ] },
+
+    { type: "h2", text: "D3. Alerts on staff phones (new)" },
+    { type: "p", text: "Primovex can show an alert on a person's phone lock screen when something new arrives in their notifications. A person switches this on themselves, on each phone, in Me then Phone alerts." },
+    { type: "bullets", items: [
+      "What is kept: a push address for each phone the person switched alerts on for, under their own account (readable only by Primovex's server, not by any person or the app). It is deleted when the person switches alerts off or when the phone no longer accepts alerts.",
+      "What a lock screen can show: the title and a short line for an operational alert (a fridge out of range, a failed check); who a message is from, never its words; and for anything about governance (SARs, concerns, significant events) only the words You have a new notification. No patient details are ever put in an alert.",
+      "Processor: Google Cloud (Firebase Cloud Messaging) and the phone maker's push service (Apple or Google) carry the alert to the phone. " + TBC + ": confirm these are covered by the review of Google's data processing addendum, and note that Apple's push service is a further processor for iPhones.",
+    ] },
+
     { type: "h2", text: "E. Staff messages, reminders and notifications (new)" },
     { type: "p", text: `Primovex sends in-app notifications: SAR and concern deadline reminders to the assigned person and, when overdue, their manager; a message from one colleague to another about a kit item during a check (up to 300 characters, typed by the sender); and a reminder to oneself. Messages are visible only to the recipient. Free text typed into a message is a place where someone could put identifying detail; staff guidance covers this. How long notifications are kept in an inbox is ${TBC} and needs a retention decision.` },
 
