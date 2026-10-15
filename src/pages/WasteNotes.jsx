@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ExternalLink, FileText, Trash2, Upload, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { openDocument } from "@/lib/openDocument";
@@ -121,6 +121,21 @@ export default function WasteNotes() {
     }
   }
   const drop = (event) => { event.preventDefault(); setDragging(false); if (canManage) addFiles(event.dataTransfer?.files); };
+  // a PDF dropped anywhere on the page is taken, and never opened over the app by the window
+  const addFilesRef = useRef(addFiles);
+  addFilesRef.current = addFiles;
+  useEffect(() => {
+    const over = (event) => { if (event.dataTransfer?.types?.includes("Files")) event.preventDefault(); };
+    const dropped = (event) => {
+      if (!event.dataTransfer?.types?.includes("Files")) return;
+      event.preventDefault();
+      setDragging(false);
+      if (canManage) addFilesRef.current(event.dataTransfer.files);
+    };
+    window.addEventListener("dragover", over);
+    window.addEventListener("drop", dropped);
+    return () => { window.removeEventListener("dragover", over); window.removeEventListener("drop", dropped); };
+  }, [canManage]);
   const dropQueue = (key) => setQueue((q) => q.filter((item) => item.key !== key));
 
   async function keep(item, form) {
@@ -156,7 +171,7 @@ export default function WasteNotes() {
 
       {canManage && (
         <div
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={drop}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={(e) => { e.stopPropagation(); drop(e); }}
           className={`flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed p-6 text-center ${dragging ? "border-teal-300 bg-teal-500/10" : "border-white/15 bg-slate-900/40"}`}
         >
           <Upload className="h-6 w-6 text-teal-300" aria-hidden="true" />
