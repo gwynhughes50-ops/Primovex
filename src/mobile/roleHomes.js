@@ -1,4 +1,4 @@
-import { ClipboardCheck, ClipboardList, FileText, FlaskConical, ListChecks, MessageSquare, Mic, NotebookPen, Package, ScanLine, ShieldAlert, Sparkles, SprayCan, Stethoscope, Thermometer, TriangleAlert, Wrench } from "lucide-react";
+import { ClipboardCheck, ClipboardList, FileText, FlaskConical, ListChecks, MessageSquare, Mic, NotebookPen, Package, ScanLine, ShieldAlert, GraduationCap, Sparkles, SprayCan, Stethoscope, Thermometer, TriangleAlert, Wrench } from "lucide-react";
 
 // What each kind of person sees on the phone: the home screen's tiles and the bottom bar. Pure data, so
 // it can be tested. A tile marked with a capability is only shown to people who hold it, and a bottom-bar
@@ -43,6 +43,7 @@ export function getRoleHome(role, capabilities = []) {
         { key: "significant-events", label: "Significant events", helper: "Report and review", Icon: TriangleAlert },
         { key: "coshh", label: "Chemicals (COSHH)", helper: "What to wear, first aid, reviews", Icon: FlaskConical, capability: "coshh.read" },
         { key: "stocktake", label: "Stock take", helper: "Count with the team", Icon: ClipboardList, capability: "stocktake.count" },
+        { key: "training", label: "Staff training", helper: "Who is due or overdue", Icon: GraduationCap, capability: "training.manage" },
         { key: "briefing", label: "What needs attention?", helper: "Your briefing from the Orb", Icon: ListChecks },
       ],
       nav: ["home", "stock", "facilities", "me"],
@@ -62,6 +63,7 @@ export function getRoleHome(role, capabilities = []) {
         { key: "issue", label: "Report an issue", helper: "To the right person", Icon: Wrench },
         { key: "stocktake", label: "Stock take", helper: "Count with the team", Icon: ClipboardList, capability: "stocktake.count" },
         { key: "significant-events", label: "Significant event", helper: "Report something that happened", Icon: TriangleAlert },
+        { key: "training", label: "Team training", helper: "Who is due or overdue", Icon: GraduationCap, capability: "training.manageClinical" },
         { key: "quick-note", label: "Quick note", helper: "A reminder for yourself", Icon: NotebookPen },
         { key: "messages", label: "Messages", helper: "From colleagues", Icon: MessageSquare },
         ...(clinicalLead ? [{ key: "briefing", label: "What needs attention?", helper: "Your briefing from the Orb", Icon: ListChecks }] : []),

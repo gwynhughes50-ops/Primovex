@@ -9,6 +9,7 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import Reports from "@/pages/Reports";
 import InspectionPack from "@/pages/InspectionPack";
 import StockTake from "@/pages/StockTake";
+import Training from "@/pages/Training";
 import Compliance from "@/pages/Compliance";
 import Notifications from "@/pages/Notifications";
 import ReorderCentre from "@/pages/ReorderCentre";
@@ -78,6 +79,7 @@ export default function DesktopApp() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="inventory" element={<PermissionGate capability="inventory.read"><Inventory /></PermissionGate>} />
         <Route path="stocktake" element={<PermissionGate capability="stocktake.manage"><StockTake /></PermissionGate>} />
+        <Route path="training" element={<PermissionGate anyOf={["training.manage", "training.manageClinical"]}><Training /></PermissionGate>} />
         <Route path="reorder-centre" element={<ReorderCentre />} />
         <Route path="purchasing" element={<Purchasing />} />
         <Route path="suppliers" element={<SupplierDirectory />} />

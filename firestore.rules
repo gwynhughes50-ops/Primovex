@@ -645,7 +645,7 @@ match /subject_access_requests/{requestId} {
       return
         role == "System Admin" ? ["*"] :
         role == "Practice Manager" ? [
-          "stocktake.count", "stocktake.manage",
+          "stocktake.count", "stocktake.manage", "training.manage",
           "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
           "dashboard.read", "operations.read", "operations.manage",
           "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",
@@ -777,6 +777,38 @@ match /subject_access_requests/{requestId} {
     match /connected_devices/{deviceId} {
       allow get, list: if signedIn() && (hasPermission("connect", "view") || isAdmin());
       allow create, update, delete: if hasPermission("connect", "manageDevices") || isAdmin();
+    }
+
+    // STAFF TRAINING MATRIX. Who has done which course and when it runs out (src/modules/training). It is staff records, so:
+    //   training.manage            sees and updates everyone's
+    //   training.manageClinical    sees and updates the clinical group's only (a nurse manager)
+    //   anyone                     reads their own, once the Practice Manager has linked their record to their account (uid)
+    // Each person and record carries the group, and the record the owner's uid, so these rules never have to look anything else up.
+    function trainingManages(group) {
+      return signedIn() && (
+        isAdmin() || hasPermission("training", "manage")
+        || (group == "clinical" && hasPermission("training", "manageClinical"))
+      );
+    }
+    function trainingOwn(uid) {
+      return signedIn() && uid is string && uid == request.auth.uid;
+    }
+    // the course list is not about any person
+    match /training_courses/{courseId} {
+      allow get, list: if signedIn();
+      allow create, update, delete: if isAdmin() || hasPermission("training", "manage");
+    }
+    match /training_people/{personId} {
+      allow get, list: if trainingManages(resource.data.group) || trainingOwn(resource.data.uid);
+      allow create: if trainingManages(request.resource.data.group) && request.resource.data.name is string && request.resource.data.name.size() > 0;
+      allow update: if trainingManages(resource.data.group) && trainingManages(request.resource.data.group);
+      allow delete: if trainingManages(resource.data.group);
+    }
+    match /training_records/{recordId} {
+      allow get, list: if trainingManages(resource.data.group) || trainingOwn(resource.data.ownerUid);
+      allow create: if trainingManages(request.resource.data.group) && request.resource.data.personId is string && request.resource.data.courseId is string;
+      allow update: if trainingManages(resource.data.group) && trainingManages(request.resource.data.group);
+      allow delete: if trainingManages(resource.data.group);
     }
 
     // Primovex's own sensors (functions/services/sensorService.js). What was set up and the latest state is readable by

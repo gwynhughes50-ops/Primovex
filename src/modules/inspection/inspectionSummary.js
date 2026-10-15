@@ -6,6 +6,7 @@
 import { concernDeadline, concernOpen, sarDays, sarOpen } from "../../ai/management/managementAsk.js";
 import { reviewSummary, reviewStatus } from "../coshh/coshh.js";
 import { certLabel, certStatus, certSummary } from "../certificates/certificates.js";
+import { STATUS, courseSummary, tally, buildMatrix } from "../training/training.js";
 
 const DAY = 86400000;
 
@@ -200,6 +201,23 @@ export function certificatesSection({ certificates, now, available }) {
     [["In date", String(summary.ok)], ["Running out in the next 60 days", String(summary.dueSoon)], ["Expired or without a date", String(summary.expired)], ["With the certificate PDF held", `${live.length - summary.noPdf} of ${live.length}`]], gaps);
 }
 
+// ---- staff training: counts only, never a name ------------------------------------------------------------------
+export function trainingSection({ training, now, available }) {
+  if (!available.training) return unavailable("training", "Staff training");
+  const people = (training?.people || []).filter((p) => p.active !== false);
+  const courses = (training?.courses || []).filter((c) => c.active !== false);
+  if (!people.length || !courses.length) return section("training", "Staff training", "none", "No staff training is recorded in Primovex yet.", [], ["No staff training is recorded in Primovex yet."]);
+  const cells = buildMatrix({ people, courses, records: training.records || [], now }).flatMap((row) => row.cells);
+  const all = tally(cells);
+  const worst = courseSummary({ people, courses, records: training.records || [], now }).filter((c) => c[STATUS.overdue] > 0).sort((a, b) => b[STATUS.overdue] - a[STATUS.overdue]).slice(0, 4);
+  const gaps = [];
+  if (all[STATUS.overdue]) gaps.push(`${plural(all[STATUS.overdue], "training entry", "training entries")} overdue${worst.length ? `, mostly ${worst.map((c) => `${c.course.name} (${c[STATUS.overdue]})`).join(", ")}` : ""}.`);
+  if (all[STATUS.dueSoon]) gaps.push(`${plural(all[STATUS.dueSoon], "training entry", "training entries")} running out in the next 60 days.`);
+  return section("training", "Staff training", gaps.length ? "attention" : "ok",
+    `${plural(people.length, "member of staff", "staff")} on the training matrix; ${all.percentInDate}% of dated training is in date.`,
+    [["Staff on the matrix", String(people.length)], ["Courses tracked", String(courses.length)], ["In date", String(all[STATUS.inDate])], ["Running out in the next 60 days", String(all[STATUS.dueSoon])], ["Overdue", String(all[STATUS.overdue])], ["Not recorded", String(all[STATUS.none])]], gaps);
+}
+
 // ---- governance: counts and dates only -------------------------------------------------------------------
 export function governanceSection({ concerns, sars, events, now, available }) {
   const from = periodStart(now);
@@ -236,7 +254,7 @@ export function governanceSection({ concerns, sars, events, now, available }) {
 export function buildSections(data) {
   return {
     fire: fireSection(data), water: waterSection(data), pat: patSection(data), emergency: emergencySection(data), cleaning: cleaningSection(data),
-    coldchain: coldChainSection(data), stock: stockSection(data), coshh: coshhSection(data), certificates: certificatesSection(data), governance: governanceSection(data),
+    coldchain: coldChainSection(data), stock: stockSection(data), coshh: coshhSection(data), certificates: certificatesSection(data), training: trainingSection(data), governance: governanceSection(data),
   };
 }
 

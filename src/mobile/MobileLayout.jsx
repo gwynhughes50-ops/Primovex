@@ -38,6 +38,7 @@ import { AlertTriangle, BellRing, Camera, CheckCircle2, Eye, Minus, Plus, Sparkl
 import ActiveSenseBanner from "@/modules/sense/components/ActiveSenseBanner";
 import { useSenseSession } from "@/contexts/SenseSessionContext";
 import MobileDeveloperIssueRecorder from "@/developer/MobileDeveloperIssueRecorder";
+import MobileTeamTraining from "./MobileTeamTraining";
 import MobileCleanerHome from "./MobileCleanerHome";
 import MobileCoshh from "./MobileCoshh";
 import MobileStockTake from "./MobileStockTake";
@@ -81,6 +82,7 @@ export default function MobileLayout({ initialTab = "home" }) {
   const [showQuickNotes, setShowQuickNotes] = useState(false);
   const [showCoshh, setShowCoshh] = useState(false);
   const [showStockTake, setShowStockTake] = useState(false);
+  const [showTraining, setShowTraining] = useState(false);
   const [showAIActionSheet, setShowAIActionSheet] = useState(false);
   // "Go to compliance" said to the Orb: it asks this screen to switch tab.
   useEffect(() => {
@@ -386,6 +388,9 @@ export default function MobileLayout({ initialTab = "home" }) {
         break;
       case "stocktake":
         setShowStockTake(true);
+        break;
+      case "training":
+        setShowTraining(true);
         break;
       case "kits":
         navigate("/inventory?tab=emergency");
@@ -960,6 +965,7 @@ export default function MobileLayout({ initialTab = "home" }) {
       )}
 
       <MessageCardHost />
+      {showTraining && <MobileTeamTraining onClose={() => setShowTraining(false)} />}
       <AskPrimovexPanel variant="mobile" />
 
       <MobileBottomNav

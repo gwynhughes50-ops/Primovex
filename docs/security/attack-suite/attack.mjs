@@ -1006,6 +1006,70 @@ async function main() {
     await assertFails(setDoc(doc(nurse, "users", "nurse-uid", "push_tokens", "t6"), pushDoc({ token: 5 })));
   });
 
+  console.log("\n=== 24. Staff training matrix (training_courses, training_people, training_records) ===");
+  const nm = testEnv.authenticatedContext("nursemgr-uid").firestore(); // a "Nurse Manager": clinical training only
+  const ma = testEnv.authenticatedContext("assistant-uid").firestore(); // a "Management Assistant": all training
+  await seed(async (db) => {
+    await setDoc(doc(db, "users", "nursemgr-uid"), { role: "Nurse Manager", displayName: "NM" });
+    await setDoc(doc(db, "users", "assistant-uid"), { role: "Management Assistant", displayName: "MA" });
+    await setDoc(doc(db, "roles", "Nurse Manager"), { name: "Nurse Manager", capabilities: ["training.manageClinical", "inventory.read"], builtIn: false });
+    await setDoc(doc(db, "roles", "Management Assistant"), { name: "Management Assistant", capabilities: ["training.manage", "dashboard.read"], builtIn: false });
+    await setDoc(doc(db, "training_people", "p-clin"), { name: "Clin Person", group: "clinical", uid: "nurse-uid", jobRole: "Nurse", active: true });
+    await setDoc(doc(db, "training_people", "p-admin"), { name: "Admin Person", group: "admin", uid: "reception-uid", jobRole: "Admin", active: true });
+    await setDoc(doc(db, "training_records", "p-clin_c1"), { personId: "p-clin", courseId: "c1", group: "clinical", ownerUid: "nurse-uid", completedOn: "2026-01-01", dueOn: "2028-01-01" });
+    await setDoc(doc(db, "training_records", "p-admin_c1"), { personId: "p-admin", courseId: "c1", group: "admin", ownerUid: "reception-uid", completedOn: "2026-01-01", dueOn: "2028-01-01" });
+    await setDoc(doc(db, "training_courses", "c1"), { name: "Fire safety", intervalMonths: 24, active: true });
+  });
+  await check("The practice manager and a management assistant CAN read and update everyone's training", async () => {
+    for (const who of [pm, ma, admin]) {
+      await assertSucceeds(getDoc(doc(who, "training_people", "p-admin")));
+      await assertSucceeds(getDoc(doc(who, "training_records", "p-clin_c1")));
+    }
+    await assertSucceeds(setDoc(doc(ma, "training_records", "p-admin_c2"), { personId: "p-admin", courseId: "c2", group: "admin", ownerUid: "reception-uid", completedOn: "2026-02-01", dueOn: "" }));
+    await assertSucceeds(updateDoc(doc(pm, "training_records", "p-clin_c1"), { completedOn: "2026-03-01" }));
+  });
+  await check("A nurse manager CAN read and update the clinical team's training but NOT the admin team's", async () => {
+    await assertSucceeds(getDoc(doc(nm, "training_people", "p-clin")));
+    await assertSucceeds(updateDoc(doc(nm, "training_records", "p-clin_c1"), { completedOn: "2026-04-01" }));
+    await assertSucceeds(setDoc(doc(nm, "training_records", "p-clin_c3"), { personId: "p-clin", courseId: "c3", group: "clinical", ownerUid: "nurse-uid", completedOn: "2026-02-01", dueOn: "" }));
+    await assertFails(getDoc(doc(nm, "training_people", "p-admin")));
+    await assertFails(getDoc(doc(nm, "training_records", "p-admin_c1")));
+    await assertFails(updateDoc(doc(nm, "training_records", "p-admin_c1"), { completedOn: "2026-04-01" }));
+    await assertFails(setDoc(doc(nm, "training_records", "p-admin_c4"), { personId: "p-admin", courseId: "c4", group: "admin", ownerUid: "reception-uid", completedOn: "2026-02-01" }));
+  });
+  await check("A nurse manager cannot move a person into the admin group to get at their record, or change course settings", async () => {
+    await assertFails(updateDoc(doc(nm, "training_people", "p-clin"), { group: "admin" }));
+    await assertFails(setDoc(doc(nm, "training_courses", "c9"), { name: "x", intervalMonths: 12 }));
+  });
+  await check("Everyone else reads only their own record: a nurse sees theirs, not a colleague's or anyone's list", async () => {
+    await assertSucceeds(getDoc(doc(nurse, "training_people", "p-clin")));
+    await assertSucceeds(getDoc(doc(nurse, "training_records", "p-clin_c1")));
+    await assertFails(getDoc(doc(nurse, "training_people", "p-admin")));
+    await assertFails(getDoc(doc(nurse, "training_records", "p-admin_c1")));
+    await assertSucceeds(getDocs(query(collection(nurse, "training_records"), where("ownerUid", "==", "nurse-uid"))));
+    await assertFails(getDocs(collection(nurse, "training_records")));
+    await assertFails(getDocs(collection(nurse, "training_people")));
+  });
+  await check("Nobody can change their own training record or link themselves to another person's", async () => {
+    await assertFails(updateDoc(doc(nurse, "training_records", "p-clin_c1"), { completedOn: "2030-01-01", dueOn: "2040-01-01" }));
+    await assertFails(updateDoc(doc(nurse, "training_people", "p-clin"), { jobRole: "Partner" }));
+    await assertFails(setDoc(doc(nurse, "training_people", "p-new"), { name: "Me", group: "clinical", uid: "nurse-uid" }));
+    await assertFails(deleteDoc(doc(nurse, "training_records", "p-clin_c1")));
+  });
+  await check("A partner, a caretaker, a read-only user and anonymous see no one's training", async () => {
+    for (const who of [partner, caretaker, readonly, anon]) {
+      await assertFails(getDoc(doc(who, "training_people", "p-clin")));
+      await assertFails(getDoc(doc(who, "training_records", "p-clin_c1")));
+    }
+  });
+  await check("Anyone signed in can read the course list; only managers can change it", async () => {
+    await assertSucceeds(getDoc(doc(nurse, "training_courses", "c1")));
+    await assertFails(getDoc(doc(anon, "training_courses", "c1")));
+    await assertSucceeds(setDoc(doc(pm, "training_courses", "c2"), { name: "Manual handling", intervalMonths: 24 }));
+    await assertFails(setDoc(doc(nurse, "training_courses", "c8"), { name: "x", intervalMonths: 12 }));
+    await assertFails(deleteDoc(doc(nurse, "training_courses", "c1")));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);

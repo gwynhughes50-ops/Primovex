@@ -8,8 +8,8 @@ let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
 const now = new Date(2026, 9, 10, 12, 0); // Sat 10 Oct 2026
 const ago = (days) => new Date(now.getTime() - days * 86400000);
-const all = { fire: true, water: true, pat: true, cleaning: true, temperature: true, stock: true, coshh: true, certs: true, concerns: true, sars: true, events: true };
-const base = { checks: [], fireWeekly: [], waterRounds: [], patSessions: [], patAssets: [], cleaningLogs: [], tempUnits: [], tempLogs: [], tempIncidents: [], stockAlerts: [], stockCount: 0, coshh: [], certificates: [], concerns: [], sars: [], events: [], available: all };
+const all = { fire: true, water: true, pat: true, cleaning: true, temperature: true, stock: true, coshh: true, certs: true, concerns: true, sars: true, events: true, training: true };
+const base = { checks: [], fireWeekly: [], waterRounds: [], patSessions: [], patAssets: [], cleaningLogs: [], tempUnits: [], tempLogs: [], tempIncidents: [], stockAlerts: [], stockCount: 0, coshh: [], certificates: [], concerns: [], sars: [], events: [], training: { people: [], courses: [], records: [] }, available: all };
 const sec = (data, id) => buildSections({ ...base, ...data, now })[id];
 const check = (assetType, days, extra = {}) => ({ assetType, assetId: `${assetType}-1`, performedAt: ago(days), result: "pass", actor: { displayName: "Caretaker" }, ...extra });
 
@@ -101,8 +101,8 @@ t("each visit sheet lists its own areas, and the gaps are gathered at the top", 
   const data = { checks: [check("fire_point", 40)], coshh: [] };
   const hs = buildReport({ visitId: "hs", data: { ...base, ...data }, now });
   const heiw = buildReport({ visitId: "heiw", data: { ...base, ...data }, now });
-  assert.deepEqual(hs.sections.map((s) => s.id), ["fire", "water", "pat", "emergency", "cleaning", "coshh", "certificates"]);
-  assert.equal(heiw.sections.length, 10);
+  assert.deepEqual(hs.sections.map((s) => s.id), ["fire", "water", "pat", "emergency", "cleaning", "coshh", "certificates", "training"]);
+  assert.equal(heiw.sections.length, 11);
   assert.ok(heiw.sections.some((s) => s.id === "governance") && !hs.sections.some((s) => s.id === "governance"), "governance is for the HEIW sheet only");
   assert.match(hs.gaps[0].text, /fire check was 40 days ago/);
 });
@@ -116,6 +116,31 @@ t("the printed sheet carries the sections, the gaps and what is held elsewhere, 
   assert.ok(!html.includes("<b>Bob") && !html.includes("<Hughes>"));
   assert.ok(html.includes("Save as PDF"));
   assert.ok(html.includes("Not shown") === false);
+});
+
+t("training: counts only, with the worst courses named and nobody else", () => {
+  const training = {
+    people: [{ id: "p1", name: "Ann Secret", group: "clinical" }, { id: "p2", name: "Bob Secret", group: "admin" }, { id: "p3", name: "Gone", group: "admin", active: false }],
+    courses: [{ id: "ig", name: "Information governance", intervalMonths: 24 }, { id: "bls", name: "Basic life support", intervalMonths: 12 }],
+    records: [
+      { personId: "p1", courseId: "ig", completedOn: "2024-01-01" },
+      { personId: "p2", courseId: "ig", completedOn: "2026-06-01" },
+      { personId: "p1", courseId: "bls", completedOn: "2025-12-01" },
+      { personId: "p2", courseId: "bls", completedOn: "2026-09-01" },
+      { personId: "p3", courseId: "ig", completedOn: "2000-01-01" },
+    ],
+  };
+  const s1 = sec({ training }, "training");
+  assert.equal(s1.status, "attention");
+  assert.match(s1.headline, /2 staff on the training matrix; 75% of dated training is in date/);
+  assert.equal(s1.rows.find((r) => r[0] === "Overdue")[1], "1");
+  assert.equal(s1.rows.find((r) => r[0] === "Running out in the next 60 days")[1], "1");
+  assert.match(s1.gaps[0], /1 training entry overdue, mostly Information governance \(1\)/);
+  assert.ok(!JSON.stringify(s1).includes("Secret"), "no names");
+  assert.equal(sec({}, "training").status, "none", "nothing recorded");
+  assert.equal(sec({ training, available: { ...all, training: false } }, "training").status, "unavailable");
+  const clean = sec({ training: { ...training, records: training.records.filter((r) => r.personId === "p2") } }, "training");
+  assert.equal(clean.status, "ok");
 });
 
 console.log(`\n${n} passed`);

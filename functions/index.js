@@ -14,6 +14,7 @@ const { raiseComplianceAlert } = require("./services/complianceAlertService");
 const sensorService = require("./services/sensorService");
 const { sendPushForNotification, sendTestAlert } = require("./services/pushService");
 const speechService = require("./services/speechService");
+const { runTrainingReminders } = require("./services/trainingReminderService");
 const { rolesToTell } = require("./services/fridgeAlertService");
 const { API_VERSION, MODEL_ID, analyzeDocument, summariseAnalyzeResult } = require("./services/azureDocumentIntelligenceService");
 const { extractClinicalFacts } = require("./services/azureOpenAiExtractionService");
@@ -483,7 +484,9 @@ exports.listStaffDirectory = onCall({ region: "europe-west2" }, async (request) 
       || hasCapability(capabilities, "admin.access")
       || hasCapability(capabilities, "inventory.verify") // choosing a colleague to message from a kit check
       || hasCapability(capabilities, "temperature.write") // naming who took a reading or opened an incident
-      || hasCapability(capabilities, "temperature.resolveIncident"); // naming who resolved a fridge incident
+      || hasCapability(capabilities, "temperature.resolveIncident") // naming who resolved a fridge incident
+      || hasCapability(capabilities, "training.manage") // linking staff training records to accounts
+      || hasCapability(capabilities, "training.manageClinical");
     if (!allowed) throw new HttpsError("permission-denied", "You need SAR, concerns, fridge, admin or stock-verification access to list staff.");
   }
   return { staff: await listStaffDirectory({ db }) };
@@ -909,6 +912,23 @@ exports.transcribeSpeech = onCall({ region: "europe-west2", timeoutSeconds: 30, 
     console.error("transcribeSpeech failed", String(error?.message || "").slice(0, 200));
     throw new HttpsError("unavailable", "The microphone couldn't be turned into words just now. Type your question instead.");
   }
+});
+
+// Every morning: tell people whose training has just come within 60 days of running out, or has run out (once for each date), and
+// on Mondays send the people who look after staff training a count. See services/trainingReminderService.js.
+exports.scheduledTrainingReminders = onSchedule({ region: "europe-west2", schedule: "every day 07:40", timeZone: "Europe/London", timeoutSeconds: 180 }, async () => {
+  const users = await db.collection("users").get();
+  const capabilitiesByRole = new Map();
+  const managers = [];
+  for (const user of users.docs) {
+    const data = user.data() || {};
+    if (data.active === false || !data.role) continue;
+    if (!capabilitiesByRole.has(data.role)) capabilitiesByRole.set(data.role, await getEffectiveCapabilities(db, data.role));
+    const capabilities = capabilitiesByRole.get(data.role);
+    if (hasCapability(capabilities, "training.manage")) managers.push({ uid: user.id, scope: "all" });
+    else if (hasCapability(capabilities, "training.manageClinical")) managers.push({ uid: user.id, scope: "clinical" });
+  }
+  await runTrainingReminders({ db, FieldValue, managers });
 });
 
 exports.scheduledConnectSimulatorSync = onSchedule(

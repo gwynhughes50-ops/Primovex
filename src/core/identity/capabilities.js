@@ -63,6 +63,10 @@ export const CAPABILITIES = {
     count: "stocktake.count",
     manage: "stocktake.manage",
   },
+  training: {
+    manage: "training.manage",
+    manageClinical: "training.manageClinical",
+  },
   coshh: {
     read: "coshh.read",
     manage: "coshh.manage",
@@ -170,6 +174,8 @@ export const CAPABILITY_CATALOG = [
   { id: "compliance.manageAssets", label: "Manage QR/NFC compliance assets", group: "Compliance" },
   { id: "stocktake.count", label: "Take part in a stock take (claim places, count, add items found)", group: "Inventory" },
   { id: "stocktake.manage", label: "Request, review and apply a stock take", group: "Inventory" },
+  { id: "training.manage", label: "Staff training: see and update everyone's training record", group: "Staff" },
+  { id: "training.manageClinical", label: "Staff training: see and update the clinical team's training record", group: "Staff" },
   { id: "coshh.read", label: "View the COSHH register (hazardous substances, PPE, first aid)", group: "Compliance" },
   { id: "coshh.manage", label: "Maintain the COSHH register and upload safety data sheets", group: "Compliance" },
 
@@ -202,6 +208,7 @@ export const ROLE_TEMPLATES = {
   "Practice Manager": [
     "stocktake.count",
     "stocktake.manage",
+    "training.manage",
     "clinflow.read",
     "clinflow.capture",
     "clinflow.workflow",
