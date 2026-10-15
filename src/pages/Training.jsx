@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { GraduationCap, Printer, Upload, X } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, GraduationCap, Printer, Upload, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
 import { listStaffDirectory } from "@/services/staffDirectoryService";
@@ -7,7 +7,7 @@ import { GROUPS, LIGHT, STATUS, STATUS_LABEL, buildMatrix, dateKey, dueOf, filte
 import { likelyLiveSheet, parseTrainingSheets, planImport, suggestAccountLinks } from "@/modules/training/trainingImport";
 import { readWorkbook } from "@/modules/training/readWorkbook";
 import { matrixHtml } from "@/modules/training/trainingPrint";
-import { applyImportPlan, newCourseId, newPersonId, saveCourse, savePerson, saveRecord, useTrainingData } from "@/modules/training/trainingService";
+import { applyImportPlan, deletePerson, newCourseId, newPersonId, saveCourse, savePerson, saveRecord, useTrainingData } from "@/modules/training/trainingService";
 
 // Staff training (Operations > Staff training): everyone's courses in one matrix with a traffic light for each, who is due or
 // overdue, the people and courses behind it, and a way to bring in the practice's existing spreadsheet. The Practice Manager and
@@ -88,6 +88,8 @@ function MatrixTab({ data, actor, canManageAll }) {
   const [onlyProblems, setOnlyProblems] = useState(false);
   const [category, setCategory] = useState("");
   const [editing, setEditing] = useState(null);
+  const scroller = useRef(null);
+  const scrollAcross = (direction) => scroller.current?.scrollBy({ left: direction * Math.max(300, scroller.current.clientWidth * 0.7), behavior: "smooth" });
   const now = useMemo(() => new Date(), []);
   const live = useMemo(() => courses.filter((c) => c.active !== false && (!category || (c.category || "General") === category)), [courses, category]);
   const matrix = useMemo(() => buildMatrix({ people: people.filter((p) => p.active !== false), courses: live, records, now }), [people, live, records, now]);
@@ -117,9 +119,10 @@ function MatrixTab({ data, actor, canManageAll }) {
       <div className="flex flex-wrap gap-2 text-xs text-slate-300">
         {[STATUS.inDate, STATUS.dueSoon, STATUS.overdue, STATUS.notRequired, STATUS.onLeave, STATUS.none].map((s) => <span key={s} className={`rounded-full px-2.5 py-1 ${CELL[LIGHT[s]]}`}>{STATUS_LABEL[s]}</span>)}
         <span className="py-1 text-slate-500">Each cell shows the date it runs out. Click one to update it.</span>
+        <span className="ml-auto flex items-center gap-1"><button type="button" className={BTN} onClick={() => scrollAcross(-1)} aria-label="Scroll the matrix to the left"><ChevronLeft className="h-4 w-4" /> Left</button><button type="button" className={BTN} onClick={() => scrollAcross(1)} aria-label="Scroll the matrix to the right">Right <ChevronRight className="h-4 w-4" /></button></span>
       </div>
-      <div className="max-h-[68vh] overflow-auto rounded-2xl border border-white/10">
-        <table className="min-w-full border-collapse text-xs">
+      <div ref={scroller} tabIndex={0} aria-label="Training matrix. Use the arrow keys or the Left and Right buttons to move across." className="max-h-[68vh] overflow-auto rounded-2xl border border-white/10 [scrollbar-width:auto]">
+        <table className="w-max min-w-full border-collapse text-xs">
           <thead className="sticky top-0 z-20 bg-slate-900">
             <tr>
               <th className="sticky left-0 z-30 bg-slate-900 px-2 py-1 text-left text-slate-400" />
@@ -127,7 +130,7 @@ function MatrixTab({ data, actor, canManageAll }) {
             </tr>
             <tr>
               <th className="sticky left-0 z-30 min-w-[11rem] bg-slate-900 px-2 py-2 text-left text-slate-200">Person</th>
-              {live.map((c) => <th key={c.id} className="min-w-[5.2rem] max-w-[6.5rem] border-l border-white/10 px-1.5 py-2 align-bottom text-left font-semibold text-slate-200">{c.name}</th>)}
+              {live.map((c) => <th key={c.id} className="w-[6.5rem] min-w-[6.5rem] max-w-[6.5rem] border-l border-white/10 px-1.5 py-2 align-bottom text-left font-semibold text-slate-200">{c.name}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -160,6 +163,7 @@ function PeopleTab({ data, canManageAll }) {
   const [message, setMessage] = useState("");
   const [adding, setAdding] = useState({ name: "", jobRole: "", group: canManageAll ? "admin" : "clinical" });
   const [showLeft, setShowLeft] = useState(false);
+  const [removing, setRemoving] = useState("");
   useEffect(() => { listStaffDirectory().then(setStaff).catch(() => setStaffError("The list of accounts could not be loaded, so people can't be linked just now.")); }, []);
   const suggestions = useMemo(() => suggestAccountLinks(people, staff), [people, staff]);
   const roles = useMemo(() => [...new Set(people.map((p) => p.jobRole).filter(Boolean))].sort(), [people]);
@@ -168,6 +172,10 @@ function PeopleTab({ data, canManageAll }) {
   async function change(person, patch) {
     setBusyId(person.id); setMessage("");
     try { await savePerson({ ...person, ...patch }, { previous: person, records }); } catch (problem) { setMessage(problem?.message || "That didn't save."); } finally { setBusyId(""); }
+  }
+  async function remove(person) {
+    setBusyId(person.id); setMessage("");
+    try { await deletePerson(person, records); setRemoving(""); setMessage(`${person.name} was removed, with their dates.`); } catch (problem) { setMessage(problem?.message || "That didn't save."); } finally { setBusyId(""); }
   }
   async function linkAll() {
     setBusyId("all"); setMessage("");
@@ -203,11 +211,11 @@ function PeopleTab({ data, canManageAll }) {
       <label className="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" checked={showLeft} onChange={(e) => setShowLeft(e.target.checked)} /> Show people who have left</label>
       <div className="overflow-x-auto rounded-2xl border border-white/10">
         <table className="min-w-full text-sm">
-          <thead className="bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Name</th><th className="px-3 py-2">Job</th><th className="px-3 py-2">Team</th><th className="px-3 py-2">Primovex account</th><th className="px-3 py-2">Working here</th></tr></thead>
+          <thead className="bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Name</th><th className="px-3 py-2">Job</th><th className="px-3 py-2">Team</th><th className="px-3 py-2">Primovex account</th><th className="px-3 py-2">Working here</th><th className="px-3 py-2" /></tr></thead>
           <tbody>
             {shown.map((p) => (
               <tr key={p.id} className="border-t border-white/5">
-                <td className="px-3 py-1.5 font-semibold text-slate-100">{p.name}</td>
+                <td className="px-3 py-1.5"><input className="w-48 rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1 font-semibold text-slate-100" defaultValue={p.name} onBlur={(e) => e.target.value.trim() && e.target.value.trim() !== p.name && change(p, { name: e.target.value })} aria-label={`Name of ${p.name}`} /></td>
                 <td className="px-3 py-1.5"><input className="w-40 rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1 text-slate-100" list="training-roles" defaultValue={p.jobRole || ""} onBlur={(e) => e.target.value !== (p.jobRole || "") && change(p, { jobRole: e.target.value })} aria-label={`Job for ${p.name}`} /></td>
                 <td className="px-3 py-1.5"><select className="rounded-lg border border-white/10 bg-slate-950/60 px-2 py-1 text-slate-100" value={p.group} disabled={!canManageAll} onChange={(e) => change(p, { group: e.target.value })} aria-label={`Team for ${p.name}`}>{GROUPS.map((g) => <option key={g.key} value={g.key}>{groupLabel(g.key)}</option>)}</select></td>
                 <td className="px-3 py-1.5">
@@ -217,6 +225,11 @@ function PeopleTab({ data, canManageAll }) {
                   </select>
                 </td>
                 <td className="px-3 py-1.5"><label className="flex items-center gap-2 text-slate-300"><input type="checkbox" checked={p.active !== false} onChange={(e) => change(p, { active: e.target.checked })} /> {p.active !== false ? "Yes" : "Left"}</label></td>
+                <td className="whitespace-nowrap px-3 py-1.5 text-right">
+                  {removing === p.id
+                    ? <><span className="mr-2 text-xs text-slate-300">Remove {p.name} and all their dates?</span><button type="button" className={BTN} disabled={busyId === p.id} onClick={() => remove(p)}>Yes, remove</button> <button type="button" className={BTN} onClick={() => setRemoving("")}>No</button></>
+                    : <button type="button" className="text-xs font-semibold text-slate-400 underline hover:text-rose-300" onClick={() => setRemoving(p.id)} aria-label={`Remove ${p.name}`}>Remove</button>}
+                </td>
               </tr>
             ))}
           </tbody>

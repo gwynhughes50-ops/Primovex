@@ -149,4 +149,18 @@ t("people are matched to accounts by exact name only, once each, and never silen
   assert.deepEqual(suggestAccountLinks(people, staff), [{ personId: "p1", uid: "u1", label: "ann example" }, { personId: "p2", uid: "u2", label: "Bea Sample" }], "two accounts with one name are not guessed between; linked and left people are skipped");
 });
 
+t("a note like 'open DBS' beside the surname does not become part of the name", () => {
+  const shifted = sheet("Department", [
+    [1, { 1: "Traffic light system", 3: "Employee Name" }],
+    [3, { 2: "Job Role", 6: "Information Governance EXP 2 yearly", 7: "Care Navigation" }],
+    [4, { 2: "ANP", 3: "Nia ", 4: "Example", 5: "open DBS ", 6: D("2028-01-01"), 7: D("2026-10-01") }],
+    [5, { 2: "HCA", 3: "Bea", 4: "Sample", 6: D("2027-02-01") }],
+  ]);
+  const out = parseTrainingSheets([shifted]);
+  assert.deepEqual(out.people.map((p) => p.name).sort(), ["Bea Sample", "Nia Example"]);
+  const nia = out.people.find((p) => p.name === "Nia Example");
+  assert.equal(nia.jobRole, "ANP");
+  assert.equal(out.records.filter((r) => r.personId === nia.id).length, 2);
+});
+
 console.log(`\n${n} passed`);

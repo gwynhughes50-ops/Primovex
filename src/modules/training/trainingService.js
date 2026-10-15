@@ -89,6 +89,16 @@ export async function savePerson(person, { previous = null, records = [] } = {})
   await batch.commit();
 }
 
+// Remove someone who should never have been on the matrix (an import mistake, a duplicate): the person and all their dates.
+// Someone who has simply left is marked "Left" instead, so their history is kept.
+export async function deletePerson(person, records = []) {
+  if (isSafeSyntheticMode()) throw new Error("Demo mode can't save changes.");
+  const batch = writeBatch(db);
+  for (const record of records.filter((r) => r.personId === person.id)) batch.delete(doc(db, RECORDS, record.id));
+  batch.delete(doc(db, PEOPLE, person.id));
+  await batch.commit();
+}
+
 export const newPersonId = (name) => `p-${clean(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || Date.now()}`;
 export const newCourseId = (name) => `c-${clean(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || Date.now()}`;
 

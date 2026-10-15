@@ -53,6 +53,7 @@ function baseName(header) {
     .trim();
 }
 
+const DBS_NOTE = /\bdbs\b/i;
 const textCells = (row) => Object.entries(row?.cells || {}).filter(([, v]) => typeof v === "string" && norm(v));
 
 // the course columns of one sheet
@@ -114,11 +115,14 @@ export function parseTrainingSheets(sheets) {
     if (!layout) { warnings.push({ sheet: sheet.name, person: "", course: "", text: "No training header row was found on this sheet, so it was skipped." }); continue; }
     const { columns, firstNameCol, lastNameCol, headerRow } = layout;
 
+    // a note such as "open DBS" where the surname should be means this sheet's names sit one column to the left
+    const shift = sheet.rows.some((row) => row.r > headerRow.r && DBS_NOTE.test(norm(row.cells[lastNameCol]))) ? 1 : 0;
+
     // the staff rows
     const staffRows = sheet.rows.filter((row) => row.r > headerRow.r).map((row) => {
-      const first = norm(row.cells[firstNameCol]);
-      const last = norm(row.cells[lastNameCol]);
-      const roleCells = [1, 2].filter((c) => c < firstNameCol).map((c) => norm(row.cells[c])).filter((v) => v && Number.isNaN(Number(v)));
+      const first = norm(row.cells[firstNameCol - shift]);
+      const last = norm(row.cells[lastNameCol - shift]);
+      const roleCells = [1, 2].filter((c) => c < firstNameCol - shift).map((c) => norm(row.cells[c])).filter((v) => v && Number.isNaN(Number(v)));
       const jobRole = roleCells.length > 1 ? roleCells[roleCells.length - 1] : roleCells[0] || "";
       return { row, first, last, jobRole, name: [first, last].filter(Boolean).join(" ") };
     }).filter((s) => s.name && Number.isNaN(Number(s.first)) && Number.isNaN(Number(s.last)) && !LEGEND.test(s.name) && !LEGEND.test(norm(s.row.cells[1])) && !LEGEND.test(norm(s.row.cells[2])));
