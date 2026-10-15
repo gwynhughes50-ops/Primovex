@@ -14,7 +14,7 @@ const pad = (n) => String(n).padStart(2, "0");
 const CODE = /^[A-Z]{2,4}\d{3}\/[A-Z0-9]{4,6}$/;
 const SITE = /^\d{6,8}-\d{2,4}$/;
 const EWC = /^(\d{6}(\/\d{2})?|\d{2} \d{2} \d{2})$/;
-const KG = /^\d+\.\d{1,3}$/;
+const KG = /^\d+(\.\d{1,3})?$/; // a weight: 65.001, 8.000, or a plain 0 when none was collected
 // the second line of the table headings
 const HEADING_WORDS = /^(Form|Codes|Box|Unit|Cart|Waste|Code|\(kg\)|\(EWC Code\))$/;
 
@@ -102,6 +102,8 @@ export function parseConsignment(pages, { fileName = "" } = {}) {
         component: inCol(x.comp - 6, x.conc - 3), concentration: inCol(x.conc - 6, x.form - 3), form: inCol(x.form - 6, x.haz - 3), hazard: inCol(x.haz - 6, x.bag - 3),
         bags: counts[0] ?? 0, sharpsBoxes: counts[1] ?? 0, sealedUnits: counts[2] ?? 0, wheeledCarts: counts[3] ?? 0,
       };
+      // nothing in the weight column and no bags, boxes, units or carts either: nothing was collected on this line
+      if (row.kg === null && counts.length && counts.every((c) => c === 0)) row.kg = 0;
       if (row.kg === null) warnings.push(`The weight for ${main.s} could not be read. Type it in.`);
       lines.push(row);
     }

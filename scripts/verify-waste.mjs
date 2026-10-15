@@ -54,6 +54,28 @@ t("a note is read: the codes, when, who it came from and each waste line", () =>
   assert.deepEqual(out.warnings, []);
 });
 
+t("a line with nothing collected (0 kg, written as a plain 0 or 0.000) is read as 0, not as missing", () => {
+  for (const zero of ["0", "0.000", "0.0"]) {
+    const [page1, page2] = note();
+    const edited = page1.map((i) => (i.s === "8.000" ? { ...i, s: zero } : i));
+    const out = parseConsignment([edited, page2]);
+    assert.equal(out.lines[0].kg, 0, zero);
+    assert.deepEqual(out.warnings, [], zero);
+    assert.equal(out.totalKg, 65.001);
+  }
+});
+
+t("a blank weight with no containers is 0; a blank weight with containers is still flagged", () => {
+  const [page1, page2] = note();
+  const blankSharps = page1.filter((i) => i.s !== "8.000").map((i) => (i.y === 458 && i.x === 555 ? { ...i, s: "0" } : i));
+  const empty = parseConsignment([blankSharps, page2]);
+  assert.equal(empty.lines[0].kg, 0);
+  assert.deepEqual(empty.warnings, []);
+  const blankWithBoxes = parseConsignment([page1.filter((i) => i.s !== "8.000"), page2]);
+  assert.equal(blankWithBoxes.lines[0].kg, null);
+  assert.ok(blankWithBoxes.warnings.some((w) => /weight/.test(w)));
+});
+
 t("the driver's and signers' names are not read into the result", () => {
   assert.ok(!JSON.stringify(parseConsignment(note())).includes("Some Driver"));
 });
