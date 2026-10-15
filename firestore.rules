@@ -645,7 +645,7 @@ match /subject_access_requests/{requestId} {
       return
         role == "System Admin" ? ["*"] :
         role == "Practice Manager" ? [
-          "stocktake.count", "stocktake.manage", "training.manage",
+          "stocktake.count", "stocktake.manage", "training.manage", "waste.read", "waste.manage",
           "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
           "dashboard.read", "operations.read", "operations.manage",
           "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",
@@ -809,6 +809,20 @@ match /subject_access_requests/{requestId} {
       allow create: if trainingManages(request.resource.data.group) && request.resource.data.personId is string && request.resource.data.courseId is string;
       allow update: if trainingManages(resource.data.group) && trainingManages(request.resource.data.group);
       allow delete: if trainingManages(resource.data.group);
+    }
+
+    // CLINICAL WASTE CONSIGNMENT NOTES (src/modules/waste). One record per Stericycle note: what was collected and when, read from
+    // the PDF the practice is emailed, with the PDF itself in Storage (waste_notes/). It is practice evidence, not patient data.
+    //   waste.read      sees them (the inspection pack, the Practice Manager and anyone given the role)
+    //   waste.manage    adds a note and corrects one (the member of staff who keeps them)
+    // A wrong note is marked voided, not deleted: only an administrator deletes.
+    match /waste_consignments/{noteId} {
+      allow get, list: if signedIn() && (hasPermission("waste", "read") || hasPermission("waste", "manage") || isAdmin());
+      allow create, update: if signedIn() && (hasPermission("waste", "manage") || isAdmin())
+        && request.resource.data.consignmentCode is string && request.resource.data.consignmentCode.size() > 0
+        && request.resource.data.collectionDate is string
+        && request.resource.data.lines is list;
+      allow delete: if isAdmin();
     }
 
     // Primovex's own sensors (functions/services/sensorService.js). What was set up and the latest state is readable by

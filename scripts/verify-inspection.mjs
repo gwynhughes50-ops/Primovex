@@ -8,8 +8,8 @@ let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
 const now = new Date(2026, 9, 10, 12, 0); // Sat 10 Oct 2026
 const ago = (days) => new Date(now.getTime() - days * 86400000);
-const all = { fire: true, water: true, pat: true, cleaning: true, temperature: true, stock: true, coshh: true, certs: true, concerns: true, sars: true, events: true, training: true };
-const base = { checks: [], fireWeekly: [], waterRounds: [], patSessions: [], patAssets: [], cleaningLogs: [], tempUnits: [], tempLogs: [], tempIncidents: [], stockAlerts: [], stockCount: 0, coshh: [], certificates: [], concerns: [], sars: [], events: [], training: { people: [], courses: [], records: [] }, available: all };
+const all = { fire: true, water: true, pat: true, cleaning: true, temperature: true, stock: true, coshh: true, certs: true, concerns: true, sars: true, events: true, training: true, waste: true };
+const base = { checks: [], fireWeekly: [], waterRounds: [], patSessions: [], patAssets: [], cleaningLogs: [], tempUnits: [], tempLogs: [], tempIncidents: [], stockAlerts: [], stockCount: 0, coshh: [], certificates: [], concerns: [], sars: [], events: [], waste: [], training: { people: [], courses: [], records: [] }, available: all };
 const sec = (data, id) => buildSections({ ...base, ...data, now })[id];
 const check = (assetType, days, extra = {}) => ({ assetType, assetId: `${assetType}-1`, performedAt: ago(days), result: "pass", actor: { displayName: "Caretaker" }, ...extra });
 
@@ -101,8 +101,8 @@ t("each visit sheet lists its own areas, and the gaps are gathered at the top", 
   const data = { checks: [check("fire_point", 40)], coshh: [] };
   const hs = buildReport({ visitId: "hs", data: { ...base, ...data }, now });
   const heiw = buildReport({ visitId: "heiw", data: { ...base, ...data }, now });
-  assert.deepEqual(hs.sections.map((s) => s.id), ["fire", "water", "pat", "emergency", "cleaning", "coshh", "certificates", "training"]);
-  assert.equal(heiw.sections.length, 11);
+  assert.deepEqual(hs.sections.map((s) => s.id), ["fire", "water", "pat", "emergency", "cleaning", "coshh", "waste", "certificates", "training"]);
+  assert.equal(heiw.sections.length, 12);
   assert.ok(heiw.sections.some((s) => s.id === "governance") && !hs.sections.some((s) => s.id === "governance"), "governance is for the HEIW sheet only");
   assert.match(hs.gaps[0].text, /fire check was 40 days ago/);
 });
@@ -141,6 +141,20 @@ t("training: counts only, with the worst courses named and nobody else", () => {
   assert.equal(sec({ training, available: { ...all, training: false } }, "training").status, "unavailable");
   const clean = sec({ training: { ...training, records: training.records.filter((r) => r.personId === "p2") } }, "training");
   assert.equal(clean.status, "ok");
+});
+
+t("clinical waste: last collection, last year's totals and a long gap; counts only", () => {
+  const note = (id, date, kg) => ({ id, consignmentCode: id, collectionDate: date, totalKg: kg, lines: [{ description: "SHARPS", kg }] });
+  const good = sec({ waste: [note("A1", "2026-10-01", 40), note("A2", "2026-09-05", 30), note("A3", "2026-08-01", 20)] }, "waste");
+  assert.equal(good.status, "ok");
+  assert.match(good.headline, /Last collection 01\/10\/2026; 3 collections and 90 kg in the last 12 months/);
+  assert.equal(good.rows.find((r) => r[0] === "Longest gap in the last 12 months")[1], "35 days");
+  const stale = sec({ waste: [note("B1", "2026-06-01", 40)] }, "waste");
+  assert.equal(stale.status, "attention");
+  assert.match(stale.gaps[0], /ago/);
+  assert.equal(sec({}, "waste").status, "none");
+  assert.equal(sec({ available: { ...all, waste: false } }, "waste").status, "unavailable");
+  assert.equal(sec({ waste: [{ ...note("V1", "2026-10-05", 99), voided: true }] }, "waste").status, "none", "a note marked as an error does not count");
 });
 
 console.log(`\n${n} passed`);

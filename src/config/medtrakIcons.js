@@ -67,6 +67,7 @@ export const Icons = {
   inventory: Boxes,
   stocktake: ListChecks,
   training: GraduationCap,
+  waste: Trash2,
   inspection: FileSearch,
   login: LogIn,
   logout: LogOut,

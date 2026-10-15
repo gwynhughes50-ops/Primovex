@@ -7,6 +7,7 @@ import { SAR_COLLECTION } from "@/modules/governance/services/sarService";
 import { SE_COLLECTION } from "@/modules/governance/seModel";
 import { normaliseSubstance } from "@/modules/coshh/coshh";
 import { normaliseCertificate } from "@/modules/certificates/certificates";
+import { normaliseConsignment } from "@/modules/waste/waste";
 import { COURSES as TRAINING_COURSES, PEOPLE as TRAINING_PEOPLE, RECORDS as TRAINING_RECORDS } from "@/modules/training/trainingService";
 
 // Reads what the inspection summary needs, once, with the signed-in person's own permissions. A collection this
@@ -32,7 +33,7 @@ export async function loadInspectionData(now = new Date()) {
   const available = {};
   const monthAgo = dayKey(new Date(now.getTime() - 31 * 86400000));
 
-  const [checks, fireWeekly, waterRounds, patSessions, patAssets, cleaningLogs, tempUnits, tempLogs, tempIncidents, stockDocs, coshhDocs, certDocs, concerns, sars, events, trainingPeople, trainingCourses, trainingRecords] = await Promise.all([
+  const [checks, fireWeekly, waterRounds, patSessions, patAssets, cleaningLogs, tempUnits, tempLogs, tempIncidents, stockDocs, coshhDocs, certDocs, concerns, sars, events, trainingPeople, trainingCourses, trainingRecords, wasteDocs] = await Promise.all([
     read("compliance checks", () => query(collection(db, "compliance_checks"), orderBy("createdAt", "desc"), limit(3000)), available, "fire"),
     read("fire records", () => query(collection(db, "fire_weekly_checks"), orderBy("createdAt", "desc"), limit(300))),
     read("water rounds", () => query(collection(db, "water_temp_rounds"), orderBy("createdAt", "desc"), limit(300))),
@@ -51,6 +52,7 @@ export async function loadInspectionData(now = new Date()) {
     read("training people", () => collection(db, TRAINING_PEOPLE), available, "training"),
     read("training courses", () => collection(db, TRAINING_COURSES)),
     read("training records", () => collection(db, TRAINING_RECORDS)),
+    read("clinical waste", () => collection(db, "waste_consignments"), available, "waste"),
   ]);
   // water uses the same compliance checks as fire
   available.water = available.fire;
@@ -62,6 +64,6 @@ export async function loadInspectionData(now = new Date()) {
 
   return {
     checks, fireWeekly, waterRounds, patSessions, patAssets, cleaningLogs, tempUnits, tempLogs, tempIncidents,
-    stockAlerts, stockCount: stock.length, coshh: coshhDocs.map((d) => normaliseSubstance(d.id, d)), certificates: certDocs.map((d) => normaliseCertificate(d.id, d)), concerns, sars, events, training: { people: trainingPeople, courses: trainingCourses, records: trainingRecords }, available,
+    stockAlerts, stockCount: stock.length, coshh: coshhDocs.map((d) => normaliseSubstance(d.id, d)), certificates: certDocs.map((d) => normaliseCertificate(d.id, d)), concerns, sars, events, waste: wasteDocs.map((d) => normaliseConsignment(d.id, d)), training: { people: trainingPeople, courses: trainingCourses, records: trainingRecords }, available,
   };
 }

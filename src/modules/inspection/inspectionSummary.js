@@ -7,6 +7,7 @@ import { concernDeadline, concernOpen, sarDays, sarOpen } from "../../ai/managem
 import { reviewSummary, reviewStatus } from "../coshh/coshh.js";
 import { certLabel, certStatus, certSummary } from "../certificates/certificates.js";
 import { STATUS, courseSummary, tally, buildMatrix } from "../training/training.js";
+import { LONG_GAP_DAYS, stats as wasteStats, live as liveWaste } from "../waste/waste.js";
 
 const DAY = 86400000;
 
@@ -201,6 +202,21 @@ export function certificatesSection({ certificates, now, available }) {
     [["In date", String(summary.ok)], ["Running out in the next 60 days", String(summary.dueSoon)], ["Expired or without a date", String(summary.expired)], ["With the certificate PDF held", `${live.length - summary.noPdf} of ${live.length}`]], gaps);
 }
 
+// ---- clinical waste: collections on record, counts and dates only ---------------------------------------------------
+export function wasteSection({ waste, now, available }) {
+  if (!available.waste) return unavailable("waste", "Clinical waste");
+  const notes = liveWaste(waste || []);
+  if (!notes.length) return section("waste", "Clinical waste", "none", "No clinical waste consignment notes are on record in Primovex yet.", [], ["No clinical waste consignment notes are on record in Primovex yet."]);
+  const s = wasteStats(notes, now);
+  const gaps = [];
+  if (s.daysSinceLast !== null && s.daysSinceLast > LONG_GAP_DAYS) gaps.push(`The last clinical waste collection on record was ${plural(s.daysSinceLast, "day")} ago.`);
+  if (s.longestGap > LONG_GAP_DAYS) gaps.push(`There was a gap of ${plural(s.longestGap, "day")} between two collections in the last 12 months.`);
+  const lastDate = s.last ? s.last.collectionDate.split("-").reverse().join("/") : "";
+  return section("waste", "Clinical waste", gaps.length ? "attention" : "ok",
+    s.last ? `Last collection ${lastDate}; ${plural(s.collectionsLastYear, "collection")} and ${s.kgLastYear} kg in the last 12 months.` : "Collections are on record.",
+    [["Last collection", lastDate || "n/a"], ["Collections in the last 12 months", String(s.collectionsLastYear)], ["Waste in the last 12 months", `${s.kgLastYear} kg`], ["Longest gap in the last 12 months", s.collectionsLastYear > 1 ? plural(s.longestGap, "day") : "n/a"], ["Consignment notes on record", String(s.total)]], gaps);
+}
+
 // ---- staff training: counts only, never a name ------------------------------------------------------------------
 export function trainingSection({ training, now, available }) {
   if (!available.training) return unavailable("training", "Staff training");
@@ -254,7 +270,7 @@ export function governanceSection({ concerns, sars, events, now, available }) {
 export function buildSections(data) {
   return {
     fire: fireSection(data), water: waterSection(data), pat: patSection(data), emergency: emergencySection(data), cleaning: cleaningSection(data),
-    coldchain: coldChainSection(data), stock: stockSection(data), coshh: coshhSection(data), certificates: certificatesSection(data), training: trainingSection(data), governance: governanceSection(data),
+    coldchain: coldChainSection(data), stock: stockSection(data), coshh: coshhSection(data), certificates: certificatesSection(data), waste: wasteSection(data), training: trainingSection(data), governance: governanceSection(data),
   };
 }
 

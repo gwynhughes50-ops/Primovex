@@ -42,7 +42,7 @@ service firebase.storage {
       return
         role == "System Admin" ? ["*"] :
         role == "Practice Manager" ? [
-          "stocktake.count", "stocktake.manage",
+          "stocktake.count", "stocktake.manage", "waste.read", "waste.manage",
           "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
           "dashboard.read", "operations.read", "operations.manage",
           "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",
@@ -167,6 +167,17 @@ service firebase.storage {
         && request.resource.size < 15 * 1024 * 1024
         && request.resource.contentType == "application/pdf";
       allow delete: if hasPermission("compliance", "manageAssets") || isAdmin();
+    }
+
+    // Clinical waste consignment notes (the Stericycle PDF), one folder per note: waste_notes/{noteId}/{fileName}.
+    // Read by whoever sees the waste records (waste.read or waste.manage); written by whoever keeps them (waste.manage).
+    // PDFs only, up to 15MB. Only an administrator deletes one.
+    match /waste_notes/{noteId}/{fileName} {
+      allow read: if hasPermission("waste", "read") || hasPermission("waste", "manage") || isAdmin();
+      allow write: if (hasPermission("waste", "manage") || isAdmin())
+        && request.resource.size < 15 * 1024 * 1024
+        && request.resource.contentType == "application/pdf";
+      allow delete: if isAdmin();
     }
 
     // Everything else is closed by default.

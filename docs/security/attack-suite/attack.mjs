@@ -1070,6 +1070,68 @@ async function main() {
     await assertFails(deleteDoc(doc(nurse, "training_courses", "c1")));
   });
 
+  console.log("\n=== 25. Clinical waste consignment notes (waste_consignments and waste_notes files) ===");
+  const keeper = testEnv.authenticatedContext("wastekeeper-uid").firestore(); // a custom role with waste.manage (the member of staff who keeps the notes)
+  const wreader = testEnv.authenticatedContext("wastereader-uid").firestore(); // a custom role with waste.read only
+  const keeperStorage = testEnv.authenticatedContext("wastekeeper-uid").storage();
+  const readerStorage = testEnv.authenticatedContext("wastereader-uid").storage();
+  const wPmStorage = testEnv.authenticatedContext("pm-uid").storage();
+  const wAdminStorage = testEnv.authenticatedContext("admin-uid").storage();
+  const noteDoc = (extra = {}) => ({ consignmentCode: "ABC123/9XY8Z", collectionDate: "2026-03-24", collectionTime: "08:46", lines: [{ ewc: "18 01 03", kg: 10 }], totalKg: 10, voided: false, ...extra });
+  await seed(async (db) => {
+    await setDoc(doc(db, "roles", "Clinical Waste Keeper"), { name: "Clinical Waste Keeper", capabilities: ["waste.manage", "dashboard.read"], builtIn: false });
+    await setDoc(doc(db, "roles", "Waste Reader"), { name: "Waste Reader", capabilities: ["waste.read", "dashboard.read"], builtIn: false });
+    await setDoc(doc(db, "users", "wastekeeper-uid"), { role: "Clinical Waste Keeper", displayName: "Keeper" });
+    await setDoc(doc(db, "users", "wastereader-uid"), { role: "Waste Reader", displayName: "Reader" });
+    await setDoc(doc(db, "waste_consignments", "cn-seed"), noteDoc({ consignmentCode: "SEED01/AAAA1" }));
+  });
+  await check("The practice manager, the member of staff who keeps the notes and an administrator CAN add a note", async () => {
+    await assertSucceeds(setDoc(doc(pm, "waste_consignments", "cn-pm"), noteDoc({ consignmentCode: "PM0001/AAAA1" })));
+    await assertSucceeds(setDoc(doc(keeper, "waste_consignments", "cn-keeper"), noteDoc({ consignmentCode: "KP0001/AAAA1" })));
+    await assertSucceeds(setDoc(doc(admin, "waste_consignments", "cn-admin"), noteDoc({ consignmentCode: "AD0001/AAAA1" })));
+  });
+  await check("A nurse, an HCA-type user, reception, a cleaner, a read-only waste role and anonymous cannot add or change one", async () => {
+    for (const who of [nurse, user, reception, cleaner, wreader, anon]) {
+      await assertFails(setDoc(doc(who, "waste_consignments", "cn-x"), noteDoc({ consignmentCode: "X00001/AAAA1" })));
+    }
+    for (const who of [nurse, wreader]) await assertFails(updateDoc(doc(who, "waste_consignments", "cn-seed"), { totalKg: 1 }));
+  });
+  await check("A note must have a code, a collection date and a list of lines", async () => {
+    await assertFails(setDoc(doc(keeper, "waste_consignments", "cn-b1"), noteDoc({ consignmentCode: "" })));
+    await assertFails(setDoc(doc(keeper, "waste_consignments", "cn-b2"), noteDoc({ consignmentCode: 5 })));
+    await assertFails(setDoc(doc(keeper, "waste_consignments", "cn-b3"), noteDoc({ collectionDate: null })));
+    await assertFails(setDoc(doc(keeper, "waste_consignments", "cn-b4"), noteDoc({ lines: "ten kilos" })));
+  });
+  await check("The practice manager, the keeper, a read-only waste role and an administrator CAN read the notes; a nurse, a cleaner, a partner and anonymous cannot", async () => {
+    for (const who of [pm, keeper, wreader, admin]) await assertSucceeds(getDoc(doc(who, "waste_consignments", "cn-seed")));
+    for (const who of [nurse, cleaner, partner, reception, anon]) await assertFails(getDoc(doc(who, "waste_consignments", "cn-seed")));
+  });
+  await check("The keeper can correct a note and mark one as entered in error; nobody except an administrator deletes one", async () => {
+    await assertSucceeds(updateDoc(doc(keeper, "waste_consignments", "cn-keeper"), { totalKg: 12, voided: true, voidReason: "Entered in error" }));
+    await assertFails(deleteDoc(doc(keeper, "waste_consignments", "cn-keeper")));
+    await assertFails(deleteDoc(doc(pm, "waste_consignments", "cn-pm")));
+    await assertSucceeds(deleteDoc(doc(admin, "waste_consignments", "cn-admin")));
+  });
+  const wastePdf = new TextEncoder().encode("%PDF-1.4 consignment note");
+  await check("The practice manager and the keeper CAN upload a consignment note PDF; others cannot, and only PDFs under 15MB", async () => {
+    await assertSucceeds(uploadBytes(ref(keeperStorage, "waste_notes/cn-keeper/a.pdf"), wastePdf, { contentType: "application/pdf" }));
+    await assertSucceeds(uploadBytes(ref(wPmStorage, "waste_notes/cn-pm/b.pdf"), wastePdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(nurseStorage, "waste_notes/cn-x/c.pdf"), wastePdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(readerStorage, "waste_notes/cn-x/c.pdf"), wastePdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(anonStorage, "waste_notes/cn-x/c.pdf"), wastePdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(keeperStorage, "waste_notes/cn-keeper/d.png"), new Uint8Array([1, 2, 3]), { contentType: "image/png" }));
+    await assertFails(uploadBytes(ref(keeperStorage, "waste_notes/cn-keeper/e.pdf"), new Uint8Array(16 * 1024 * 1024), { contentType: "application/pdf" }));
+  });
+  await check("Whoever sees the waste records can open the PDF; a nurse and anonymous cannot", async () => {
+    for (const who of [keeperStorage, readerStorage, wPmStorage, wAdminStorage]) await assertSucceeds(getBytes(ref(who, "waste_notes/cn-keeper/a.pdf")));
+    for (const who of [nurseStorage, anonStorage]) await assertFails(getBytes(ref(who, "waste_notes/cn-keeper/a.pdf")));
+  });
+  await check("Only an administrator deletes a consignment note PDF", async () => {
+    await assertFails(deleteObject(ref(keeperStorage, "waste_notes/cn-keeper/a.pdf")));
+    await assertFails(deleteObject(ref(wPmStorage, "waste_notes/cn-keeper/a.pdf")));
+    await assertSucceeds(deleteObject(ref(wAdminStorage, "waste_notes/cn-keeper/a.pdf")));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);
