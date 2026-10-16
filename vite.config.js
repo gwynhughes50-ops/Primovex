@@ -2,8 +2,17 @@ import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+// Every build gets its own id. It is baked into the app and also written to /version.json, so a running web app can tell when a
+// newer version has been published (see src/lib/appUpdate.js).
+const BUILD_ID = `${new Date().toISOString()}-${Math.random().toString(36).slice(2, 8)}`;
+const emitVersion = () => ({
+  name: "primovex-emit-version",
+  generateBundle() { this.emitFile({ type: "asset", fileName: "version.json", source: JSON.stringify({ build: BUILD_ID }) }); },
+});
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), emitVersion()],
+  define: { __PRIMOVEX_BUILD__: JSON.stringify(BUILD_ID) },
 
   resolve: {
     alias: {

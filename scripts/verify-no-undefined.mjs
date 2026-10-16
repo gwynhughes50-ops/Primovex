@@ -14,7 +14,7 @@ const { parse } = require("@babel/parser");
 const traverse = require("@babel/traverse").default;
 
 const ROOT = fileURLToPath(new URL("../src/", import.meta.url));
-const GLOBALS = new Set(`undefined NaN Infinity globalThis window document navigator console location history localStorage sessionStorage indexedDB
+const GLOBALS = new Set(`undefined NaN Infinity __PRIMOVEX_BUILD__ globalThis window document navigator console location history localStorage sessionStorage indexedDB
   setTimeout clearTimeout setInterval clearInterval requestAnimationFrame cancelAnimationFrame queueMicrotask structuredClone fetch Request Response Headers URL URLSearchParams
   FormData Blob File FileReader Image Audio Event CustomEvent EventTarget MessageChannel MutationObserver ResizeObserver IntersectionObserver AbortController AbortSignal
   Promise Map Set WeakMap WeakSet WeakRef Symbol Proxy Reflect JSON Math Date RegExp Error TypeError RangeError SyntaxError EvalError Object Array String Number Boolean BigInt Function

@@ -90,6 +90,7 @@
     "test:audio-recorder": "esbuild scripts/verify-audio-recorder.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-audio-recorder.bundle.mjs && node work/verify-audio-recorder.bundle.mjs",
     "test:training": "esbuild scripts/verify-training.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-training.bundle.mjs && node work/verify-training.bundle.mjs",
     "test:waste": "esbuild scripts/verify-waste.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-waste.bundle.mjs && node work/verify-waste.bundle.mjs",
+    "test:app-update": "esbuild scripts/verify-app-update.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-app-update.bundle.mjs && node work/verify-app-update.bundle.mjs",
     "test:waste-return": "esbuild scripts/verify-waste-return.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-waste-return.bundle.mjs && node work/verify-waste-return.bundle.mjs",
     "test:timesheets": "esbuild scripts/verify-timesheets.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-timesheets.bundle.mjs && node work/verify-timesheets.bundle.mjs",
     "test:bright-hr": "esbuild scripts/verify-bright-hr.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-bright-hr.bundle.mjs && node work/verify-bright-hr.bundle.mjs",
