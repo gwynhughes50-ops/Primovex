@@ -11,6 +11,7 @@ import MfaSetup from "@/components/security/MfaSetup";
 import PhoneAlerts from "./PhoneAlerts";
 import MyTraining from "@/modules/training/MyTraining";
 import MobileMileage from "./MobileMileage";
+import MobileTimesheet from "./MobileTimesheet";
 import { normalizeStockItemCategory, summariseExpiry, getExpiryStatus, daysUntilExpiry } from "@/services/stockService";
 import useExpirySettings from "@/hooks/useExpirySettings";
 import { stockLevelStatus } from "@/lib/stockAlerts";
@@ -180,6 +181,7 @@ export default function MobileHome({ mode="home", onNavigate, onScan, onSearch, 
           </div>
         </Card>
         <Section title="Security"><div className="flex items-center gap-3 py-2"><ShieldCheck className="text-[var(--medtrak-accent)]"/><div><b>Mobile access protected</b><p className="text-sm text-[var(--medtrak-muted)]">Biometric, PIN and account password fallback</p></div></div></Section>
+        <Section title="Timesheet"><MobileTimesheet /></Section>
         <Section title="Mileage"><MobileMileage /></Section>
         <Section title="My training"><MyTraining /></Section>
         <Section title="Phone alerts"><PhoneAlerts /></Section>

@@ -72,6 +72,7 @@ export const Icons = {
   waste: Trash2,
   timesheets: Clock,
   mileage: Car,
+  myTimesheet: ClipboardCheck,
   inspection: FileSearch,
   login: LogIn,
   logout: LogOut,

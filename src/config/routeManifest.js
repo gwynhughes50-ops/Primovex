@@ -17,6 +17,7 @@ export const ROUTE_MANIFEST = [
   { path: "/suppliers", label: "Suppliers", section: "operations", iconKey: "suppliers", capability: "suppliers.read" },
   { path: "/facilities", label: "Facilities", section: "operations", iconKey: "facilities", children: ["Overview", "Spaces", "Equipment"] },
   { path: "/training", label: "Staff training", section: "operations", iconKey: "training", capability: "training.manage", anyOf: ["training.manage", "training.manageClinical"] },
+  { path: "/my-timesheet", label: "Timesheet", section: "operations", iconKey: "myTimesheet" },
   { path: "/mileage", label: "Mileage", section: "operations", iconKey: "mileage" },
   { path: "/timesheets", label: "Timesheets", section: "operations", iconKey: "timesheets", capability: "timesheets.manage" },
   { path: "/waste", label: "Clinical waste", section: "operations", iconKey: "waste", capability: "waste.read", anyOf: ["waste.read", "waste.manage"] },

@@ -822,6 +822,71 @@ match /subject_access_requests/{requestId} {
       allow delete: if signedIn() && (isAdmin() || hasPermission("timesheets", "manage"));
     }
 
+    // TIMESHEETS PER PAY PERIOD (src/modules/timesheets). Everyone has one for each pay period, worked out from their working pattern.
+    //   the person      declares their hours were as normal, or records what was different, and sends it
+    //   their manager   signs it off, or declines it with a reason (the manager named in the person's own staff record)
+    //   payroll team    (timesheets.payroll) sees only signed-off ones, sends them to payroll, or returns one with a reason
+    //   timesheets.manage  sees everyone's and sets up the pay periods
+    // Nobody can delete a timesheet. Every change is also written to timesheet_audit by a server function (nobody can edit that).
+    function tsPayroll() {
+      return signedIn() && (isAdmin() || hasPermission("timesheets", "payroll"));
+    }
+    match /timesheet_periods/{periodId} {
+      allow get, list: if signedIn();
+      allow create, update: if mileageManages() && request.resource.data.name is string && request.resource.data.from is string && request.resource.data.to is string && request.resource.data.due is string;
+      allow delete: if mileageManages();
+    }
+    match /timesheets/{tsId} {
+      allow get, list: if signedIn() && (resource.data.uid == request.auth.uid || resource.data.managerUid == request.auth.uid || mileageManages()
+        || (tsPayroll() && resource.data.state in ["approved", "sent", "returned"]));
+      // the person starts theirs (often sending it at once with the declaration)
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && tsId == request.resource.data.periodId + "_" + request.resource.data.staffId
+        && exists(/databases/$(database)/documents/timesheet_periods/$(request.resource.data.periodId))
+        && request.resource.data.state in ["draft", "submitted"]
+        && request.resource.data.kind in ["no-change", "changes"]
+        && request.resource.data.lines is list && request.resource.data.lines.size() <= 120
+        && request.resource.data.lastActorUid == request.auth.uid
+        && mileageStaff(request.resource.data.staffId).uid == request.auth.uid
+        && request.resource.data.managerUid == mileageStaff(request.resource.data.staffId).get("managerUid", null)
+        && request.resource.data.staffName == mileageStaff(request.resource.data.staffId).name
+        && (request.resource.data.state == "draft" || request.resource.data.declaration.confirmedAt is string);
+      // the person changes it, or sends it again after it was declined or returned
+      allow update: if signedIn() && resource.data.uid == request.auth.uid
+        && resource.data.state in ["draft", "declined", "returned"]
+        && request.resource.data.state in ["draft", "submitted"]
+        && request.resource.data.lastActorUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["state", "kind", "expected", "lines", "totals", "declaration", "submissions", "submittedAt", "note", "lastActorUid", "lastActorName", "updatedAt"])
+        && request.resource.data.lines is list && request.resource.data.lines.size() <= 120
+        && (request.resource.data.state == "draft" || request.resource.data.declaration.confirmedAt is string);
+      // the line manager signs off or declines (a decline needs a reason); with no manager set, whoever manages timesheets does. Nobody decides their own.
+      allow update: if signedIn() && resource.data.uid != request.auth.uid
+        && resource.data.state == "submitted"
+        && (resource.data.managerUid == request.auth.uid || (resource.data.managerUid == null && mileageManages()))
+        && request.resource.data.state in ["approved", "declined"]
+        && request.resource.data.lastActorUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["state", "decision", "lastActorUid", "lastActorName", "updatedAt"])
+        && request.resource.data.decision.byUid == request.auth.uid
+        && request.resource.data.decision.outcome == request.resource.data.state
+        && (request.resource.data.state == "approved" || (request.resource.data.decision.reason is string && request.resource.data.decision.reason.size() >= 3));
+      // the payroll team sends a signed-off one on, or returns it with a reason
+      allow update: if tsPayroll() && resource.data.uid != request.auth.uid
+        && resource.data.state == "approved"
+        && request.resource.data.state in ["sent", "returned"]
+        && request.resource.data.lastActorUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["state", "payroll", "lastActorUid", "lastActorName", "updatedAt"])
+        && request.resource.data.payroll.byUid == request.auth.uid
+        && request.resource.data.payroll.outcome == request.resource.data.state
+        && (request.resource.data.state == "sent" || (request.resource.data.payroll.reason is string && request.resource.data.payroll.reason.size() >= 3));
+      allow delete: if false;
+    }
+    // the trail of everything done to a timesheet, written only by the server (functions/services/timesheetAuditService.js)
+    match /timesheet_audit/{entryId} {
+      allow get, list: if signedIn() && (resource.data.staffUid == request.auth.uid || resource.data.managerUid == request.auth.uid || mileageManages() || tsPayroll());
+      allow create, update, delete: if false;
+    }
+
     // MILEAGE CLAIMS (src/modules/mileage): a journey in a member of staff's own vehicle, paid at the HMRC rate.
     //   the person    adds their own, and changes or withdraws it while it is waiting
     //   their line manager (set in the timesheet register) approves or declines it
@@ -834,7 +899,7 @@ match /subject_access_requests/{requestId} {
       return signedIn() && (isAdmin() || hasPermission("timesheets", "manage"));
     }
     match /mileage_claims/{claimId} {
-      allow get, list: if signedIn() && (mileageManages() || resource.data.uid == request.auth.uid || resource.data.managerUid == request.auth.uid);
+      allow get, list: if signedIn() && (mileageManages() || tsPayroll() || resource.data.uid == request.auth.uid || resource.data.managerUid == request.auth.uid);
       allow create: if signedIn()
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.status == "submitted"

@@ -93,6 +93,7 @@
     "test:timesheets": "esbuild scripts/verify-timesheets.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-timesheets.bundle.mjs && node work/verify-timesheets.bundle.mjs",
     "test:bright-hr": "esbuild scripts/verify-bright-hr.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-bright-hr.bundle.mjs && node work/verify-bright-hr.bundle.mjs",
     "test:mileage": "esbuild scripts/verify-mileage.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-mileage.bundle.mjs && node work/verify-mileage.bundle.mjs",
+    "test:timesheet-flow": "esbuild scripts/verify-timesheet-flow.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-timesheet-flow.bundle.mjs && node work/verify-timesheet-flow.bundle.mjs",
     "test:training-import": "esbuild scripts/verify-training-import.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-training-import.bundle.mjs && node work/verify-training-import.bundle.mjs",
     "test:read-workbook": "esbuild scripts/verify-read-workbook.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-read-workbook.bundle.mjs && node work/verify-read-workbook.bundle.mjs",
     "test:staff-picker": "esbuild scripts/verify-staff-picker.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-staff-picker.bundle.mjs && node work/verify-staff-picker.bundle.mjs",

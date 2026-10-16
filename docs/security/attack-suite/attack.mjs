@@ -1245,6 +1245,106 @@ async function main() {
     await assertSucceeds(deleteDoc(doc(tsAdmin, "mileage_routes", "r-1")));
   });
 
+  console.log("\n=== 28. Timesheets per pay period (timesheet_periods, timesheets, timesheet_audit) ===");
+  const payroll = testEnv.authenticatedContext("payroll-uid").firestore(); // a custom role with timesheets.payroll: the payroll team
+  await seed(async (db) => {
+    await setDoc(doc(db, "roles", "Payroll Team"), { name: "Payroll Team", capabilities: ["timesheets.payroll", "dashboard.read"], builtIn: false });
+    await setDoc(doc(db, "users", "payroll-uid"), { role: "Payroll Team", displayName: "Payroll" });
+    await setDoc(doc(db, "mileage_claims", "m-pay"), { uid: "nurse-uid", managerUid: "reception-uid", status: "approved", miles: 5, vehicle: "car", date: "2026-10-01" });
+    await setDoc(doc(db, "timesheet_audit", "a-1"), { timesheetId: "p28_ts-m-nurse", staffUid: "nurse-uid", managerUid: "reception-uid", action: "created and submitted", actorUid: "nurse-uid" });
+  });
+  const per = (extra = {}) => ({ name: "October payroll", from: "2026-08-31", to: "2026-10-04", due: "2026-10-05", ...extra });
+  const sheet = (extra = {}) => ({ periodId: "p28", staffId: "ts-m-nurse", uid: "nurse-uid", staffName: "Nurse Claimant", payrollNo: "12", managerUid: "reception-uid", state: "submitted", kind: "no-change", expected: { hours: 150, days: [] }, lines: [], totals: {}, declaration: { text: "I confirm", confirmedAt: "2026-10-05T09:00:00Z", confirmedByName: "Nurse Claimant" }, submissions: 1, lastActorUid: "nurse-uid", lastActorName: "Nurse Claimant", ...extra });
+  const decide = (who, id, state, byUid, reason) => updateDoc(doc(who, "timesheets", id), { state, decision: { outcome: state, byUid, by: "X", at: "2026-10-06T09:00:00Z", reason: reason || "" }, lastActorUid: byUid, lastActorName: "X" });
+  const dispatch = (who, id, state, byUid, reason) => updateDoc(doc(who, "timesheets", id), { state, payroll: { outcome: state, byUid, by: "P", at: "2026-10-07T09:00:00Z", reference: "OCT", reason: reason || "" }, lastActorUid: byUid, lastActorName: "P" });
+
+  await check("Whoever manages timesheets sets up the pay periods; everyone signed in reads them; a member of staff cannot", async () => {
+    await assertSucceeds(setDoc(doc(pm, "timesheet_periods", "p28"), per()));
+    await assertSucceeds(setDoc(doc(tsAdmin, "timesheet_periods", "p28b"), per({ name: "November payroll", from: "2026-10-05", to: "2026-11-01", due: "2026-11-02" })));
+    await assertSucceeds(getDoc(doc(nurse, "timesheet_periods", "p28")));
+    await assertFails(getDoc(doc(anon, "timesheet_periods", "p28")));
+    await assertFails(setDoc(doc(nurse, "timesheet_periods", "px"), per()));
+    await assertFails(deleteDoc(doc(nurse, "timesheet_periods", "p28b")));
+  });
+  await check("A member of staff CAN send their own timesheet with the declaration, naming their real line manager", async () => {
+    await assertSucceeds(setDoc(doc(nurse, "timesheets", "p28_ts-m-nurse"), sheet()));
+  });
+  await check("A timesheet cannot be made for someone else, with a made-up manager, as already signed off, without a declaration, or for a period that doesn't exist", async () => {
+    await assertFails(setDoc(doc(nurse, "timesheets", "p28b_ts-m-nurse"), sheet({ periodId: "p28b", uid: "reception-uid" })));
+    await assertFails(setDoc(doc(nurse, "timesheets", "p28b_ts-m-nurse"), sheet({ periodId: "p28b", managerUid: "cleaner-uid" })));
+    await assertFails(setDoc(doc(nurse, "timesheets", "p28b_ts-m-nurse"), sheet({ periodId: "p28b", managerUid: null })));
+    await assertFails(setDoc(doc(nurse, "timesheets", "p28b_ts-m-nurse"), sheet({ periodId: "p28b", state: "approved" })));
+    await assertFails(setDoc(doc(nurse, "timesheets", "p28b_ts-m-nurse"), sheet({ periodId: "p28b", declaration: null })));
+    await assertFails(setDoc(doc(nurse, "timesheets", "pnone_ts-m-nurse"), sheet({ periodId: "pnone" })));
+    await assertFails(setDoc(doc(nurse, "timesheets", "wrong-id"), sheet({ periodId: "p28b" })));
+    await assertFails(setDoc(doc(nurse, "timesheets", "p28b_ts-m-cleaner"), sheet({ periodId: "p28b", staffId: "ts-m-cleaner", staffName: "Cleaner Claimant" })));
+    await assertFails(setDoc(doc(nurse, "timesheets", "p28b_ts-m-nurse"), sheet({ periodId: "p28b", lastActorUid: "reception-uid" })));
+    await assertFails(setDoc(doc(anon, "timesheets", "p28b_ts-m-nurse"), sheet({ periodId: "p28b" })));
+  });
+  await check("A timesheet is read by the person, their line manager, whoever manages timesheets; payroll only once it is signed off; nobody else", async () => {
+    for (const who of [nurse, reception, pm, tsAdmin]) await assertSucceeds(getDoc(doc(who, "timesheets", "p28_ts-m-nurse")));
+    for (const who of [payroll, cleaner, partner, caretaker, anon]) await assertFails(getDoc(doc(who, "timesheets", "p28_ts-m-nurse")));
+    await assertSucceeds(getDocs(query(collection(reception, "timesheets"), where("managerUid", "==", "reception-uid"))));
+    await assertFails(getDocs(collection(cleaner, "timesheets")));
+  });
+  await check("The line manager cannot decline without a reason, cannot sign in someone else's name, and cannot change the hours; a stranger and the person themselves cannot decide", async () => {
+    await assertFails(decide(reception, "p28_ts-m-nurse", "declined", "reception-uid", ""));
+    await assertFails(decide(reception, "p28_ts-m-nurse", "declined", "reception-uid", "no"));
+    await assertFails(decide(reception, "p28_ts-m-nurse", "declined", "pm-uid", "Not agreed"));
+    await assertFails(updateDoc(doc(reception, "timesheets", "p28_ts-m-nurse"), { state: "approved", decision: { outcome: "approved", byUid: "reception-uid" }, lastActorUid: "reception-uid", lastActorName: "X", lines: [{ date: "2026-09-10", code: "B", hours: 20, comment: "" }] }));
+    await assertFails(decide(nurse, "p28_ts-m-nurse", "approved", "nurse-uid"));
+    await assertFails(decide(cleaner, "p28_ts-m-nurse", "approved", "cleaner-uid"));
+    await assertFails(decide(payroll, "p28_ts-m-nurse", "approved", "payroll-uid"));
+  });
+  await check("The line manager declines with a reason; the person then corrects and sends it again, but cannot change who approves it or the decision", async () => {
+    await assertSucceeds(decide(reception, "p28_ts-m-nurse", "declined", "reception-uid", "Overtime on the 12th was not agreed"));
+    await assertFails(updateDoc(doc(nurse, "timesheets", "p28_ts-m-nurse"), { managerUid: "nurse-uid", lastActorUid: "nurse-uid", lastActorName: "N" }));
+    await assertFails(updateDoc(doc(nurse, "timesheets", "p28_ts-m-nurse"), { state: "approved", lastActorUid: "nurse-uid", lastActorName: "N" }));
+    await assertFails(updateDoc(doc(nurse, "timesheets", "p28_ts-m-nurse"), { state: "submitted", decision: { outcome: "approved", byUid: "nurse-uid" }, lastActorUid: "nurse-uid", lastActorName: "N" }));
+    await assertSucceeds(updateDoc(doc(nurse, "timesheets", "p28_ts-m-nurse"), { state: "submitted", kind: "changes", lines: [{ date: "2026-09-10", code: "B", hours: 1, comment: "" }], totals: { B: 1 }, submissions: 2, lastActorUid: "nurse-uid", lastActorName: "N" }));
+  });
+  await check("Once it is with the manager the person cannot change it; the manager signs it off", async () => {
+    await assertFails(updateDoc(doc(nurse, "timesheets", "p28_ts-m-nurse"), { lines: [], lastActorUid: "nurse-uid", lastActorName: "N" }));
+    await assertSucceeds(decide(reception, "p28_ts-m-nurse", "approved", "reception-uid"));
+    await assertFails(decide(reception, "p28_ts-m-nurse", "declined", "reception-uid", "Changed my mind"));
+    await assertFails(updateDoc(doc(nurse, "timesheets", "p28_ts-m-nurse"), { state: "draft", lastActorUid: "nurse-uid", lastActorName: "N" }));
+  });
+  await check("Payroll sees a timesheet only once it is signed off; can send it on, but cannot return one without a reason; the manager cannot touch it after sign-off", async () => {
+    await assertSucceeds(getDoc(doc(payroll, "timesheets", "p28_ts-m-nurse")));
+    await assertSucceeds(getDocs(query(collection(payroll, "timesheets"), where("state", "in", ["approved", "sent", "returned"]))));
+    await assertFails(getDocs(collection(payroll, "timesheets")));
+    await assertFails(dispatch(reception, "p28_ts-m-nurse", "sent", "reception-uid"));
+    await assertFails(dispatch(payroll, "p28_ts-m-nurse", "returned", "payroll-uid", ""));
+    await assertFails(dispatch(payroll, "p28_ts-m-nurse", "sent", "pm-uid"));
+    await assertFails(updateDoc(doc(payroll, "timesheets", "p28_ts-m-nurse"), { state: "sent", payroll: { outcome: "sent", byUid: "payroll-uid" }, lastActorUid: "payroll-uid", lastActorName: "P", lines: [] }));
+    await assertSucceeds(dispatch(payroll, "p28_ts-m-nurse", "sent", "payroll-uid"));
+    await assertFails(dispatch(payroll, "p28_ts-m-nurse", "returned", "payroll-uid", "Too late now"));
+  });
+  await check("With no line manager set, whoever manages timesheets signs it off; payroll can return it with a reason and the person can send it again", async () => {
+    const cleanerSheet = (extra = {}) => sheet({ periodId: "p28", staffId: "ts-m-cleaner", uid: "cleaner-uid", staffName: "Cleaner Claimant", managerUid: null, lastActorUid: "cleaner-uid", lastActorName: "C", ...extra });
+    await assertSucceeds(setDoc(doc(cleaner, "timesheets", "p28_ts-m-cleaner"), cleanerSheet()));
+    await assertFails(decide(reception, "p28_ts-m-cleaner", "approved", "reception-uid"));
+    await assertSucceeds(decide(tsAdmin, "p28_ts-m-cleaner", "approved", "tsadmin-uid"));
+    await assertSucceeds(dispatch(payroll, "p28_ts-m-cleaner", "returned", "payroll-uid", "Payroll number is wrong"));
+    await assertSucceeds(updateDoc(doc(cleaner, "timesheets", "p28_ts-m-cleaner"), { state: "submitted", submissions: 2, lastActorUid: "cleaner-uid", lastActorName: "C" }));
+  });
+  await check("Nobody can delete a timesheet, an administrator included", async () => {
+    for (const who of [nurse, reception, pm, tsAdmin, payroll, admin]) await assertFails(deleteDoc(doc(who, "timesheets", "p28_ts-m-nurse")));
+  });
+  await check("The audit trail is read by the person, their manager, the payroll team and whoever manages timesheets, and nobody can write, change or delete it", async () => {
+    for (const who of [nurse, reception, payroll, pm, tsAdmin]) await assertSucceeds(getDoc(doc(who, "timesheet_audit", "a-1")));
+    for (const who of [cleaner, partner, anon]) await assertFails(getDoc(doc(who, "timesheet_audit", "a-1")));
+    for (const who of [nurse, reception, payroll, pm, tsAdmin, admin]) {
+      await assertFails(setDoc(doc(who, "timesheet_audit", "forged"), { timesheetId: "x", staffUid: "nurse-uid", action: "signed off" }));
+      await assertFails(updateDoc(doc(who, "timesheet_audit", "a-1"), { action: "nothing happened" }));
+      await assertFails(deleteDoc(doc(who, "timesheet_audit", "a-1")));
+    }
+  });
+  await check("The payroll team can read approved mileage claims to put beside the timesheets; a nurse cannot read someone else's", async () => {
+    await assertSucceeds(getDoc(doc(payroll, "mileage_claims", "m-pay")));
+    await assertFails(getDoc(doc(cleaner, "mileage_claims", "m-pay")));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);

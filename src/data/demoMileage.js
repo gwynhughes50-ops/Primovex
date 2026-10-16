@@ -15,7 +15,7 @@ const hospital = { id: "place:hospital", name: "District Hospital" };
 
 export function demoMileage() {
   return {
-    me: { id: "demo-me", name: "Demo User", uid: "demo-me", managerUid: "demo-manager", managerId: "demo-m", active: true },
+    me: { id: "demo-me", name: "Demo User", uid: "demo-me", managerUid: "demo-manager", managerId: "demo-m", active: true, payrollNo: "100", patterns: [{ from: "2020-01-06", mode: "fixed", weeks: [(() => { const d = { blocks: [{ start: "08:30", end: "17:00" }], breakMin: 60 }; const off = { blocks: [], breakMin: 0 }; return { mon: d, tue: d, wed: d, thu: d, fri: d, sat: off, sun: off }; })()] }] },
     sites, places,
     routes: [{ id: "r1", fromId: "site:branch", toId: "site:main", miles: 6.8 }, { id: "r2", fromId: "place:hospital", toId: "site:main", miles: 11.2 }],
     mine: [

@@ -13,6 +13,7 @@ import Training from "@/pages/Training";
 import WasteNotes from "@/pages/WasteNotes";
 import Timesheets from "@/pages/Timesheets";
 import Mileage from "@/pages/Mileage";
+import MyTimesheet from "@/pages/MyTimesheet";
 import Compliance from "@/pages/Compliance";
 import Notifications from "@/pages/Notifications";
 import ReorderCentre from "@/pages/ReorderCentre";
@@ -82,6 +83,7 @@ export default function DesktopApp() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="inventory" element={<PermissionGate capability="inventory.read"><Inventory /></PermissionGate>} />
         <Route path="stocktake" element={<PermissionGate capability="stocktake.manage"><StockTake /></PermissionGate>} />
+        <Route path="my-timesheet" element={<MyTimesheet />} />
         <Route path="mileage" element={<Mileage />} />
         <Route path="timesheets" element={<PermissionGate capability="timesheets.manage"><Timesheets /></PermissionGate>} />
         <Route path="waste" element={<PermissionGate anyOf={["waste.read", "waste.manage"]}><WasteNotes /></PermissionGate>} />

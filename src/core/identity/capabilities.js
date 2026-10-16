@@ -69,6 +69,7 @@ export const CAPABILITIES = {
   },
   timesheets: {
     manage: "timesheets.manage",
+    payroll: "timesheets.payroll",
   },
   waste: {
     read: "waste.read",
@@ -184,6 +185,7 @@ export const CAPABILITY_CATALOG = [
   { id: "training.manage", label: "Staff training: see and update everyone's training record", group: "Staff" },
   { id: "training.manageClinical", label: "Staff training: see and update the clinical team's training record", group: "Staff" },
   { id: "timesheets.manage", label: "Timesheets: set up everyone's working pattern and hours, and see and update their timesheets", group: "Staff" },
+  { id: "timesheets.payroll", label: "Timesheets: the payroll team. See signed-off timesheets and send them to payroll, or return one with a reason", group: "Staff" },
   { id: "waste.read", label: "Clinical waste: see the consignment notes and collection records", group: "Compliance" },
   { id: "waste.manage", label: "Clinical waste: add consignment notes (drop in the Stericycle PDF) and correct them", group: "Compliance" },
   { id: "coshh.read", label: "View the COSHH register (hazardous substances, PPE, first aid)", group: "Compliance" },

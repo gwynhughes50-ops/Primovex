@@ -2,7 +2,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const crypto = require("crypto");
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { defineSecret } = require("firebase-functions/params");
 const { getProvider, listProviders } = require("./providers/providerFactory");
@@ -37,6 +37,7 @@ const { raiseFridgeAlert } = require("./services/fridgeAlertService");
 const { getOrbCapabilities } = require("./services/orbScope");
 const { notifySignificantEvent } = require("./services/significantEventNotify");
 const { runStockReview } = require("./services/stockReviewService");
+const { buildAuditEntry } = require("./services/timesheetAuditService");
 
 initializeApp();
 const db = getFirestore();
@@ -917,6 +918,15 @@ exports.transcribeSpeech = onCall({ region: "europe-west2", timeoutSeconds: 30, 
 
 // Every morning: tell people whose training has just come within 60 days of running out, or has run out (once for each date), and
 // on Mondays send the people who look after staff training a count. See services/trainingReminderService.js.
+// Every change to a timesheet is written to timesheet_audit, which no browser can write to (see timesheetAuditService.js).
+exports.auditTimesheets = onDocumentWritten({ document: "timesheets/{timesheetId}", region: "europe-west2" }, async (event) => {
+  const before = event.data?.before?.exists ? event.data.before.data() : null;
+  const after = event.data?.after?.exists ? event.data.after.data() : null;
+  const entry = buildAuditEntry(before, after, { id: event.params.timesheetId });
+  if (!entry) return;
+  await db.collection("timesheet_audit").add({ ...entry, at: FieldValue.serverTimestamp() });
+});
+
 exports.scheduledTrainingReminders = onSchedule({ region: "europe-west2", schedule: "every day 07:40", timeZone: "Europe/London", timeoutSeconds: 180 }, async () => {
   const users = await db.collection("users").get();
   const capabilitiesByRole = new Map();
