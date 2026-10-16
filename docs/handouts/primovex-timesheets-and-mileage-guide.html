@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Primovex: timesheets and mileage, a guide for everyone</title>
+<style>
+  @page { size: A4; margin: 14mm 15mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; font-size: 10.5pt; line-height: 1.38; color: #14213d; margin: 0; }
+  h1 { font-size: 21pt; margin: 0; color: #0b3b7a; }
+  h2 { font-size: 13.5pt; margin: 14px 0 5px; color: #0b3b7a; border-bottom: 2px solid #1fb5a8; padding-bottom: 2px; }
+  h3 { font-size: 11pt; margin: 9px 0 3px; color: #14213d; }
+  p { margin: 4px 0; }
+  ul, ol { margin: 3px 0 3px 18px; padding: 0; }
+  li { margin: 2px 0; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 3px solid #0b3b7a; padding-bottom: 8px; }
+  .top img { height: 38px; }
+  .sub { color: #4a5a78; font-size: 10.5pt; margin-top: 2px; }
+  .box { border: 1.5px solid #1fb5a8; background: #eefaf8; border-radius: 8px; padding: 7px 10px; margin: 8px 0; }
+  .warn { border-color: #d9822b; background: #fff6ea; }
+  .rule { border-color: #c0392b; background: #fdeeee; }
+  .who { display: inline-block; background: #0b3b7a; color: #fff; border-radius: 12px; padding: 1px 10px; font-size: 9.5pt; font-weight: 600; margin-left: 6px; vertical-align: middle; }
+  .steps { counter-reset: n; list-style: none; margin: 4px 0; padding: 0; }
+  .steps li { counter-increment: n; position: relative; padding: 4px 0 4px 32px; break-inside: avoid; }
+  .steps li::before { content: counter(n); position: absolute; left: 0; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: #1fb5a8; color: #fff; font-weight: 700; text-align: center; line-height: 22px; font-size: 10pt; }
+  table { border-collapse: collapse; width: 100%; margin: 5px 0; }
+  th, td { border: 1px solid #b9c6dc; padding: 3px 7px; text-align: left; vertical-align: top; font-size: 10pt; }
+  th { background: #e6edf8; color: #0b3b7a; }
+  .btn { display: inline-block; border: 1.5px solid #0b3b7a; border-radius: 5px; padding: 0 6px; font-weight: 600; font-size: 9.5pt; background: #fff; white-space: nowrap; }
+  .go { background: #1fb5a8; border-color: #1fb5a8; color: #fff; }
+  .small { font-size: 9pt; color: #4a5a78; }
+  .pb { break-before: page; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .card { border: 1px solid #b9c6dc; border-radius: 8px; padding: 6px 10px; break-inside: avoid; }
+  .card h3 { margin-top: 2px; color: #0b3b7a; }
+  .flow { display: flex; align-items: stretch; gap: 4px; margin: 8px 0; }
+  .flow div { flex: 1; border: 1.5px solid #0b3b7a; border-radius: 8px; padding: 5px 6px; text-align: center; font-size: 9.5pt; background: #f3f7fd; }
+  .flow b { display: block; color: #0b3b7a; }
+  .flow span.arrow { align-self: center; color: #1fb5a8; font-size: 16pt; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div>
+    <h1>Timesheets and mileage</h1>
+    <div class="sub">A guide for everyone at the practice &nbsp;·&nbsp; on your phone or on a computer</div>
+  </div>
+  <img src="../../public/branding/primovex-logo-approved.png" alt="Primovex">
+</div>
+
+<p style="margin-top:8px">Timesheets and mileage claims are now done in Primovex, instead of the spreadsheets and paper forms. The idea is that it is <b>quick</b>: most months you do one tap, and your line manager only needs to look closely at the ones where something changed.</p>
+
+<div class="flow">
+  <div><b>1. You</b>confirm your hours were as normal, or say what was different</div><span class="arrow">&rsaquo;</span>
+  <div><b>2. Line manager</b>signs it off, or declines it with a reason</div><span class="arrow">&rsaquo;</span>
+  <div><b>3. Payroll team</b>sends it on to payroll, or returns it with a reason</div>
+</div>
+
+<div class="box">
+  <b>Every step is recorded</b> (who, when and any reason) and nobody can change or remove the record afterwards. That protects you as well as the practice.
+</div>
+
+<h2>1. Sending your timesheet <span class="who">Everyone</span></h2>
+<p>Do this at the end of each pay period. <b>On your phone:</b> open Primovex, go to the <b>Me</b> tab and find <b>Timesheet</b>. <b>On a computer:</b> open <b>Operations</b>, then <b>Timesheet</b>.</p>
+<p>You will see the pay period, the date it is due, and your <b>usual hours</b> for the period (worked out from your working pattern, with bank holidays included).</p>
+
+<div class="cols">
+  <div class="card">
+    <h3>My hours were as normal</h3>
+    <ol class="steps">
+      <li>Press <span class="btn">No changes</span>.</li>
+      <li>Read the sentence and tick <span class="btn">I confirm this is correct</span>.</li>
+      <li>Press <span class="btn go">Send to my line manager</span>.</li>
+    </ol>
+    <p class="small">That is all. It takes a few seconds.</p>
+  </div>
+  <div class="card">
+    <h3>Something was different</h3>
+    <ol class="steps">
+      <li>Press <span class="btn">Something was different</span>.</li>
+      <li>Add each day: choose the <b>day</b>, <b>what it was</b>, the <b>hours</b>, and a comment (needed for &ldquo;Other&rdquo;). Press <span class="btn">Add this</span>.</li>
+      <li>Tick the confirmation and press <span class="btn go">Send to my line manager</span>.</li>
+    </ol>
+    <p class="small">Not ready? Press <span class="btn">Save, send later</span>.</p>
+  </div>
+</div>
+
+<h3>What to choose for &ldquo;what it was&rdquo;</h3>
+<table>
+  <tr><th style="width:22%">Choose</th><th>When</th></tr>
+  <tr><td>Overtime, standard rate</td><td>Extra hours you worked, at the normal rate</td></tr>
+  <tr><td>Overtime, time and a half</td><td>Extra hours you worked that are paid at time and a half</td></tr>
+  <tr><td>Time off in lieu</td><td>Hours of TOIL you <b>took</b> in this period</td></tr>
+  <tr><td>Annual leave</td><td>Hours of leave you took</td></tr>
+  <tr><td>Sick leave</td><td>Hours you were off sick (the hours only: no reason is needed)</td></tr>
+  <tr><td>Other</td><td>Anything else, with a comment saying what</td></tr>
+</table>
+<div class="box warn"><b>Leave, sickness and TOIL are still booked in BrightHR as before.</b> Put them on your timesheet as well, so payroll has them.</div>
+
+<h3>If it is sent back to you</h3>
+<p>If your line manager declines it, or payroll returns it, you get an alert on your phone with the reason, and the reason shows on your timesheet. Correct it and press <span class="btn go">Send to my line manager</span> again. Sent it by mistake? Tell your line manager before they sign it off: they can decline it so you can fix it.</p>
+
+<h3>Reminders</h3>
+<p>If you have not sent yours, Primovex reminds you <b>5 days before</b> it is due, <b>2 days before</b>, <b>on the day</b>, and then <b>every day</b> it is overdue. Make sure alerts are on (Me tab, Phone alerts) so they reach your lock screen.</p>
+
+<h2>2. Line managers: signing off <span class="who">Line managers</span></h2>
+<p>You only see timesheets that name you as the line manager. Open <b>Operations, Timesheet, To sign off</b> (on a phone: <b>Me</b> tab, <b>Timesheet</b>, <b>To sign off</b>). You get an alert each morning while some are waiting.</p>
+<div class="cols">
+  <div class="card">
+    <h3>People whose hours were as normal</h3>
+    <p>They are in <b>one list</b> with the time each person confirmed.</p>
+    <ol class="steps"><li>Check the names look right.</li><li>Press <span class="btn go">Sign off all</span>.</li></ol>
+    <p class="small">Need to query one? Press <span class="btn">Decline&hellip;</span> next to their name instead.</p>
+  </div>
+  <div class="card">
+    <h3>People who recorded changes</h3>
+    <p>Each is shown in full: their usual hours and every change, with the totals.</p>
+    <ol class="steps"><li>Read the changes.</li><li>Press <span class="btn go">Sign off</span>, or <span class="btn">Decline&hellip;</span>.</li><li>If declining, type the <b>reason</b>. They see it exactly as you write it.</li></ol>
+  </div>
+</div>
+<p><b>You cannot sign off your own.</b> If your own line manager is not set, whoever looks after timesheets signs yours off. Under any timesheet, <span class="btn">Show the history</span> lists every step with names, times and reasons.</p>
+
+<h2>3. Mileage claims <span class="who">Everyone</span> <span class="who">Line managers approve</span></h2>
+<p>For work journeys in your own vehicle. Open <b>Operations, Mileage</b> on a computer, or the <b>Me</b> tab, <b>Mileage</b> on your phone.</p>
+<ol class="steps">
+  <li>Press <span class="btn go">Add a journey</span>.</li>
+  <li>Choose the <b>date</b>, then <b>From</b> and <b>To</b> from the lists. The miles fill in for routes we know; otherwise type the miles <b>one way</b>.</li>
+  <li>Tick <b>There and back</b> for a return trip. Choose your <b>vehicle</b> and the <b>reason</b>.</li>
+  <li>Press <span class="btn go">Send for approval</span>. You can change or withdraw it until it has been decided.</li>
+</ol>
+<div class="box rule"><b>Never type a patient's name or address.</b> That is why places are chosen from a list. For a patient visit choose <b>Home visit</b>; nothing more is needed.</div>
+<p>Line managers approve in <b>To approve</b> (or the <b>Me</b> tab on the phone). Approved miles are paid through payroll at the HMRC rate: <b>45p a mile for a car or van up to 10,000 miles in the tax year</b> (6 April to 5 April), then 25p; motorcycle 24p; bicycle 20p. Primovex works out the amount for you.</p>
+
+<h2>4. The payroll team <span class="who">Payroll team</span></h2>
+<p>Open <b>Operations, Timesheet, Payroll</b> and choose the pay period. You only see timesheets a line manager has <b>signed off</b>, with each person's payroll number and approved mileage for the period beside them.</p>
+<ol class="steps">
+  <li>Press <span class="btn">Download CSV</span> to put the figures into the payroll system.</li>
+  <li>Tick the timesheets you have sent (or <span class="btn">Select all</span>), add a reference if you want one, and press <span class="btn go">Mark as sent to payroll</span>.</li>
+  <li>Something wrong (for example a missing payroll number)? Press <span class="btn">Return&hellip;</span> and type the reason. It goes back to the person to correct, and then through their line manager again.</li>
+</ol>
+<p>You get a daily alert while signed-off timesheets are waiting to be sent.</p>
+
+<h2>5. Setting it up <span class="who">Practice Manager</span></h2>
+<p class="small">Do this once. It needs a computer.</p>
+<ol class="steps">
+  <li><b>Bring in the staff.</b> <b>Operations, Timesheets</b> (plural), tab <b>Import from BrightHR</b>. Choose the BrightHR <i>Holiday Summary Report</i> (CSV) and press <span class="btn go">Import</span>. Leave &ldquo;doctors and trainees&rdquo; unticked.</li>
+  <li><b>Set each person's working pattern.</b> On <b>People and patterns</b> press <span class="btn">Set pattern</span>. Set the days and times and the unpaid break. Use <i>Split shift</i> for two parts to a day, <i>Repeats every 2 weeks</i> for a rota, <i>Zero hours</i> for staff with no usual hours, and <i>New pattern from a date</i> when hours change.</li>
+  <li><b>Choose their line manager</b> and <b>link their Primovex account</b> from the dropdowns on the same row. A person cannot see their timesheet until they are linked, and a manager cannot sign off until their own account is linked too.</li>
+  <li><b>Add the pay period.</b> <b>Operations, Timesheet</b> (singular), tab <b>Pay periods</b>, <span class="btn">Add the next pay period</span>. Enter the name, the first and last day, and the day timesheets are due, then save. Reminders count from the due date.</li>
+  <li><b>Mileage places and routes.</b> <b>Operations, Mileage, Places and routes</b>. Add other places staff drive to and the miles between places people often travel between.</li>
+  <li><b>Give out the permissions</b> (Admin, Roles): the <b>payroll team</b> role needs <i>Timesheets: the payroll team</i>; whoever helps set up needs <i>Timesheets: set up everyone's working pattern</i>.</li>
+</ol>
+<div class="box"><b>Each pay period afterwards:</b> add the next pay period, then use the <b>Pay periods</b> tab to see how many are with managers, signed off and sent to payroll, and exactly who has not sent theirs yet.</div>
+
+<h2>6. Common questions</h2>
+<table>
+  <tr><td style="width:36%"><b>It says my sign-in isn't linked to a staff record.</b></td><td>The Practice Manager needs to link your account (Timesheets, People).</td></tr>
+  <tr><td><b>It shows no usual hours.</b></td><td>Your working pattern has not been set up yet. Ask the Practice Manager.</td></tr>
+  <tr><td><b>Nothing waiting for me to sign off.</b></td><td>Either nobody has sent theirs yet, or the staff record doesn't name you as their line manager (and your account linked).</td></tr>
+  <tr><td><b>I need to correct something after sending.</b></td><td>Ask your line manager to decline it. It comes back to you to fix and send again. Once it is signed off it cannot be changed.</td></tr>
+  <tr><td><b>My hours changed for good.</b></td><td>Ask the Practice Manager to add a new working pattern from the date it changed.</td></tr>
+  <tr><td><b>A journey isn't in the list of places.</b></td><td>Type the miles yourself and tell the Practice Manager, who can add the place or route for next time.</td></tr>
+  <tr><td><b>I'm stuck.</b></td><td>Tap the <b>Orb</b> and ask in your own words (for example &ldquo;how do I send my timesheet?&rdquo;). It gives the steps.</td></tr>
+</table>
+
+<p class="small" style="margin-top:10px">Questions about timesheets or mileage: ask the Practice Manager.</p>
+
+</body>
+</html>
