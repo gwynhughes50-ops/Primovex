@@ -1170,6 +1170,81 @@ async function main() {
     await assertSucceeds(deleteDoc(doc(tsAdmin, "timesheet_staff", "ts-new")));
   });
 
+  console.log("\n=== 27. Mileage claims (mileage_claims, mileage_places, mileage_routes, mileage_settings) ===");
+  await seed(async (db) => {
+    // the nurse is claiming; her line manager is reception (uid reception-uid); the cleaner has no line manager set
+    await setDoc(doc(db, "timesheet_staff", "ts-m-nurse"), { name: "Nurse Claimant", uid: "nurse-uid", managerUid: "reception-uid", managerId: "ts-other", patterns: [], active: true });
+    await setDoc(doc(db, "timesheet_staff", "ts-m-cleaner"), { name: "Cleaner Claimant", uid: "cleaner-uid", managerUid: null, patterns: [], active: true });
+    await setDoc(doc(db, "timesheet_staff", "ts-m-nouid"), { name: "No Account", patterns: [], active: true });
+  });
+  const mile = (extra = {}) => ({ uid: "nurse-uid", staffId: "ts-m-nurse", staffName: "Nurse Claimant", managerUid: "reception-uid", date: "2026-10-01", fromId: "site:a", fromName: "Surgery", toId: "site:b", toName: "Branch", miles: 7.4, returnTrip: true, vehicle: "car", purpose: "Meeting or training", note: "", status: "submitted", ...extra });
+  await check("A member of staff CAN add their own mileage claim, naming their real line manager", async () => {
+    await assertSucceeds(setDoc(doc(nurse, "mileage_claims", "m-1"), mile()));
+    await assertSucceeds(setDoc(doc(testEnv.authenticatedContext("cleaner-uid").firestore(), "mileage_claims", "m-c1"), mile({ uid: "cleaner-uid", staffId: "ts-m-cleaner", staffName: "Cleaner Claimant", managerUid: null })));
+  });
+  await check("A claim cannot be made for someone else, with a made-up manager, as already approved, or with silly miles or a vehicle", async () => {
+    await assertFails(setDoc(doc(nurse, "mileage_claims", "m-x1"), mile({ uid: "reception-uid" })));
+    await assertFails(setDoc(doc(nurse, "mileage_claims", "m-x2"), mile({ managerUid: "cleaner-uid" })));
+    await assertFails(setDoc(doc(nurse, "mileage_claims", "m-x3"), mile({ managerUid: null })));
+    await assertFails(setDoc(doc(nurse, "mileage_claims", "m-x4"), mile({ staffId: "ts-m-cleaner", staffName: "Cleaner Claimant" })));
+    await assertFails(setDoc(doc(nurse, "mileage_claims", "m-x5"), mile({ staffId: "ts-m-nouid", staffName: "No Account" })));
+    await assertFails(setDoc(doc(nurse, "mileage_claims", "m-x6"), mile({ status: "approved" })));
+    await assertFails(setDoc(doc(nurse, "mileage_claims", "m-x7"), mile({ miles: 0 })));
+    await assertFails(setDoc(doc(nurse, "mileage_claims", "m-x8"), mile({ miles: 900 })));
+    await assertFails(setDoc(doc(nurse, "mileage_claims", "m-x9"), mile({ vehicle: "tank" })));
+    await assertFails(setDoc(doc(nurse, "mileage_claims", "m-x10"), mile({ staffName: "Someone Else" })));
+    await assertFails(setDoc(doc(anon, "mileage_claims", "m-x11"), mile()));
+  });
+  await check("A claim can be read by the person, their line manager, the practice manager, a timesheet administrator and an administrator, and nobody else", async () => {
+    for (const who of [nurse, reception, pm, tsAdmin, admin]) await assertSucceeds(getDoc(doc(who, "mileage_claims", "m-1")));
+    for (const who of [cleaner, partner, caretaker, anon]) await assertFails(getDoc(doc(who, "mileage_claims", "m-1")));
+    await assertSucceeds(getDocs(query(collection(nurse, "mileage_claims"), where("uid", "==", "nurse-uid"))));
+    await assertSucceeds(getDocs(query(collection(reception, "mileage_claims"), where("managerUid", "==", "reception-uid"))));
+    await assertFails(getDocs(collection(cleaner, "mileage_claims")));
+  });
+  await check("The person can correct their own waiting claim, but not who approves it, its status, or whose it is", async () => {
+    await assertSucceeds(updateDoc(doc(nurse, "mileage_claims", "m-1"), { miles: 8, note: "Longer way round" }));
+    await assertFails(updateDoc(doc(nurse, "mileage_claims", "m-1"), { managerUid: "nurse-uid" }));
+    await assertFails(updateDoc(doc(nurse, "mileage_claims", "m-1"), { status: "approved" }));
+    await assertFails(updateDoc(doc(nurse, "mileage_claims", "m-1"), { uid: "reception-uid" }));
+    await assertFails(updateDoc(doc(cleaner, "mileage_claims", "m-1"), { miles: 1 }));
+  });
+  await check("The line manager approves a waiting claim, changing nothing else; the person can't approve their own; a stranger can't", async () => {
+    await assertFails(updateDoc(doc(nurse, "mileage_claims", "m-1"), { status: "approved", decidedByName: "Me" }));
+    await assertFails(updateDoc(doc(cleaner, "mileage_claims", "m-1"), { status: "approved", decidedByName: "Cleaner" }));
+    await assertFails(updateDoc(doc(reception, "mileage_claims", "m-1"), { status: "approved", decidedByName: "Manager", miles: 400 }));
+    await assertSucceeds(updateDoc(doc(reception, "mileage_claims", "m-1"), { status: "approved", decidedByName: "Manager", decisionNote: "" }));
+  });
+  await check("Once decided the person can't change the claim, the line manager can't reverse it, and the practice manager can put it right", async () => {
+    await assertFails(updateDoc(doc(nurse, "mileage_claims", "m-1"), { miles: 1 }));
+    await assertFails(updateDoc(doc(reception, "mileage_claims", "m-1"), { status: "rejected", decidedByName: "Manager" }));
+    await assertSucceeds(updateDoc(doc(pm, "mileage_claims", "m-1"), { status: "rejected", decidedByName: "PM", decisionNote: "Duplicate" }));
+  });
+  await check("The person can withdraw a waiting claim but not a decided one; only an administrator deletes that", async () => {
+    await assertSucceeds(setDoc(doc(nurse, "mileage_claims", "m-2"), mile()));
+    await assertSucceeds(deleteDoc(doc(nurse, "mileage_claims", "m-2")));
+    await assertFails(deleteDoc(doc(nurse, "mileage_claims", "m-1")));
+    await assertFails(deleteDoc(doc(pm, "mileage_claims", "m-1")));
+    await assertSucceeds(deleteDoc(doc(admin, "mileage_claims", "m-1")));
+  });
+  await check("Everyone signed in can read the places, routes and rates; only whoever manages timesheets can change them", async () => {
+    await assertSucceeds(setDoc(doc(tsAdmin, "mileage_places", "p-1"), { name: "Hospital", active: true }));
+    await assertSucceeds(setDoc(doc(pm, "mileage_routes", "r-1"), { fromId: "site:a", toId: "place:p-1", miles: 12.4 }));
+    await assertSucceeds(setDoc(doc(pm, "mileage_settings", "rates"), { car: { tiers: [{ upTo: 10000, pence: 45 }, { pence: 25 }] } }));
+    for (const who of [nurse, cleaner]) {
+      await assertSucceeds(getDoc(doc(who, "mileage_places", "p-1")));
+      await assertSucceeds(getDoc(doc(who, "mileage_routes", "r-1")));
+      await assertSucceeds(getDoc(doc(who, "mileage_settings", "rates")));
+    }
+    await assertFails(getDoc(doc(anon, "mileage_settings", "rates")));
+    await assertFails(setDoc(doc(nurse, "mileage_places", "p-2"), { name: "Fake place" }));
+    await assertFails(setDoc(doc(nurse, "mileage_routes", "r-2"), { fromId: "a", toId: "b", miles: 1 }));
+    await assertFails(setDoc(doc(nurse, "mileage_settings", "rates"), { car: { tiers: [{ pence: 9999 }] } }));
+    await assertFails(setDoc(doc(pm, "mileage_routes", "r-3"), { fromId: "a", toId: "b", miles: 0 }));
+    await assertFails(deleteDoc(doc(nurse, "mileage_routes", "r-1")));
+    await assertSucceeds(deleteDoc(doc(tsAdmin, "mileage_routes", "r-1")));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);

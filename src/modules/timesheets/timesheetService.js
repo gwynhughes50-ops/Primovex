@@ -34,11 +34,11 @@ export function useTimesheetStaff(enabled = true) {
 const clean = (value) => String(value ?? "").trim();
 
 // A person's own facts. `patch` can hold: patterns, uid, managerId, active, jobTitle, ...  Only known fields are written.
-const OWN = ["name", "patterns", "uid", "managerId", "active", "notes"];
+const OWN = ["name", "patterns", "uid", "managerId", "managerUid", "active", "notes"];
 export async function saveStaff(person, patch, actor = {}) {
   if (isSafeSyntheticMode()) throw new Error("Demo mode can't save changes.");
   const data = {};
-  for (const key of OWN) if (key in patch) data[key] = key === "uid" || key === "managerId" ? clean(patch[key]) || null : key === "name" || key === "notes" ? clean(patch[key]) : patch[key];
+  for (const key of OWN) if (key in patch) data[key] = key === "uid" || key === "managerId" || key === "managerUid" ? clean(patch[key]) || null : key === "name" || key === "notes" ? clean(patch[key]) : patch[key];
   data.updatedAt = serverTimestamp();
   data.updatedByName = actor.displayName || actor.email || "";
   await setDoc(doc(db, STAFF, person.id), data, { merge: true });

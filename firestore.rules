@@ -822,6 +822,57 @@ match /subject_access_requests/{requestId} {
       allow delete: if signedIn() && (isAdmin() || hasPermission("timesheets", "manage"));
     }
 
+    // MILEAGE CLAIMS (src/modules/mileage): a journey in a member of staff's own vehicle, paid at the HMRC rate.
+    //   the person    adds their own, and changes or withdraws it while it is waiting
+    //   their line manager (set in the timesheet register) approves or declines it
+    //   timesheets.manage  sees everyone's and can approve (never their own)
+    // The manager on a claim must be the manager in the claimant's own staff record, so nobody can name a friend to approve it.
+    function mileageStaff(staffId) {
+      return get(/databases/$(database)/documents/timesheet_staff/$(staffId)).data;
+    }
+    function mileageManages() {
+      return signedIn() && (isAdmin() || hasPermission("timesheets", "manage"));
+    }
+    match /mileage_claims/{claimId} {
+      allow get, list: if signedIn() && (mileageManages() || resource.data.uid == request.auth.uid || resource.data.managerUid == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.status == "submitted"
+        && request.resource.data.staffId is string
+        && mileageStaff(request.resource.data.staffId).uid == request.auth.uid
+        && request.resource.data.managerUid == mileageStaff(request.resource.data.staffId).get("managerUid", null)
+        && request.resource.data.staffName == mileageStaff(request.resource.data.staffId).name
+        && request.resource.data.miles is number && request.resource.data.miles > 0 && request.resource.data.miles <= 400
+        && request.resource.data.date is string
+        && request.resource.data.vehicle in ["car", "motorcycle", "bicycle"];
+      // the person corrects their own claim while it is still waiting
+      allow update: if signedIn() && resource.data.uid == request.auth.uid && resource.data.status == "submitted"
+        && request.resource.data.status == "submitted"
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["date", "fromId", "fromName", "toId", "toName", "miles", "returnTrip", "vehicle", "purpose", "note", "updatedAt"])
+        && request.resource.data.miles is number && request.resource.data.miles > 0 && request.resource.data.miles <= 400;
+      // the line manager decides a waiting claim; whoever manages timesheets can also put one right later. Nobody decides their own.
+      allow update: if signedIn() && resource.data.uid != request.auth.uid
+        && ((resource.data.managerUid == request.auth.uid && resource.data.status == "submitted") || mileageManages())
+        && request.resource.data.status in ["approved", "rejected", "submitted"]
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "decidedByName", "decidedAt", "decisionNote", "updatedAt"]);
+      allow delete: if signedIn() && ((resource.data.uid == request.auth.uid && resource.data.status == "submitted") || isAdmin());
+    }
+    // the places and routes staff choose from, and the rates: everyone reads, whoever manages timesheets sets them up
+    match /mileage_places/{placeId} {
+      allow get, list: if signedIn();
+      allow create, update: if mileageManages() && request.resource.data.name is string;
+      allow delete: if mileageManages();
+    }
+    match /mileage_routes/{routeId} {
+      allow get, list: if signedIn();
+      allow create, update: if mileageManages() && request.resource.data.miles is number && request.resource.data.miles > 0;
+      allow delete: if mileageManages();
+    }
+    match /mileage_settings/{docId} {
+      allow get, list: if signedIn();
+      allow create, update, delete: if mileageManages();
+    }
+
     // CLINICAL WASTE CONSIGNMENT NOTES (src/modules/waste). One record per Stericycle note: what was collected and when, read from
     // the PDF the practice is emailed, with the PDF itself in Storage (waste_notes/). It is practice evidence, not patient data.
     //   waste.read      sees them (the inspection pack, the Practice Manager and anyone given the role)

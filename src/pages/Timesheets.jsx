@@ -160,9 +160,16 @@ function PeopleTab({ data, actor }) {
     && (!onlyMissing || !patternLine(p).set)
     && (!search.trim() || `${p.name} ${p.jobTitle || ""}`.toLowerCase().includes(search.trim().toLowerCase())));
 
+  // A claim names its approver by account, so the account of a person's line manager is kept on the person's own record:
+  // set when the manager is chosen, and brought up to date for everyone they manage when the manager's account is linked.
   async function change(person, patch) {
     setMessage("");
-    try { await saveStaff(person, patch, actor); } catch (failure) { setMessage(failure?.message || "That didn't save."); }
+    try {
+      const next = { ...patch };
+      if ("managerId" in patch) next.managerUid = staff.find((m) => m.id === patch.managerId)?.uid || null;
+      await saveStaff(person, next, actor);
+      if ("uid" in patch) for (const report of staff.filter((s) => s.managerId === person.id)) await saveStaff(report, { managerUid: patch.uid || null }, actor);
+    } catch (failure) { setMessage(failure?.message || "That didn't save."); }
   }
   async function remove(person) {
     setMessage("");
