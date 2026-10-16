@@ -157,4 +157,18 @@ t("clinical waste: last collection, last year's totals and a long gap; counts on
   assert.equal(sec({ waste: [{ ...note("V1", "2026-10-05", 99), voided: true }] }, "waste").status, "none", "a note marked as an error does not count");
 });
 
+t("clinical waste by site: each site is judged on its own, and a site that has gone quiet is a gap even if the other is fresh", () => {
+  const note = (id, date, siteId, siteName) => ({ id, consignmentCode: id, collectionDate: date, totalKg: 10, siteId, siteName, lines: [{ kg: 10 }] });
+  const both = sec({ waste: [note("m1", "2026-10-01", "main", "Main Surgery"), note("b1", "2026-09-20", "branch", "Branch Surgery")] }, "waste");
+  assert.equal(both.status, "ok");
+  assert.equal(both.rows.find((r) => r[0] === "Last collection, Main Surgery")[1].startsWith("01/10/2026"), true);
+  assert.equal(both.rows.find((r) => r[0] === "Last collection, Branch Surgery")[1].startsWith("20/09/2026"), true);
+  const quiet = sec({ waste: [note("m1", "2026-10-01", "main", "Main Surgery"), note("b1", "2026-06-01", "branch", "Branch Surgery")] }, "waste");
+  assert.equal(quiet.status, "attention");
+  assert.ok(quiet.gaps.some((g) => /^Branch Surgery: the last clinical waste collection on record was \d+ days ago/.test(g)));
+  assert.ok(!quiet.gaps.some((g) => /^Main Surgery/.test(g)));
+  const mixed = sec({ waste: [note("m1", "2026-10-01", "main", "Main Surgery"), note("x1", "2026-10-02", "", "")] }, "waste");
+  assert.ok(mixed.gaps.some((g) => /1 collection has no site recorded/.test(g)));
+});
+
 console.log(`\n${n} passed`);

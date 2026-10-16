@@ -18,7 +18,7 @@ export const LONG_GAP_DAYS = 60;
 export function normaliseConsignment(id, data = {}) {
   const lines = Array.isArray(data.lines) ? data.lines : [];
   return {
-    id, consignmentCode: data.consignmentCode || "", documentRef: data.documentRef || "", customerSite: data.customerSite || "", premisesCode: data.premisesCode || "",
+    id, siteId: data.siteId || "", siteName: data.siteName || "", siteAddress: data.siteAddress || "", consignmentCode: data.consignmentCode || "", documentRef: data.documentRef || "", customerSite: data.customerSite || "", premisesCode: data.premisesCode || "",
     collectionDate: data.collectionDate || "", collectionTime: data.collectionTime || "", producer: data.producer || "", carrier: data.carrier || "", destination: data.destination || "",
     lines, totalKg: Number(data.totalKg) || round(lines.reduce((sum, l) => sum + (Number(l.kg) || 0), 0)),
     fileName: data.fileName || "", filePath: data.filePath || "", fileUrl: data.fileUrl || "", voided: data.voided === true, voidReason: data.voidReason || "",
@@ -42,6 +42,21 @@ export function summaryOf(consignment) {
 }
 
 export const live = (list) => list.filter((c) => !c.voided);
+
+// the notes for one site ("" = every site; NO_SITE = those with no site recorded yet)
+export const NO_SITE = "none";
+export const forSite = (list, siteId) => (!siteId ? list : list.filter((c) => (c.siteId || NO_SITE) === siteId));
+// the notes grouped by site, in name order, with the notes that have no site last
+export function siteGroups(list) {
+  const groups = new Map();
+  for (const c of list) {
+    const id = c.siteId || NO_SITE;
+    const group = groups.get(id) || { siteId: id, name: c.siteName || (id === NO_SITE ? "No site recorded" : id), notes: [] };
+    group.notes.push(c);
+    groups.set(id, group);
+  }
+  return [...groups.values()].sort((a, b) => (a.siteId === NO_SITE) - (b.siteId === NO_SITE) || a.name.localeCompare(b.name));
+}
 export const newestFirst = (list) => [...list].sort((a, b) => (b.collectionDate || "").localeCompare(a.collectionDate || "") || (b.collectionTime || "").localeCompare(a.collectionTime || ""));
 
 export const duplicateOf = (list, code) => list.find((c) => c.consignmentCode && code && c.consignmentCode.toUpperCase() === String(code).trim().toUpperCase()) || null;

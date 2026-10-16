@@ -7,7 +7,7 @@ import { concernDeadline, concernOpen, sarDays, sarOpen } from "../../ai/managem
 import { reviewSummary, reviewStatus } from "../coshh/coshh.js";
 import { certLabel, certStatus, certSummary } from "../certificates/certificates.js";
 import { STATUS, courseSummary, tally, buildMatrix } from "../training/training.js";
-import { LONG_GAP_DAYS, stats as wasteStats, live as liveWaste } from "../waste/waste.js";
+import { LONG_GAP_DAYS, NO_SITE, siteGroups, stats as wasteStats, live as liveWaste } from "../waste/waste.js";
 
 const DAY = 86400000;
 
@@ -212,9 +212,21 @@ export function wasteSection({ waste, now, available }) {
   if (s.daysSinceLast !== null && s.daysSinceLast > LONG_GAP_DAYS) gaps.push(`The last clinical waste collection on record was ${plural(s.daysSinceLast, "day")} ago.`);
   if (s.longestGap > LONG_GAP_DAYS) gaps.push(`There was a gap of ${plural(s.longestGap, "day")} between two collections in the last 12 months.`);
   const lastDate = s.last ? s.last.collectionDate.split("-").reverse().join("/") : "";
+  // each site on its own: a site that has gone a long time without a collection is a gap even if the other has had one
+  const groups = siteGroups(notes);
+  const perSite = groups.length > 1 || groups[0].siteId !== NO_SITE ? groups : [];
+  const siteRows = [];
+  for (const g of perSite) {
+    const f = wasteStats(g.notes, now);
+    siteRows.push([`Last collection, ${g.name}`, f.last ? `${f.last.collectionDate.split("-").reverse().join("/")} (${plural(f.collectionsLastYear, "collection")} and ${f.kgLastYear} kg in 12 months)` : "none"]);
+    if (f.daysSinceLast !== null && f.daysSinceLast > LONG_GAP_DAYS) gaps.push(`${g.name}: the last clinical waste collection on record was ${plural(f.daysSinceLast, "day")} ago.`);
+    if (f.longestGap > LONG_GAP_DAYS) gaps.push(`${g.name}: a gap of ${plural(f.longestGap, "day")} between two collections in the last 12 months.`);
+  }
+  const noSite = notes.filter((n) => !n.siteId).length;
+  if (noSite && perSite.length) gaps.push(`${plural(noSite, "collection has", "collections have")} no site recorded.`);
   return section("waste", "Clinical waste", gaps.length ? "attention" : "ok",
     s.last ? `Last collection ${lastDate}; ${plural(s.collectionsLastYear, "collection")} and ${s.kgLastYear} kg in the last 12 months.` : "Collections are on record.",
-    [["Last collection", lastDate || "n/a"], ["Collections in the last 12 months", String(s.collectionsLastYear)], ["Waste in the last 12 months", `${s.kgLastYear} kg`], ["Longest gap in the last 12 months", s.collectionsLastYear > 1 ? plural(s.longestGap, "day") : "n/a"], ["Consignment notes on record", String(s.total)]], gaps);
+    [["Last collection", lastDate || "n/a"], ["Collections in the last 12 months", String(s.collectionsLastYear)], ["Waste in the last 12 months", `${s.kgLastYear} kg`], ["Longest gap in the last 12 months", s.collectionsLastYear > 1 ? plural(s.longestGap, "day") : "n/a"], ["Consignment notes on record", String(s.total)], ...siteRows], gaps);
 }
 
 // ---- staff training: counts only, never a name ------------------------------------------------------------------

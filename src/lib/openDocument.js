@@ -8,6 +8,18 @@ export async function openDocument({ url, path, fileName = "document.pdf" }) {
     if (typeof window !== "undefined" && window.PrimovexDocs?.openUrl) {
       return window.PrimovexDocs.openUrl(url) ? "" : "The phone couldn't open that document. Check you have an app for PDFs.";
     }
+    if (globalThis.__TAURI_INTERNALS__ && url) {
+      // the desktop app fetches the file itself (the page can't: the storage bucket doesn't allow it) and opens it in the PDF viewer
+      try {
+        const { invoke } = await import("@tauri-apps/api/core");
+        await invoke("open_storage_pdf", { url, fileName });
+        return "";
+      } catch (error) {
+        const detail = String(error?.message || error || "");
+        // an older install without that command falls through to the older way below; any other problem is said in words
+        if (!/not found|unknown command|not allowed|did not match/i.test(detail)) return detail || "Could not open the document. Try again, or ask the Practice Manager.";
+      }
+    }
     if (globalThis.__TAURI_INTERNALS__ && path) {
       const [{ getBytes, ref }, { storage }, { invoke }] = await Promise.all([
         import("firebase/storage"), import("@/lib/firebase"), import("@tauri-apps/api/core"),

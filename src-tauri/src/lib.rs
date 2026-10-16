@@ -33,13 +33,46 @@ fn sanitise_file_name(file_name: &str) -> String {
 // documents already held in the app's own local ClinFlow cache, never for arbitrary paths.
 #[tauri::command]
 fn open_clinflow_pdf(app: tauri::AppHandle, bytes: Vec<u8>, file_name: String) -> Result<(), String> {
+  write_and_open_pdf(&app, &bytes, &file_name)
+}
+
+// Downloads a practice document (a COSHH sheet, a certificate, a waste consignment note) from the practice's own Firebase
+// Storage and opens it in the system PDF viewer. The download is done here, not in the web page: the page would need the
+// storage bucket to allow cross-origin downloads, and it does not, so opening a PDF from there silently did nothing.
+// Deliberately narrow: https://firebasestorage.googleapis.com only, a size cap, and the bytes must be a PDF.
+#[cfg(any(target_os = "macos", windows, target_os = "linux"))]
+#[tauri::command]
+async fn open_storage_pdf(app: tauri::AppHandle, url: String, file_name: String) -> Result<(), String> {
+  if !url.starts_with("https://firebasestorage.googleapis.com/") {
+    return Err("Only documents held in the practice's own storage can be opened.".to_string());
+  }
+  let client = reqwest::Client::builder()
+    .timeout(std::time::Duration::from_secs(45))
+    .build()
+    .map_err(|e| e.to_string())?;
+  let response = client.get(&url).send().await.map_err(|e| format!("The document could not be fetched: {e}"))?;
+  let status = response.status();
+  if !status.is_success() {
+    return Err(format!("The document store answered {status}."));
+  }
+  let bytes = response.bytes().await.map_err(|e| format!("The document could not be read: {e}"))?;
+  if bytes.len() > 25 * 1024 * 1024 {
+    return Err("That document is too large to open here.".to_string());
+  }
+  if !bytes.starts_with(b"%PDF") {
+    return Err("That file is not a PDF.".to_string());
+  }
+  write_and_open_pdf(&app, &bytes, &file_name)
+}
+
+fn write_and_open_pdf(app: &tauri::AppHandle, bytes: &[u8], file_name: &str) -> Result<(), String> {
   let mut dir: PathBuf = app.path().temp_dir().map_err(|e| e.to_string())?;
   dir.push("primovex-clinflow-preview");
   fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
 
   let mut path = dir;
-  path.push(sanitise_file_name(&file_name));
-  fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+  path.push(sanitise_file_name(file_name));
+  fs::write(&path, bytes).map_err(|e| e.to_string())?;
 
   app
     .opener()
@@ -535,6 +568,8 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .invoke_handler(tauri::generate_handler![
       open_clinflow_pdf,
+      #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
+      open_storage_pdf,
       #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
       fetch_local_device_reading,
       #[cfg(desktop)]

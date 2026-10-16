@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { consignmentId, findDate, parseConsignment } from "../src/modules/waste/consignmentParse.js";
-import { duplicateOf, monthly, normaliseConsignment, stats, summaryOf, wasteLabel } from "../src/modules/waste/waste.js";
+import { NO_SITE, duplicateOf, forSite, monthly, siteGroups, normaliseConsignment, stats, summaryOf, wasteLabel } from "../src/modules/waste/waste.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
@@ -43,6 +43,7 @@ t("a note is read: the codes, when, who it came from and each waste line", () =>
   assert.equal(out.collectionDate, "2026-03-24");
   assert.equal(out.collectionTime, "08:46");
   assert.equal(out.producer, "Example Surgery");
+  assert.equal(out.siteAddress, "1 High Street");
   assert.equal(out.carrier, "Stericycle");
   assert.match(out.destination, /DEPOT ROAD.*TOWN UK AB1 2CD/);
   assert.equal(out.lines.length, 2, "the second table (UN numbers) is not waste");
@@ -129,6 +130,18 @@ t("a note already on record is found by its code, whatever the case", () => {
   const list = [mk("cn-x", "2026-03-24", 5)];
   assert.ok(duplicateOf(list, " cn-x "));
   assert.equal(duplicateOf(list, "other"), null);
+});
+
+t("notes are grouped by site, with the ones that have no site last, and can be filtered to one site", () => {
+  const withSite = (id, date, siteId, siteName) => normaliseConsignment(id, { consignmentCode: id, collectionDate: date, siteId, siteName, totalKg: 10, lines: [{ kg: 10 }] });
+  const list = [withSite("a", "2026-09-01", "main", "Main Surgery"), withSite("b", "2026-09-02", "branch", "Branch Surgery"), withSite("c", "2026-09-03", "main", "Main Surgery"), withSite("d", "2026-09-04", "", "")];
+  const groups = siteGroups(list);
+  assert.deepEqual(groups.map((g) => [g.name, g.notes.length]), [["Branch Surgery", 1], ["Main Surgery", 2], ["No site recorded", 1]]);
+  assert.equal(groups[2].siteId, NO_SITE);
+  assert.deepEqual(forSite(list, "main").map((c) => c.id), ["a", "c"]);
+  assert.deepEqual(forSite(list, NO_SITE).map((c) => c.id), ["d"]);
+  assert.equal(forSite(list, "").length, 4);
+  assert.deepEqual(monthly(forSite(list, "branch")).map((m) => [m.month, m.collections]), [["2026-09", 1]]);
 });
 
 console.log(`\n${n} passed`);

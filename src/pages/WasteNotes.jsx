@@ -4,8 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { openDocument } from "@/lib/openDocument";
 import { parseConsignment } from "@/modules/waste/consignmentParse";
 import { readPdfText } from "@/modules/waste/pdfText";
-import { LONG_GAP_DAYS, duplicateOf, monthly, newestFirst, stats, summaryOf } from "@/modules/waste/waste";
-import { addConsignment, formProblem, pdfProblem, setVoided, updateConsignment, useWasteNotes } from "@/modules/waste/wasteService";
+import { LONG_GAP_DAYS, NO_SITE, duplicateOf, forSite, monthly, newestFirst, siteGroups, stats, summaryOf } from "@/modules/waste/waste";
+import { addConsignment, formProblem, pdfProblem, setVoided, siteKey, updateConsignment, useWasteNotes, useWasteSites } from "@/modules/waste/wasteService";
 
 // Clinical waste (Operations > Clinical waste): the Stericycle consignment notes the practice is emailed after each collection.
 // Drop the PDF in; Primovex reads it on this computer (the PDF is not sent anywhere to be read), shows what it found for checking,
@@ -18,7 +18,8 @@ const PRIMARY = "inline-flex items-center gap-1.5 rounded-lg bg-teal-500/90 px-4
 const uk = (key) => (key ? key.split("-").reverse().join("/") : "");
 const monthName = (key) => new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 const emptyLine = () => ({ wasteCode: "", ewc: "", description: "", kg: "", component: "", concentration: "", form: "", hazard: "", bags: 0, sharpsBoxes: 0, sealedUnits: 0, wheeledCarts: 0 });
-const formOf = (source) => ({
+const formOf = (source, siteFor = () => "") => ({
+  siteId: source.siteId || siteFor(source.customerSite) || "", siteName: source.siteName || "", siteAddress: source.siteAddress || "",
   consignmentCode: source.consignmentCode || "", documentRef: source.documentRef || "", customerSite: source.customerSite || "", premisesCode: source.premisesCode || "",
   collectionDate: source.collectionDate || "", collectionTime: source.collectionTime || "", producer: source.producer || "", carrier: source.carrier || "", destination: source.destination || "",
   lines: (source.lines || []).map((l) => ({ ...l, kg: l.kg ?? "" })), notes: source.notes || "",
@@ -29,8 +30,8 @@ function Tile({ label, value, sub, tone }) {
 }
 
 // Check (and correct) what was read from a note, then keep it. `existing` = the notes already on record, to catch a note added twice.
-function ReviewCard({ title, initial, fileName, warnings = [], existing = [], editingId = "", onSave, onCancel }) {
-  const [form, setForm] = useState(() => formOf(initial));
+function ReviewCard({ title, initial, fileName, warnings = [], existing = [], editingId = "", sites = [], bySiteNumber = {}, onSave, onCancel }) {
+  const [form, setForm] = useState(() => formOf(initial, (number) => bySiteNumber[siteKey(number)] || (sites.length === 1 ? sites[0].id : "")));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const set = (patch) => setForm((current) => ({ ...current, ...patch }));
@@ -38,6 +39,7 @@ function ReviewCard({ title, initial, fileName, warnings = [], existing = [], ed
   const duplicate = !editingId ? duplicateOf(existing, form.consignmentCode) : null;
   const total = form.lines.reduce((sum, l) => sum + (Number(l.kg) || 0), 0);
   const problem = formProblem(form);
+  const chooseSite = (siteId) => set({ siteId, siteName: sites.find((x) => x.id === siteId)?.name || "" });
   async function save() {
     setBusy(true); setError("");
     try { await onSave(form); } catch (failure) { setError(failure?.message || "That didn't save. Check you have permission."); setBusy(false); }
@@ -51,6 +53,10 @@ function ReviewCard({ title, initial, fileName, warnings = [], existing = [], ed
       {warnings.length > 0 && <ul className="mt-2 list-disc space-y-0.5 rounded-lg border border-amber-400/30 bg-amber-500/10 p-3 pl-7 text-sm text-amber-100">{warnings.map((w, i) => <li key={i}>{w}</li>)}</ul>}
       {duplicate && <p className="mt-2 rounded-lg border border-rose-400/40 bg-rose-500/10 p-3 text-sm text-rose-100" role="alert">This note is already on record (collected {uk(duplicate.collectionDate)}). It has not been added again.</p>}
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <label className={`${LABEL} sm:col-span-3`}>Which site was this collection from?
+          <select className={FIELD} value={form.siteId} onChange={(e) => chooseSite(e.target.value)}><option value="">Choose a site</option>{sites.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select>
+          {form.siteAddress && <span className="mt-1 block text-xs font-normal normal-case text-slate-400">The note says: {form.siteAddress}{form.customerSite ? ` (customer site number ${form.customerSite})` : ""}</span>}
+        </label>
         <label className={LABEL}>Consignment note code<input className={FIELD} value={form.consignmentCode} disabled={Boolean(editingId)} onChange={(e) => set({ consignmentCode: e.target.value })} /></label>
         <label className={LABEL}>Collected on<input type="date" className={FIELD} value={form.collectionDate} onChange={(e) => set({ collectionDate: e.target.value })} /></label>
         <label className={LABEL}>Time<input type="time" className={FIELD} value={form.collectionTime} onChange={(e) => set({ collectionTime: e.target.value })} /></label>
@@ -95,6 +101,9 @@ export default function WasteNotes() {
   const actor = { displayName: displayName || user?.email || "", email: user?.email || "" };
   const canManage = can("waste.manage");
   const { list, error } = useWasteNotes(true);
+  const wasteSites = useWasteSites();
+  const [siteFilter, setSiteFilter] = useState("");
+  const [openError, setOpenError] = useState({ id: "", text: "" });
   const [queue, setQueue] = useState([]); // [{ key, fileName, file, state: "reading" | "ready" | "failed", parsed, problem }]
   const [editing, setEditing] = useState(null);
   const [confirmId, setConfirmId] = useState("");
@@ -104,9 +113,12 @@ export default function WasteNotes() {
   const picker = useRef(null);
   const now = useMemo(() => new Date(), []);
   const all = useMemo(() => list || [], [list]);
-  const shown = useMemo(() => newestFirst(all), [all]);
-  const figures = useMemo(() => stats(all, now), [all, now]);
-  const months = useMemo(() => monthly(all), [all]);
+  const view = useMemo(() => forSite(all, siteFilter), [all, siteFilter]);
+  const shown = useMemo(() => newestFirst(view), [view]);
+  const figures = useMemo(() => stats(view, now), [view, now]);
+  const months = useMemo(() => monthly(view), [view]);
+  const groups = useMemo(() => siteGroups(all.filter((c) => !c.voided)), [all]);
+  const siteName = (id) => (id === NO_SITE ? "No site recorded" : wasteSites.sites.find((x) => x.id === id)?.name || groups.find((g) => g.siteId === id)?.name || id);
 
   function addFiles(files) {
     setMessage(""); setProblem("");
@@ -144,8 +156,9 @@ export default function WasteNotes() {
     setMessage(`Kept: the note collected on ${uk(form.collectionDate)} (${form.consignmentCode.toUpperCase()}).`);
   }
   async function open(note) {
+    setOpenError({ id: "", text: "" });
     const failed = await openDocument({ url: note.fileUrl, path: note.filePath, fileName: note.fileName || "consignment-note.pdf" });
-    if (failed) setProblem(failed);
+    if (failed) setOpenError({ id: note.id, text: failed });
   }
   async function mistake(note, voided) {
     setProblem(""); setConfirmId("");
@@ -162,6 +175,12 @@ export default function WasteNotes() {
         <p className="max-w-3xl text-sm text-slate-400">The consignment note Stericycle emails after each collection, kept on record: when waste was collected, what and how much, with the note itself to show an inspector.{canManage ? " Drop the PDF below." : ""}</p>
       </div>
       {error && <p className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100" role="alert">{error}</p>}
+      {groups.length > 0 && (
+        <div className="flex flex-wrap items-end gap-3">
+          <label className={LABEL}>Show<select className={FIELD} value={siteFilter} onChange={(e) => setSiteFilter(e.target.value)}><option value="">Both sites together</option>{groups.map((g) => <option key={g.siteId} value={g.siteId}>{g.name}</option>)}</select></label>
+          {groups.length > 1 && !siteFilter && <div className="flex flex-wrap gap-2">{groups.map((g) => { const f = stats(g.notes, now); return <button type="button" key={g.siteId} onClick={() => setSiteFilter(g.siteId)} className="rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-left hover:bg-white/5"><span className="block text-sm font-semibold text-slate-100">{g.name}</span><span className="block text-xs text-slate-400">{f.last ? `last collected ${uk(f.last.collectionDate)} (${f.daysSinceLast} days ago)` : "no collections"} · {f.collectionsLastYear} in 12 months · {f.kgLastYear} kg</span></button>; })}</div>}
+        </div>
+      )}
       <div className="grid gap-2 sm:grid-cols-4">
         <Tile label="Last collection" value={last ? uk(last.collectionDate) : "None yet"} sub={last ? `${figures.daysSinceLast} day${figures.daysSinceLast === 1 ? "" : "s"} ago` : ""} tone={figures.daysSinceLast > LONG_GAP_DAYS ? "bg-amber-400/10" : "bg-emerald-500/10"} />
         <Tile label="Collections, last 12 months" value={figures.collectionsLastYear} />
@@ -186,22 +205,24 @@ export default function WasteNotes() {
 
       {queue.map((item) => item.state === "reading" ? <p key={item.key} className="text-sm text-slate-300">Reading {item.fileName}…</p>
         : item.state === "failed" ? <p key={item.key} className="rounded-lg border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100" role="alert">{item.fileName}: {item.problem} <button type="button" className="ml-2 underline" onClick={() => dropQueue(item.key)}>Dismiss</button></p>
-          : <ReviewCard key={item.key} title="Check this note" initial={item.parsed} fileName={item.fileName} warnings={item.parsed.warnings} existing={all} onSave={(form) => keep(item, form)} onCancel={() => dropQueue(item.key)} />)}
-      {editing && <ReviewCard title="Correct this note" initial={editing} fileName={editing.fileName} editingId={editing.id} onSave={async (form) => { await updateConsignment(editing.id, form, actor); setEditing(null); setMessage("Changes saved."); }} onCancel={() => setEditing(null)} />}
+          : <ReviewCard key={item.key} title="Check this note" initial={item.parsed} fileName={item.fileName} warnings={item.parsed.warnings} existing={all} sites={wasteSites.sites} bySiteNumber={wasteSites.bySiteNumber} onSave={(form) => keep(item, form)} onCancel={() => dropQueue(item.key)} />)}
+      {editing && <ReviewCard title="Correct this note" initial={editing} fileName={editing.fileName} editingId={editing.id} sites={wasteSites.sites} bySiteNumber={wasteSites.bySiteNumber} onSave={async (form) => { await updateConsignment(editing.id, form, actor); setEditing(null); setMessage("Changes saved."); }} onCancel={() => setEditing(null)} />}
 
       {!shown.length ? <p className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300">No consignment notes are on record yet.{canManage ? " Drop the first one above." : ""}</p> : (
         <div className="overflow-x-auto rounded-2xl border border-white/10">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Collected</th><th className="px-3 py-2">Consignment note</th><th className="px-3 py-2">Waste</th><th className="px-3 py-2">Total</th><th className="px-3 py-2" /></tr></thead>
+            <thead className="bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Collected</th><th className="px-3 py-2">Site</th><th className="px-3 py-2">Consignment note</th><th className="px-3 py-2">Waste</th><th className="px-3 py-2">Total</th><th className="px-3 py-2" /></tr></thead>
             <tbody>
               {shown.map((c) => (
                 <tr key={c.id} className={`border-t border-white/5 ${c.voided ? "opacity-50" : ""}`}>
                   <td className="whitespace-nowrap px-3 py-2 font-semibold text-slate-100">{uk(c.collectionDate)}{c.collectionTime ? <span className="ml-1 font-normal text-slate-400">{c.collectionTime}</span> : null}</td>
+                  <td className="px-3 py-2 text-slate-300">{c.siteName || <span className="text-amber-200">Not set</span>}</td>
                   <td className="px-3 py-2 text-slate-200">{c.consignmentCode}{c.voided && <span className="ml-2 rounded-full bg-rose-500/20 px-2 py-0.5 text-xs text-rose-200">Entered in error</span>}</td>
                   <td className="px-3 py-2 text-slate-300">{summaryOf(c)}</td>
                   <td className="whitespace-nowrap px-3 py-2 text-slate-100">{c.totalKg} kg</td>
                   <td className="whitespace-nowrap px-3 py-2 text-right">
                     {c.fileUrl && <button type="button" className={BTN} onClick={() => open(c)}><ExternalLink className="h-4 w-4" aria-hidden="true" /> Open PDF</button>}
+                    {openError.id === c.id && <span className="mt-1 block max-w-xs whitespace-normal text-left text-xs text-rose-300" role="alert">{openError.text}</span>}
                     {canManage && !c.voided && <button type="button" className={`${BTN} ml-1`} onClick={() => { setEditing(c); setMessage(""); }}>Correct</button>}
                     {canManage && (confirmId === c.id
                       ? <><span className="ml-2 text-xs text-slate-300">Mark as entered in error?</span> <button type="button" className={`${BTN} ml-1`} onClick={() => mistake(c, !c.voided)}>Yes</button> <button type="button" className={BTN} onClick={() => setConfirmId("")}>No</button></>
@@ -216,7 +237,7 @@ export default function WasteNotes() {
 
       {months.length > 0 && (
         <details className="rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-sm text-slate-200">
-          <summary className="cursor-pointer font-semibold">Month by month</summary>
+          <summary className="cursor-pointer font-semibold">Month by month{siteFilter ? `: ${siteName(siteFilter)}` : ""}</summary>
           <table className="mt-2 min-w-full text-sm"><thead className="text-left text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-2 py-1">Month</th><th className="px-2 py-1">Collections</th><th className="px-2 py-1">kg</th><th className="px-2 py-1">Bags</th><th className="px-2 py-1">Sharps boxes</th></tr></thead>
             <tbody>{months.map((m) => <tr key={m.month} className="border-t border-white/5"><td className="px-2 py-1">{monthName(m.month)}</td><td className="px-2 py-1">{m.collections}</td><td className="px-2 py-1">{m.kg}</td><td className="px-2 py-1">{m.bags}</td><td className="px-2 py-1">{m.sharpsBoxes}</td></tr>)}</tbody>
           </table>

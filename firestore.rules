@@ -951,6 +951,12 @@ match /subject_access_requests/{requestId} {
         && request.resource.data.lines is list;
       allow delete: if isAdmin();
     }
+    // which Stericycle site number belongs to which of the practice's sites (set by whoever keeps the notes, as they choose a site)
+    match /waste_settings/{docId} {
+      allow get, list: if signedIn() && (hasPermission("waste", "read") || hasPermission("waste", "manage") || isAdmin());
+      allow create, update: if signedIn() && (hasPermission("waste", "manage") || isAdmin());
+      allow delete: if isAdmin();
+    }
 
     // Primovex's own sensors (functions/services/sensorService.js). What was set up and the latest state is readable by
     // those who see Connect; it is only ever written by the functions. The keys (hashed) are not readable by anyone in the

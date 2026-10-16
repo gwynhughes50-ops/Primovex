@@ -8,8 +8,8 @@ const clinical = (kg, bags) => ({ wasteCode: "HT", ewc: "18 01 03", description:
 
 export function demoWaste() {
   return [
-    { id: "demo-w1", consignmentCode: "DEM001/AAAA1", documentRef: "DEMO00001A", customerSite: "0000001-111", premisesCode: "DEM001", collectionDate: ago(12), collectionTime: "09:10", producer: "Demo Surgery", carrier: "Stericycle", lines: [sharps(6, 6), clinical(58.4, 22)], fileName: "demo-note-1.pdf" },
-    { id: "demo-w2", consignmentCode: "DEM001/BBBB2", documentRef: "DEMO00002B", customerSite: "0000001-111", premisesCode: "DEM001", collectionDate: ago(40), collectionTime: "08:50", producer: "Demo Surgery", carrier: "Stericycle", lines: [sharps(9.5, 9), clinical(71.2, 27)], fileName: "demo-note-2.pdf" },
-    { id: "demo-w3", consignmentCode: "DEM001/CCCC3", documentRef: "DEMO00003C", customerSite: "0000001-111", premisesCode: "DEM001", collectionDate: ago(69), collectionTime: "09:30", producer: "Demo Surgery", carrier: "Stericycle", lines: [clinical(64.0, 24)], fileName: "demo-note-3.pdf" },
+    { id: "demo-w1", siteId: "main", siteName: "Main Surgery", consignmentCode: "DEM001/AAAA1", documentRef: "DEMO00001A", customerSite: "0000001-111", premisesCode: "DEM001", collectionDate: ago(12), collectionTime: "09:10", producer: "Demo Surgery", carrier: "Stericycle", lines: [sharps(6, 6), clinical(58.4, 22)], fileName: "demo-note-1.pdf" },
+    { id: "demo-w2", siteId: "branch", siteName: "Branch Surgery", consignmentCode: "DEM001/BBBB2", documentRef: "DEMO00002B", customerSite: "0000001-111", premisesCode: "DEM001", collectionDate: ago(40), collectionTime: "08:50", producer: "Demo Surgery", carrier: "Stericycle", lines: [sharps(9.5, 9), clinical(71.2, 27)], fileName: "demo-note-2.pdf" },
+    { id: "demo-w3", siteId: "main", siteName: "Main Surgery", consignmentCode: "DEM001/CCCC3", documentRef: "DEMO00003C", customerSite: "0000001-111", premisesCode: "DEM001", collectionDate: ago(69), collectionTime: "09:30", producer: "Demo Surgery", carrier: "Stericycle", lines: [clinical(64.0, 24)], fileName: "demo-note-3.pdf" },
   ];
 }

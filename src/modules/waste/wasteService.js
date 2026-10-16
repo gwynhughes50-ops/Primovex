@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { collection, doc, onSnapshot, serverTimestamp, setDoc, updateDoc } from "firebase/firestore";
+import { listActiveSites } from "@/lib/checklistsFirestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
@@ -9,6 +10,28 @@ import { normaliseConsignment } from "./waste";
 
 export const COLLECTION = "waste_consignments";
 export const MAX_NOTE_BYTES = 15 * 1024 * 1024;
+export const SETTINGS = "waste_settings";
+
+// The practice's sites (from Practice Admin) and which Stericycle site number belongs to which of them, so a note can fill its site in
+export function useWasteSites() {
+  const [state, setState] = useState({ sites: [], bySiteNumber: {}, ready: false });
+  useEffect(() => {
+    if (isSafeSyntheticMode()) { setState({ sites: [{ id: "main", name: "Main Surgery" }, { id: "branch", name: "Branch Surgery" }], bySiteNumber: {}, ready: true }); return undefined; }
+    let live = true;
+    listActiveSites().then((sites) => live && setState((s) => ({ ...s, sites }))).catch(() => {});
+    const stop = onSnapshot(doc(db, SETTINGS, "sites"), (snap) => setState((s) => ({ ...s, bySiteNumber: snap.exists() ? snap.data().bySiteNumber || {} : {}, ready: true })), () => setState((s) => ({ ...s, ready: true })));
+    return () => { live = false; stop(); };
+  }, []);
+  return state;
+}
+
+// remember that this Stericycle site number is this site (whoever keeps the notes does this by choosing the site once)
+export async function rememberSite(siteNumber, siteId) {
+  if (isSafeSyntheticMode() || !siteNumber || !siteId) return;
+  const key = String(siteNumber).replace(/[.#$/\[\]]/g, "_");
+  await setDoc(doc(db, SETTINGS, "sites"), { bySiteNumber: { [key]: siteId } }, { merge: true });
+}
+export const siteKey = (siteNumber) => String(siteNumber || "").replace(/[.#$/\[\]]/g, "_");
 
 // Every consignment note on record. `list` is null until the first answer arrives; demo and training mode show samples.
 export function useWasteNotes(enabled = true) {
@@ -46,6 +69,7 @@ export function toRecord(form) {
     form: text(l.form, 40), hazard: text(l.hazard, 40), bags: num(l.bags) ?? 0, sharpsBoxes: num(l.sharpsBoxes) ?? 0, sealedUnits: num(l.sealedUnits) ?? 0, wheeledCarts: num(l.wheeledCarts) ?? 0,
   }));
   return {
+    siteId: text(form.siteId, 80), siteName: text(form.siteName, 80), siteAddress: text(form.siteAddress, 200),
     consignmentCode: text(form.consignmentCode, 40).toUpperCase(), documentRef: text(form.documentRef, 40), customerSite: text(form.customerSite, 40), premisesCode: text(form.premisesCode, 40),
     collectionDate: text(form.collectionDate, 10), collectionTime: text(form.collectionTime, 5), producer: text(form.producer), carrier: text(form.carrier), destination: text(form.destination, 300),
     lines, totalKg: Math.round(lines.reduce((sum, l) => sum + (l.kg || 0), 0) * 1000) / 1000, notes: text(form.notes, 500),
@@ -56,6 +80,7 @@ export function toRecord(form) {
 export function formProblem(form) {
   if (!text(form.consignmentCode)) return "Enter the consignment note code (top of the note).";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(form.collectionDate || "")) return "Enter the date the waste was collected.";
+  if (!text(form.siteId)) return "Choose which site this collection was from.";
   if (!(form.lines || []).length) return "Add at least one waste line (what was collected, and how much).";
   if ((form.lines || []).some((l) => num(l.kg) === null || num(l.kg) < 0)) return "Every waste line needs its weight in kg.";
   return "";
@@ -69,6 +94,7 @@ export async function addConsignment(form, file, actor = {}) {
   if (problem) throw new Error(problem);
   const record = toRecord(form);
   const id = consignmentId(record.consignmentCode);
+  rememberSite(form.customerSite, record.siteId).catch(() => {});
   const path = `waste_notes/${id}/${Date.now()}_${safeName(file.name)}`;
   const fileRef = ref(storage, path);
   await uploadBytes(fileRef, file, { contentType: "application/pdf" });

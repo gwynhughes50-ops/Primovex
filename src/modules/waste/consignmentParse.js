@@ -4,7 +4,7 @@
 // they are not needed to evidence a collection.
 //
 //   pages: [[{ s: "text", x, y }]]  (PDF coordinates: y goes up the page)
-//   returns { consignmentCode, documentRef, customerSite, premisesCode, collectionDate "YYYY-MM-DD", collectionTime "HH:MM",
+//   returns { consignmentCode, documentRef, customerSite, premisesCode, siteAddress, collectionDate "YYYY-MM-DD", collectionTime "HH:MM",
 //             producer, carrier, destination, lines: [{ wasteCode, ewc, description, kg, component, concentration, form,
 //             hazard, bags, sharpsBoxes, sealedUnits, wheeledCarts }], totalKg, warnings: [text] }
 
@@ -70,6 +70,10 @@ export function parseConsignment(pages, { fileName = "" } = {}) {
   const producerItem = colon.find((i) => !/stericycle|srcl/i.test(i.s));
   const carrierItem = colon.find((i) => /stericycle|srcl/i.test(i.s));
   const producer = producerItem ? clean(producerItem.s.split(" : ")[0]) : "";
+  // the address lines under the name (not the phone number or the email)
+  const siteAddress = producerItem
+    ? first.filter((i) => i !== producerItem && Math.abs(i.x - producerItem.x) <= 3 && i.y < producerItem.y && producerItem.y - i.y < 40 && !/@/.test(i.s) && !/^[\d\s+()-]{7,}$/.test(i.s)).sort(byReading).map((i) => i.s).join(", ")
+    : "";
   const carrier = carrierItem ? clean(carrierItem.s.split(" : ")[0]) : "";
   const destination = carrierItem
     ? clean([carrierItem.s.split(" : ").slice(1).join(" : "), ...first.filter((i) => i !== carrierItem && Math.abs(i.x - carrierItem.x) <= 3 && i.y < carrierItem.y && carrierItem.y - i.y < 18).sort(byReading).map((i) => i.s)].join(" "))
@@ -115,7 +119,7 @@ export function parseConsignment(pages, { fileName = "" } = {}) {
   if (!lines.length) warnings.push("No waste lines could be read from this note. Check it is a Stericycle consignment note, and add the weights by hand.");
   if (!items.length) warnings.push("There was no text in that PDF (it may be a scan or a photo), so nothing could be read. Type the details in.");
 
-  return { consignmentCode: code, documentRef: docRef, customerSite: siteItem?.s || "", premisesCode: premises, collectionDate, collectionTime, producer, carrier, destination, lines, totalKg, warnings };
+  return { consignmentCode: code, documentRef: docRef, customerSite: siteItem?.s || "", premisesCode: premises, siteAddress, collectionDate, collectionTime, producer, carrier, destination, lines, totalKg, warnings };
 }
 
 // the id a note is stored under: the same note dropped twice lands on the same record

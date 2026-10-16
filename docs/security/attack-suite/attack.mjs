@@ -1122,6 +1122,14 @@ async function main() {
     await assertFails(uploadBytes(ref(keeperStorage, "waste_notes/cn-keeper/d.png"), new Uint8Array([1, 2, 3]), { contentType: "image/png" }));
     await assertFails(uploadBytes(ref(keeperStorage, "waste_notes/cn-keeper/e.pdf"), new Uint8Array(16 * 1024 * 1024), { contentType: "application/pdf" }));
   });
+  await check("The site-number mapping is read by whoever sees the waste records and set only by whoever keeps the notes", async () => {
+    await assertSucceeds(setDoc(doc(keeper, "waste_settings", "sites"), { bySiteNumber: { "9015865-111": "main" } }, { merge: true }));
+    await assertSucceeds(setDoc(doc(pm, "waste_settings", "sites"), { bySiteNumber: { "9015865-112": "branch" } }, { merge: true }));
+    for (const who of [keeper, wreader, pm, admin]) await assertSucceeds(getDoc(doc(who, "waste_settings", "sites")));
+    for (const who of [nurse, cleaner, anon]) await assertFails(getDoc(doc(who, "waste_settings", "sites")));
+    for (const who of [wreader, nurse, cleaner, anon]) await assertFails(setDoc(doc(who, "waste_settings", "sites"), { bySiteNumber: { "9015865-111": "x" } }, { merge: true }));
+    await assertFails(deleteDoc(doc(keeper, "waste_settings", "sites")));
+  });
   await check("Whoever sees the waste records can open the PDF; a nurse and anonymous cannot", async () => {
     for (const who of [keeperStorage, readerStorage, wPmStorage, wAdminStorage]) await assertSucceeds(getBytes(ref(who, "waste_notes/cn-keeper/a.pdf")));
     for (const who of [nurseStorage, anonStorage]) await assertFails(getBytes(ref(who, "waste_notes/cn-keeper/a.pdf")));
