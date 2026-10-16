@@ -4,8 +4,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { openDocument } from "@/lib/openDocument";
 import { parseConsignment } from "@/modules/waste/consignmentParse";
 import { readPdfText } from "@/modules/waste/pdfText";
+import { isProducerReturn, parseProducerReturn } from "@/modules/waste/returnParse";
+import WasteReturns from "@/modules/waste/WasteReturns";
 import { LONG_GAP_DAYS, NO_SITE, duplicateOf, forSite, monthly, newestFirst, siteGroups, stats, summaryOf } from "@/modules/waste/waste";
-import { addConsignment, formProblem, pdfProblem, setVoided, siteKey, updateConsignment, useWasteNotes, useWasteSites } from "@/modules/waste/wasteService";
+import { addConsignment, formProblem, pdfProblem, setVoided, siteKey, updateConsignment, useWasteNotes, useWasteReturns, useWasteSites } from "@/modules/waste/wasteService";
 
 // Clinical waste (Operations > Clinical waste): the Stericycle consignment notes the practice is emailed after each collection.
 // Drop the PDF in; Primovex reads it on this computer (the PDF is not sent anywhere to be read), shows what it found for checking,
@@ -102,8 +104,12 @@ export default function WasteNotes() {
   const canManage = can("waste.manage");
   const { list, error } = useWasteNotes(true);
   const wasteSites = useWasteSites();
+  const wasteReturns = useWasteReturns(true);
+  const [tab, setTab] = useState("notes");
+  const [returnQueue, setReturnQueue] = useState([]);
   const [siteFilter, setSiteFilter] = useState("");
   const [openError, setOpenError] = useState({ id: "", text: "" });
+  const onNotes = tab === "notes";
   const [queue, setQueue] = useState([]); // [{ key, fileName, file, state: "reading" | "ready" | "failed", parsed, problem }]
   const [editing, setEditing] = useState(null);
   const [confirmId, setConfirmId] = useState("");
@@ -128,7 +134,15 @@ export default function WasteNotes() {
       if (bad) { setQueue((q) => [...q, { key, fileName: file.name, state: "failed", problem: bad }]); continue; }
       setQueue((q) => [...q, { key, fileName: file.name, file, state: "reading" }]);
       readPdfText(file)
-        .then((pages) => setQueue((q) => q.map((item) => (item.key === key ? { ...item, state: "ready", parsed: parseConsignment(pages, { fileName: file.name }) } : item))))
+        .then((pages) => {
+          if (isProducerReturn(pages)) {
+            setQueue((q) => q.filter((item) => item.key !== key));
+            setReturnQueue((r) => [...r, { key, fileName: file.name, file, state: "ready", parsed: parseProducerReturn(pages) }]);
+            setTab("returns");
+            return;
+          }
+          setQueue((q) => q.map((item) => (item.key === key ? { ...item, state: "ready", parsed: parseConsignment(pages, { fileName: file.name }) } : item)));
+        })
         .catch(() => setQueue((q) => q.map((item) => (item.key === key ? { ...item, state: "ready", parsed: parseConsignment([[]], { fileName: file.name }) } : item))));
     }
   }
@@ -175,13 +189,16 @@ export default function WasteNotes() {
         <p className="max-w-3xl text-sm text-slate-400">The consignment note Stericycle emails after each collection, kept on record: when waste was collected, what and how much, with the note itself to show an inspector.{canManage ? " Drop the PDF below." : ""}</p>
       </div>
       {error && <p className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100" role="alert">{error}</p>}
-      {groups.length > 0 && (
+      <div className="flex gap-1 border-b border-white/10" role="tablist">
+        {[["notes", "Collections"], ["returns", `Quarterly returns${(wasteReturns.list || []).length ? ` (${wasteReturns.list.length})` : ""}`]].map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={`rounded-t-lg px-4 py-2 text-sm font-semibold ${tab === key ? "bg-white/10 text-slate-50" : "text-slate-400 hover:text-slate-200"}`}>{label}</button>)}
+      </div>
+      {onNotes && groups.length > 0 && (
         <div className="flex flex-wrap items-end gap-3">
           <label className={LABEL}>Show<select className={FIELD} value={siteFilter} onChange={(e) => setSiteFilter(e.target.value)}><option value="">Both sites together</option>{groups.map((g) => <option key={g.siteId} value={g.siteId}>{g.name}</option>)}</select></label>
           {groups.length > 1 && !siteFilter && <div className="flex flex-wrap gap-2">{groups.map((g) => { const f = stats(g.notes, now); return <button type="button" key={g.siteId} onClick={() => setSiteFilter(g.siteId)} className="rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2 text-left hover:bg-white/5"><span className="block text-sm font-semibold text-slate-100">{g.name}</span><span className="block text-xs text-slate-400">{f.last ? `last collected ${uk(f.last.collectionDate)} (${f.daysSinceLast} days ago)` : "no collections"} · {f.collectionsLastYear} in 12 months · {f.kgLastYear} kg</span></button>; })}</div>}
         </div>
       )}
-      <div className="grid gap-2 sm:grid-cols-4">
+      <div className={`${onNotes ? "" : "hidden "}grid gap-2 sm:grid-cols-4`}>
         <Tile label="Last collection" value={last ? uk(last.collectionDate) : "None yet"} sub={last ? `${figures.daysSinceLast} day${figures.daysSinceLast === 1 ? "" : "s"} ago` : ""} tone={figures.daysSinceLast > LONG_GAP_DAYS ? "bg-amber-400/10" : "bg-emerald-500/10"} />
         <Tile label="Collections, last 12 months" value={figures.collectionsLastYear} />
         <Tile label="Waste, last 12 months" value={`${figures.kgLastYear} kg`} />
@@ -194,7 +211,7 @@ export default function WasteNotes() {
           className={`flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed p-6 text-center ${dragging ? "border-teal-300 bg-teal-500/10" : "border-white/15 bg-slate-900/40"}`}
         >
           <Upload className="h-6 w-6 text-teal-300" aria-hidden="true" />
-          <p className="font-semibold text-slate-100">Drop the Stericycle consignment note (PDF) here</p>
+          <p className="font-semibold text-slate-100">Drop a Stericycle PDF here: a consignment note, or the quarterly return</p>
           <p className="text-sm text-slate-400">It is read on this computer. You check what it found before it is kept. More than one at a time is fine.</p>
           <button type="button" className={BTN} onClick={() => picker.current?.click()}>Or choose PDF files</button>
           <input ref={picker} type="file" accept="application/pdf,.pdf" multiple className="sr-only" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
@@ -203,12 +220,12 @@ export default function WasteNotes() {
       {message && <p className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100" role="status">{message}</p>}
       {problem && <p className="text-sm text-rose-300" role="alert">{problem}</p>}
 
-      {queue.map((item) => item.state === "reading" ? <p key={item.key} className="text-sm text-slate-300">Reading {item.fileName}…</p>
+      {onNotes && queue.map((item) => item.state === "reading" ? <p key={item.key} className="text-sm text-slate-300">Reading {item.fileName}…</p>
         : item.state === "failed" ? <p key={item.key} className="rounded-lg border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-100" role="alert">{item.fileName}: {item.problem} <button type="button" className="ml-2 underline" onClick={() => dropQueue(item.key)}>Dismiss</button></p>
           : <ReviewCard key={item.key} title="Check this note" initial={item.parsed} fileName={item.fileName} warnings={item.parsed.warnings} existing={all} sites={wasteSites.sites} bySiteNumber={wasteSites.bySiteNumber} onSave={(form) => keep(item, form)} onCancel={() => dropQueue(item.key)} />)}
-      {editing && <ReviewCard title="Correct this note" initial={editing} fileName={editing.fileName} editingId={editing.id} sites={wasteSites.sites} bySiteNumber={wasteSites.bySiteNumber} onSave={async (form) => { await updateConsignment(editing.id, form, actor); setEditing(null); setMessage("Changes saved."); }} onCancel={() => setEditing(null)} />}
+      {onNotes && editing && <ReviewCard title="Correct this note" initial={editing} fileName={editing.fileName} editingId={editing.id} sites={wasteSites.sites} bySiteNumber={wasteSites.bySiteNumber} onSave={async (form) => { await updateConsignment(editing.id, form, actor); setEditing(null); setMessage("Changes saved."); }} onCancel={() => setEditing(null)} />}
 
-      {!shown.length ? <p className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300">No consignment notes are on record yet.{canManage ? " Drop the first one above." : ""}</p> : (
+      {onNotes && (!shown.length ? <p className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300">No consignment notes are on record yet.{canManage ? " Drop the first one above." : ""}</p> : (
         <div className="overflow-x-auto rounded-2xl border border-white/10">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Collected</th><th className="px-3 py-2">Site</th><th className="px-3 py-2">Consignment note</th><th className="px-3 py-2">Waste</th><th className="px-3 py-2">Total</th><th className="px-3 py-2" /></tr></thead>
@@ -233,9 +250,11 @@ export default function WasteNotes() {
             </tbody>
           </table>
         </div>
-      )}
+      ))}
 
-      {months.length > 0 && (
+      {tab === "returns" && <WasteReturns returns={wasteReturns} notes={all} sites={wasteSites.sites} bySiteNumber={wasteSites.bySiteNumber} queue={returnQueue} canManage={canManage} actor={actor} onQueueDone={(key) => setReturnQueue((r) => r.filter((x) => x.key !== key))} onQueueCancel={(key) => setReturnQueue((r) => r.filter((x) => x.key !== key))} onMessage={setMessage} />}
+
+      {onNotes && months.length > 0 && (
         <details className="rounded-2xl border border-white/10 bg-slate-900/60 p-3 text-sm text-slate-200">
           <summary className="cursor-pointer font-semibold">Month by month{siteFilter ? `: ${siteName(siteFilter)}` : ""}</summary>
           <table className="mt-2 min-w-full text-sm"><thead className="text-left text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-2 py-1">Month</th><th className="px-2 py-1">Collections</th><th className="px-2 py-1">kg</th><th className="px-2 py-1">Bags</th><th className="px-2 py-1">Sharps boxes</th></tr></thead>

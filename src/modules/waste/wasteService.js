@@ -4,8 +4,9 @@ import { listActiveSites } from "@/lib/checklistsFirestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db, storage } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
-import { demoWaste } from "@/data/demoWaste";
+import { demoWaste, demoWasteReturns } from "@/data/demoWaste";
 import { consignmentId } from "./consignmentParse";
+import { returnId } from "./returnParse";
 import { normaliseConsignment } from "./waste";
 
 export const COLLECTION = "waste_consignments";
@@ -119,4 +120,48 @@ export async function updateConsignment(id, form, actor = {}) {
 export async function setVoided(id, voided, reason, actor = {}) {
   if (isSafeSyntheticMode()) throw new Error("Demo mode can't save changes.");
   await updateDoc(doc(db, COLLECTION, id), { voided: Boolean(voided), voidReason: voided ? text(reason, 120) : "", updatedAt: serverTimestamp(), updatedByName: who(actor) });
+}
+
+// ---- Stericycle's quarterly returns: saved on their own, to check the notes against --------------------------------------------------
+
+export const RETURNS = "waste_returns";
+
+export function useWasteReturns(enabled = true) {
+  const [state, setState] = useState({ list: null, error: "" });
+  useEffect(() => {
+    if (!enabled) { setState({ list: null, error: "" }); return undefined; }
+    if (isSafeSyntheticMode()) { setState({ list: demoWasteReturns(), error: "" }); return undefined; }
+    return onSnapshot(collection(db, RETURNS),
+      (snap) => setState({ list: snap.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.year * 10 + b.quarter) - (a.year * 10 + a.quarter) || String(a.siteName).localeCompare(String(b.siteName))), error: "" }),
+      (error) => setState({ list: [], error: error?.code === "permission-denied" ? "Your role can't open the quarterly returns." : "Could not load the quarterly returns." }));
+  }, [enabled]);
+  return state;
+}
+
+export function returnProblem(parsed, siteId) {
+  if (!siteId) return "Choose which site this return is for.";
+  if (!parsed.customerSite) return "The customer site number could not be read from this return.";
+  if (!parsed.year || !parsed.quarter) return "The quarter could not be read from this return.";
+  if (!parsed.rows?.length) return "No consignments could be read from this return.";
+  return "";
+}
+
+// Keeps a return (and the PDF) in its own place. The same site and quarter lands on the same record, so a corrected return replaces the old one.
+export async function addReturn(parsed, { siteId, siteName }, file, actor = {}) {
+  if (isSafeSyntheticMode()) throw new Error("Demo mode can't save changes.");
+  const problem = returnProblem(parsed, siteId) || pdfProblem(file);
+  if (problem) throw new Error(problem);
+  const id = returnId(parsed.customerSite, parsed.year, parsed.quarter);
+  rememberSite(parsed.customerSite, siteId).catch(() => {});
+  const path = `waste_returns/${id}/${Date.now()}_${safeName(file.name)}`;
+  const fileRef = ref(storage, path);
+  await uploadBytes(fileRef, file, { contentType: "application/pdf" });
+  const fileUrl = await getDownloadURL(fileRef);
+  await setDoc(doc(db, RETURNS, id), {
+    siteId, siteName: text(siteName, 80), customerSite: text(parsed.customerSite, 40), producer: text(parsed.producer, 100), address: text(parsed.address, 200), premisesCode: text(parsed.premisesCode, 40),
+    reportDate: parsed.reportDate || "", year: parsed.year, quarter: parsed.quarter, totalKg: parsed.totalKg,
+    rows: parsed.rows.slice(0, 400).map((r) => ({ code: text(r.code, 40), date: r.date || "", ewc: text(r.ewc, 20), hazard: text(r.hazard, 20), form: text(r.form, 20), kg: Number(r.kg) || 0, disposal: text(r.disposal, 10) })),
+    fileName: file.name || "producer-return.pdf", filePath: path, fileUrl, fileSize: file.size, addedByName: who(actor), addedAt: serverTimestamp(), updatedAt: serverTimestamp(),
+  });
+  return id;
 }

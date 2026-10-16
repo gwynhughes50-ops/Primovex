@@ -951,6 +951,17 @@ match /subject_access_requests/{requestId} {
         && request.resource.data.lines is list;
       allow delete: if isAdmin();
     }
+    // Stericycle's quarterly producer returns (src/modules/waste/returnParse.js): one per site per quarter, kept to check the consignment notes
+    // against. Same people as the notes: waste.read / waste.manage see them, waste.manage adds one, only an administrator deletes.
+    match /waste_returns/{returnId} {
+      allow get, list: if signedIn() && (hasPermission("waste", "read") || hasPermission("waste", "manage") || isAdmin());
+      allow create, update: if signedIn() && (hasPermission("waste", "manage") || isAdmin())
+        && request.resource.data.rows is list && request.resource.data.rows.size() <= 400
+        && request.resource.data.year is number && request.resource.data.quarter is number
+        && request.resource.data.quarter >= 1 && request.resource.data.quarter <= 4
+        && request.resource.data.customerSite is string;
+      allow delete: if isAdmin();
+    }
     // which Stericycle site number belongs to which of the practice's sites (set by whoever keeps the notes, as they choose a site)
     match /waste_settings/{docId} {
       allow get, list: if signedIn() && (hasPermission("waste", "read") || hasPermission("waste", "manage") || isAdmin());

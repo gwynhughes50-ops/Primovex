@@ -3,6 +3,8 @@
 //
 //   consignment: { id, consignmentCode, collectionDate "YYYY-MM-DD", collectionTime, lines: [...], totalKg, voided, ... }
 
+import { codeKey, quarterRange } from "./returnParse";
+
 const DAY = 86400000;
 const pad = (n) => String(n).padStart(2, "0");
 const dateKey = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -95,3 +97,45 @@ export function stats(list, now = new Date()) {
     longestGap,
   };
 }
+
+// ---- checking a quarterly return against the notes that are saved ---------------------------------------------------------------
+
+const digits = (text) => String(text || "").replace(/[^0-9]/g, "");
+const siteNumberKey = (text) => digits(text);
+const plus = (a, b) => Math.round((a + b) * 1000) / 1000;
+// the weight on a note that counts toward the hazardous (18 01 03) figure Stericycle reports
+const hazardousKg = (note) => {
+  const lines = (note.lines || []).filter((l) => digits(l.ewc).startsWith("180103"));
+  return lines.length ? lines.reduce((n, l) => plus(n, Number(l.kg) || 0), 0) : Number(note.totalKg) || 0;
+};
+
+// The return lists each consignment Stericycle received from a site in a quarter. Each is matched to a saved note by its code (ignoring
+// slashes and spacing). What comes back:
+//   matched   on the return and saved; with whether the date and the weight agree
+//   missing   on the return but not saved: the note still has to be added
+//   extra     saved for this site in the quarter but not on the return (it may be received next quarter, if collected near the end)
+export function compareReturn({ rows = [], notes = [], customerSite = "", siteId = "", year, quarter }) {
+  const range = quarterRange(year, quarter);
+  const live = notes.filter((n) => !n.voided);
+  const byKey = new Map(live.map((n) => [codeKey(n.consignmentCode), n]));
+  const groups = new Map();
+  for (const r of rows) groups.set(codeKey(r.code), [...(groups.get(codeKey(r.code)) || []), r]);
+  const matched = [];
+  const missing = [];
+  for (const [key, list] of groups) {
+    const note = byKey.get(key);
+    const returnKg = list.reduce((n, r) => plus(n, Number(r.kg) || 0), 0);
+    if (!note) { missing.push({ code: list[0].code, date: list[0].date, kg: returnKg }); continue; }
+    const noteKg = hazardousKg(note);
+    matched.push({ code: list[0].code, note, returnKg, noteKg, returnDate: list[0].date, dateOk: note.collectionDate === list[0].date, weightOk: Math.abs(returnKg - noteKg) <= 0.06 });
+  }
+  const here = (n) => (siteId && n.siteId === siteId) || (customerSite && siteNumberKey(n.customerSite) === siteNumberKey(customerSite));
+  const extra = live.filter((n) => here(n) && n.collectionDate >= range.from && n.collectionDate <= range.to && !groups.has(codeKey(n.consignmentCode)))
+    .map((n) => {
+      const nearEdge = (parseDay(range.to) - parseDay(n.collectionDate)) / DAY <= 7;
+      return { note: n, nearEdge };
+    });
+  const problems = matched.filter((m) => !m.dateOk || !m.weightOk).length;
+  return { range, total: groups.size, matched, missing, extra, problems, complete: missing.length === 0 && problems === 0 };
+}
+const parseDay = (key) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || "")); return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime() : 0; };

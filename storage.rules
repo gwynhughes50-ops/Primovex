@@ -180,6 +180,15 @@ service firebase.storage {
       allow delete: if isAdmin();
     }
 
+    // Stericycle's quarterly producer returns (PDF), one folder per return: waste_returns/{returnId}/{fileName}. Same rules as the consignment notes.
+    match /waste_returns/{returnId}/{fileName} {
+      allow read: if hasPermission("waste", "read") || hasPermission("waste", "manage") || isAdmin();
+      allow write: if (hasPermission("waste", "manage") || isAdmin())
+        && request.resource.size < 15 * 1024 * 1024
+        && request.resource.contentType == "application/pdf";
+      allow delete: if isAdmin();
+    }
+
     // Everything else is closed by default.
     match /{allPaths=**} {
       allow read, write: if false;

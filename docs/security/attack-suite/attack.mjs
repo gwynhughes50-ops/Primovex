@@ -1130,6 +1130,34 @@ async function main() {
     for (const who of [wreader, nurse, cleaner, anon]) await assertFails(setDoc(doc(who, "waste_settings", "sites"), { bySiteNumber: { "9015865-111": "x" } }, { merge: true }));
     await assertFails(deleteDoc(doc(keeper, "waste_settings", "sites")));
   });
+  const retDoc = (extra = {}) => ({ siteId: "branch", siteName: "Branch Surgery", customerSite: "9015865-108", producer: "Park View", year: 2026, quarter: 2, rows: [{ code: "CAJ236//7LO21", date: "2026-04-08", kg: 10 }], totalKg: 10, ...extra });
+  await check("The keeper and the practice manager CAN save a quarterly return; a read-only waste role, a nurse and anonymous cannot, and it must be a real quarter with a list of rows", async () => {
+    await assertSucceeds(setDoc(doc(keeper, "waste_returns", "wr-1"), retDoc()));
+    await assertSucceeds(setDoc(doc(pm, "waste_returns", "wr-2"), retDoc({ quarter: 1 })));
+    for (const who of [wreader, nurse, cleaner, anon]) await assertFails(setDoc(doc(who, "waste_returns", "wr-x"), retDoc()));
+    await assertFails(setDoc(doc(keeper, "waste_returns", "wr-b1"), retDoc({ quarter: 5 })));
+    await assertFails(setDoc(doc(keeper, "waste_returns", "wr-b2"), retDoc({ rows: "none" })));
+    await assertFails(setDoc(doc(keeper, "waste_returns", "wr-b3"), retDoc({ year: "2026" })));
+    await assertFails(setDoc(doc(keeper, "waste_returns", "wr-b4"), retDoc({ customerSite: 5 })));
+  });
+  await check("Quarterly returns are read by whoever sees the waste records and nobody else; only an administrator deletes one", async () => {
+    for (const who of [keeper, wreader, pm, admin]) await assertSucceeds(getDoc(doc(who, "waste_returns", "wr-1")));
+    for (const who of [nurse, cleaner, partner, anon]) await assertFails(getDoc(doc(who, "waste_returns", "wr-1")));
+    await assertFails(deleteDoc(doc(keeper, "waste_returns", "wr-1")));
+    await assertFails(deleteDoc(doc(pm, "waste_returns", "wr-1")));
+    await assertSucceeds(deleteDoc(doc(admin, "waste_returns", "wr-2")));
+  });
+  await check("The quarterly return PDF: the keeper and practice manager upload it, readers open it, a nurse and anonymous cannot, only an administrator deletes it", async () => {
+    await assertSucceeds(uploadBytes(ref(keeperStorage, "waste_returns/wr-1/a.pdf"), wastePdf, { contentType: "application/pdf" }));
+    await assertSucceeds(uploadBytes(ref(wPmStorage, "waste_returns/wr-1/b.pdf"), wastePdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(readerStorage, "waste_returns/wr-1/c.pdf"), wastePdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(nurseStorage, "waste_returns/wr-1/c.pdf"), wastePdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(keeperStorage, "waste_returns/wr-1/d.png"), new Uint8Array([1, 2]), { contentType: "image/png" }));
+    for (const who of [keeperStorage, readerStorage, wPmStorage, wAdminStorage]) await assertSucceeds(getBytes(ref(who, "waste_returns/wr-1/a.pdf")));
+    for (const who of [nurseStorage, anonStorage]) await assertFails(getBytes(ref(who, "waste_returns/wr-1/a.pdf")));
+    await assertFails(deleteObject(ref(keeperStorage, "waste_returns/wr-1/a.pdf")));
+    await assertSucceeds(deleteObject(ref(wAdminStorage, "waste_returns/wr-1/a.pdf")));
+  });
   await check("Whoever sees the waste records can open the PDF; a nurse and anonymous cannot", async () => {
     for (const who of [keeperStorage, readerStorage, wPmStorage, wAdminStorage]) await assertSucceeds(getBytes(ref(who, "waste_notes/cn-keeper/a.pdf")));
     for (const who of [nurseStorage, anonStorage]) await assertFails(getBytes(ref(who, "waste_notes/cn-keeper/a.pdf")));

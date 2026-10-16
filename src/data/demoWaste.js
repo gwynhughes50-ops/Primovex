@@ -13,3 +13,13 @@ export function demoWaste() {
     { id: "demo-w3", siteId: "main", siteName: "Main Surgery", consignmentCode: "DEM001/CCCC3", documentRef: "DEMO00003C", customerSite: "0000001-111", premisesCode: "DEM001", collectionDate: ago(69), collectionTime: "09:30", producer: "Demo Surgery", carrier: "Stericycle", lines: [clinical(64.0, 24)], fileName: "demo-note-3.pdf" },
   ];
 }
+
+// a made-up quarterly return for the demo: three consignments, one of which has no saved note yet
+export function demoWasteReturns() {
+  const [a, , c] = demoWaste();
+  const row = (note, code) => ({ code, date: note.collectionDate, ewc: "18 01 03", hazard: "HP9", form: "Mixed", kg: note.lines.reduce((n, l) => n + l.kg, 0), disposal: "R03" });
+  const year = Number(a.collectionDate.slice(0, 4));
+  const quarter = Math.floor((Number(a.collectionDate.slice(5, 7)) - 1) / 3) + 1;
+  const rows = [row(a, "DEM001//AAAA1"), row(c, "DEM001//CCCC3"), { code: "DEM001//MISSD", date: a.collectionDate, ewc: "18 01 03", hazard: "HP9", form: "Mixed", kg: 12, disposal: "R03" }];
+  return [{ id: "demo-return", siteId: "main", siteName: "Main Surgery", customerSite: "0000001-111", producer: "Demo Surgery", address: "", premisesCode: "DEM001", reportDate: a.collectionDate, year, quarter, totalKg: rows.reduce((n, r) => n + r.kg, 0), rows, fileName: "demo-return.pdf" }];
+}
