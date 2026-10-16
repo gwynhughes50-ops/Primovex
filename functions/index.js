@@ -38,6 +38,7 @@ const { getOrbCapabilities } = require("./services/orbScope");
 const { notifySignificantEvent } = require("./services/significantEventNotify");
 const { runStockReview } = require("./services/stockReviewService");
 const { buildAuditEntry } = require("./services/timesheetAuditService");
+const { runTimesheetReminders, statusNotice, deliver: deliverNotices } = require("./services/timesheetReminderService");
 
 initializeApp();
 const db = getFirestore();
@@ -925,6 +926,28 @@ exports.auditTimesheets = onDocumentWritten({ document: "timesheets/{timesheetId
   const entry = buildAuditEntry(before, after, { id: event.params.timesheetId });
   if (!entry) return;
   await db.collection("timesheet_audit").add({ ...entry, at: FieldValue.serverTimestamp() });
+  // a person is told at once, with the reason, when their timesheet is declined or returned
+  const notice = statusNotice(entry, after);
+  if (notice) await deliverNotices(db, FieldValue, [notice]);
+});
+
+// Every morning: reminders to staff who have not sent their timesheet (5 and 2 days before, the day, then daily when overdue), the line
+// managers' sign-off counts, overdue lists for whoever manages timesheets, and the payroll team's count. See timesheetReminderService.js.
+exports.scheduledTimesheetReminders = onSchedule({ region: "europe-west2", schedule: "every day 08:00", timeZone: "Europe/London", timeoutSeconds: 180 }, async () => {
+  const users = await db.collection("users").get();
+  const capabilitiesByRole = new Map();
+  const managerUids = [];
+  const payrollUids = [];
+  for (const user of users.docs) {
+    const data = user.data() || {};
+    if (data.active === false || !data.role) continue;
+    if (!capabilitiesByRole.has(data.role)) capabilitiesByRole.set(data.role, await getEffectiveCapabilities(db, data.role));
+    const capabilities = capabilitiesByRole.get(data.role);
+    // named in the role itself: a System Admin's "everything" does not make them the payroll team
+    if (Array.isArray(capabilities) && capabilities.includes("timesheets.manage")) managerUids.push(user.id);
+    if (Array.isArray(capabilities) && capabilities.includes("timesheets.payroll")) payrollUids.push(user.id);
+  }
+  await runTimesheetReminders({ db, FieldValue, managerUids, payrollUids });
 });
 
 exports.scheduledTrainingReminders = onSchedule({ region: "europe-west2", schedule: "every day 07:40", timeZone: "Europe/London", timeoutSeconds: 180 }, async () => {

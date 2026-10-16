@@ -959,7 +959,7 @@ export const HELP_ARTICLES = [
       "If something was different, press \"Something was different\". Add each day: choose the day, what it was (overtime, time in lieu, sickness, annual leave or other), the hours and, for Other, a comment. Then confirm and send.",
       "Your line manager signs it off, then the payroll team sends it to payroll. If it is declined or returned you will see the reason; correct it and send it again.",
     ],
-    tip: "Leave, sickness and time in lieu are still booked in BrightHR. Put them on your timesheet too, so payroll has them. Sent by mistake? Tell your line manager before they sign it off; they can decline it.",
+    tip: "Leave, sickness and time in lieu are still booked in BrightHR. Put them on your timesheet too, so payroll has them. Sent by mistake? Tell your line manager before they sign it off; they can decline it. If you have not sent yours, Primovex reminds you 5 days and 2 days before it is due, on the day, and every day it is overdue.",
     open: { label: "Open Timesheet", route: "/my-timesheet" },
     related: ["sign-off-timesheets"],
   },
