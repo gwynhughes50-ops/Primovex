@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { CHECK_EVERY_MS, newerVersionReady } from "@/lib/appUpdate";
+import { CHECK_EVERY_MS, newerVersionReady, refreshNow } from "@/lib/appUpdate";
 
 // "A new version of Primovex is ready": shown on the web app (iPhone Home Screen, browser) when a newer version has been published.
 // It checks when the app is opened or brought back to the front, and every few minutes while it is open. Nothing is forced: the
@@ -30,7 +30,7 @@ export default function UpdateBanner() {
   return (
     <div role="status" className="fixed inset-x-3 z-[400] flex items-center justify-between gap-3 rounded-2xl border border-teal-300/50 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-50 shadow-2xl" style={{ bottom: "max(5.5rem, env(safe-area-inset-bottom))" }}>
       <span>A new version of Primovex is ready.</span>
-      <button type="button" onClick={() => window.location.reload()} className="min-h-10 shrink-0 rounded-xl bg-teal-400 px-4 font-bold text-slate-950">Update now</button>
+      <button type="button" onClick={refreshNow} className="min-h-10 shrink-0 rounded-xl bg-teal-400 px-4 font-bold text-slate-950">Update now</button>
     </div>
   );
 }

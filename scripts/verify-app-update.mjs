@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { newerVersionReady } from "../src/lib/appUpdate.js";
+import { buildLabel, newerVersionReady } from "../src/lib/appUpdate.js";
 
 let n = 0;
 const t = async (name, fn) => { await fn(); n += 1; console.log(`ok  ${name}`); };
@@ -24,6 +24,12 @@ await t("the check is made fresh every time (never from the cache)", async () =>
   await newerVersionReady({ fetchFn: async (url, options) => { seen = { url, options }; return { ok: true, json: async () => ({ build: "b1" }) }; }, current: "b1", base: "" });
   assert.match(seen.url, /^\/version\.json\?t=\d+$/);
   assert.equal(seen.options.cache, "no-store");
+});
+
+await t("the version of a build is shown in words, or as unknown when there is none", async () => {
+  assert.match(buildLabel("2026-10-16T15:04:58.670Z-cnhrw3"), /16 Oct/);
+  assert.equal(buildLabel(""), "unknown");
+  assert.equal(buildLabel("not a date"), "unknown");
 });
 
 console.log(`\n${n} passed`);

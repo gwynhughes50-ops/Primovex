@@ -20,3 +20,19 @@ export async function newerVersionReady({ fetchFn = globalThis.fetch, current = 
 
 // the minimum gap between checks, so coming back to the app repeatedly doesn't ask every time
 export const CHECK_EVERY_MS = 5 * 60 * 1000;
+
+// when the running build was made, in words ("16 Oct, 15:04")
+export function buildLabel(id = BUILD_ID) {
+  const date = new Date(String(id).slice(0, 24));
+  return Number.isNaN(date.getTime()) ? "unknown" : date.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+// Is this the Home Screen app, or just a browser tab?
+export const runningAs = () => (typeof navigator !== "undefined" && (navigator.standalone === true || (typeof matchMedia === "function" && matchMedia("(display-mode: standalone)").matches)) ? "the Home Screen app" : "a browser tab");
+
+// Load the newest version: the page is asked for again under a new address, so nothing the phone saved can be used instead
+export function refreshNow() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("updated", String(Date.now()));
+  window.location.replace(url.toString());
+}
