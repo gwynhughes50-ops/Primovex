@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { NAV_PLACES, getRoleHome, navFor, visibleActions } from "../src/mobile/roleHomes.js";
+import { NAV_PLACES, getRoleHome, HOME_TYPES, homeTypeOfName, navFor, visibleActions } from "../src/mobile/roleHomes.js";
 import { buildAttention } from "../src/mobile/homeAttention.js";
 
 let n = 0;
@@ -178,6 +178,25 @@ t("a nurse manager gets the clinical home with the briefing and the attention st
 
 t("nurses and HCAs can report a significant event from the phone", () => {
   for (const role of ["Nurse", "HCA"]) assert.ok(getRoleHome(role, ["inventory.read"]).actions.some((a) => a.key === "significant-events"), role);
+});
+
+t("a role can be given its layout: an Assistant Practitioner gets the clinical home, as an HCA does, whatever it is called", () => {
+  const plain = getRoleHome("Assistant Practitioner", ["inventory.read"]);
+  assert.equal(plain.id, "clinical", "practitioner is now recognised by its name");
+  const named = getRoleHome("Bank Support", ["inventory.read"]);
+  assert.equal(named.id, "general", "a name that means nothing gets the general home");
+  const chosen = getRoleHome("Bank Support", ["inventory.read"], "clinical");
+  assert.equal(chosen.id, "clinical");
+  assert.deepEqual(chosen.actions.map((a) => a.key), getRoleHome("HCA", ["inventory.read"]).actions.map((a) => a.key), "the same tiles as an HCA");
+  assert.equal(getRoleHome("HCA", [], "general").id, "general", "a choice beats the name, both ways");
+  assert.equal(getRoleHome("Assistant Practitioner", ["inventory.read"], "clinical-lead").attention, true);
+});
+
+t("every kind of home can be chosen, and a name suggests the right one", () => {
+  for (const type of HOME_TYPES) assert.ok(getRoleHome("Anything", ["inventory.read"], type.id).actions.length > 0, type.id);
+  assert.equal(HOME_TYPES.length, 7);
+  assert.deepEqual(["HCA", "Nurse", "Assistant Practitioner", "Nurse Manager", "Practice Manager", "Management Assistant", "Caretaker", "Reception", "Partner", "Stock Controller"].map(homeTypeOfName),
+    ["clinical", "clinical", "clinical", "clinical-lead", "manager", "general", "caretaker", "reception", "partner", "general"]);
 });
 
 console.log(`\n${n} passed`);

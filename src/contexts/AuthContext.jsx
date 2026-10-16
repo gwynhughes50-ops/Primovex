@@ -231,6 +231,8 @@ export function AuthProvider({ children }) {
   // "View as": only a System Admin, and only what the screens show. They stay signed in as themselves.
   const viewingAs = resolveViewAs({ realRole, requested: viewAsRequested });
   const role = viewingAs || realRole;
+  // the layout this role was given by whoever made it ("" = decided by the role's name)
+  const roleHomeType = customRoles.find((r) => r.name === role)?.homeType || "";
   const rawCapabilities = viewingAs
     ? getCapabilitiesForProfile({ role: viewingAs }, customRoleCapabilities)
     : getCapabilitiesForProfile(profile, customRoleCapabilities);
@@ -297,6 +299,7 @@ export function AuthProvider({ children }) {
       user,
       profile,
       role,
+      roleHomeType,
       realRole,
       viewingAs,
       canViewAs,
@@ -313,7 +316,7 @@ export function AuthProvider({ children }) {
       error,
       signOut,
     }),
-    [user, profile, role, viewingAs, viewAsRequested, capabilities, moduleToggles, customRoles, displayName, isAdmin, platformMode, loading, profileLoading, error]
+    [user, profile, role, roleHomeType, viewingAs, viewAsRequested, capabilities, moduleToggles, customRoles, displayName, isAdmin, platformMode, loading, profileLoading, error]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

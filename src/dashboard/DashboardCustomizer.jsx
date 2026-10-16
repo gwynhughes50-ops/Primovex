@@ -1,7 +1,7 @@
 import { Check, ChevronDown, ChevronUp, RotateCcw, Settings2, X } from "lucide-react";
 import { DASHBOARD_WIDGETS, defaultWidgetsForRole } from "@/dashboard/dashboardPreferences";
 
-export default function DashboardCustomizer({ open, onClose, preferences, role, onChange, onSave, saving }) {
+export default function DashboardCustomizer({ open, onClose, preferences, role, homeType = "", onChange, onSave, saving }) {
   if (!open) return null;
   const visible = new Set(preferences.visible);
   const orderedWidgets = preferences.order
@@ -25,7 +25,7 @@ export default function DashboardCustomizer({ open, onClose, preferences, role, 
   }
 
   function reset() {
-    onChange({ ...preferences, visible: defaultWidgetsForRole(role) });
+    onChange({ ...preferences, visible: defaultWidgetsForRole(role, homeType) });
   }
 
   return (

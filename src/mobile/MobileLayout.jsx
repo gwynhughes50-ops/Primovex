@@ -122,9 +122,9 @@ export default function MobileLayout({ initialTab = "home" }) {
   const navigate = useNavigate();
   const { open: openPrimovexAI, ask: askPrimovexAI } = usePrimovexAI();
   const { activeSenseSession, activate } = useSenseSession();
-  const { role, user, displayName, can, capabilities = [] } = useAuth();
+  const { role, roleHomeType, user, displayName, can, capabilities = [] } = useAuth();
   // The four places in the bottom bar are the ones this role uses.
-  const navPlaces = navFor(getRoleHome(role, capabilities));
+  const navPlaces = navFor(getRoleHome(role, capabilities, roleHomeType));
   const routedChecklistTab = location.pathname === '/inventory' ? new URLSearchParams(location.search).get('tab') : null;
   const showRoutedChecklist = routedChecklistTab === 'emergency' || routedChecklistTab === 'anaphylaxis';
   const routedChecklistAssetId = showRoutedChecklist ? new URLSearchParams(location.search).get('asset') : null;

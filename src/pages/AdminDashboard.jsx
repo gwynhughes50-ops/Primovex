@@ -75,6 +75,7 @@ import { loadFacilitiesState } from "@/modules/facilities/services/facilitiesSto
 import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
 import { CAPABILITY_CATALOG, ROLE_PRESETS, ROLE_TEMPLATES } from "@/core/identity/capabilities";
+import { HOME_TYPES, homeTypeOfName } from "@/mobile/roleHomes";
 import { describeNotificationAccess, ON_THEIR_COMPUTER } from "@/lib/notificationAccess";
 import { sendDueNotificationsNow } from "@/services/dueNotificationsService";
 import { describeDueRun } from "@/lib/dueNotificationsText";
@@ -302,6 +303,7 @@ export default function AdminDashboard() {
         name: r.name,
         description: r.description || `${r.name} custom role.`,
         permissions: r.capabilities || [],
+        homeType: r.homeType || "",
         protected: false,
         custom: true,
       })),
@@ -314,11 +316,12 @@ export default function AdminDashboard() {
     name: "",
     description: "",
     permissions: ["inventory.read"],
+    homeType: "",
   });
 
   const openEditRole = (role) => {
     setEditingRole(role);
-    setNewRole({ name: role.name, description: role.description || "", permissions: role.permissions || [] });
+    setNewRole({ name: role.name, description: role.description || "", permissions: role.permissions || [], homeType: role.homeType || "" });
     setAddRoleError("");
     setIsAddRoleOpen(true);
   };
@@ -561,13 +564,14 @@ export default function AdminDashboard() {
           name,
           description: newRole.description.trim(),
           capabilities: newRole.permissions,
+          homeType: newRole.homeType || "",
           builtIn: false,
           ...(editingRole ? {} : { createdAt: serverTimestamp(), createdByUid: user?.uid || null, active: true }),
         },
         { merge: true }
       );
 
-      setNewRole({ name: "", description: "", permissions: ["inventory.read"] });
+      setNewRole({ name: "", description: "", permissions: ["inventory.read"], homeType: "" });
       setEditingRole(null);
       setIsAddRoleOpen(false);
     } catch (error) {
@@ -1088,7 +1092,7 @@ export default function AdminDashboard() {
                       className="rounded-full bg-gradient-to-r from-teal-500 to-emerald-400 text-slate-950 shadow-lg shadow-emerald-500/30"
                       onClick={() => {
                         setEditingRole(null);
-                        setNewRole({ name: "", description: "", permissions: ["inventory.read"] });
+                        setNewRole({ name: "", description: "", permissions: ["inventory.read"], homeType: "" });
                         setAddRoleError("");
                         setIsAddRoleOpen(true);
                       }}
@@ -1521,7 +1525,7 @@ export default function AdminDashboard() {
                       className="rounded-full border border-slate-700/70 px-3 py-1 text-slate-200 hover:bg-slate-800/60"
                       onClick={() => {
                         setAddRoleError("");
-                        setNewRole({ name: preset.name, description: preset.description, permissions: [...preset.permissions] });
+                        setNewRole({ name: preset.name, description: preset.description, permissions: [...preset.permissions], homeType: "" });
                       }}
                     >
                       {preset.name}
@@ -1539,6 +1543,35 @@ export default function AdminDashboard() {
                     placeholder="e.g. Stock Manager"
                     disabled={!!editingRole}
                   />
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-300">Copy the permissions of an existing role</label>
+                  <select
+                    className="mt-1 w-full rounded-md border border-slate-700/70 bg-slate-900/60 px-3 py-2 text-sm text-slate-100"
+                    value=""
+                    onChange={(e) => {
+                      const source = roles.find((r) => r.id === e.target.value);
+                      if (!source) return;
+                      setNewRole((p) => ({ ...p, permissions: [...(source.permissions || [])], homeType: source.homeType || homeTypeOfName(source.name) }));
+                    }}
+                  >
+                    <option value="">Choose a role to copy from (for example HCA)…</option>
+                    {roles.filter((r) => r.name !== newRole.name).map((r) => <option key={r.id} value={r.id}>{r.name} ({(r.permissions || []).length} permissions)</option>)}
+                  </select>
+                  <p className="mt-1 text-[11px] text-slate-400">Copies the ticks below and the layout. You can then add or remove permissions.</p>
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-300">Layout on the phone and the desktop dashboard</label>
+                  <select
+                    className="mt-1 w-full rounded-md border border-slate-700/70 bg-slate-900/60 px-3 py-2 text-sm text-slate-100"
+                    value={newRole.homeType || ""}
+                    onChange={(e) => setNewRole((p) => ({ ...p, homeType: e.target.value }))}
+                  >
+                    <option value="">Automatic (from the role's name{newRole.name.trim() ? ": " + (HOME_TYPES.find((h) => h.id === homeTypeOfName(newRole.name))?.label || "") : ""})</option>
+                    {HOME_TYPES.map((h) => <option key={h.id} value={h.id}>{h.label}: {h.note}</option>)}
+                  </select>
                 </div>
 
                 <div>
@@ -1587,7 +1620,7 @@ export default function AdminDashboard() {
                 className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
                 disabled={addRoleBusy}
                 onClick={() => {
-                  setNewRole({ name: "", description: "", permissions: ["inventory.read"] });
+                  setNewRole({ name: "", description: "", permissions: ["inventory.read"], homeType: "" });
                   setEditingRole(null);
                   setAddRoleError("");
                   setIsAddRoleOpen(false);

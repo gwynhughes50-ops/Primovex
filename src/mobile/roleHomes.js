@@ -22,12 +22,38 @@ export const NAV_PLACES = {
 
 const ORB = { key: "orb", label: "Ask Orb", helper: "Type or speak", Icon: Sparkles, compact: true };
 
-export function getRoleHome(role, capabilities = []) {
+// The kinds of home a role can have. A role names its own (Admin > Roles > "Layout"); with none chosen, the name decides, as before.
+export const HOME_TYPES = [
+  { id: "clinical", label: "Clinical", note: "Nurse, HCA, practitioner: scan stock, kits and boxes, fridge checks, stock take" },
+  { id: "clinical-lead", label: "Clinical lead", note: "As clinical, plus what needs attention (nurse manager)" },
+  { id: "manager", label: "Practice management", note: "What needs attention, compliance, concerns, SARs, staff training" },
+  { id: "caretaker", label: "Facilities", note: "Scan a space or asset, fire and water checks, cleaning" },
+  { id: "reception", label: "Front desk", note: "Report an issue, room status, notes" },
+  { id: "partner", label: "Partner / oversight", note: "The practice at a glance" },
+  { id: "general", label: "General", note: "A short, plain set of actions" },
+];
+// a word that sends getRoleHome down the right branch for each kind of home
+const HOME_KEYS = { clinical: "nurse", "clinical-lead": "nurse manager", manager: "practice manager", caretaker: "caretaker", reception: "reception", partner: "partner", general: "general staff" };
+const CLINICAL_WORDS = /nurse|hca|clinician|clinical|practitioner|healthcare|health care|physio/;
+
+// which kind of home a role's name would give it
+export function homeTypeOfName(role) {
   const key = norm(role);
+  const clinicalLead = key.includes("manager") && CLINICAL_WORDS.test(key) && !key.includes("practice manager");
+  if (!clinicalLead && (key.includes("practice manager") || key.includes("system admin") || key.includes("manager"))) return "manager";
+  if (CLINICAL_WORDS.test(key)) return clinicalLead ? "clinical-lead" : "clinical";
+  if (key.includes("caretaker") || key.includes("maintenance") || key.includes("estates")) return "caretaker";
+  if (key.includes("reception")) return "reception";
+  if (key.includes("partner")) return "partner";
+  return "general";
+}
+
+export function getRoleHome(role, capabilities = [], homeType = "") {
+  const key = HOME_KEYS[homeType] || norm(role);
 
   // A nurse manager (or any clinical lead with "manager" in the name) works on the ward, so gets the clinical home with the
   // practice's attention strip and briefing added, not the Practice Manager's office home.
-  const clinicalLead = key.includes("manager") && /nurse|hca|clinician|clinical/.test(key) && !key.includes("practice manager");
+  const clinicalLead = key.includes("manager") && CLINICAL_WORDS.test(key) && !key.includes("practice manager");
 
   if (!clinicalLead && (key.includes("practice manager") || key.includes("system admin") || key === "manager" || key.includes("manager"))) {
     return {
@@ -50,7 +76,7 @@ export function getRoleHome(role, capabilities = []) {
     };
   }
 
-  if (key.includes("nurse") || key.includes("hca") || key.includes("clinician")) {
+  if (CLINICAL_WORDS.test(key)) {
     return {
       id: "clinical", eyebrow: "Clinical", headline: clinicalLead ? "The clinic day and what needs attention" : "Quick actions for the clinic day", attention: clinicalLead,
       primary: { key: "scan-stock", label: "Scan stock", helper: "Use 1, 2 or more in seconds", Icon: ScanLine },

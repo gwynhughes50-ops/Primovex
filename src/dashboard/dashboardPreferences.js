@@ -15,15 +15,15 @@ export const DASHBOARD_WIDGETS = [
 
 const ALL = DASHBOARD_WIDGETS.map((widget) => widget.id);
 
-export function defaultWidgetsForRole(role = "") {
+export function defaultWidgetsForRole(role = "", homeType = "") {
   const value = String(role || "").toLowerCase();
-  if (value.includes("practice manager") || value.includes("system admin")) {
+  if (homeType === "manager" || (!homeType && (value.includes("practice manager") || value.includes("system admin")))) {
     return ["brief", "management", "whoIsWhere", "issues", "stockSummary", "quickActions", "quickNotes"];
   }
-  if (value.includes("nurse") || value.includes("healthcare") || value.includes("hca")) {
+  if (homeType === "clinical" || homeType === "clinical-lead" || (!homeType && (value.includes("nurse") || value.includes("healthcare") || value.includes("hca") || value.includes("practitioner")))) {
     return ["brief", "issues", "stockSummary", "quickActions", "quickNotes"];
   }
-  if (value.includes("caretaker") || value.includes("facilities") || value.includes("cleaner")) {
+  if (homeType === "caretaker" || (!homeType && (value.includes("caretaker") || value.includes("facilities") || value.includes("cleaner")))) {
     return ["brief", "management", "timeline"];
   }
   return ["brief", "management", "issues", "quickActions", "quickNotes"];
@@ -33,8 +33,8 @@ function dedupe(ids) {
   return Array.from(new Set(ids));
 }
 
-export function normaliseDashboardPreferences(preferences, role) {
-  const fallback = defaultWidgetsForRole(role);
+export function normaliseDashboardPreferences(preferences, role, homeType = "") {
+  const fallback = defaultWidgetsForRole(role, homeType);
   const orderSource = Array.isArray(preferences?.order) ? preferences.order : ALL;
   // dedupe() guards against a stale saved doc that already has a duplicate
   // id in it (e.g. from an earlier version of this function) — filtering for

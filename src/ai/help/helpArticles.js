@@ -385,8 +385,9 @@ export const HELP_ARTICLES = [
     where: "desktop",
     steps: [
       "Go to Advanced Administration and open \"Roles & Permissions\", then press \"Add Role\".",
-      "Name the role. Use \"Start from\" to begin with a ready-made set (for example Stock Controller) and then tick or untick what it can do.",
-      "Save, then go to Users and assign the role to the people who need it.",
+      "Name the role. To give it the same permissions as an existing role (for example HCA), choose that role under \"Copy the permissions of an existing role\", then tick or untick what it can do. \"Start from\" has ready-made sets such as Stock Controller.",
+      "Choose its \"Layout on the phone and the desktop dashboard\". Left on Automatic, the role's name decides (a name with nurse, HCA or practitioner in it gets the clinical layout). Pick Clinical for any role that should look like the HCA's.",
+      "Save, then add the person under Add User (any role, including your own, can be chosen) or change an existing person's role under Users.",
     ],
     open: { label: "Open Roles & Permissions", route: "/admin/roles" },
     related: ["add-user", "archive-delete-item"],

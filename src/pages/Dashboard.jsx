@@ -22,18 +22,18 @@ import { subscribeQuickNotes } from "@/services/quickNotesService";
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user, profile, role } = useAuth();
+  const { user, profile, role, roleHomeType } = useAuth();
   const data = useSmartHomeData();
   const rooms = useRoomOperationalContext();
   const [useStockOpen, setUseStockOpen] = useState(false);
   const [customiseOpen, setCustomiseOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [preferences, setPreferences] = useState(() => normaliseDashboardPreferences(profile?.dashboardPreferences, role));
+  const [preferences, setPreferences] = useState(() => normaliseDashboardPreferences(profile?.dashboardPreferences, role, roleHomeType));
   const [quickNotesOpen, setQuickNotesOpen] = useState(false);
   const [quickNotes, setQuickNotes] = useState([]);
   useEffect(() => subscribeQuickNotes((notes) => setQuickNotes(notes.filter((note) => note.status !== "completed"))), []);
 
-  useEffect(() => setPreferences(normaliseDashboardPreferences(profile?.dashboardPreferences, role)), [profile?.dashboardPreferences, role]);
+  useEffect(() => setPreferences(normaliseDashboardPreferences(profile?.dashboardPreferences, role, roleHomeType)), [profile?.dashboardPreferences, role, roleHomeType]);
   const visible = useMemo(() => new Set(preferences.visible), [preferences.visible]);
 
   async function savePreferences() {
@@ -62,7 +62,7 @@ export default function Dashboard() {
     <HomeHeader title="A calm view of your practice" actions={!visible.has("quickActions") ? <Button variant="outline" className="rounded-xl" onClick={() => setCustomiseOpen(true)}><Settings2 className="mr-2 h-4 w-4" />Customise</Button> : null} />
     {errors.length > 0 && <HomeWidget title="Some live data could not be loaded" className="border-rose-500/30">{errors.map((error, index) => <p key={index} className="text-sm text-rose-700">{String(error?.message || error)}</p>)}</HomeWidget>}
     {preferences.order.map((id) => visible.has(id) ? <React.Fragment key={id}>{widgets[id]}</React.Fragment> : null)}
-    <DashboardCustomizer open={customiseOpen} onClose={() => setCustomiseOpen(false)} preferences={preferences} role={role} onChange={setPreferences} onSave={savePreferences} saving={saving} />
+    <DashboardCustomizer open={customiseOpen} onClose={() => setCustomiseOpen(false)} preferences={preferences} role={role} homeType={roleHomeType} onChange={setPreferences} onSave={savePreferences} saving={saving} />
     <UseStockDialog open={useStockOpen} onClose={() => setUseStockOpen(false)} />
     <QuickNotesSheet open={quickNotesOpen} onClose={() => setQuickNotesOpen(false)} />
   </HomeShell>;

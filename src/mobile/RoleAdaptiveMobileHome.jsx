@@ -8,9 +8,9 @@ import MobileStockTakeBanner from "./MobileStockTakeBanner";
 // The phone home for everyone except the Cleaner (who has MobileCleanerHome): its tiles come from the role
 // (see roleHomes.js). Managers and partners also see what needs attention at the top.
 export default function RoleAdaptiveMobileHome({ onAction }) {
-  const { role, capabilities = [], displayName } = useAuth();
+  const { role, roleHomeType, capabilities = [], displayName } = useAuth();
   const { activeSenseSession } = useSenseSession();
-  const home = getRoleHome(role, capabilities);
+  const home = getRoleHome(role, capabilities, roleHomeType);
   const firstName = String(displayName || "").trim().split(" ")[0] || "there";
   const PrimaryIcon = home.primary.Icon;
 
