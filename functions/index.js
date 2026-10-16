@@ -486,7 +486,8 @@ exports.listStaffDirectory = onCall({ region: "europe-west2" }, async (request) 
       || hasCapability(capabilities, "temperature.write") // naming who took a reading or opened an incident
       || hasCapability(capabilities, "temperature.resolveIncident") // naming who resolved a fridge incident
       || hasCapability(capabilities, "training.manage") // linking staff training records to accounts
-      || hasCapability(capabilities, "training.manageClinical");
+      || hasCapability(capabilities, "training.manageClinical")
+      || hasCapability(capabilities, "timesheets.manage"); // linking timesheet staff to accounts and choosing line managers
     if (!allowed) throw new HttpsError("permission-denied", "You need SAR, concerns, fridge, admin or stock-verification access to list staff.");
   }
   return { staff: await listStaffDirectory({ db }) };

@@ -1132,6 +1132,44 @@ async function main() {
     await assertSucceeds(deleteObject(ref(wAdminStorage, "waste_notes/cn-keeper/a.pdf")));
   });
 
+  console.log("\n=== 26. Timesheets staff register (timesheet_staff) ===");
+  const tsAdmin = testEnv.authenticatedContext("tsadmin-uid").firestore(); // a custom role with timesheets.manage (a management assistant)
+  await seed(async (db) => {
+    await setDoc(doc(db, "roles", "Timesheet Admin"), { name: "Timesheet Admin", capabilities: ["timesheets.manage", "dashboard.read"], builtIn: false });
+    await setDoc(doc(db, "users", "tsadmin-uid"), { role: "Timesheet Admin", displayName: "TS Admin" });
+    await setDoc(doc(db, "timesheet_staff", "ts-nurse"), { name: "Nurse Person", uid: "nurse-uid", patterns: [], active: true });
+    await setDoc(doc(db, "timesheet_staff", "ts-other"), { name: "Other Person", uid: "reception-uid", patterns: [], active: true });
+  });
+  await check("The practice manager, a timesheet administrator and an administrator CAN read and set up everyone's pattern", async () => {
+    for (const who of [pm, tsAdmin, admin]) await assertSucceeds(getDoc(doc(who, "timesheet_staff", "ts-other")));
+    await assertSucceeds(setDoc(doc(tsAdmin, "timesheet_staff", "ts-new"), { name: "New Person", uid: null, patterns: [{ from: "2026-01-05", mode: "zero-hours", weeks: [] }], active: true }));
+    await assertSucceeds(updateDoc(doc(pm, "timesheet_staff", "ts-other"), { managerId: "ts-nurse" }));
+  });
+  await check("A member of staff reads only their own record: not a colleague's, not the whole list", async () => {
+    await assertSucceeds(getDoc(doc(nurse, "timesheet_staff", "ts-nurse")));
+    await assertFails(getDoc(doc(nurse, "timesheet_staff", "ts-other")));
+    await assertSucceeds(getDocs(query(collection(nurse, "timesheet_staff"), where("uid", "==", "nurse-uid"))));
+    await assertFails(getDocs(collection(nurse, "timesheet_staff")));
+  });
+  await check("Nobody else can read it: a cleaner, a partner, reception looking at another person's, a caretaker and anonymous", async () => {
+    for (const who of [cleaner, partner, anon, caretaker]) await assertFails(getDoc(doc(who, "timesheet_staff", "ts-nurse")));
+    await assertFails(getDoc(doc(reception, "timesheet_staff", "ts-nurse")));
+  });
+  await check("A member of staff cannot change their own pattern or leave figures, or add or remove anyone", async () => {
+    await assertFails(updateDoc(doc(nurse, "timesheet_staff", "ts-nurse"), { patterns: [{ from: "2026-01-05", mode: "zero-hours", weeks: [] }] }));
+    await assertFails(setDoc(doc(nurse, "timesheet_staff", "ts-nurse"), { name: "Nurse Person", leave: { remaining: 9999 } }, { merge: true }));
+    await assertFails(setDoc(doc(nurse, "timesheet_staff", "ts-fake"), { name: "Fake", uid: "nurse-uid" }));
+    await assertFails(deleteDoc(doc(nurse, "timesheet_staff", "ts-nurse")));
+  });
+  await check("A record must have a name", async () => {
+    await assertFails(setDoc(doc(tsAdmin, "timesheet_staff", "ts-noname"), { name: "", patterns: [] }));
+    await assertFails(setDoc(doc(tsAdmin, "timesheet_staff", "ts-noname2"), { name: 5, patterns: [] }));
+  });
+  await check("Whoever manages timesheets can remove a mistaken person; others cannot", async () => {
+    await assertFails(deleteDoc(doc(cleaner, "timesheet_staff", "ts-new")));
+    await assertSucceeds(deleteDoc(doc(tsAdmin, "timesheet_staff", "ts-new")));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);

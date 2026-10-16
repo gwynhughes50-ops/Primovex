@@ -645,7 +645,7 @@ match /subject_access_requests/{requestId} {
       return
         role == "System Admin" ? ["*"] :
         role == "Practice Manager" ? [
-          "stocktake.count", "stocktake.manage", "training.manage", "waste.read", "waste.manage",
+          "stocktake.count", "stocktake.manage", "training.manage", "waste.read", "waste.manage", "timesheets.manage",
           "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
           "dashboard.read", "operations.read", "operations.manage",
           "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",
@@ -809,6 +809,17 @@ match /subject_access_requests/{requestId} {
       allow create: if trainingManages(request.resource.data.group) && request.resource.data.personId is string && request.resource.data.courseId is string;
       allow update: if trainingManages(resource.data.group) && trainingManages(request.resource.data.group);
       allow delete: if trainingManages(resource.data.group);
+    }
+
+    // TIMESHEETS: each person's working pattern, hours and leave (src/modules/timesheets). It is staff employment data, so:
+    //   timesheets.manage   sees and sets up everyone's (the Practice Manager and whoever is given the role)
+    //   anyone              reads their own, once their record is linked to their account (uid)
+    // Only people who manage timesheets can write: nobody changes their own pattern or leave figures.
+    match /timesheet_staff/{staffId} {
+      allow get, list: if signedIn() && (isAdmin() || hasPermission("timesheets", "manage") || (resource.data.uid is string && resource.data.uid == request.auth.uid));
+      allow create, update: if signedIn() && (isAdmin() || hasPermission("timesheets", "manage"))
+        && request.resource.data.name is string && request.resource.data.name.size() > 0;
+      allow delete: if signedIn() && (isAdmin() || hasPermission("timesheets", "manage"));
     }
 
     // CLINICAL WASTE CONSIGNMENT NOTES (src/modules/waste). One record per Stericycle note: what was collected and when, read from
