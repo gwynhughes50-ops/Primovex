@@ -389,7 +389,7 @@ export const HELP_ARTICLES = [
       "Press \"Reset password\". Primovex makes a link for them to set a new password; copy it and send it to them yourself.",
       "The link only lasts an hour. If it runs out, make another.",
     ],
-    tip: "If they have lost the phone with their authenticator app, press \"Reset two-step\" for them as well.",
+    tip: "If the reset email never arrives (NHS mail often blocks it), press \"Temporary password\" next to them instead: it shows a password to give them in person, and they choose their own at their next sign-in. If they have lost the phone with their authenticator app, press \"Reset two-step\" for them as well.",
     open: { label: "Open Users", route: "/admin/users" },
     related: ["add-user"],
   },

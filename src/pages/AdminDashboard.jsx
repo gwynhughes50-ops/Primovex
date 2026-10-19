@@ -519,7 +519,7 @@ export default function AdminDashboard() {
     setResetLinkBusy(true);
     setResetLinkError("");
     try {
-      setResetLinkResult(resetLinkTarget.noEmail ? await setTemporaryPassword(resetLinkTarget.id) : await createPasswordLink(resetLinkTarget.id));
+      setResetLinkResult((resetLinkTarget.noEmail || resetLinkTarget.tempMode) ? await setTemporaryPassword(resetLinkTarget.id) : await createPasswordLink(resetLinkTarget.id));
     } catch (error) {
       setResetLinkError(error?.message || "Could not generate a password link.");
     } finally {
@@ -854,6 +854,17 @@ export default function AdminDashboard() {
                                     >
                                       <Link2 className="h-4 w-4 mr-2" /> {u.noEmail ? "New temporary password" : "Reset password"}
                                     </Button>
+                                    {!u.noEmail && (
+                                      <Button
+                                        variant="outline"
+                                        className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60 disabled:opacity-40"
+                                        disabled={isInactive}
+                                        title="Give them a temporary password in person, for when the reset email doesn't arrive"
+                                        onClick={() => setResetLinkTarget({ ...u, tempMode: true })}
+                                      >
+                                        <KeyRound className="h-4 w-4 mr-2" /> Temporary password
+                                      </Button>
+                                    )}
                                     <Button
                                       variant="outline"
                                       className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
@@ -1336,17 +1347,17 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur p-4">
           <div className="w-full max-w-lg rounded-2xl border border-slate-800/70 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
             <div className="flex items-center gap-2 text-lg font-semibold text-slate-50">
-              <Link2 className="h-5 w-5" /> {resetLinkTarget.noEmail ? "Temporary password for" : "Password link for"} {resetLinkTarget.displayName || resetLinkTarget.email}
+              <Link2 className="h-5 w-5" /> {(resetLinkTarget.noEmail || resetLinkTarget.tempMode) ? "Temporary password for" : "Password link for"} {resetLinkTarget.displayName || resetLinkTarget.email}
             </div>
 
-            {!resetLinkResult && resetLinkTarget.noEmail ? (
+            {!resetLinkResult && (resetLinkTarget.noEmail || resetLinkTarget.tempMode) ? (
               <div className="text-sm text-slate-300 mt-2">
-                This sets a new temporary password for <strong className="text-slate-100">{resetLinkTarget.signInName}</strong>, who has no email address. Anything they are signed in on is signed out, and they must choose their own password when they next sign in. It's recorded in the audit log.
+                This sets a new temporary password for <strong className="text-slate-100">{resetLinkTarget.signInName || resetLinkTarget.email}</strong>. Use this when a reset email isn't arriving, or they have no email address. Anything they are signed in on is signed out, and they must choose their own password when they next sign in. It's recorded in the audit log.
               </div>
             ) : resetLinkResult?.temporaryPassword ? (
               <div className="mt-3 space-y-3">
                 <div className="rounded-xl border border-slate-800/70 bg-slate-950/40 p-3 space-y-2">
-                  <div><div className="text-xs text-slate-400">Sign-in name</div><code className="text-base text-slate-50">{resetLinkResult.signInName}</code></div>
+                  <div><div className="text-xs text-slate-400">{resetLinkResult.signInName ? "Sign-in name" : "Email address"}</div><code className="text-base text-slate-50">{resetLinkResult.signInName || resetLinkResult.email}</code></div>
                   <div className="flex items-center gap-2">
                     <div className="flex-1"><div className="text-xs text-slate-400">Temporary password</div><code className="text-lg tracking-wider text-slate-50">{resetLinkResult.temporaryPassword}</code></div>
                     <Button type="button" size="sm" variant="outline" className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60 shrink-0" onClick={copyResetLink}>
@@ -1394,7 +1405,7 @@ export default function AdminDashboard() {
               </Button>
               {!resetLinkResult && (
                 <Button className="rounded-full bg-teal-500 text-slate-950 hover:bg-teal-400" disabled={resetLinkBusy} onClick={generateResetLink}>
-                  {resetLinkBusy ? (resetLinkTarget.noEmail ? "Setting…" : "Generating…") : (resetLinkTarget.noEmail ? "Set a new temporary password" : "Generate link")}
+                  {resetLinkBusy ? ((resetLinkTarget.noEmail || resetLinkTarget.tempMode) ? "Setting…" : "Generating…") : ((resetLinkTarget.noEmail || resetLinkTarget.tempMode) ? "Set a new temporary password" : "Generate link")}
                 </Button>
               )}
             </div>

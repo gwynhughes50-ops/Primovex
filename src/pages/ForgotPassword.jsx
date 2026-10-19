@@ -53,7 +53,7 @@ export default function ForgotPassword() {
       setMsg({
         type: "ok",
         text:
-          "If an account exists for that email, a password reset link has been sent. Check your inbox (and spam/junk).",
+          "If an account exists for that email, a password reset link has been sent. Check your inbox and your spam or junk folder. If nothing arrives within a few minutes, ask your manager for a temporary password: NHS mail often blocks these emails.",
       });
     } catch (err) {
       setMsg({ type: "error", text: normalizeFirebaseError(err) });

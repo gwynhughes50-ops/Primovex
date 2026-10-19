@@ -158,8 +158,8 @@ async function deleteUserAccount({ uid, actorUid }) {
 // account's password, so a System Admin account's link can only be issued by
 // another System Admin (otherwise admin.access alone would be a route to
 // taking over the highest-privilege account).
-// A new temporary password for someone who signs in with a sign-in name (no email to send a reset link to). They must choose their own
-// at their next sign-in; anything they are signed in on is signed out.
+// A new temporary password, handed over in person (or by phone): for someone with no email address, and for anyone whose reset email does not
+// arrive (mail systems often block it). They must choose their own at their next sign-in; anything they are signed in on is signed out.
 async function setTemporaryPassword({ uid, callerRole }) {
   const cleanUid = String(uid || "");
   if (!cleanUid) throw new HttpsError("invalid-argument", "Missing user id.");
@@ -167,7 +167,6 @@ async function setTemporaryPassword({ uid, callerRole }) {
   const profile = await db.collection("users").doc(cleanUid).get();
   if (!profile.exists) throw new HttpsError("not-found", "That account has no Primovex profile.");
   const data = profile.data() || {};
-  if (!data.noEmail) throw new HttpsError("failed-precondition", "This account has an email address: use \"Reset password\" instead.");
   if (data.role === "System Admin" && callerRole !== "System Admin") throw new HttpsError("permission-denied", "Only a System Admin can reset a System Admin's password.");
   if (data.active === false) throw new HttpsError("failed-precondition", "This account is deactivated: reactivate it first.");
   const temporaryPassword = generateTemporaryPassword();
@@ -179,7 +178,7 @@ async function setTemporaryPassword({ uid, callerRole }) {
     throw new HttpsError("internal", error.message || "Could not set a new password.");
   }
   await db.collection("users").doc(cleanUid).set({ mustChangePassword: true }, { merge: true });
-  return { uid: cleanUid, signInName: data.signInName || "", temporaryPassword };
+  return { uid: cleanUid, signInName: data.noEmail ? data.signInName || "" : "", email: data.noEmail ? "" : data.email || "", temporaryPassword };
 }
 
 async function createPasswordLink({ uid, callerRole }) {

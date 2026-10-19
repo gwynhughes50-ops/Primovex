@@ -63,7 +63,7 @@ export default function MobileAccountLogin() {
     try {
       if (resetMode) {
         await sendPasswordResetEmail(auth, cleanEmail);
-        setNotice("Password reset instructions have been sent if the account exists.");
+        setNotice("Reset instructions have been sent if the account exists. Check your junk folder. If nothing arrives in a few minutes, ask your manager for a temporary password.");
         return;
       }
 
