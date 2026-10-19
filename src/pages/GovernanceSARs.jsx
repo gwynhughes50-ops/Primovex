@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { collection, limit, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { FolderOpen, Folder, FolderPlus, Pencil, Trash2, X } from "lucide-react";
 
 import PageHeader from "@/components/common/PageHeader";
@@ -586,6 +586,8 @@ function SarDetailPanel({ sar, actor, isTeam, canDelete, onEdit, onDelete, onClo
 export default function GovernanceSARs() {
   const { user, displayName, can } = useAuth();
   const isTeam = can("governance.manageSars");
+  // the SAR team and partners see every request; anyone else sees only the ones assigned to them (the rules say the same)
+  const seesAll = isTeam || can("governance.partnerAccess");
   const actor = useMemo(() => actorFromUser(user, displayName), [user, displayName]);
   const [rows, setRows] = useState([]);
   const [users, setUsers] = useState([]);
@@ -609,7 +611,10 @@ export default function GovernanceSARs() {
   const canDelete = isTeam;
 
   useEffect(() => {
-    const qSars = query(collection(db, SAR_COLLECTION), orderBy("createdAt", "desc"), limit(2000));
+    if (!user?.uid) return undefined;
+    const qSars = seesAll
+      ? query(collection(db, SAR_COLLECTION), orderBy("createdAt", "desc"), limit(2000))
+      : query(collection(db, SAR_COLLECTION), where("assignedToUid", "==", user.uid));
     const unsub = onSnapshot(
       qSars,
       (snap) => {
@@ -623,7 +628,7 @@ export default function GovernanceSARs() {
       }
     );
     return () => unsub();
-  }, []);
+  }, [seesAll, user?.uid]);
 
   // The names for "Assigned To" / "Manager for Escalation". Read through a
   // server function: the users collection itself is private to administrators
@@ -638,9 +643,9 @@ export default function GovernanceSARs() {
       setUsersError("The staff list couldn't be loaded, so you can't pick people yet.");
     }
   }, []);
-  useEffect(() => { loadStaff(); }, [loadStaff]);
+  useEffect(() => { if (isTeam) loadStaff(); }, [loadStaff, isTeam]);
 
-  useEffect(() => subscribeSarYearFolders(setFolderYears, (err) => console.error("SAR year folders", err)), []);
+  useEffect(() => (seesAll ? subscribeSarYearFolders(setFolderYears, (err) => console.error("SAR year folders", err)) : undefined), [seesAll]);
 
   const metrics = useMemo(() => countMetrics(rows), [rows]);
   const selected = useMemo(() => rows.find((row) => row.id === selectedId) || null, [rows, selectedId]);
