@@ -446,9 +446,14 @@ function flattenProfilePermissions(profile) {
 // loaded live from Firestore (see AuthContext's "roles" subscription) — kept
 // as a plain argument rather than importing Firestore here so this stays a
 // framework-agnostic pure function.
-export function getCapabilitiesForProfile(profile, customRoleCapabilities = {}) {
+// The original roles an administrator may change the permissions of (the System Admin, User and ReadOnly roles are fixed). A change is kept
+// in role_overrides/{role}; the same list is mirrored by hand in firestore.rules, storage.rules and functions/services/roleCapabilities.js.
+export const OVERRIDABLE_ROLES = ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner"];
+
+export function getCapabilitiesForProfile(profile, customRoleCapabilities = {}, roleOverrides = {}) {
   const role = profile?.role || "ReadOnly";
-  const roleCapabilities = ROLE_TEMPLATES[role] || customRoleCapabilities[role] || ROLE_TEMPLATES.User || [];
+  const overridden = OVERRIDABLE_ROLES.includes(role) && Array.isArray(roleOverrides?.[role]?.capabilities) ? roleOverrides[role].capabilities : null;
+  const roleCapabilities = overridden || ROLE_TEMPLATES[role] || customRoleCapabilities[role] || ROLE_TEMPLATES.User || [];
   const profileCapabilities = flattenProfilePermissions(profile);
   const merged = new Set([...roleCapabilities, ...profileCapabilities]);
   return Array.from(merged);

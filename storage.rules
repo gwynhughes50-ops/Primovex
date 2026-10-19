@@ -119,8 +119,16 @@ service firebase.storage {
         : [];
     }
 
+    function overridableRole(role) {
+      return role in ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner"];
+    }
+    function hasRoleOverride(role) {
+      return overridableRole(role) && firestore.exists(/databases/(default)/documents/role_overrides/$(role));
+    }
     function effectiveRoleCapabilities(role) {
-      return isBuiltInRole(role) ? builtInRoleCapabilities(role) : customRoleCapabilities(role);
+      return isBuiltInRole(role)
+        ? (hasRoleOverride(role) ? firestore.get(/databases/(default)/documents/role_overrides/$(role)).data.capabilities : builtInRoleCapabilities(role))
+        : customRoleCapabilities(role);
     }
 
     function hasPermission(domain, action) {

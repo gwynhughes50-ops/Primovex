@@ -263,6 +263,14 @@ match /practice_config/{docId} {
 // -------------------------
 // CUSTOM ROLES (admin-defined, on top of the built-in ROLE_TEMPLATES)
 // -------------------------
+// An administrator's change to an original role's permissions. Readable by everyone signed in (the app needs it to know what a role may do).
+match /role_overrides/{roleId} {
+  allow get, list: if signedIn();
+  allow create, update: if isAdmin() && roleId in ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner"]
+    && request.resource.data.capabilities is list && request.resource.data.capabilities.size() <= 120;
+  allow delete: if isAdmin();
+}
+
 match /roles/{roleId} {
   allow get, list: if signedIn();
   allow create, update: if isAdmin();
@@ -732,8 +740,18 @@ match /subject_access_requests/{requestId} {
         : [];
     }
 
+    // An administrator can change the permissions of most original roles (never System Admin, User or ReadOnly). The change is kept in
+    // role_overrides/{role}; the list of roles it may apply to is mirrored in src/core/identity/capabilities.js.
+    function overridableRole(role) {
+      return role in ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner"];
+    }
+    function hasRoleOverride(role) {
+      return overridableRole(role) && exists(/databases/$(database)/documents/role_overrides/$(role));
+    }
     function effectiveRoleCapabilities(role) {
-      return isBuiltInRole(role) ? builtInRoleCapabilities(role) : customRoleCapabilities(role);
+      return isBuiltInRole(role)
+        ? (hasRoleOverride(role) ? get(/databases/$(database)/documents/role_overrides/$(role)).data.capabilities : builtInRoleCapabilities(role))
+        : customRoleCapabilities(role);
     }
 
     function hasPermission(domain, action) {

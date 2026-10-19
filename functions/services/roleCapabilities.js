@@ -71,8 +71,16 @@ const BUILT_IN_ROLE_CAPABILITIES = {
 // Admin-created roles (AdminDashboard's Add/Edit Role) live at
 // roles/{roleName} with a `capabilities` array — same document shape
 // firestore.rules' customRoleCapabilities() reads.
+const OVERRIDABLE_ROLES = ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner"];
+
 async function getEffectiveCapabilities(db, role) {
   const builtIn = BUILT_IN_ROLE_CAPABILITIES[role];
+  if (builtIn && OVERRIDABLE_ROLES.includes(role)) {
+    // an administrator's change to this original role's permissions (role_overrides), else the original
+    const override = await db.collection("role_overrides").doc(role).get();
+    const capabilities = override.exists ? override.data()?.capabilities : null;
+    return Array.isArray(capabilities) ? capabilities : builtIn;
+  }
   if (builtIn) return builtIn;
   if (!role) return [];
   const roleDoc = await db.collection("roles").doc(role).get();
@@ -83,4 +91,4 @@ function hasCapability(capabilities, required) {
   return Array.isArray(capabilities) && (capabilities.includes("*") || capabilities.includes(required));
 }
 
-module.exports = { BUILT_IN_ROLE_CAPABILITIES, getEffectiveCapabilities, hasCapability };
+module.exports = { OVERRIDABLE_ROLES, BUILT_IN_ROLE_CAPABILITIES, getEffectiveCapabilities, hasCapability };

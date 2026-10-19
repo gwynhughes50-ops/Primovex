@@ -47,6 +47,7 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null); // firestore /users/{uid} or synthetic profile
   const [moduleTogglesLoaded, setModuleTogglesLoaded] = useState(false); // true once the practice's module switch has actually been read
   const [moduleToggles, setModuleToggles] = useState(null); // practice_config.moduleToggles — per-module on/off with an allow-list
+  const [roleOverrides, setRoleOverrides] = useState({}); // role_overrides/{role}: an administrator's change to an original role's permissions
   const [customRoles, setCustomRoles] = useState([]); // admin-defined roles/{roleId} docs, on top of the built-in ROLE_TEMPLATES
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -222,6 +223,16 @@ export function AuthProvider({ children }) {
     });
   }, [platformMode, authUid]);
 
+  useEffect(() => {
+    if (isSafeSyntheticMode(platformMode) || !authUid) { setRoleOverrides({}); return undefined; }
+    return onSnapshot(collection(db, "role_overrides"), (snap) => {
+      setRoleOverrides(Object.fromEntries(snap.docs.map((d) => [d.id, d.data()])));
+    }, (err) => {
+      console.error("Role overrides subscription failed", err);
+      setRoleOverrides({});
+    });
+  }, [platformMode, authUid]);
+
   const customRoleCapabilities = useMemo(
     () => Object.fromEntries(customRoles.map((r) => [r.name, r.capabilities || []])),
     [customRoles]
@@ -232,10 +243,10 @@ export function AuthProvider({ children }) {
   const viewingAs = resolveViewAs({ realRole, requested: viewAsRequested });
   const role = viewingAs || realRole;
   // the layout this role was given by whoever made it ("" = decided by the role's name)
-  const roleHomeType = customRoles.find((r) => r.name === role)?.homeType || "";
+  const roleHomeType = customRoles.find((r) => r.name === role)?.homeType || roleOverrides[role]?.homeType || "";
   const rawCapabilities = viewingAs
-    ? getCapabilitiesForProfile({ role: viewingAs }, customRoleCapabilities)
-    : getCapabilitiesForProfile(profile, customRoleCapabilities);
+    ? getCapabilitiesForProfile({ role: viewingAs }, customRoleCapabilities, roleOverrides)
+    : getCapabilitiesForProfile(profile, customRoleCapabilities, roleOverrides);
   // Modules switched off (practice_config.moduleToggles) are removed from the
   // capabilities list itself — not just checked in can()/canAny() — because
   // navigation.js filters the sidebar straight off this array, bypassing
@@ -300,6 +311,7 @@ export function AuthProvider({ children }) {
       profile,
       role,
       roleHomeType,
+      roleOverrides,
       realRole,
       viewingAs,
       canViewAs,
@@ -316,7 +328,7 @@ export function AuthProvider({ children }) {
       error,
       signOut,
     }),
-    [user, profile, role, roleHomeType, viewingAs, viewAsRequested, capabilities, moduleToggles, customRoles, displayName, isAdmin, platformMode, loading, profileLoading, error]
+    [user, profile, role, roleHomeType, roleOverrides, viewingAs, viewAsRequested, capabilities, moduleToggles, customRoles, displayName, isAdmin, platformMode, loading, profileLoading, error]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

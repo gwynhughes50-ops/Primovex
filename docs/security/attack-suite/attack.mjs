@@ -1381,6 +1381,44 @@ async function main() {
     await assertFails(getDoc(doc(cleaner, "mileage_claims", "m-pay")));
   });
 
+  console.log("\n=== 29. Changing an original role's permissions (role_overrides) ===");
+  await seed(async (db) => {
+    await setDoc(doc(db, "users", "hca-ovr-uid"), { role: "HCA", displayName: "HCA Override" });
+  });
+  const hcaOvr = testEnv.authenticatedContext("hca-ovr-uid").firestore();
+  const hcaOvrStorage = testEnv.authenticatedContext("hca-ovr-uid").storage();
+  await seed(async (db) => { await setDoc(doc(db, "waste_consignments", "cn-ovr"), { consignmentCode: "OVR001/AAAA1", collectionDate: "2026-03-24", lines: [] }); });
+  await check("Before any change an HCA cannot read the clinical waste records or its PDFs", async () => {
+    await assertFails(getDoc(doc(hcaOvr, "waste_consignments", "cn-ovr")));
+    await assertFails(getBytes(ref(hcaOvrStorage, "waste_notes/cn-pm/b.pdf")));
+  });
+  await check("Only an administrator can change an original role; the practice manager, the role's own people and anonymous cannot", async () => {
+    for (const who of [pm, hcaOvr, nurse, anon]) await assertFails(setDoc(doc(who, "role_overrides", "HCA"), { capabilities: ["waste.read"] }));
+    await assertSucceeds(setDoc(doc(admin, "role_overrides", "HCA"), { capabilities: ["dashboard.read", "operations.read", "inventory.read", "waste.read", "mobile.access"] }));
+  });
+  await check("Once changed, every HCA gets the new permissions in the database and in file storage, straight away", async () => {
+    await assertSucceeds(getDoc(doc(hcaOvr, "waste_consignments", "cn-ovr")));
+    await assertSucceeds(getBytes(ref(hcaOvrStorage, "waste_notes/cn-pm/b.pdf")));
+  });
+  await check("A change can also take a permission away: the HCA loses what the new list omits", async () => {
+    await assertSucceeds(updateDoc(doc(admin, "role_overrides", "HCA"), { capabilities: ["dashboard.read"] }));
+    await assertFails(getDoc(doc(hcaOvr, "waste_consignments", "cn-ovr")));
+    await assertFails(getBytes(ref(hcaOvrStorage, "waste_notes/cn-pm/b.pdf")));
+  });
+  await check("System Admin, User and ReadOnly cannot be given a change at all, and nothing malformed is accepted", async () => {
+    for (const name of ["System Admin", "User", "ReadOnly", "Made Up Role"]) await assertFails(setDoc(doc(admin, "role_overrides", name), { capabilities: ["waste.read"] }));
+    await assertFails(setDoc(doc(admin, "role_overrides", "Nurse"), { capabilities: "everything" }));
+    await assertFails(setDoc(doc(admin, "role_overrides", "Nurse"), { capabilities: Array.from({ length: 200 }, (_, i) => "x." + i) }));
+  });
+  await check("Everyone signed in can read the changes (the app needs them); an administrator restores the original by deleting it, and the HCA is back as before", async () => {
+    for (const who of [hcaOvr, nurse, cleaner]) await assertSucceeds(getDoc(doc(who, "role_overrides", "HCA")));
+    await assertFails(getDoc(doc(anon, "role_overrides", "HCA")));
+    await assertFails(deleteDoc(doc(pm, "role_overrides", "HCA")));
+    await assertSucceeds(deleteDoc(doc(admin, "role_overrides", "HCA")));
+    await assertFails(getDoc(doc(hcaOvr, "waste_consignments", "cn-ovr")));
+    await assertFails(getBytes(ref(hcaOvrStorage, "waste_notes/cn-pm/b.pdf")));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);

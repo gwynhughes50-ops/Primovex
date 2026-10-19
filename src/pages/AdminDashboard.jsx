@@ -72,9 +72,9 @@ import { loadSenseState, saveSenseState } from "@/modules/sense/services/senseSt
 import { loadFacilitiesState } from "@/modules/facilities/services/facilitiesStore";
 
 // ✅ Firestore activity feed
-import { collection, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc } from "firebase/firestore";
+import { collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { CAPABILITY_CATALOG, ROLE_PRESETS, ROLE_TEMPLATES } from "@/core/identity/capabilities";
+import { CAPABILITY_CATALOG, OVERRIDABLE_ROLES, ROLE_PRESETS, ROLE_TEMPLATES } from "@/core/identity/capabilities";
 import { HOME_TYPES, homeTypeOfName } from "@/mobile/roleHomes";
 import { describeNotificationAccess, ON_THEIR_COMPUTER } from "@/lib/notificationAccess";
 import { sendDueNotificationsNow } from "@/services/dueNotificationsService";
@@ -219,7 +219,7 @@ function prettyPermissions(perms = []) {
 }
 
 export default function AdminDashboard() {
-  const { isAdmin, loading: authLoading, can, displayName, user, customRoles: liveCustomRoles } = useAuth();
+  const { isAdmin, loading: authLoading, can, displayName, user, customRoles: liveCustomRoles, roleOverrides = {} } = useAuth();
 
   const { totalItems, lowStockItems, loading: stockLoading } = useStockSummary();
 
@@ -297,7 +297,10 @@ export default function AdminDashboard() {
   // these feed into actual permission checks app-wide.
   const roles = useMemo(
     () => [
-      ...defaultRoles,
+      ...defaultRoles.map((r) => {
+        const override = OVERRIDABLE_ROLES.includes(r.name) && Array.isArray(roleOverrides[r.name]?.capabilities) ? roleOverrides[r.name] : null;
+        return { ...r, builtInRole: true, canEdit: OVERRIDABLE_ROLES.includes(r.name), overridden: Boolean(override), permissions: override ? override.capabilities : r.permissions, originalPermissions: r.permissions, homeType: override?.homeType || "" };
+      }),
       ...liveCustomRoles.map((r) => ({
         id: r.id,
         name: r.name,
@@ -308,7 +311,7 @@ export default function AdminDashboard() {
         custom: true,
       })),
     ],
-    [liveCustomRoles]
+    [liveCustomRoles, roleOverrides]
   );
   const [isAddRoleOpen, setIsAddRoleOpen] = useState(false);
   const [editingRole, setEditingRole] = useState(null);
@@ -542,7 +545,7 @@ export default function AdminDashboard() {
     setAddRoleError("");
     if (!name) return;
 
-    if (name.toLowerCase().includes("admin")) {
+    if (!editingRole?.builtInRole && name.toLowerCase().includes("admin")) {
       setAddRoleError("Admin roles are protected. Create non-admin roles only.");
       return;
     }
@@ -553,6 +556,14 @@ export default function AdminDashboard() {
 
     setAddRoleBusy(true);
     try {
+      if (editingRole?.builtInRole) {
+        // an original role: keep the change in role_overrides (the original stays in the program and can be restored)
+        await setDoc(doc(db, "role_overrides", editingRole.name), { capabilities: newRole.permissions, homeType: newRole.homeType || "", updatedAt: serverTimestamp(), updatedByName: displayName || user?.email || "" }, { merge: true });
+        setNewRole({ name: "", description: "", permissions: ["inventory.read"], homeType: "" });
+        setEditingRole(null);
+        setIsAddRoleOpen(false);
+        return;
+      }
       // Doc id is the exact role name — every other place that reads this
       // collection (createUserAccount Cloud Function, AddUser's dropdown)
       // looks a role up by that same name, so no separate slug/id mapping.
@@ -576,6 +587,22 @@ export default function AdminDashboard() {
       setIsAddRoleOpen(false);
     } catch (error) {
       setAddRoleError(error?.message || "Could not save this role.");
+    } finally {
+      setAddRoleBusy(false);
+    }
+  };
+
+  const restoreOriginalRole = async () => {
+    if (!editingRole?.builtInRole) return;
+    setAddRoleBusy(true);
+    setAddRoleError("");
+    try {
+      await deleteDoc(doc(db, "role_overrides", editingRole.name));
+      setNewRole({ name: "", description: "", permissions: ["inventory.read"], homeType: "" });
+      setEditingRole(null);
+      setIsAddRoleOpen(false);
+    } catch (error) {
+      setAddRoleError(error?.message || "Could not restore the original permissions.");
     } finally {
       setAddRoleBusy(false);
     }
@@ -1116,7 +1143,7 @@ export default function AdminDashboard() {
                         <TableBody>
                           {roles.map((r) => (
                             <TableRow key={r.id} className="border-slate-800/70">
-                              <TableCell className="text-slate-100 font-semibold">{r.name}</TableCell>
+                              <TableCell className="text-slate-100 font-semibold">{r.name}{r.overridden && <Badge variant="outline" className="ml-2 border-amber-400/40 text-amber-200">Customised</Badge>}</TableCell>
                               <TableCell className="text-slate-300">{r.description || "—"}</TableCell>
                               <TableCell className="text-slate-300">{prettyPermissions(r.permissions)}</TableCell>
                               <TableCell className="text-right">
@@ -1125,7 +1152,7 @@ export default function AdminDashboard() {
                                 </Badge>
                               </TableCell>
                               <TableCell className="text-right">
-                                {r.custom && (
+                                {(r.custom || r.canEdit) && (
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -1545,6 +1572,11 @@ export default function AdminDashboard() {
                   />
                 </div>
 
+                {editingRole?.builtInRole && (
+                  <p className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+                    This is one of the original roles. Your changes apply to everyone who has it, straight away. {editingRole.name === "Practice Manager" ? "Take care not to remove the administration permissions: the System Admin role can always put it right. " : ""}You can restore the original permissions at any time.
+                  </p>
+                )}
                 <div>
                   <label className="text-xs text-slate-300">Copy the permissions of an existing role</label>
                   <select
@@ -1614,7 +1646,17 @@ export default function AdminDashboard() {
               </div>
             )}
 
-            <div className="flex justify-end gap-2 p-5 pt-4 border-t border-slate-800/70">
+            <div className="flex flex-wrap justify-end gap-2 p-5 pt-4 border-t border-slate-800/70">
+              {editingRole?.builtInRole && editingRole.overridden && (
+                <Button
+                  variant="outline"
+                  className="mr-auto rounded-full border-amber-400/40 bg-slate-900/40 text-amber-100 hover:bg-slate-900/60"
+                  disabled={addRoleBusy}
+                  onClick={restoreOriginalRole}
+                >
+                  Restore the original permissions
+                </Button>
+              )}
               <Button
                 variant="outline"
                 className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
