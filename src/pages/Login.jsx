@@ -2,6 +2,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
+import { loginAddress } from "@/lib/signInName";
 import MfaChallenge from "@/components/security/MfaChallenge";
 import { isMfaRequiredError } from "@/lib/mfaHelpers";
 import { canResolveWithTotp, resolverFromError } from "@/services/mfaService";
@@ -33,7 +34,7 @@ function normaliseLoginError(error) {
   const code = String(error?.code || "");
   if (code === "auth/too-many-requests") return "Too many sign-in attempts. Please wait a moment before trying again or reset your password.";
   if (code === "auth/network-request-failed") return "Network error. Please check your connection and try again.";
-  return "We couldn't sign you in with those details. Please check your email and password.";
+  return "We couldn't sign you in with those details. Please check your email (or sign-in name) and password.";
 }
 
 function CapabilityPill({ children }) {
@@ -66,7 +67,7 @@ export default function Login() {
   // code step is shown until it's completed or cancelled.
   const [mfaResolver, setMfaResolver] = useState(null);
 
-  const canSubmit = useMemo(() => String(email || "").trim().includes("@") && password.length >= 6, [email, password]);
+  const canSubmit = useMemo(() => Boolean(loginAddress(email)) && password.length >= 6, [email, password]);
 
   async function completeSignIn(credential, provider) {
     await writeAuditEvent({
@@ -85,8 +86,8 @@ export default function Login() {
     e.preventDefault();
     setError("");
 
-    const cleanEmail = email.trim();
-    if (!cleanEmail) return setError("Please enter your email.");
+    const cleanEmail = loginAddress(email);
+    if (!cleanEmail) return setError("Please enter your email address, or your sign-in name if you were given one.");
     if (!password) return setError("Please enter your password.");
 
     setSaving(true);
@@ -199,8 +200,8 @@ export default function Login() {
               ) : (
               <form onSubmit={handleSubmit} className="mt-6 space-y-4">
                 <div>
-                  <label className={`mb-2 block text-xs font-semibold uppercase tracking-wide ${MUTED}`}>Email</label>
-                  <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@nhs.uk" autoComplete="email" inputMode="email" className={fieldClass} />
+                  <label className={`mb-2 block text-xs font-semibold uppercase tracking-wide ${MUTED}`}>Email or sign-in name</label>
+                  <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@nhs.uk" autoComplete="username" autoCapitalize="none" autoCorrect="off" className={fieldClass} />
                 </div>
                 <div>
                   <label className={`mb-2 block text-xs font-semibold uppercase tracking-wide ${MUTED}`}>Password</label>

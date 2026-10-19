@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { KeyRound, Mail, ShieldCheck } from "lucide-react";
 import { sendPasswordResetEmail, signInWithEmailAndPassword } from "firebase/auth";
+import { isSignInAddress, loginAddress } from "@/lib/signInName";
 import MfaChallenge from "@/components/security/MfaChallenge";
 import { isMfaRequiredError } from "@/lib/mfaHelpers";
 import { canResolveWithTotp, resolverFromError } from "@/services/mfaService";
@@ -24,7 +25,7 @@ export default function MobileAccountLogin() {
   const [resetMode, setResetMode] = useState(false);
 
   const canSubmit = useMemo(
-    () => String(email || "").trim().includes("@") && (resetMode || password.length >= 6),
+    () => Boolean(loginAddress(email)) && (!resetMode || !isSignInAddress(loginAddress(email))) && (resetMode || password.length >= 6),
     [email, password, resetMode]
   );
 
@@ -47,10 +48,14 @@ export default function MobileAccountLogin() {
     event.preventDefault();
     setError("");
     setNotice("");
-    const cleanEmail = email.trim();
+    const cleanEmail = loginAddress(email);
 
     if (!cleanEmail) {
-      setError("Enter your email address.");
+      setError("Enter your email address, or your sign-in name if you were given one.");
+      return;
+    }
+    if (resetMode && isSignInAddress(cleanEmail)) {
+      setError("A sign-in name has no email to send to. Ask your manager for a new temporary password.");
       return;
     }
 
@@ -110,14 +115,15 @@ export default function MobileAccountLogin() {
           ) : (
           <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
             <label className="block">
-              <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--medtrak-muted)]">Email</span>
+              <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-[var(--medtrak-muted)]">Email or sign-in name</span>
               <div className="flex items-center gap-3 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-4">
                 <Mail className="h-5 w-5 text-[var(--medtrak-muted)]" />
                 <input
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
-                  inputMode="email"
-                  autoComplete="email"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   placeholder="you@nhs.uk"
                   className="min-w-0 flex-1 bg-transparent py-4 outline-none"
                 />

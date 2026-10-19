@@ -42,6 +42,8 @@ const builtInRoles = Object.keys(ROLE_TEMPLATES).map((name) => ({
   hint: ROLE_HINTS[name] || `${name} capability template.`,
 }));
 
+import { signInNameProblem, suggestSignInName } from "@/lib/signInName";
+
 function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
 }
@@ -67,6 +69,12 @@ export default function AddUser() {
     email: "",
     role: "User",
   });
+  // someone with no email address signs in with a short name and a temporary password instead
+  const [noEmail, setNoEmail] = useState(false);
+  const [signInName, setSignInName] = useState("");
+  const [signInTouched, setSignInTouched] = useState(false);
+  const [tempPassword, setTempPassword] = useState("");
+  const [made, setMade] = useState({ signInName: "" });
 
   const [status, setStatus] = useState("idle"); // idle | sending | sent | error
   const [error, setError] = useState("");
@@ -80,12 +88,15 @@ export default function AddUser() {
 
   const canSubmit = useMemo(() => {
     if (!form.displayName.trim()) return false;
+    if (noEmail) return !signInNameProblem(signInName);
     if (!isValidEmail(form.email)) return false;
     return true;
-  }, [form.displayName, form.email]);
+  }, [form.displayName, form.email, noEmail, signInName]);
 
   const update = (key) => (e) => {
-    setForm((p) => ({ ...p, [key]: e.target.value }));
+    const value = e.target.value;
+    setForm((p) => ({ ...p, [key]: value }));
+    if (key === "displayName" && noEmail && !signInTouched) setSignInName(suggestSignInName(value));
     setError("");
   };
 
@@ -95,6 +106,11 @@ export default function AddUser() {
     setError("");
     setInviteLink("");
     setLinkCopied(false);
+    setNoEmail(false);
+    setSignInName("");
+    setSignInTouched(false);
+    setTempPassword("");
+    setMade({ signInName: "" });
   };
 
   const onSubmit = async (e) => {
@@ -105,7 +121,10 @@ export default function AddUser() {
       setError("Please enter a display name.");
       return;
     }
-    if (!isValidEmail(form.email)) {
+    if (noEmail) {
+      const problem = signInNameProblem(signInName);
+      if (problem) { setError(problem); return; }
+    } else if (!isValidEmail(form.email)) {
       setError("Please enter a valid email address.");
       return;
     }
@@ -114,10 +133,13 @@ export default function AddUser() {
       setStatus("sending");
       const result = await createUserAccount({
         displayName: form.displayName.trim(),
-        email: form.email.trim(),
+        email: noEmail ? "" : form.email.trim(),
+        signInName: noEmail ? signInName.trim().toLowerCase() : undefined,
         role: form.role,
       });
       setInviteLink(result?.inviteLink || "");
+      setTempPassword(result?.temporaryPassword || "");
+      setMade({ signInName: result?.signInName || "" });
       setStatus("sent");
     } catch (err) {
       setStatus("error");
@@ -127,7 +149,7 @@ export default function AddUser() {
 
   const copyInviteLink = async () => {
     try {
-      await navigator.clipboard.writeText(inviteLink);
+      await navigator.clipboard.writeText(tempPassword || inviteLink);
       setLinkCopied(true);
       window.setTimeout(() => setLinkCopied(false), 2000);
     } catch {
@@ -177,6 +199,24 @@ export default function AddUser() {
                 />
               </div>
 
+              <label className="flex items-start gap-2 rounded-xl border border-slate-800/70 bg-slate-950/40 p-3 text-sm text-slate-200">
+                <input type="checkbox" className="mt-1" checked={noEmail} onChange={(e) => { setNoEmail(e.target.checked); setSignInName(e.target.checked ? suggestSignInName(form.displayName) : ""); setSignInTouched(false); setError(""); }} />
+                <span><b>This person has no email address</b><span className="block text-xs text-slate-400">They sign in with a short sign-in name and a temporary password that you give them. They choose their own password the first time.</span></span>
+              </label>
+
+              {noEmail ? (
+                <div>
+                  <label className="text-xs text-slate-300">Sign-in name</label>
+                  <Input
+                    value={signInName}
+                    onChange={(e) => { setSignInName(e.target.value.toLowerCase()); setSignInTouched(true); setError(""); }}
+                    placeholder="e.g. cherryl.blair"
+                    autoCapitalize="none"
+                    className="mt-1 bg-slate-950/40 border-slate-800/70 text-slate-100 placeholder:text-slate-500"
+                  />
+                  {signInName.trim().length > 0 && signInNameProblem(signInName) && <div className="mt-1 text-xs text-amber-200">{signInNameProblem(signInName)}</div>}
+                </div>
+              ) : (
               <div>
                 <label className="text-xs text-slate-300">Email address</label>
                 <div className="relative mt-1">
@@ -194,6 +234,7 @@ export default function AddUser() {
                   </div>
                 )}
               </div>
+              )}
 
               <div>
                 <label className="text-xs text-slate-300">Role</label>
@@ -255,11 +296,24 @@ export default function AddUser() {
                   <div>
                     <div className="font-semibold text-emerald-50">Account created</div>
                     <div className="text-sm text-emerald-100/80">
-                      <span className="font-medium text-emerald-50">{form.email}</span> now exists as {form.role}. There's no email sending set up yet, so send this password-set link to them yourself.
+                      {tempPassword ? (<><span className="font-medium text-emerald-50">{form.displayName}</span> now exists as {form.role}. Give them the sign-in name and temporary password below, in person. The password is shown only now.</>) : (<><span className="font-medium text-emerald-50">{form.email}</span> now exists as {form.role}. There's no email sending set up yet, so send this password-set link to them yourself.</>)}
                     </div>
                   </div>
                 </div>
               </div>
+
+              {tempPassword && (
+                <div className="rounded-xl border border-slate-800/70 bg-slate-950/40 p-3 space-y-2">
+                  <div><div className="text-xs text-slate-400">Sign-in name</div><code className="text-base text-slate-50">{made.signInName}</code></div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1"><div className="text-xs text-slate-400">Temporary password</div><code className="text-lg tracking-wider text-slate-50">{tempPassword}</code></div>
+                    <Button type="button" size="sm" variant="outline" className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60 shrink-0" onClick={copyInviteLink}>
+                      <Copy className="h-3.5 w-3.5 mr-1.5" /> {linkCopied ? "Copied" : "Copy"}
+                    </Button>
+                  </div>
+                  <div className="rounded-lg border border-amber-500/25 bg-amber-500/10 p-2 text-xs text-amber-100">Write it down or tell them now: it can't be shown again (you can set a new temporary password later from Users). They will be asked to choose their own password when they first sign in.</div>
+                </div>
+              )}
 
               {inviteLink && (
                 <div className="rounded-xl border border-slate-800/70 bg-slate-950/40 p-3">

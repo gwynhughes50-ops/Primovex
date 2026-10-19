@@ -19,9 +19,16 @@ export function subscribeUsers(onData, onError) {
 // createUserAccount Cloud Function (admin-only). Returns { uid, inviteLink }
 // — there's no email-sending set up in this project, so the admin needs to
 // hand the invite link to the new user themselves (email, chat, etc.).
-export async function createUserAccount({ displayName, email, role }) {
+export async function createUserAccount({ displayName, email, signInName, role }) {
   const call = httpsCallable(functions, "createUserAccount");
-  const response = await call({ displayName, email, role });
+  const response = await call({ displayName, email, signInName, role });
+  return response.data;
+}
+
+// For someone with no email address: a new temporary password (they must choose their own at their next sign-in)
+export async function setTemporaryPassword(uid) {
+  const call = httpsCallable(functions, "setTemporaryPassword");
+  const response = await call({ uid });
   return response.data;
 }
 

@@ -21,7 +21,7 @@ const { extractClinicalFacts } = require("./services/azureOpenAiExtractionServic
 const { appendGovernedAuditEvent } = require("./services/governedAuditService");
 const { reportRoomIssue } = require("./services/roomIssueService");
 const { recordSensePresenceTap } = require("./services/sensePresenceService");
-const { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa } = require("./services/userAccountService");
+const { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa, setTemporaryPassword } = require("./services/userAccountService");
 const { getEffectiveCapabilities, hasCapability } = require("./services/roleCapabilities");
 const { notifySarAssignment } = require("./services/notificationService");
 const { listStaffDirectory } = require("./services/staffDirectoryService");
@@ -356,7 +356,7 @@ exports.recordSensePresenceTap = onCall({ region: "europe-west2", timeoutSeconds
 
 exports.createUserAccount = onCall({ region: "europe-west2" }, async (request) => {
   const callerRole = await assertAdmin(request);
-  const { displayName, email, role } = request.data || {};
+  const { displayName, email, signInName, role } = request.data || {};
   // admin.access (granted to Practice Manager, not just System Admin) is
   // enough to add ordinary staff accounts, but minting another System Admin
   // is a strictly higher-trust action reserved for an actual System Admin —
@@ -364,7 +364,30 @@ exports.createUserAccount = onCall({ region: "europe-west2" }, async (request) =
   if (role === "System Admin" && callerRole !== "System Admin") {
     throw new HttpsError("permission-denied", "Only a System Admin can create another System Admin account.");
   }
-  return createUserAccount({ displayName, email, role, creatorUid: request.auth.uid });
+  const result = await createUserAccount({ displayName, email, signInName, role, creatorUid: request.auth.uid });
+  if (result.temporaryPassword) {
+    try {
+      const callerProfile = await db.collection("users").doc(request.auth.uid).get();
+      await appendGovernedAuditEvent({ db, auth: request.auth, profile: callerProfile.data() || {}, data: { action: "admin.user.created-without-email", module: "administration", targetType: "user", targetId: result.uid, summary: "Account created with a sign-in name and a temporary password", classification: "security" } });
+    } catch (error) {
+      console.error("No-email account audit event failed", { message: error?.message });
+    }
+  }
+  return result;
+});
+
+// A new temporary password for someone with no email address (the person must choose their own at their next sign-in).
+exports.setTemporaryPassword = onCall({ region: "europe-west2" }, async (request) => {
+  const callerRole = await assertAdmin(request);
+  const { uid } = request.data || {};
+  const result = await setTemporaryPassword({ uid, callerRole });
+  try {
+    const callerProfile = await db.collection("users").doc(request.auth.uid).get();
+    await appendGovernedAuditEvent({ db, auth: request.auth, profile: callerProfile.data() || {}, data: { action: "admin.user.temporary-password-set", module: "administration", targetType: "user", targetId: result.uid, summary: "New temporary password set for an account with no email address", classification: "security" } });
+  } catch (error) {
+    console.error("Temporary-password audit event failed", { message: error?.message });
+  }
+  return result;
 });
 
 exports.createPasswordLink = onCall({ region: "europe-west2" }, async (request) => {

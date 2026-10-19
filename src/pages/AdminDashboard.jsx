@@ -81,7 +81,7 @@ import { sendDueNotificationsNow } from "@/services/dueNotificationsService";
 import { describeDueRun } from "@/lib/dueNotificationsText";
 import { useAuth } from "@/contexts/AuthContext";
 import ViewAsPanel from "@/components/admin/ViewAsPanel";
-import { subscribeUsers, updateUserRole, updateUserOrbScope, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa, sendTestAlert } from "@/services/adminUserService";
+import { subscribeUsers, updateUserRole, updateUserOrbScope, setUserActive, deleteUserAccount, createPasswordLink, setTemporaryPassword, resetUserMfa, sendTestAlert } from "@/services/adminUserService";
 import { ORB_TOPICS, describeOrbScope, normaliseOrbScope } from "@/lib/orbScope";
 
 // --------------------------
@@ -519,7 +519,7 @@ export default function AdminDashboard() {
     setResetLinkBusy(true);
     setResetLinkError("");
     try {
-      setResetLinkResult(await createPasswordLink(resetLinkTarget.id));
+      setResetLinkResult(resetLinkTarget.noEmail ? await setTemporaryPassword(resetLinkTarget.id) : await createPasswordLink(resetLinkTarget.id));
     } catch (error) {
       setResetLinkError(error?.message || "Could not generate a password link.");
     } finally {
@@ -529,7 +529,7 @@ export default function AdminDashboard() {
 
   const copyResetLink = async () => {
     try {
-      await navigator.clipboard.writeText(resetLinkResult.link);
+      await navigator.clipboard.writeText(resetLinkResult.temporaryPassword || resetLinkResult.link);
       setResetLinkCopied(true);
       window.setTimeout(() => setResetLinkCopied(false), 2000);
     } catch {
@@ -822,7 +822,7 @@ export default function AdminDashboard() {
                               return (
                               <TableRow key={u.id} className="border-slate-800/70">
                                 <TableCell className="text-slate-100">{u.displayName || "—"}</TableCell>
-                                <TableCell className="text-slate-300">{u.email || "—"}</TableCell>
+                                <TableCell className="text-slate-300">{u.noEmail ? `Sign-in name: ${u.signInName || "—"}` : (u.email || "—")}</TableCell>
                                 <TableCell>
                                   <Badge variant="outline" className="border-slate-700/70 text-slate-200">
                                     {u.role || "No role"}
@@ -849,10 +849,10 @@ export default function AdminDashboard() {
                                       variant="outline"
                                       className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60 disabled:opacity-40"
                                       disabled={isInactive}
-                                      title={isInactive ? "Reactivate the account first" : "Generate a new password-set link"}
+                                      title={isInactive ? "Reactivate the account first" : u.noEmail ? "Set a new temporary password (no email address)" : "Generate a new password-set link"}
                                       onClick={() => setResetLinkTarget(u)}
                                     >
-                                      <Link2 className="h-4 w-4 mr-2" /> Reset password
+                                      <Link2 className="h-4 w-4 mr-2" /> {u.noEmail ? "New temporary password" : "Reset password"}
                                     </Button>
                                     <Button
                                       variant="outline"
@@ -1336,10 +1336,27 @@ export default function AdminDashboard() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur p-4">
           <div className="w-full max-w-lg rounded-2xl border border-slate-800/70 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
             <div className="flex items-center gap-2 text-lg font-semibold text-slate-50">
-              <Link2 className="h-5 w-5" /> Password link for {resetLinkTarget.displayName || resetLinkTarget.email}
+              <Link2 className="h-5 w-5" /> {resetLinkTarget.noEmail ? "Temporary password for" : "Password link for"} {resetLinkTarget.displayName || resetLinkTarget.email}
             </div>
 
-            {!resetLinkResult ? (
+            {!resetLinkResult && resetLinkTarget.noEmail ? (
+              <div className="text-sm text-slate-300 mt-2">
+                This sets a new temporary password for <strong className="text-slate-100">{resetLinkTarget.signInName}</strong>, who has no email address. Anything they are signed in on is signed out, and they must choose their own password when they next sign in. It's recorded in the audit log.
+              </div>
+            ) : resetLinkResult?.temporaryPassword ? (
+              <div className="mt-3 space-y-3">
+                <div className="rounded-xl border border-slate-800/70 bg-slate-950/40 p-3 space-y-2">
+                  <div><div className="text-xs text-slate-400">Sign-in name</div><code className="text-base text-slate-50">{resetLinkResult.signInName}</code></div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1"><div className="text-xs text-slate-400">Temporary password</div><code className="text-lg tracking-wider text-slate-50">{resetLinkResult.temporaryPassword}</code></div>
+                    <Button type="button" size="sm" variant="outline" className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60 shrink-0" onClick={copyResetLink}>
+                      <Copy className="h-3.5 w-3.5 mr-1.5" /> {resetLinkCopied ? "Copied" : "Copy"}
+                    </Button>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-100">Give it to them in person. It can't be shown again. They'll choose their own password when they sign in.</div>
+              </div>
+            ) : !resetLinkResult ? (
               <div className="text-sm text-slate-300 mt-2">
                 This generates a fresh link that lets <strong className="text-slate-100">{resetLinkTarget.email}</strong> set a new password. It's recorded in the audit log. Their current password keeps working until they use the link.
               </div>
@@ -1377,7 +1394,7 @@ export default function AdminDashboard() {
               </Button>
               {!resetLinkResult && (
                 <Button className="rounded-full bg-teal-500 text-slate-950 hover:bg-teal-400" disabled={resetLinkBusy} onClick={generateResetLink}>
-                  {resetLinkBusy ? "Generating…" : "Generate link"}
+                  {resetLinkBusy ? (resetLinkTarget.noEmail ? "Setting…" : "Generating…") : (resetLinkTarget.noEmail ? "Set a new temporary password" : "Generate link")}
                 </Button>
               )}
             </div>

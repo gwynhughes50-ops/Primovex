@@ -12,6 +12,7 @@ import CoshhLanding from "@/mobile/CoshhLanding";
 import MobileBootSplash from "@/mobile/auth/MobileBootSplash";
 import MobileAccountLogin from "@/mobile/auth/MobileAccountLogin";
 import FirstRunSetupGate from "@/setup/FirstRunSetupGate";
+import MustChangePassword from "@/auth/MustChangePassword";
 
 const MINIMUM_SPLASH_MS = 1200;
 
@@ -30,7 +31,7 @@ function MobileAccessDenied() {
 }
 
 function MobileBootController({ initialTab = "home" }) {
-  const { user, loading, can } = useAuth();
+  const { user, loading, can, profile } = useAuth();
   const [minimumSplashComplete, setMinimumSplashComplete] = useState(false);
 
   useEffect(() => {
@@ -43,17 +44,19 @@ function MobileBootController({ initialTab = "home" }) {
   }
 
   if (!user) return <MobileAccountLogin />;
+  if (profile?.mustChangePassword === true) return <MustChangePassword />;
   if (!can("mobile.access")) return <MobileAccessDenied />;
   return <FirstRunSetupGate><MobileLayout initialTab={initialTab} /></FirstRunSetupGate>;
 }
 
 function MobileSenseRoute() {
   const { entityType, entityId } = useParams();
-  const { user, loading, can } = useAuth();
+  const { user, loading, can, profile } = useAuth();
   if (loading) return <MobileBootSplash message="Opening Primovex Sense" />;
   // Keep the deep-link route in place while the user signs in. Once Firebase
   // restores the session this component opens the intended room automatically.
   if (!user) return <MobileAccountLogin />;
+  if (profile?.mustChangePassword === true) return <MustChangePassword />;
   if (!can("mobile.access")) return <MobileAccessDenied />;
   // a fridge's own tag or QR code goes straight to that fridge's temperature check
   if (entityType === "fridge") return <FridgeCheckLanding unitId={entityId} />;
@@ -63,9 +66,10 @@ function MobileSenseRoute() {
 }
 
 function MobileGovernanceConcernsRoute() {
-  const { user, loading, can } = useAuth();
+  const { user, loading, can, profile } = useAuth();
   if (loading) return <MobileBootSplash message="Opening Concerns" />;
   if (!user) return <MobileAccountLogin />;
+  if (profile?.mustChangePassword === true) return <MustChangePassword />;
   if (!can("mobile.access")) return <MobileAccessDenied />;
   // Wrapped in the same session lock as the rest of the app — this carries
   // real patient governance data (EMIS numbers, complaint details), reached
@@ -75,18 +79,20 @@ function MobileGovernanceConcernsRoute() {
 }
 
 function MobileGovernanceSARsRoute() {
-  const { user, loading, can } = useAuth();
+  const { user, loading, can, profile } = useAuth();
   if (loading) return <MobileBootSplash message="Opening SARs" />;
   if (!user) return <MobileAccountLogin />;
+  if (profile?.mustChangePassword === true) return <MustChangePassword />;
   if (!can("mobile.access")) return <MobileAccessDenied />;
   // Behind the same PIN / biometric lock as Concerns: SAR records are patient governance data.
   return <MobileSessionShell><MobileGovernanceSARs /></MobileSessionShell>;
 }
 
 function MobileSignificantEventsRoute() {
-  const { user, loading, can } = useAuth();
+  const { user, loading, can, profile } = useAuth();
   if (loading) return <MobileBootSplash message="Opening Significant events" />;
   if (!user) return <MobileAccountLogin />;
+  if (profile?.mustChangePassword === true) return <MustChangePassword />;
   if (!can("mobile.access")) return <MobileAccessDenied />;
   // Behind the same PIN / biometric lock: events can carry a patient's EMIS number.
   return <MobileSessionShell><MobileSignificantEvents /></MobileSessionShell>;

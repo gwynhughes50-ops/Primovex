@@ -159,34 +159,19 @@ export async function updatePracticeRole(roleId, payload, actor = null) {
 
 export async function seedPracticeDefaults(actor = null) {
   const nowActor = actor || null;
-  const [departmentSnapshot, roleSnapshot] = await Promise.all([
-    getDocs(collection(db, "practice_departments")),
-    getDocs(collection(db, "practice_roles")),
-  ]);
+  const departmentSnapshot = await getDocs(collection(db, "practice_departments"));
 
   const existingDepartments = new Set(
     departmentSnapshot.docs.map((row) => String(row.data()?.name || "").trim().toLowerCase())
-  );
-  const existingRoles = new Set(
-    roleSnapshot.docs.map((row) => String(row.data()?.name || "").trim().toLowerCase())
   );
 
   const missingDepartments = DEFAULT_DEPARTMENTS.filter(
     (name) => !existingDepartments.has(name.trim().toLowerCase())
   );
-  const missingRoles = DEFAULT_ROLE_TEMPLATES.filter(
-    (role) => !existingRoles.has(role.name.trim().toLowerCase())
-  );
 
   await Promise.all(
     missingDepartments.map((name) =>
       addDepartment({ name, description: "", order: 0 }, nowActor)
-    )
-  );
-
-  await Promise.all(
-    missingRoles.map((role) =>
-      addPracticeRole({ ...role, description: "Default Primovex role template" }, nowActor)
     )
   );
 
@@ -203,6 +188,5 @@ export async function seedPracticeDefaults(actor = null) {
 
   return {
     departmentsAdded: missingDepartments.length,
-    rolesAdded: missingRoles.length,
   };
 }

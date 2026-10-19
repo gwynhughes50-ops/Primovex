@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import AccessDenied from "@/components/security/AccessDenied";
-import { CAPABILITY_CATALOG } from "@/core/identity/capabilities";
 import PlatformModeControls from "@/components/platform/PlatformModeControls";
 import SpaceBuilder from "@/modules/sense/components/SpaceBuilder";
 import OrgChart from "@/components/admin/OrgChart";
@@ -16,21 +15,17 @@ import { getPlatformModeConfig, getStoredPlatformMode } from "@/config/platformM
 import { subscribeUsers, updateUserDepartment, updateUserOrgHighlight, updateUserReportsTo } from "@/services/adminUserService";
 import {
   addDepartment,
-  addPracticeRole,
   addPracticeSite,
   DEFAULT_DEPARTMENTS,
-  DEFAULT_ROLE_TEMPLATES,
   PULSE_AREAS,
   savePracticeConfig,
   seedPracticeDefaults,
   subscribeCollection,
   updateDepartment,
-  updatePracticeRole,
   updatePracticeSite,
   subscribePracticeConfig,
 } from "@/services/practiceAdminService";
 
-const PERMISSION_OPTIONS = CAPABILITY_CATALOG;
 
 const tabs = [
   { key: "overview", label: "Overview", icon: Icons.gauge },
@@ -38,7 +33,6 @@ const tabs = [
   { key: "sites", label: "Sites", icon: Icons.sites },
   { key: "spaces", label: "Spaces", icon: Icons.practice },
   { key: "departments", label: "Departments", icon: Icons.departments },
-  { key: "roles", label: "Roles", icon: Icons.roles },
   { key: "pulse", label: "Pulse", icon: Icons.pulse },
   { key: "modules", label: "Modules", icon: Icons.settings },
   { key: "platform", label: "Platform Mode", icon: Icons.settings },
@@ -74,7 +68,6 @@ export default function PracticeAdministration() {
   const [practice, setPractice] = useState(null);
   const [sites, setSites] = useState([]);
   const [departments, setDepartments] = useState([]);
-  const [roles, setRoles] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -93,9 +86,6 @@ export default function PracticeAdministration() {
   const [editingSiteId, setEditingSiteId] = useState(null);
   const [siteDetailsForm, setSiteDetailsForm] = useState({ address: "", postcode: "", telephone: "" });
   const [departmentName, setDepartmentName] = useState("");
-  const [roleName, setRoleName] = useState("");
-  const [roleDepartment, setRoleDepartment] = useState("");
-  const [rolePermissions, setRolePermissions] = useState(["dashboard.read"]);
   const [pulseWeights, setPulseWeights] = useState(
     PULSE_AREAS.reduce((acc, area) => {
       acc[area.key] = area.defaultWeight;
@@ -158,7 +148,6 @@ export default function PracticeAdministration() {
 
     const unsubSites = subscribeCollection("practice_sites", (snap) => setSites(docsFromSnapshot(snap)), (err) => setError(err?.message || String(err)));
     const unsubDepartments = subscribeCollection("practice_departments", (snap) => setDepartments(docsFromSnapshot(snap)), (err) => setError(err?.message || String(err)));
-    const unsubRoles = subscribeCollection("practice_roles", (snap) => setRoles(docsFromSnapshot(snap)), (err) => setError(err?.message || String(err)));
     // Not subscribeCollection("users", ...): that orders by created_at
     // server-side, but user profiles are written with createdAt (camelCase,
     // from the account-creation Cloud Function) - Firestore silently drops
@@ -173,7 +162,6 @@ export default function PracticeAdministration() {
       unsubConfig();
       unsubSites();
       unsubDepartments();
-      unsubRoles();
       unsubUsers();
     };
   }, [canListUsers]);
@@ -233,11 +221,11 @@ export default function PracticeAdministration() {
   const seedDefaults = async () => {
     if (!requireManage()) return;
     beginAction();
-    if (!confirm("Add default departments and role templates?")) return;
+    if (!confirm("Add the default departments?")) return;
     try {
       setBusy(true);
       const result = await seedPracticeDefaults(actor);
-      setSuccess(`Defaults checked: ${result.departmentsAdded} departments and ${result.rolesAdded} roles added.`);
+      setSuccess(`Defaults checked: ${result.departmentsAdded} departments added.`);
     } catch (err) {
       console.error(err);
       setError(err?.message || "Failed to seed defaults.");
@@ -325,33 +313,6 @@ export default function PracticeAdministration() {
     }
   };
 
-  const createRole = async () => {
-    if (!requireManage()) return;
-    beginAction();
-    if (!roleName.trim()) return;
-    try {
-      setBusy(true);
-      await addPracticeRole(
-        {
-          name: roleName.trim(),
-          department: roleDepartment || "Unassigned",
-          permissions: rolePermissions,
-          description: "",
-        },
-        actor
-      );
-      setRoleName("");
-      setRoleDepartment("");
-      setRolePermissions(["dashboard.read"]);
-      setSuccess("Role added.");
-    } catch (err) {
-      console.error(err);
-      setError(err?.message || "Failed to add role.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
   // off unless it has been deliberately turned on for everyone (see core/identity/moduleAccess.js)
   const clinflowDisabled = practice?.moduleToggles?.clinflow?.disabled !== false;
 
@@ -413,7 +374,6 @@ export default function PracticeAdministration() {
         });
       }
       if (type === "department") await updateDepartment(record.id, payload, actor);
-      if (type === "role") await updatePracticeRole(record.id, payload, actor);
       setSuccess(`${record.name} ${payload.active ? "activated" : "deactivated"}.`);
     } catch (err) {
       setError(err?.message || `Failed to update ${type}.`);
@@ -461,14 +421,13 @@ export default function PracticeAdministration() {
 
   const completionScore = useMemo(() => {
     let score = 0;
-    if (practice?.name) score += 20;
-    if (sites.length > 0) score += 20;
-    if (departments.length > 0) score += 20;
-    if (roles.length > 0) score += 20;
-    if (practice?.pulse_weights) score += 10;
+    if (practice?.name) score += 25;
+    if (sites.length > 0) score += 25;
+    if (departments.length > 0) score += 25;
+    if (practice?.pulse_weights) score += 15;
     if (setupComplete) score += 10;
     return score;
-  }, [departments.length, practice, roles.length, setupComplete, sites.length]);
+  }, [departments.length, practice, setupComplete, sites.length]);
 
   if (!authLoading && !canRead) {
     return <AccessDenied title="Practice Administration restricted" message="You do not currently have permission to view practice administration." />;
@@ -484,7 +443,7 @@ export default function PracticeAdministration() {
             </div>
             <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Practice Administration</h1>
             <p className="mt-1 max-w-2xl text-sm mt-text-secondary">
-              Set up your practice structure, sites, departments, roles, Pulse weighting and platform modes. This is the foundation that Primovex modules will use.
+              Set up your practice structure, sites, departments, Pulse weighting and platform modes. This is the foundation that Primovex modules will use.
             </p>
           </div>
 
@@ -528,13 +487,12 @@ export default function PracticeAdministration() {
               <Card className="rounded-2xl mt-card border p-4 mt-text-primary">
                 <SectionHeader title="Digital Twin" />
                 <p className="text-sm mt-text-secondary">
-                  Primovex should reflect how the practice actually works. Start with practice details, then add sites, departments and role templates.
+                  Primovex should reflect how the practice actually works. Start with practice details, then add sites and departments.
                 </p>
                 <div className="mt-4 space-y-2 text-sm">
                   <div className="flex justify-between"><span className="mt-text-secondary">Practice</span><span>{practice?.name || "Not set"}</span></div>
                   <div className="flex justify-between"><span className="mt-text-secondary">Sites</span><span>{sites.length}</span></div>
                   <div className="flex justify-between"><span className="mt-text-secondary">Departments</span><span>{departments.length}</span></div>
-                  <div className="flex justify-between"><span className="mt-text-secondary">Roles</span><span>{roles.length}</span></div>
                   <div className="flex justify-between"><span className="mt-text-secondary">Users</span><span>{canListUsers ? users.length : "Restricted"}</span></div>
                 </div>
               </Card>
@@ -557,7 +515,6 @@ export default function PracticeAdministration() {
                   {[
                     { label: "Sites", value: sites.length },
                     { label: "Departments", value: departments.length },
-                    { label: "Roles", value: roles.length },
                     { label: "Users", value: canListUsers ? users.length : "Restricted" },
                   ].map((item) => (
                     <div key={item.label} className="rounded-xl mt-card-strong border p-3">
@@ -594,7 +551,6 @@ export default function PracticeAdministration() {
                     { label: "Practice details saved", done: !!practice?.name },
                     { label: "At least one site added", done: sites.length > 0 },
                     { label: "Departments configured", done: departments.length > 0 },
-                    { label: "Roles configured", done: roles.length > 0 },
                     { label: "Pulse weighting configured", done: !!practice?.pulse_weights },
                     { label: "Setup marked complete", done: setupComplete },
                   ].map((row) => (
@@ -749,59 +705,6 @@ export default function PracticeAdministration() {
               ) : (
                 <p className="text-sm mt-text-secondary">Full staff directory access (admin.manageUsers) is required to view the organisation chart.</p>
               )}
-            </Card>
-          )}
-
-          {activeTab === "roles" && (
-            <Card className="rounded-2xl mt-card border p-4 mt-text-primary">
-              <SectionHeader title="Roles & Permissions" />
-              <div className="rounded-2xl mt-card-strong border p-4">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <Input disabled={!canManage} value={roleName} onChange={(e) => setRoleName(e.target.value)} placeholder="Role name" />
-                  <select disabled={!canManage} value={roleDepartment} onChange={(e) => setRoleDepartment(e.target.value)} className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 mt-text-primary">
-                    <option value="">Select department</option>
-                    {departments.map((dept) => <option key={dept.id} value={dept.name}>{dept.name}</option>)}
-                  </select>
-                </div>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {PERMISSION_OPTIONS.map((permission) => (
-                    <label key={permission.id} className="flex items-center gap-2 rounded-lg mt-card border p-2 text-sm">
-                      <input
-                        type="checkbox"
-                        disabled={!canManage}
-                        checked={rolePermissions.includes(permission.id)}
-                        onChange={(e) => {
-                          setRolePermissions((current) =>
-                            e.target.checked ? [...new Set([...current, permission.id])] : current.filter((key) => key !== permission.id)
-                          );
-                        }}
-                      />
-                      {permission.label}
-                    </label>
-                  ))}
-                </div>
-                <Button className="mt-4" onClick={createRole} disabled={busy || !canManage}><Icons.add className="mr-1 h-4 w-4" />Add Role</Button>
-              </div>
-
-              <div className="mt-5 grid gap-3 lg:grid-cols-2">
-                {roles.length === 0 ? (
-                  <div className="rounded-xl mt-card-strong border p-4 text-sm mt-text-secondary">No roles created yet. Use Add Defaults or create your own.</div>
-                ) : roles.map((role) => (
-                  <div key={role.id} className="rounded-xl mt-card-strong border p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="font-bold mt-text-primary">{role.name}</div>
-                        <div className="text-xs mt-text-secondary">{role.department || "Unassigned"}</div>
-                      </div>
-                      <Pill>{role.active === false ? "Inactive" : "Active"}</Pill>
-                    </div>
-                    {canManage && <Button size="sm" variant="outline" onClick={() => toggleRecord("role", role)}>{role.active === false ? "Activate" : "Deactivate"}</Button>}
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {(role.permissions || []).map((permission) => <Pill key={permission}>{permission}</Pill>)}
-                    </div>
-                  </div>
-                ))}
-              </div>
             </Card>
           )}
 

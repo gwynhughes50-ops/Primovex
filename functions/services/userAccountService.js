@@ -1,6 +1,22 @@
 const { getAuth } = require("firebase-admin/auth");
 const { FieldValue, getFirestore } = require("firebase-admin/firestore");
 const { HttpsError } = require("firebase-functions/v2/https");
+const { randomInt } = require("node:crypto");
+
+// Some people (a cleaner, say) have no email address. They sign in with a short "sign-in name" instead: behind the scenes it is an
+// address at a domain that can never receive mail, so Firebase Auth accepts it, and the person types only the name. They get a
+// temporary password from the administrator and must choose their own the first time they sign in.
+const NO_EMAIL_DOMAIN = "no-email.invalid";
+const SIGN_IN_NAME = /^[a-z0-9][a-z0-9._-]{2,29}$/;
+const signInNameProblem = (name) => (SIGN_IN_NAME.test(String(name || "")) ? "" : "A sign-in name is 3 to 30 letters, numbers, dots, dashes or underscores, starting with a letter or number (for example cherryl.blair).");
+const addressFor = (signInName) => `${String(signInName).toLowerCase()}@${NO_EMAIL_DOMAIN}`;
+
+// 12 characters in three groups, from letters and numbers that can't be mistaken for each other (no 0/O, 1/l/I), e.g. "k7Qm-4xPd-9Wzr"
+const PASSWORD_CHARS = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+function generateTemporaryPassword(pick = randomInt) {
+  const group = () => Array.from({ length: 4 }, () => PASSWORD_CHARS[pick(PASSWORD_CHARS.length)]).join("");
+  return `${group()}-${group()}-${group()}`;
+}
 
 // Mirrors the role names in src/core/identity/capabilities.js ROLE_TEMPLATES.
 // Kept as a plain list here since that file is a frontend ES module the
@@ -24,11 +40,18 @@ const VALID_ROLES = [
 // profile, then returns a password-set link for the admin to hand to the new
 // user. There is no email-sending infrastructure in this project, so this
 // deliberately returns the link rather than pretending to have emailed it.
-async function createUserAccount({ displayName, email, role, creatorUid }) {
+async function createUserAccount({ displayName, email, signInName, role, creatorUid }) {
   const cleanName = String(displayName || "").trim();
-  const cleanEmail = String(email || "").trim().toLowerCase();
+  const noEmail = !String(email || "").trim() && Boolean(String(signInName || "").trim());
+  const cleanSignIn = noEmail ? String(signInName).trim().toLowerCase() : "";
+  const cleanEmail = noEmail ? addressFor(cleanSignIn) : String(email || "").trim().toLowerCase();
   if (!cleanName) throw new HttpsError("invalid-argument", "Enter a display name.");
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) throw new HttpsError("invalid-argument", "Enter a valid email address.");
+  if (noEmail) {
+    const problem = signInNameProblem(cleanSignIn);
+    if (problem) throw new HttpsError("invalid-argument", problem);
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) || cleanEmail.endsWith(`@${NO_EMAIL_DOMAIN}`)) {
+    throw new HttpsError("invalid-argument", "Enter a valid email address.");
+  }
 
   const db = getFirestore();
 
@@ -42,12 +65,13 @@ async function createUserAccount({ displayName, email, role, creatorUid }) {
   }
 
   const auth = getAuth();
+  const temporaryPassword = noEmail ? generateTemporaryPassword() : "";
   let userRecord;
   try {
-    userRecord = await auth.createUser({ email: cleanEmail, displayName: cleanName });
+    userRecord = await auth.createUser({ email: cleanEmail, displayName: cleanName, ...(noEmail ? { password: temporaryPassword } : {}) });
   } catch (error) {
     if (error.code === "auth/email-already-exists") {
-      throw new HttpsError("already-exists", "An account with this email already exists.");
+      throw new HttpsError("already-exists", noEmail ? "That sign-in name is already taken. Try another." : "An account with this email already exists.");
     }
     throw new HttpsError("internal", error.message || "Could not create the account.");
   }
@@ -58,8 +82,10 @@ async function createUserAccount({ displayName, email, role, creatorUid }) {
     role,
     createdAt: FieldValue.serverTimestamp(),
     createdByUid: creatorUid || null,
+    ...(noEmail ? { noEmail: true, signInName: cleanSignIn, mustChangePassword: true } : {}),
   });
 
+  if (noEmail) return { uid: userRecord.uid, signInName: cleanSignIn, temporaryPassword };
   const inviteLink = await auth.generatePasswordResetLink(cleanEmail);
 
   return { uid: userRecord.uid, inviteLink };
@@ -132,6 +158,30 @@ async function deleteUserAccount({ uid, actorUid }) {
 // account's password, so a System Admin account's link can only be issued by
 // another System Admin (otherwise admin.access alone would be a route to
 // taking over the highest-privilege account).
+// A new temporary password for someone who signs in with a sign-in name (no email to send a reset link to). They must choose their own
+// at their next sign-in; anything they are signed in on is signed out.
+async function setTemporaryPassword({ uid, callerRole }) {
+  const cleanUid = String(uid || "");
+  if (!cleanUid) throw new HttpsError("invalid-argument", "Missing user id.");
+  const db = getFirestore();
+  const profile = await db.collection("users").doc(cleanUid).get();
+  if (!profile.exists) throw new HttpsError("not-found", "That account has no Primovex profile.");
+  const data = profile.data() || {};
+  if (!data.noEmail) throw new HttpsError("failed-precondition", "This account has an email address: use \"Reset password\" instead.");
+  if (data.role === "System Admin" && callerRole !== "System Admin") throw new HttpsError("permission-denied", "Only a System Admin can reset a System Admin's password.");
+  if (data.active === false) throw new HttpsError("failed-precondition", "This account is deactivated: reactivate it first.");
+  const temporaryPassword = generateTemporaryPassword();
+  try {
+    await getAuth().updateUser(cleanUid, { password: temporaryPassword });
+    await getAuth().revokeRefreshTokens(cleanUid);
+  } catch (error) {
+    if (error.code === "auth/user-not-found") throw new HttpsError("not-found", "That account no longer exists.");
+    throw new HttpsError("internal", error.message || "Could not set a new password.");
+  }
+  await db.collection("users").doc(cleanUid).set({ mustChangePassword: true }, { merge: true });
+  return { uid: cleanUid, signInName: data.signInName || "", temporaryPassword };
+}
+
 async function createPasswordLink({ uid, callerRole }) {
   const cleanUid = String(uid || "");
   if (!cleanUid) throw new HttpsError("invalid-argument", "Missing user id.");
@@ -207,4 +257,4 @@ async function resetUserMfa({ uid, callerUid, callerRole }) {
   return { uid: cleanUid, email: record.email || "", removed: enrolled.length };
 }
 
-module.exports = { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa, mfaResetDecision, VALID_ROLES };
+module.exports = { NO_EMAIL_DOMAIN, signInNameProblem, addressFor, generateTemporaryPassword, setTemporaryPassword, createUserAccount, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa, mfaResetDecision, VALID_ROLES };
