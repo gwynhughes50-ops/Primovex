@@ -16,7 +16,7 @@ export const COMPLIANCE_ASSET_TYPES = [
   { key: "fire_drill", label: "Fire Drill", icon: "🚨", checkMode: "pass_fail", defaultFrequency: "sixmonthly", codePrefix: "DR" },
   { key: "fire_alarm_panel", label: "Fire Alarm Panel", icon: "🔔", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "AP" },
   // water safety beyond the taps (the key starts with water_, so the water screens and reports pick them up)
-  { key: "water_tmv", label: "Thermostatic Mixing Valve (TMV)", icon: "🚿", checkMode: "temperature", defaultFrequency: "quarterly", minTempC: 38, maxTempC: 44, codePrefix: "TMV", countdownSeconds: 30, flushable: true },
+  { key: "water_tmv", label: "Thermostatic Mixing Valve (TMV)", icon: "🚿", checkMode: "temperature", defaultFrequency: "quarterly", minTempC: 38, maxTempC: 46, codePrefix: "TMV", countdownSeconds: 30, flushable: true },
   { key: "water_flush", label: "Little-used Outlet or Shower (flush)", icon: "🚰", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "FL" },
   { key: "general", label: "General Asset", icon: "📍", checkMode: "pass_fail", defaultFrequency: "monthly", codePrefix: "GA" },
 ];

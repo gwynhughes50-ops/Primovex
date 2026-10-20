@@ -232,4 +232,11 @@ t("a hot outlet passes at any temperature from 50 up (no 65 limit), a cold one a
   }
 });
 
+t("a mixing valve (TMV) passes from 38 to 46, as the practice's contractor sets it", () => {
+  const tmv = getAssetTypeConfig("water_tmv");
+  assert.deepEqual([tmv.minTempC, tmv.maxTempC], [38, 46]);
+  const outlet = { assetType: "water_tmv", checkMode: "temperature" };
+  for (const [temp, status] of [[37.9, "fail"], [38, "pass"], [45, "pass"], [46, "pass"], [46.1, "fail"]]) assert.equal(evaluateComplianceResult(outlet, { tempC: temp }).status, status, String(temp));
+});
+
 console.log(`\n${n} passed`);

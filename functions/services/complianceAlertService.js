@@ -20,11 +20,13 @@ const tidy = (value, max) => String(value ?? "").replace(/[\u0000-\u001f\u007f]/
 function buildComplianceAlert({ incident, incidentId, recipientUid }) {
   const name = tidy(incident.assetLabel || incident.assetCode, 80) || "A compliance asset";
   const where = tidy(incident.location, 80);
+  // a fault the fire alarm panel showed during the weekly test; what the person typed about it (faultNote) is never in the alert
+  const panelFault = incident.kind === "panel_fault";
   return {
     recipientUid,
     module: "compliance",
     kind: "compliance-alert",
-    title: `${name} failed its check`,
+    title: panelFault ? "Fire alarm panel fault" : `${name} failed its check`,
     message: `${tidy(incident.summary, 220) || "A check failed."}${where ? ` Location: ${where}.` : ""} Recorded by ${tidy(incident.openedBy, 80) || "a colleague"}. Open this to say what was done.`,
     priority: incident.severity === "high" ? "critical" : "high",
     read: false,

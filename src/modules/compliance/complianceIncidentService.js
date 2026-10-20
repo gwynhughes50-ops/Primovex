@@ -3,7 +3,7 @@ import { addDoc, arrayUnion, collection, doc, getDocs, limit, onSnapshot, orderB
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
-import { actionEntry, buildIncident, isOpen, resolutionPatch, sortIncidents } from "./complianceIncidents";
+import { PANEL_FAULT, actionEntry, buildIncident, buildPanelFaultIncident, isOpen, isPanelFault, resolutionPatch, sortIncidents } from "./complianceIncidents";
 
 const COLLECTION = "compliance_incidents";
 
@@ -37,7 +37,8 @@ export async function openIncidentForFailedCheck({ asset, check, actor }) {
   try {
     if (!asset?.id) return null;
     const existing = await getDocs(query(collection(db, COLLECTION), where("assetId", "==", asset.id)));
-    if (existing.docs.some((d) => isOpen(d.data()))) return null;
+    // an open panel fault on the same call point is a different problem and does not count
+    if (existing.docs.some((d) => isOpen(d.data()) && !isPanelFault(d.data()))) return null;
     const ref = await addDoc(collection(db, COLLECTION), { ...buildIncident({ asset, check, actor }), openedAt: serverTimestamp() });
     try {
       await httpsCallable(functions, "raiseComplianceAlert")({ incidentId: ref.id });
@@ -47,6 +48,26 @@ export async function openIncidentForFailedCheck({ asset, check, actor }) {
     return ref.id;
   } catch (error) {
     console.warn("Could not open an incident for the failed check", error);
+    return null;
+  }
+}
+
+// The alarm panel showed a fault during a fire alarm test: open an incident for it (unless one is already open, so a fault
+// that lasts a few weeks is not raised again each week) and tell the caretaker and practice manager. Never throws.
+export async function openIncidentForPanelFault({ asset, check, actor, note }) {
+  try {
+    if (!asset?.id) return null;
+    const existing = await getDocs(query(collection(db, COLLECTION), where("kind", "==", PANEL_FAULT)));
+    if (existing.docs.some((d) => isOpen(d.data()))) return null;
+    const ref = await addDoc(collection(db, COLLECTION), { ...buildPanelFaultIncident({ asset, check, actor, note }), openedAt: serverTimestamp() });
+    try {
+      await httpsCallable(functions, "raiseComplianceAlert")({ incidentId: ref.id });
+    } catch (error) {
+      console.warn("Could not alert the caretaker and practice manager about the panel fault", error);
+    }
+    return ref.id;
+  } catch (error) {
+    console.warn("Could not open an incident for the panel fault", error);
     return null;
   }
 }

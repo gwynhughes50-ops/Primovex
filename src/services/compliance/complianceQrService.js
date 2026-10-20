@@ -16,7 +16,7 @@ import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { auth, db } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import { demoComplianceAssets, demoComplianceChecks } from "@/data/demoCompliance";
-import { openIncidentForFailedCheck } from "@/modules/compliance/complianceIncidentService";
+import { openIncidentForFailedCheck, openIncidentForPanelFault } from "@/modules/compliance/complianceIncidentService";
 import { deviceStorage, findCachedAsset, flushQueue, isOfflineError, queueCheck } from "@/modules/compliance/offlineChecks";
 import {
   FREQUENCY_MS, toDateValue, buildAssetPatch, RETIRE_REASONS, retireReasonLabel,
@@ -302,6 +302,12 @@ export async function recordComplianceCheck(asset, payload = {}) {
     await createCompliancePulseEvent(asset, check, result);
     // a failure is someone's job to put right: open an incident and tell the caretaker and practice manager
     await openIncidentForFailedCheck({ asset, check: { ...check, id: ref.id }, actor });
+  }
+
+  // the alarm panel showed a fault during a fire alarm test (the test itself may well have passed): its own incident, and
+  // the caretaker and practice manager are told
+  if (check.faultDetected === true) {
+    await openIncidentForPanelFault({ asset, check: { ...check, id: ref.id }, actor, note: payload.notes });
   }
 
   return { id: ref.id, ...check };

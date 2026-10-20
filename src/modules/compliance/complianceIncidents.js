@@ -27,8 +27,22 @@ const CHOICES = [
   { key: "sign", label: "Warning sign put up", groups: ["water", "fire", "other"] },
   { key: "other", label: "Something else (add a note)", groups: ["water", "fire", "other"] },
 ];
+// A fault the fire alarm panel showed during the weekly test (an earth fault, say). The test itself passed; the fault is the
+// incident, and is dealt with by the fire alarm engineer rather than by checking the call point again.
+export const PANEL_FAULT = "panel_fault";
+export const isPanelFault = (incident) => incident?.kind === PANEL_FAULT;
+
+const PANEL_CHOICES = [
+  { key: "engineer", label: "Fire alarm engineer called" },
+  { key: "monitoring", label: "Alarm receiving centre told about the fault" },
+  { key: "fixed", label: "Fault cleared or repaired" },
+  { key: "other", label: "Something else (add a note)" },
+];
+
 export const actionChoicesFor = (type) => CHOICES.filter((c) => c.groups.includes(assetGroup(type)));
-export const choiceLabel = (key) => CHOICES.find((c) => c.key === key)?.label || key;
+// the choices for one incident: a panel fault has its own
+export const incidentChoices = (incident) => (isPanelFault(incident) ? PANEL_CHOICES : actionChoicesFor(incident?.assetType));
+export const choiceLabel = (key) => CHOICES.find((c) => c.key === key)?.label || PANEL_CHOICES.find((c) => c.key === key)?.label || key;
 
 const trim = (value, max = 200) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 const degrees = (value) => (value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)) ? `${Number(value)}°C` : "");
@@ -58,6 +72,32 @@ export function buildIncident({ asset, check, actor = {} }) {
     summary: describeFailure(asset, check),
     observedTemp: Number.isFinite(Number(check?.tempC)) && check?.tempC !== "" && check?.tempC !== null ? Number(check.tempC) : null,
     expectedRange: asset?.minTempC != null && asset?.maxTempC != null ? { min: Number(asset.minTempC), max: Number(asset.maxTempC) } : null,
+    status: INCIDENT_STATUS.open,
+    openedAtMs: Date.now(),
+    openedByUid: actor.uid || "",
+    openedBy: trim(actor.displayName || actor.name || actor.email, 80) || "A colleague",
+    actions: [],
+  };
+}
+
+// The document written when the alarm panel shows a fault during a fire alarm test. What the person typed about it is kept
+// on the incident (faultNote) and never in the summary, because the summary goes into the alert on people's lock screens.
+export function buildPanelFaultIncident({ asset, check, actor = {}, note = "" }) {
+  const name = trim(asset?.label || asset?.assetCode || "a call point", 80);
+  return {
+    kind: PANEL_FAULT,
+    siteId: asset?.siteId || check?.siteId || "main_branch",
+    assetId: asset?.id || check?.assetId || "",
+    assetCode: trim(asset?.assetCode || check?.assetCode, 40),
+    assetLabel: "Fire alarm panel fault",
+    assetType: "fire_alarm_panel",
+    location: trim(asset?.location || check?.location, 120),
+    checkId: check?.id || "",
+    severity: "high",
+    summary: `The fire alarm panel showed a fault during the test of ${name}.`,
+    faultNote: trim(note, 200),
+    observedTemp: null,
+    expectedRange: null,
     status: INCIDENT_STATUS.open,
     openedAtMs: Date.now(),
     openedByUid: actor.uid || "",
@@ -99,6 +139,8 @@ export function recheckState(incident, checks = []) {
 // "" when it can be closed. A retired asset needs no recheck.
 export function closeBlockedReason(incident, checks = [], asset = null) {
   if (!(incident?.actions || []).length) return "Record what was done about it first.";
+  // a panel fault is put right by the engineer, not by checking a call point again
+  if (isPanelFault(incident)) return "";
   if (asset && asset.active === false) return "";
   const { state } = recheckState(incident, checks);
   if (state === "none") return "Check it again by scanning its tag. It has to pass before this can be closed.";

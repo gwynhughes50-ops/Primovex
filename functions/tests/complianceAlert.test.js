@@ -114,3 +114,22 @@ test("the message is built from the incident and tidied, with nothing the caller
   assert.match(n.message, /^x y z Recorded by Colin\./);
   assert.equal(buildComplianceAlert({ incident: { openedBy: "A" }, incidentId: "i", recipientUid: "u" }).title, "A compliance asset failed its check");
 });
+
+test("a fire alarm panel fault is announced as one, and what the person typed about it is never in the alert", () => {
+  const fault = { kind: "panel_fault", assetLabel: "Fire alarm panel fault", assetCode: "FP-050", location: "Reception", summary: "The fire alarm panel showed a fault during the test of Fire point 50.", faultNote: "Earth fault zone 3, call me on 07700 900123", severity: "high", openedBy: "Colin" };
+  const n = buildComplianceAlert({ incident: fault, incidentId: "i", recipientUid: "u" });
+  assert.equal(n.title, "Fire alarm panel fault");
+  assert.equal(n.priority, "critical");
+  assert.match(n.message, /^The fire alarm panel showed a fault during the test of Fire point 50\. Location: Reception\. Recorded by Colin\./);
+  assert.ok(!JSON.stringify(n).includes("Earth fault"), "the note stays inside Primovex");
+  assert.ok(!JSON.stringify(n).includes("07700"));
+  assert.equal(buildComplianceAlert({ incident: { openedBy: "A", assetLabel: "Tap" }, incidentId: "i", recipientUid: "u" }).title, "Tap failed its check", "an ordinary failure is unchanged");
+});
+
+test("a panel fault incident is raised once and goes to the caretaker and the practice manager", async () => {
+  const db = world({ "compliance_incidents/inc-1": incident({ kind: "panel_fault", assetLabel: "Fire alarm panel fault", summary: "The fire alarm panel showed a fault during the test of Fire point 50.", faultNote: "Earth fault" }) });
+  const result = await raise(db);
+  assert.equal(result.sent, 2);
+  assert.deepEqual(toWho(db), ["care", "pm"]);
+  assert.deepEqual(await raise(db), { sent: 0, alreadyAlerted: true, roles: [] }, "once per incident");
+});

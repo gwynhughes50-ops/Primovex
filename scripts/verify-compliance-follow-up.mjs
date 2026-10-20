@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  ALERT_ROLES, actionChoicesFor, actionEntry, ageText, assetGroup, buildIncident, closeBlockedReason, describeFailure, isOpen, recheckState, resolutionPatch, sortIncidents,
+  ALERT_ROLES, actionChoicesFor, actionEntry, ageText, assetGroup, buildIncident, buildPanelFaultIncident, closeBlockedReason, describeFailure, incidentChoices, isOpen, isPanelFault, recheckState, resolutionPatch, sortIncidents,
 } from "../src/modules/compliance/complianceIncidents.js";
 import { ageDays, buildIssue, isOpenIssue, issueSummary, openIssuesIn, sortIssues, updateEntry, validateIssue } from "../src/modules/maintenance/maintenance.js";
 import { daysSinceFireTest, dueList, overdueDays, patRetest } from "../src/modules/compliance/complianceDue.js";
@@ -159,6 +159,43 @@ t("'Open' on a check that needs doing takes the person to the list it belongs to
   const by = Object.fromEntries(list.map((i) => [i.key, i.action]));
   assert.deepEqual(by["fire-weekly"], { type: "section", section: "fire" });
   assert.deepEqual(by.overdue, { type: "section", section: "water" });
+});
+
+t("a fault shown by the fire alarm panel is its own kind of incident: the note is kept apart from the summary, and the engineer's actions are offered", () => {
+  const asset = { id: "a1", assetCode: "FP-050", label: "Fire point 50", location: "Reception", siteId: "main_branch" };
+  const incident = buildPanelFaultIncident({ asset, check: { id: "c1" }, actor, note: "  Earth fault   zone 3 " });
+  assert.equal(isPanelFault(incident), true);
+  assert.equal(isPanelFault(buildIncident({ asset, check: { id: "c1", result: "fail" }, actor })), false);
+  assert.equal(incident.severity, "high");
+  assert.equal(incident.assetLabel, "Fire alarm panel fault");
+  assert.equal(incident.summary, "The fire alarm panel showed a fault during the test of Fire point 50.");
+  assert.ok(!incident.summary.includes("Earth"), "what was typed is never in the summary, which goes into the alert");
+  assert.equal(incident.faultNote, "Earth fault zone 3");
+  assert.deepEqual([incident.status, incident.openedByUid, incident.actions], ["open", "u1", []]);
+  assert.deepEqual(incidentChoices(incident).map((c) => c.key), ["engineer", "monitoring", "fixed", "other"]);
+  assert.ok(incidentChoices({ assetType: "water_hot" }).some((c) => c.key === "flushed"), "an ordinary failure keeps its own choices");
+  assert.equal(actionEntry({ choice: "engineer", actor }).label, "Fire alarm engineer called");
+});
+
+t("a panel fault is closed once something has been done about it, without checking the call point again", () => {
+  const incident = { ...buildPanelFaultIncident({ asset: { id: "a1", label: "Fire point 50" }, actor }), openedAtMs: 1000 };
+  assert.equal(closeBlockedReason(incident, []), "Record what was done about it first.");
+  const dealt = { ...incident, actions: [actionEntry({ choice: "engineer", actor })] };
+  assert.equal(closeBlockedReason(dealt, []), "", "no recheck needed");
+  assert.equal(resolutionPatch({ incident: dealt, checks: [], actor, note: "Engineer cleared the earth fault" }).status, "resolved");
+  // an ordinary failure still needs a passing recheck
+  const failed = { ...buildIncident({ asset: { id: "a2", label: "Tap" }, check: {}, actor }), actions: [actionEntry({ choice: "flushed", actor })], openedAtMs: 1000 };
+  assert.match(closeBlockedReason(failed, []), /Check it again/);
+});
+
+t("'what needs doing' says the alarm panel is showing a fault, not that an asset failed", () => {
+  const incident = { id: "i1", ...buildPanelFaultIncident({ asset: { id: "a1", label: "Fire point 50" }, actor }), openedAtMs: ago(2).getTime() };
+  const item = dueList({ assets: [], incidents: [incident], now }).find((i) => i.key === "incident-i1");
+  assert.equal(item.label, "The fire alarm panel is showing a fault");
+  assert.equal(item.tone, "critical");
+  assert.match(item.detail, /Nothing recorded yet/);
+  const dealt = dueList({ assets: [], incidents: [{ ...incident, actions: [actionEntry({ choice: "engineer", actor })] }], now }).find((i) => i.key === "incident-i1");
+  assert.match(dealt.detail, /needs closing once it is put right/);
 });
 
 console.log(`\n${n} passed`);

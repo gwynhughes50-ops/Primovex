@@ -2,7 +2,7 @@
 // hands in the records.
 
 import { FREQUENCY_MS, getNextFirePointToTest, isComplianceCheckDue, isFireAlarmTestDueThisWeek, toDateValue } from "../../services/compliance/complianceRules.js";
-import { isOpen as incidentOpen, ageText } from "./complianceIncidents.js";
+import { isOpen as incidentOpen, ageText, isPanelFault } from "./complianceIncidents.js";
 import { issueSummary } from "../maintenance/maintenance.js";
 import { reviewSummary } from "../coshh/coshh.js";
 import { certLabel, certStatus, daysUntilExpiry } from "../certificates/certificates.js";
@@ -49,7 +49,14 @@ export function dueList({ assets = [], incidents = [], patSessions = [], issues 
   const items = [];
   const open = incidents.filter(incidentOpen);
   for (const incident of open) {
-    items.push({ key: `incident-${incident.id}`, tone: "critical", label: `${label({ label: incident.assetLabel, assetCode: incident.assetCode })} failed its check`, detail: `Open for ${ageText(incident, now)}. ${(incident.actions || []).length ? "Action recorded; needs a passing recheck." : "Nothing recorded yet."}`, action: { type: "incident", id: incident.id } });
+    const fault = isPanelFault(incident);
+    items.push({
+      key: `incident-${incident.id}`,
+      tone: "critical",
+      label: fault ? "The fire alarm panel is showing a fault" : `${label({ label: incident.assetLabel, assetCode: incident.assetCode })} failed its check`,
+      detail: `Open for ${ageText(incident, now)}. ${(incident.actions || []).length ? (fault ? "Action recorded; needs closing once it is put right." : "Action recorded; needs a passing recheck.") : "Nothing recorded yet."}`,
+      action: { type: "incident", id: incident.id },
+    });
   }
   const withIncident = new Set(open.map((i) => i.assetId));
 
