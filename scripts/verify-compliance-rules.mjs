@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  FIRE_TEST_STEPS, checklistGaps, fireTestChecklist, fireTestPassable, recentCheck, upToDateCount,
+  FIRE_TEST_STEPS, checklistGaps, fireTestCanPass, fireTestChecklist, fireTestPassable, panelFault, recentCheck, upToDateCount,
   COMPLIANCE_ASSET_TYPES, buildComplianceLink, buildComplianceQrPayload, evaluateComplianceResult, generateNextAssetCode, getAssetTypeConfig, getCountdownSeconds, getNextFirePointToTest,
   isComplianceCheckDue, isFireAlarmTestDueThisWeek, isFlushableAsset, normaliseAssetCode, parseComplianceQrPayload, buildAssetPatch, RETIRE_REASONS, retireReasonLabel,
 } from "../src/services/compliance/complianceRules.js";
@@ -160,21 +160,37 @@ t("a link-style tag opens the asset's check, and the older text tags and labels 
   assert.equal(parseComplianceQrPayload("https://app.primovex.co.uk/sense/open/fridge/f1"), null);
 });
 
-t("a fire alarm test can only pass when every required step is ticked; the alarm receiving centre is optional", () => {
-  const required = FIRE_TEST_STEPS.filter((s) => s.required).map((s) => s.key);
-  assert.equal(required.length, 5);
+t("a fire alarm test can only pass when every step is ticked, the panel question is answered, and a fault is described", () => {
+  const all = FIRE_TEST_STEPS.map((s) => s.key);
+  assert.equal(FIRE_TEST_STEPS.length, 6);
+  assert.ok(FIRE_TEST_STEPS.every((s) => s.required), "this practice's alarm is monitored, so every step is required");
+  assert.equal(FIRE_TEST_STEPS[0].key, "arc", "the alarm receiving centre is told first");
   assert.equal(fireTestPassable([]), false);
-  assert.equal(fireTestPassable(required.slice(0, 4)), false);
-  assert.equal(fireTestPassable(required), true);
-  assert.equal(fireTestPassable([...required, "arc"]), true);
-  assert.equal(fireTestPassable(["arc"]), false, "the optional step alone is not enough");
-  const saved = fireTestChecklist(required.slice(0, 3));
-  assert.equal(saved.length, FIRE_TEST_STEPS.length);
-  assert.deepEqual(saved.filter((s) => s.ok).map((s) => s.key), required.slice(0, 3));
-  assert.equal(checklistGaps(fireTestChecklist(required)), "");
+  assert.equal(fireTestPassable(all.slice(0, 5)), false);
+  assert.equal(fireTestPassable(all), true);
+  assert.equal(fireTestPassable(all.filter((k) => k !== "arc")), false, "telling the alarm receiving centre cannot be skipped");
+  // the panel question
+  assert.equal(fireTestCanPass({ ticked: all }), false, "not answered");
+  assert.equal(fireTestCanPass({ ticked: all, fault: "no" }), true);
+  assert.equal(fireTestCanPass({ ticked: all, fault: "yes" }), false, "a fault has to be described");
+  assert.equal(fireTestCanPass({ ticked: all, fault: "yes", notes: "  " }), false);
+  assert.equal(fireTestCanPass({ ticked: all, fault: "yes", notes: "Earth fault" }), true, "a fault does not fail the test by itself");
+  assert.equal(fireTestCanPass({ ticked: all.slice(1), fault: "no" }), false);
+  assert.equal(panelFault({ faultDetected: true }), true);
+  assert.equal(panelFault({ faultDetected: false }), false);
+  assert.equal(panelFault({}), null, "tests from before the question was asked");
+  // what is saved, and how a gap reads
+  const saved = fireTestChecklist(all.slice(0, 4));
+  assert.equal(saved.length, 6);
+  assert.deepEqual(saved.filter((s) => s.ok).map((s) => s.key), all.slice(0, 4));
+  assert.ok(saved.every((s) => s.required === true), "each saved step remembers it was required");
+  assert.equal(checklistGaps(fireTestChecklist(all)), "");
   assert.equal(checklistGaps(saved), "Not done: panel zone, reset");
   assert.equal(checklistGaps(null), "");
-  assert.equal(checklistGaps(fireTestChecklist([...required, "arc"].slice(0, 5))), "", "an unticked optional step is not a gap");
+  // a test saved before the alarm receiving centre step was required is not now marked as missing it
+  const older = [{ key: "warned", label: "x", ok: true }, { key: "operated", label: "x", ok: true }, { key: "sounders", label: "x", ok: true }, { key: "panel", label: "x", ok: true }, { key: "reset", label: "x", ok: true }, { key: "arc", label: "x", ok: false }];
+  assert.equal(checklistGaps(older), "", "an older record without a requirement is read by what was required then");
+  assert.equal(checklistGaps([{ key: "arc", label: "x", ok: false, required: true }]), "Not done: alarm receiving centre told");
 });
 
 t("a second scan of an asset checked a moment ago is noticed, with who did it", () => {

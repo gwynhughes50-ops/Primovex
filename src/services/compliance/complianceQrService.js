@@ -268,7 +268,9 @@ export async function recordComplianceCheck(asset, payload = {}) {
     // done with no signal and sent afterwards: performedAt is when it was really done, createdAt when it reached the server
     savedOffline: payload.savedOffline === true,
     // the steps of a fire alarm test, each with whether it was done (null for any other check)
-    checklist: Array.isArray(payload.checklist) ? payload.checklist.slice(0, 12).map((step) => ({ key: String(step?.key || "").slice(0, 40), label: String(step?.label || "").slice(0, 120), ok: step?.ok === true })) : null,
+    checklist: Array.isArray(payload.checklist) ? payload.checklist.slice(0, 12).map((step) => ({ key: String(step?.key || "").slice(0, 40), label: String(step?.label || "").slice(0, 120), ...(typeof step?.required === "boolean" ? { required: step.required } : {}), ok: step?.ok === true })) : null,
+    // did the alarm panel show a fault during a fire alarm test (an earth fault, say)? null when it was not asked
+    faultDetected: typeof payload.faultDetected === "boolean" ? payload.faultDetected : null,
     source: payload.source || "mobile_qr",
     identificationMethod: payload.identificationMethod || "qr",
     scanRaw: payload.scanRaw || asset.scanRaw || null,

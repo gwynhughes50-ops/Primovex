@@ -258,17 +258,20 @@ export function buildAssetPatch(form = {}, type = "general") {
 }
 
 // ---- the weekly fire alarm test, as a short log ----
-// What the person confirms as they test one call point. The first five must all be done for the test to pass; the last is
-// for a practice whose alarm is monitored. Kept in one list so it can be changed to match the practice's own fire log
-// (the fire risk assessor says what the log should hold).
+// What the person confirms as they test one call point, in the order it is done. All must be done for the test to pass.
+// This practice's alarm is monitored, so the alarm receiving centre is told first. Kept in one list so it can be changed to
+// match the practice's own fire log (the fire risk assessor says what the log should hold).
 export const FIRE_TEST_STEPS = [
+  { key: "arc", label: "The alarm receiving centre was told a test was about to happen", short: "alarm receiving centre told", required: true },
   { key: "warned", label: "Everyone in the building was told a test was happening", short: "occupants warned", required: true },
   { key: "operated", label: "The call point was operated with the test key", short: "call point operated", required: true },
   { key: "sounders", label: "The alarm sounders were heard", short: "sounders heard", required: true },
   { key: "panel", label: "The panel showed the right zone or call point", short: "panel zone", required: true },
   { key: "reset", label: "The call point and panel were reset and the alarm silenced", short: "reset", required: true },
-  { key: "arc", label: "The alarm receiving centre was told (only if the alarm is monitored)", short: "alarm receiving centre told", required: false },
 ];
+// Tests saved before the alarm receiving centre step became required did not need it: a saved test remembers what was
+// required when it was done, and an older one that does not say is read by this list.
+const LEGACY_REQUIRED = ["warned", "operated", "sounders", "panel", "reset"];
 
 // a test can only pass when every required step has been ticked; `ticked` is a list of step keys
 export function fireTestPassable(ticked = []) {
@@ -276,16 +279,30 @@ export function fireTestPassable(ticked = []) {
   return FIRE_TEST_STEPS.filter((s) => s.required).every((s) => done.has(s.key));
 }
 
+// Can the test be marked PASS? Every required step ticked, the panel question answered ("yes" a fault was shown, or "no"),
+// and a note saying what it showed if there was one. A fault does not fail the test by itself: it is recorded, and the note
+// says what it was (an earth fault, say) so it can be followed up.
+export function fireTestCanPass({ ticked = [], fault = "", notes = "" } = {}) {
+  if (!fireTestPassable(ticked)) return false;
+  if (fault !== "yes" && fault !== "no") return false;
+  return fault === "no" || String(notes).trim().length > 0;
+}
+
 // the steps as saved on a check: each with whether it was done
-export const fireTestChecklist = (ticked = []) => FIRE_TEST_STEPS.map(({ key, label }) => ({ key, label, ok: ticked.includes(key) }));
+export const fireTestChecklist = (ticked = []) => FIRE_TEST_STEPS.map(({ key, label, required }) => ({ key, label, required, ok: ticked.includes(key) }));
 
 // A short note of what a saved checklist missed, for the history ("" when every required step was done)
 export function checklistGaps(checklist) {
   if (!Array.isArray(checklist)) return "";
-  const names = new Map(FIRE_TEST_STEPS.filter((s) => s.required).map((s) => [s.key, s.short]));
-  const missed = checklist.filter((step) => names.has(step.key) && step.ok !== true).map((step) => names.get(step.key));
+  const short = new Map(FIRE_TEST_STEPS.map((s) => [s.key, s.short]));
+  const missed = checklist
+    .filter((step) => step.ok !== true && (step.required ?? LEGACY_REQUIRED.includes(step.key)))
+    .map((step) => short.get(step.key) || step.label || step.key);
   return missed.length ? `Not done: ${missed.join(", ")}` : "";
 }
+
+// The panel's answer to "was a fault shown?" as saved on a check: true, false, or null when it was not asked
+export const panelFault = (check) => (check && typeof check.faultDetected === "boolean" ? check.faultDetected : null);
 
 // Was this asset checked a moment ago (so a second scan is probably a mistake)? { minutes, by } or null.
 export function recentCheck(asset, now = new Date(), withinMinutes = 10) {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Droplets, Thermometer, X, XCircle } from "lucide-react";
 import { getAssetTypeConfig } from "@/services/compliance/complianceQrService";
-import { FIRE_TEST_STEPS, fireTestChecklist, fireTestPassable } from "@/services/compliance/complianceRules";
+import { FIRE_TEST_STEPS, fireTestCanPass, fireTestChecklist } from "@/services/compliance/complianceRules";
 import { playBeep } from "@/utils/beep";
 
 // The two "one job" screens a check opens into once a tag has been tapped.
@@ -228,10 +228,12 @@ export function PassFailSheet({ asset, eyebrow = "Check", busy, onSubmit, onCanc
 // ---------------------------------------------------------------------------
 export function FireTestSheet({ asset, busy, onSubmit, onCancel }) {
   const [ticked, setTicked] = useState([]);
+  const [fault, setFault] = useState(""); // "yes" or "no": did the alarm panel show a fault
   const [notes, setNotes] = useState("");
   const [askedForNote, setAskedForNote] = useState(false);
   const notesRef = useRef(null);
-  const passable = fireTestPassable(ticked);
+  const passable = fireTestCanPass({ ticked, fault, notes });
+  const faultFlag = fault === "yes" ? true : fault === "no" ? false : undefined;
   const toggle = (key) => setTicked((list) => (list.includes(key) ? list.filter((k) => k !== key) : [...list, key]));
 
   function fail() {
@@ -240,7 +242,7 @@ export function FireTestSheet({ asset, busy, onSubmit, onCancel }) {
       notesRef.current?.focus();
       return;
     }
-    onSubmit({ status: "fail", notes, checklist: fireTestChecklist(ticked) });
+    onSubmit({ status: "fail", notes, checklist: fireTestChecklist(ticked), faultDetected: faultFlag });
   }
 
   return (
@@ -252,14 +254,23 @@ export function FireTestSheet({ asset, busy, onSubmit, onCancel }) {
             <li key={step.key}>
               <button type="button" onClick={() => toggle(step.key)} aria-pressed={on} className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left ${on ? "border-emerald-500/50 bg-emerald-500/10" : "border-[var(--medtrak-border)] bg-[var(--medtrak-panel)]"}`}>
                 <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${on ? "bg-emerald-500 text-white" : "border border-[var(--medtrak-border)]"}`}>{on && <CheckCircle2 className="h-5 w-5" />}</span>
-                <span className="text-sm font-semibold">{step.label}{!step.required && <span className="ml-1 font-normal text-[var(--medtrak-muted)]">(optional)</span>}</span>
+                <span className="text-sm font-semibold">{step.label}</span>
               </button>
             </li>
           );
         })}
       </ul>
+      <fieldset className="mt-4">
+        <legend className="text-sm font-bold">Was a fault shown on the alarm panel?</legend>
+        <div className="mt-2 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Fault shown on the panel">
+          {[["no", "No fault"], ["yes", "Yes, a fault"]].map(([value, label]) => (
+            <button key={value} type="button" role="radio" aria-checked={fault === value} onClick={() => setFault(value)} className={`min-h-12 rounded-2xl border px-3 text-sm font-bold ${fault === value ? (value === "yes" ? "border-amber-500 bg-amber-500 text-white" : "border-emerald-500 bg-emerald-500 text-white") : "border-[var(--medtrak-border)] bg-[var(--medtrak-panel)]"}`}>{label}</button>
+          ))}
+        </div>
+        {fault === "yes" && <p className="mt-2 text-xs text-amber-700">Say what the panel showed in the note below (for example an earth fault). It is recorded with the test so it can be followed up.</p>}
+      </fieldset>
       <div className="mt-4 grid grid-cols-2 gap-3">
-        <button type="button" onClick={() => onSubmit({ status: "pass", notes, checklist: fireTestChecklist(ticked) })} disabled={busy || !passable} className="rounded-[1.5rem] bg-emerald-500 px-4 py-6 text-center text-2xl font-bold text-white disabled:opacity-40">
+        <button type="button" onClick={() => onSubmit({ status: "pass", notes, checklist: fireTestChecklist(ticked), faultDetected: faultFlag })} disabled={busy || !passable} className="rounded-[1.5rem] bg-emerald-500 px-4 py-6 text-center text-2xl font-bold text-white disabled:opacity-40">
           <CheckCircle2 className="mx-auto mb-1 h-8 w-8" />
           PASS
         </button>
@@ -268,7 +279,7 @@ export function FireTestSheet({ asset, busy, onSubmit, onCancel }) {
           FAIL
         </button>
       </div>
-      {!passable && <p className="mt-2 text-xs text-[var(--medtrak-muted)]">PASS unlocks when every step above (except the optional one) is ticked. If something did not work, tap FAIL and say what.</p>}
+      {!passable && <p className="mt-2 text-xs text-[var(--medtrak-muted)]">PASS unlocks when every step above is ticked and the panel question is answered. If something did not work, tap FAIL and say what.</p>}
       <textarea ref={notesRef} value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Notes / issues (optional)" className={`${NOTES_CLASS} ${askedForNote ? "border-rose-500/60" : ""}`} />
       {askedForNote && <p className="mt-2 text-sm text-rose-600">Add a note about the fault if you can, then tap FAIL again. Tapping FAIL with no note saves it as it is.</p>}
       <button type="button" onClick={onCancel} className="mt-3 w-full rounded-2xl border border-[var(--medtrak-border)] px-4 py-3 text-[var(--medtrak-muted)]">Cancel</button>
