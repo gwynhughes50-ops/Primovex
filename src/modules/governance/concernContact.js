@@ -82,3 +82,62 @@ export function validateQuickConcern(form = {}) {
 
 // the contact record to save from the form's fields
 export const contactFromForm = (form = {}) => cleanContact({ phone: form.raisedByPhone, email: form.raisedByEmail, preferred: form.raisedByPreferred });
+
+// ---- the step-by-step "log a concern" ----------------------------------------------------------------------------------------
+// One question per screen. Each step knows what it needs before the person can move on, in words for them. The same rules,
+// put together, are validateQuickConcern above, so the last screen can still check everything.
+
+export const CONCERN_WIZARD_STEPS = ["who", "reply", "patient", "about", "owner", "check"];
+
+// the steps to show: the "who deals with it" step only appears when there are people to pick from
+export const wizardStepsFor = (hasPeople) => CONCERN_WIZARD_STEPS.filter((step) => step !== "owner" || hasPeople);
+
+export function validateConcernStep(step, form = {}) {
+  const raiserIsPatient = (form.source || "patient") === "patient";
+  const raiserInitials = String(form.raisedByInitials || "").replace(/[^A-Za-z]/g, "");
+  switch (step) {
+    case "who":
+      return !raiserIsPatient && raiserInitials.length < 1 ? ["Add the initials of the person raising it."] : [];
+    case "reply":
+      return validateContact({ phone: form.raisedByPhone, email: form.raisedByEmail, preferred: form.raisedByPreferred });
+    case "patient": {
+      if (String(form.emisNumber || "").trim()) return [];
+      const initials = String(form.patientInitials || "").trim();
+      return !initials || !form.dateOfBirth ? ["Give the patient's EMIS number, or their initials and date of birth."] : [];
+    }
+    case "about": {
+      const errors = [];
+      if (!form.category) errors.push("Choose the type of concern.");
+      if (!form.receivedAt || Number.isNaN(new Date(form.receivedAt).getTime())) errors.push("Say the date it was received.");
+      if (!String(form.summary || "").trim()) errors.push("Say briefly what it is about, without the patient's name.");
+      return errors;
+    }
+    case "check":
+      return validateQuickConcern(form);
+    default:
+      return [];
+  }
+}
+
+// true when the reply step has nothing in it, so its button can say "Skip"
+export const replyIsEmpty = (form = {}) => !String(form.raisedByPhone || "").trim() && !String(form.raisedByEmail || "").trim();
+
+// plain words for who raised it (the stored value stays as it is)
+export const CONCERN_SOURCE_LABELS = {
+  patient: "The patient",
+  relative: "A relative",
+  next_of_kin: "Next of kin",
+  parent_guardian: "Parent or guardian",
+  friend: "A friend",
+  llais: "Llais (health watchdog)",
+  bcuhb: "The health board (BCUHB)",
+  mddus: "MDDUS",
+  gmpi: "GMPI",
+  solicitor: "A solicitor",
+  coroner: "The coroner",
+  police: "The police",
+  ombudsman: "The Ombudsman",
+  staff: "A member of staff",
+  other: "Someone else",
+};
+export const sourceLabel = (source) => CONCERN_SOURCE_LABELS[source] || String(source || "").replaceAll("_", " ");
