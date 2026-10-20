@@ -14,6 +14,7 @@
     "core:default",
     "deep-link:default",
     "process:default",
-    "os:default"
+    "os:default",
+    "updater:default"
   ]
 }

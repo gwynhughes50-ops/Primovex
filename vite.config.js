@@ -1,6 +1,9 @@
 import { fileURLToPath, URL } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { readFileSync } from "node:fs";
+
+const PACKAGE_VERSION = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version;
 
 // Every build gets its own id. It is baked into the app and also written to /version.json, so a running web app can tell when a
 // newer version has been published (see src/lib/appUpdate.js).
@@ -12,7 +15,7 @@ const emitVersion = () => ({
 
 export default defineConfig({
   plugins: [react(), emitVersion()],
-  define: { __PRIMOVEX_BUILD__: JSON.stringify(BUILD_ID) },
+  define: { __PRIMOVEX_BUILD__: JSON.stringify(BUILD_ID), __PRIMOVEX_VERSION__: JSON.stringify(PACKAGE_VERSION) },
 
   resolve: {
     alias: {

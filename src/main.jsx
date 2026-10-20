@@ -18,6 +18,7 @@ import MaintenanceSync from "@/modules/maintenance/MaintenanceSync";
 import ViewAsBanner from "@/components/security/ViewAsBanner";
 import OrbStatusProvider from "@/orb/OrbStatusContext";
 import UpdateBanner from "@/components/system/UpdateBanner";
+import DesktopUpdateBanner from "@/components/system/DesktopUpdateBanner";
 
 const isAndroidRuntime = /Android/i.test(navigator.userAgent) && Boolean(window.__TAURI_INTERNALS__);
 const isAndroidBuild = import.meta.env.MODE === "android";
@@ -59,6 +60,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
                 </OrbStatusProvider>
                 {useMobileApplication && <ViewAsBanner compact />}
                 <UpdateBanner />
+                <DesktopUpdateBanner />
               </PrimovexAIProvider>
             </MedTrakThemeProvider>
           </SenseSessionProvider>

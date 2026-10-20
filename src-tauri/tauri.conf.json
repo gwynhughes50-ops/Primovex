@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Primovex",
-  "version": "0.15.41",
+  "version": "0.15.42",
   "identifier": "uk.co.primovex.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -44,7 +44,7 @@
     ],
     "category": "Business",
     "copyright": "© 2026 Primovex",
-    "createUpdaterArtifacts": false,
+    "createUpdaterArtifacts": true,
     "windows": {
       "webviewInstallMode": {
         "type": "downloadBootstrapper",
@@ -81,6 +81,15 @@
           "appLink": true
         }
       ]
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEYxMjYzMzUwNDdBRjk4NkIKUldScm1LOUhVRE1tOGFkMzR1WE5MTlRrMXp3elhsME9Yd0g1MXdKVGN2WnVmWkdrakxJWW9xS2sK",
+      "endpoints": [
+        "https://medtrak-b1cad.web.app/updates/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

@@ -5,7 +5,7 @@ import { db, functions } from "@/lib/firebase";
 export const AUDIT_EVENTS_COLLECTION = "audit_events";
 export const AUDIT_LEDGER_VERSION = 2;
 const OUTBOX_KEY = "primovex.audit.outbox.v2";
-const APP_VERSION = "0.15.41";
+const APP_VERSION = typeof __PRIMOVEX_VERSION__ !== "undefined" ? __PRIMOVEX_VERSION__ : "dev";
 
 function clientId() {
   return globalThis.crypto?.randomUUID?.() || `audit-${Date.now()}-${Math.random().toString(16).slice(2)}`;

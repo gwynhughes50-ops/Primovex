@@ -88,7 +88,7 @@ export default function SecurityCentre() {
   const exportReadiness = () => {
     const payload = {
       product: "Primovex",
-      version: "0.15.41",
+      version: typeof __PRIMOVEX_VERSION__ !== "undefined" ? __PRIMOVEX_VERSION__ : "dev",
       generatedAt: new Date().toISOString(),
       clinicalDataMode: clinicalReadiness.mode,
       liveClinicalDataAllowed: false,
@@ -101,7 +101,7 @@ export default function SecurityCentre() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `primovex-v0.15.41-governed-audit-ledger-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `primovex-governed-audit-ledger-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
   };

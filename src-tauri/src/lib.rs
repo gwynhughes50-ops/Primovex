@@ -597,6 +597,10 @@ pub fn run() {
     ]);
 
   #[cfg(desktop)]
+  // checks for a newer signed release of the desktop app (see src/release/updateService.js); not on the phone
+  #[cfg(desktop)]
+  let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+
   let builder = builder.manage(AlertState::default()).manage(OrbState::default());
 
   // The close button hides Primovex to the system tray (instead of quitting) when the

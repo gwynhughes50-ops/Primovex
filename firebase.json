@@ -24,6 +24,9 @@
   "hosting": {
     "site": "medtrak-b1cad",
     "public": "dist",
+    "predeploy": [
+      "node scripts/stage-updates.mjs"
+    ],
     "ignore": [
       "firebase.json",
       "**/.*",

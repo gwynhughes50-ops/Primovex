@@ -2,6 +2,11 @@ export function isTauriRuntime() {
   return Boolean(window?.__TAURI_INTERNALS__);
 }
 
+// the installed Windows app (the phone apps are Tauri too, but they update another way)
+export function isDesktopApp() {
+  return isTauriRuntime() && !/android|iphone|ipad/i.test(globalThis.navigator?.userAgent || "");
+}
+
 export function getReleaseChannel() {
   return import.meta.env.VITE_PRIMOVEX_RELEASE_CHANNEL || "beta";
 }
@@ -17,11 +22,11 @@ export async function getInstalledVersion() {
 }
 
 export async function checkForDesktopUpdate() {
-  if (!isTauriRuntime()) {
-    return { supported: false, reason: "Updates are available in the installed Primovex desktop application." };
+  if (!isDesktopApp()) {
+    return { supported: false, reason: "Updates are available in the installed Primovex desktop application. The web app and iPhone update by themselves; the Android app updates from the link in the email." };
   }
-  if (import.meta.env.VITE_PRIMOVEX_UPDATES_ENABLED !== "true") {
-    return { supported: false, reason: "The updater will activate when the first signed Primovex release is published." };
+  if (import.meta.env.VITE_PRIMOVEX_UPDATES_ENABLED === "false") {
+    return { supported: false, reason: "Updates are switched off in this build." };
   }
   const { check } = await import("@tauri-apps/plugin-updater");
   const update = await check({ timeout: 30000 });

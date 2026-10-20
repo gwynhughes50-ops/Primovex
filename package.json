@@ -1,6 +1,6 @@
 {
   "name": "primovex",
-  "version": "0.15.41",
+  "version": "0.15.42",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,7 @@
     "version:sync": "node scripts/sync-version.mjs",
     "release:config": "node scripts/create-release-config.mjs",
     "release:check": "npm run version:sync && npm run build",
-    "desktop:build": "npm run version:sync && tauri build",
+    "desktop:build": "node scripts/desktop-release.mjs",
     "android:init": "npm run tauri -- android init",
     "android:dev": "npm run tauri -- android dev",
     "android:dev:open": "npm run tauri -- android dev --open",
@@ -115,6 +115,7 @@
     "test:hooks-order": "node scripts/verify-hooks-order.mjs",
     "test:message-card": "esbuild scripts/verify-message-card.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-message-card.bundle.mjs && node work/verify-message-card.bundle.mjs",
     "test:orb-management": "esbuild scripts/verify-orb-management.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-management.bundle.mjs && node work/verify-orb-management.bundle.mjs",
+    "test:update-manifest": "esbuild scripts/verify-update-manifest.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-update-manifest.bundle.mjs && node work/verify-update-manifest.bundle.mjs",
     "test:orb-compliance": "esbuild scripts/verify-orb-compliance.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-compliance.bundle.mjs && node work/verify-orb-compliance.bundle.mjs",
     "test:spoken-commands": "esbuild scripts/verify-spoken-commands.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-spoken-commands.bundle.mjs && node work/verify-spoken-commands.bundle.mjs",
     "test:orb-unmatched": "esbuild scripts/verify-orb-unmatched.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-unmatched.bundle.mjs && node work/verify-orb-unmatched.bundle.mjs",

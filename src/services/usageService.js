@@ -12,7 +12,7 @@ import { createUsageTracker } from "@/lib/usageTracker";
 const SESSION_KEY = "primovex.usage.session.v1";
 const FLUSH_EVERY_MS = 4 * 60 * 1000;
 const TICK_EVERY_MS = 15 * 1000;
-const APP_VERSION = "0.15.41";
+const APP_VERSION = typeof __PRIMOVEX_VERSION__ !== "undefined" ? __PRIMOVEX_VERSION__ : "dev";
 
 let active = null; // { uid, sessionId, tracker, timers, sending, ended }
 
