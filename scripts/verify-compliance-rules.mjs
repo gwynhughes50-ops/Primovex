@@ -197,4 +197,13 @@ t("'up to date' counts the checked assets, not the single fire call points or re
   assert.deepEqual(upToDateCount([], now), { done: 0, total: 0 });
 });
 
+t("a freezer's default safe range is -25 to -15, the same as the fridge-check screen's", () => {
+  const freezer = getAssetTypeConfig("freezer");
+  assert.deepEqual([freezer.minTempC, freezer.maxTempC], [-25, -15]);
+  assert.equal(evaluateComplianceResult({ assetType: "freezer", checkMode: "temperature" }, { tempC: -18 }).status, "pass");
+  assert.equal(evaluateComplianceResult({ assetType: "freezer", checkMode: "temperature" }, { tempC: -20 }).status, "pass");
+  assert.equal(evaluateComplianceResult({ assetType: "freezer", checkMode: "temperature" }, { tempC: -12 }).status, "fail", "too warm");
+  assert.equal(evaluateComplianceResult({ assetType: "freezer", checkMode: "temperature" }, { tempC: -30 }).status, "fail", "too cold");
+});
+
 console.log(`\n${n} passed`);
