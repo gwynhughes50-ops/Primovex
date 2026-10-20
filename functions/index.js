@@ -15,6 +15,7 @@ const sensorService = require("./services/sensorService");
 const { sendPushForNotification, sendTestAlert } = require("./services/pushService");
 const speechService = require("./services/speechService");
 const { runTrainingReminders } = require("./services/trainingReminderService");
+const complianceReminders = require("./services/complianceReminderService");
 const { rolesToTell } = require("./services/fridgeAlertService");
 const { API_VERSION, MODEL_ID, analyzeDocument, summariseAnalyzeResult } = require("./services/azureDocumentIntelligenceService");
 const { extractClinicalFacts } = require("./services/azureOpenAiExtractionService");
@@ -986,6 +987,15 @@ exports.scheduledTrainingReminders = onSchedule({ region: "europe-west2", schedu
     else if (hasCapability(capabilities, "training.manageClinical")) managers.push({ uid: user.id, scope: "clinical" });
   }
   await runTrainingReminders({ db, FieldValue, managers });
+});
+
+// Fire, water and other tagged checks: the caretaker is told each weekday morning what is due; the practice manager on
+// Mondays what has gone red (see services/complianceReminderService.js).
+exports.scheduledComplianceReminders = onSchedule({ region: "europe-west2", schedule: "every day 07:50", timeZone: "Europe/London", timeoutSeconds: 120 }, async () => {
+  const uidsFor = async (role) => (await db.collection("users").where("role", "==", role).get()).docs.filter((d) => d.data()?.active !== false).map((d) => d.id);
+  const [caretakers, managers] = await Promise.all([uidsFor(complianceReminders.CARETAKER_ROLE), uidsFor(complianceReminders.MANAGER_ROLE)]);
+  const told = await complianceReminders.runComplianceReminders({ db, FieldValue, caretakers, managers });
+  console.log("Compliance reminders", told);
 });
 
 exports.scheduledConnectSimulatorSync = onSchedule(
