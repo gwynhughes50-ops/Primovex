@@ -512,7 +512,7 @@ export default function ComplianceQrEngine({ assets: siteAssets = [], checks = [
                 const Icon = typeIcon(asset.assetType);
                 const payload = buildComplianceQrPayload(asset);
                 return (
-                  <div key={asset.id} className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+                  <div key={asset.id} className="rounded-2xl border border-white/10 bg-slate-950/30 p-4">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-start gap-3">
                         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-teal-400/10 text-teal-100">

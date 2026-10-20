@@ -122,7 +122,7 @@ export default function DemoMode() {
             <CardContent className="p-5">
               <div className="flex items-center gap-2"><Icons.pulse className="h-5 w-5 text-violet-200" /><h2 className="text-lg font-semibold">MedAI demonstration brief</h2></div>
               <div className="mt-4 space-y-3">
-                {scenario.brief.map((line) => <div key={line} className="rounded-2xl border border-white/10 bg-slate-950/45 p-3 text-sm text-slate-200">{line}</div>)}
+                {scenario.brief.map((line) => <div key={line} className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-sm text-slate-200">{line}</div>)}
               </div>
             </CardContent>
           </Card>
