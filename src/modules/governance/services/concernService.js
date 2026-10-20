@@ -19,6 +19,7 @@ import {
 import { db } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import { cleanContact, contactFromForm, hasContact, legacyContact } from "@/modules/governance/concernContact";
+import { STEP_ACTIONS, buildClosePatch, buildStep, partyOf, sentCount, ukDay } from "@/modules/governance/concernCase";
 import { demoGovernanceCases, demoConcernTimeline, demoLearningActions } from "@/data/demoDataset";
 
 export const CONCERNS_COLLECTION = "governance_concerns";
@@ -29,6 +30,8 @@ export const CONCERN_CORRESPONDENCE_COLLECTION = "governance_concern_corresponde
 // case's owner (see firestore.rules), so it never shows in lists, search, the partner view, the Orb or a printed pack.
 export const CONCERN_CONTACTS_COLLECTION = "governance_concern_contacts";
 export const CONCERN_MEETINGS_COLLECTION = "governance_concern_meetings";
+// What has gone back and forth with the indemnity insurer, GMPI and a solicitor: one record per step (see modules/governance/concernCase.js)
+export const CONCERN_STEPS_COLLECTION = "governance_concern_steps";
 export const CORRESPONDENCE_TYPES = ["letter", "meeting", "phone", "email", "other"];
 
 export const CONCERN_PRIORITIES = {
@@ -763,4 +766,101 @@ export function getConcernMetrics(concerns = []) {
   const listeningMissing = open.filter((c) => !c.listeningDiscussionOfferedAt);
   const avgHealth = open.length ? Math.round(open.reduce((sum, c) => sum + calculateCaseHealth(c), 0) / open.length) : 100;
   return { open: open.length, overdue: overdue.length, dueWeek: dueWeek.length, high: high.length, listeningMissing: listeningMissing.length, avgHealth };
+}
+
+// ---------------------------------------------------------------------------
+// The wizards: what has gone back and forth with the indemnity insurer, GMPI (or NHS Resolution) and a solicitor, and closing a case
+// only once it has been dealt with. The rules for both are in modules/governance/concernCase.js.
+// ---------------------------------------------------------------------------
+
+// Filtered by concern only (no orderBy), so it needs no composite index; callers order them with orderedSteps().
+export function subscribeCaseSteps(concernId, callback, onError) {
+  if (isSafeSyntheticMode()) {
+    const timer = setTimeout(() => callback([]), 50);
+    return () => clearTimeout(timer);
+  }
+  if (!concernId) return () => {};
+  return onSnapshot(
+    query(collection(db, CONCERN_STEPS_COLLECTION), where("concernId", "==", concernId)),
+    (snapshot) => callback(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    onError,
+  );
+}
+
+// Record one step with a party. `steps` is what the case already has, so a "sent" knows which round it is.
+export async function addCaseStep(concernId, steps, input, actor = {}) {
+  const round = input?.action === "sent" ? sentCount(steps, input.party) + 1 : null;
+  const step = buildStep({ ...input, round });
+  if (isSafeSyntheticMode()) return `demo-step-${Date.now()}`;
+  // the id is made up first and the record set, so a re-sent write after a dropped connection lands on the same record
+  const ref = doc(collection(db, CONCERN_STEPS_COLLECTION));
+  await setDoc(ref, {
+    concernId,
+    ...step,
+    createdByUid: actor.uid || null,
+    createdByName: actor.displayName || actor.email || "Unknown",
+    createdAt: serverTimestamp(),
+    createdAtMs: Date.now(),
+  });
+  const who = partyOf(step.party)?.short || "An outside party";
+  const rounds = step.round && step.round > 1 ? ` (time ${step.round})` : "";
+  await addConcernTimeline(concernId, {
+    type: "step",
+    title: step.action === "sent" ? `Sent to ${who}${rounds}` : step.action === "instructed" ? `${who} instructed a solicitor` : `${who}: ${STEP_ACTIONS[step.action].toLowerCase()}`,
+    message: `${ukDay(step.occurredOn)}.${step.note ? ` ${step.note}` : ""}`,
+    actor,
+  });
+  return ref.id;
+}
+
+// "The final response letter is ready to send". When outside parties have not all accepted, a reason is kept with it.
+export async function markFinalResponseReady(concern, { reason = "", actor = {} } = {}) {
+  if (isSafeSyntheticMode() || !concern?.id) return;
+  const why = String(reason || "").replace(/\s+/g, " ").trim().slice(0, 300);
+  await updateConcern(concern.id, { finalResponseReadyAt: serverTimestamp(), finalResponseReadyNote: why }, actor);
+  await addConcernTimeline(concern.id, { type: "response_ready", title: "Final response letter ready to send", message: why ? `Marked ready before everyone had accepted it: ${why}` : "Everyone involved has accepted it.", actor });
+}
+
+// Close a case once the final response has been sent, learning has been considered, the Welsh Risk Pool report and the Duty of
+// Candour have been dealt with, and an outcome is recorded. Throws a sentence for the first thing missing, writing nothing.
+export async function closeConcernGuided({ concern, steps = [], closing = {}, learningCount = 0, actor = {} } = {}) {
+  const patch = buildClosePatch({ closing, concern, steps, learningCount });
+  if (isSafeSyntheticMode() || !concern?.id) return;
+  for (const title of (closing.newLearning || []).map((t) => String(t || "").replace(/\s+/g, " ").trim().slice(0, 160)).filter(Boolean)) {
+    await addLearningAction(concern.id, { title }, actor);
+  }
+  await addConcernCorrespondence(concern.id, {
+    type: patch.finalResponseSentVia === "meeting" ? "meeting" : patch.finalResponseSentVia,
+    occurredAt: patch.finalResponseSentOn,
+    notes: `Final response sent.${patch.sentBeforeAccepted ? ` Sent before everyone involved had accepted it: ${patch.sentBeforeAcceptedReason}` : ""}`,
+  }, actor);
+  await updateConcern(concern.id, {
+    status: CONCERN_STATUSES.closed,
+    closedAt: serverTimestamp(),
+    outcome: patch.outcome,
+    finalResponseSentAt: Timestamp.fromDate(new Date(`${patch.finalResponseSentOn}T12:00:00`)),
+    finalResponseSentVia: patch.finalResponseSentVia,
+    sentBeforeAccepted: patch.sentBeforeAccepted,
+    sentBeforeAcceptedReason: patch.sentBeforeAcceptedReason,
+    learningRequired: patch.learningRequired,
+    learningNote: patch.learningNote,
+    lfeReportStatus: patch.lfeReportStatus,
+    ...(patch.lfeReportStatus === "sent" && concern.lfeReportStatus !== "sent" ? { lfeReportSentAt: serverTimestamp() } : {}),
+    dutyOfCandourConsidered: true,
+    dutyOfCandourTriggered: patch.dutyOfCandourTriggered,
+    dutyOfCandourNote: patch.dutyOfCandourNote,
+  }, actor);
+  const lfe = { not_required: "not needed", in_progress: "being prepared", sent: "sent" }[patch.lfeReportStatus];
+  await addConcernTimeline(concern.id, {
+    type: "closed",
+    title: "Case closed",
+    message: [
+      `Outcome: ${CONCERN_OUTCOME_LABELS[patch.outcome]}.`,
+      `Final response sent ${ukDay(patch.finalResponseSentOn)}.`,
+      patch.learningRequired ? "Learning recorded." : `No learning: ${patch.learningNote}`,
+      `Welsh Risk Pool report: ${lfe}.`,
+      patch.dutyOfCandourTriggered ? "Duty of Candour triggered." : "Duty of Candour considered, not triggered.",
+    ].join(" "),
+    actor,
+  });
 }

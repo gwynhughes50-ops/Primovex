@@ -383,6 +383,19 @@ match /governance_concern_learning_actions/{actionId} {
   allow delete: if isAdmin();
 }
 
+// What has gone back and forth with the indemnity insurer, GMPI (or NHS Resolution) and a solicitor on a case: sent, they want
+// changes, sent again, accepted. A record of what happened, so the concerns team adds to it and nobody edits it; only an admin
+// can remove one (a step recorded against the wrong case).
+match /governance_concern_steps/{stepId} {
+  allow get, list: if signedIn() && (
+    isConcernsTeam() || isGovernancePartner()
+    || isInvolvedInConcern(get(/databases/$(database)/documents/governance_concerns/$(resource.data.concernId)).data)
+  );
+  allow create: if isConcernsTeam();
+  allow update: if false;
+  allow delete: if isAdmin();
+}
+
 match /governance_concern_correspondence/{entryId} {
   allow get, list: if signedIn() && (
     isConcernsTeam() || isGovernancePartner()

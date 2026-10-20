@@ -250,6 +250,20 @@ async function main() {
   await check("Concerns team CANNOT delete a meeting (admin only)", () => assertFails(deleteDoc(doc(reception, "governance_concern_meetings", "m-new"))));
   await check("Admin CAN delete a meeting", () => assertSucceeds(deleteDoc(doc(admin, "governance_concern_meetings", "m-new"))));
 
+  console.log("\n=== 3c. Concern steps (indemnity insurer, GMPI, solicitor) ===");
+  const caseStep = (extra = {}) => ({ concernId: "concern-1", party: "indemnity", action: "sent", occurredOn: "2026-10-12", what: "draft_response", note: "", round: 1, createdByUid: "reception-uid", ...extra });
+  await seed(async (db) => { await setDoc(doc(db, "governance_concern_steps", "st-seed"), caseStep()); });
+  await check("Concerns team (Reception) CAN record a step", () => assertSucceeds(setDoc(doc(reception, "governance_concern_steps", "st-new"), caseStep({ action: "accepted", round: null }))));
+  await check("A recorded step CANNOT be edited", () => assertFails(updateDoc(doc(reception, "governance_concern_steps", "st-seed"), { action: "accepted" })));
+  await check("Person involved in the case CAN read its steps", () => assertSucceeds(getDoc(doc(user, "governance_concern_steps", "st-seed"))));
+  await check("Person involved in the case CANNOT record a step", () => assertFails(setDoc(doc(user, "governance_concern_steps", "st-x"), caseStep())));
+  await check("Partner (oversight) CAN read steps", () => assertSucceeds(getDoc(doc(partner, "governance_concern_steps", "st-seed"))));
+  await check("Partner CANNOT record a step", () => assertFails(setDoc(doc(partner, "governance_concern_steps", "st-y"), caseStep())));
+  await check("Uninvolved ReadOnly user CANNOT read a step", () => assertFails(getDoc(doc(readonly, "governance_concern_steps", "st-seed"))));
+  await check("Anonymous CANNOT read a step", () => assertFails(getDoc(doc(anon, "governance_concern_steps", "st-seed"))));
+  await check("Concerns team CANNOT delete a step (admin only)", () => assertFails(deleteDoc(doc(reception, "governance_concern_steps", "st-new"))));
+  await check("Admin CAN delete a step recorded against the wrong case", () => assertSucceeds(deleteDoc(doc(admin, "governance_concern_steps", "st-new"))));
+
   console.log("\n=== 4. Custom role 'admin.access' does NOT grant roles/{} writes ===");
   await check("IT custom role (has admin.access) is DENIED writing to roles/{} (System Admin only, by design)", () =>
     assertFails(setDoc(doc(testEnv.authenticatedContext("it-uid").firestore(), "roles", "NewRole"), {

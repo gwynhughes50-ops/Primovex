@@ -11,6 +11,7 @@ import { Icons } from "@/config/medtrakIcons";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeUsers } from "@/services/adminUserService";
 import ConcernMeetings from "@/modules/governance/components/ConcernMeetings";
+import { CaseReviewPanel, ConcernCloseWizard, ConcernUpdateWizard, useCaseSteps } from "@/modules/governance/components/ConcernWizards";
 import { printConcernSummary } from "@/modules/governance/services/concernPrint";
 import {
   CONCERN_CATEGORIES,
@@ -30,7 +31,6 @@ import {
   addLearningAction,
   buildGovernancePrompts,
   calculateCaseHealth,
-  closeConcern,
   createConcern,
   createConcernReference,
   deleteConcern,
@@ -305,9 +305,9 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
   const [correspondenceForm, setCorrespondenceForm] = useState({ type: "letter", occurredAt: formatDateInput(new Date()), notes: "" });
   const [extendDate, setExtendDate] = useState("");
   const [extendReason, setExtendReason] = useState("");
-  const [closingOutcome, setClosingOutcome] = useState("");
-  const [closeBusy, setCloseBusy] = useState(false);
-  const [closeError, setCloseError] = useState("");
+  const [showUpdate, setShowUpdate] = useState(false);
+  const [showClose, setShowClose] = useState(false);
+  const caseSteps = useCaseSteps(concern?.id);
   const [outcomeEdit, setOutcomeEdit] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
@@ -375,20 +375,6 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
     await extendConcernDeadline(concern.id, concern.finalResponseDueAt, extendDate, extendReason.trim(), actor);
     setExtendDate("");
     setExtendReason("");
-  };
-
-  const submitClose = async () => {
-    if (!closingOutcome) return;
-    try {
-      setCloseBusy(true);
-      setCloseError("");
-      await closeConcern(concern, actor, closingOutcome);
-      setClosingOutcome("");
-    } catch (err) {
-      setCloseError(err?.message || "Could not close the case.");
-    } finally {
-      setCloseBusy(false);
-    }
   };
 
   const submitOutcomeChange = async () => {
@@ -468,7 +454,17 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
         </div>
 
         {isTeam && (
-          <div className="mt-4 flex flex-wrap items-end gap-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-3">
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button onClick={() => setShowUpdate(true)} className="rounded-full">Update this case</Button>
+            {concern.status !== CONCERN_STATUSES.closed && <Button onClick={() => setShowClose(true)} className="rounded-full bg-emerald-500 text-slate-950 hover:bg-emerald-400">Close this case</Button>}
+          </div>
+        )}
+        <CaseReviewPanel concern={concern} steps={caseSteps} onUpdate={isTeam ? () => setShowUpdate(true) : undefined} />
+
+        {isTeam && (
+          <details className="mt-4">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">Extend the deadline directly</summary>
+          <div className="mt-2 flex flex-wrap items-end gap-2 rounded-2xl border border-slate-800 bg-slate-900/60 p-3">
             <div className="space-y-1">
               <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Extend final response deadline</label>
               <Input type="date" value={extendDate} onChange={(e) => setExtendDate(e.target.value)} />
@@ -476,20 +472,7 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
             <Input value={extendReason} onChange={(e) => setExtendReason(e.target.value)} placeholder="Reason (e.g. awaiting clinical statement)" className="flex-1 min-w-[200px]" />
             <Button onClick={submitExtension} disabled={!extendDate} className="rounded-full">Extend</Button>
           </div>
-        )}
-
-        {isTeam && concern.status !== CONCERN_STATUSES.closed && (
-          <div className="mt-4 flex flex-wrap items-end gap-2 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 p-3">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Closing outcome</label>
-              <select value={closingOutcome} onChange={(e) => setClosingOutcome(e.target.value)} className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-white">
-                <option value="">Select outcome…</option>
-                {CONCERN_OUTCOMES.map((o) => <option key={o} value={o}>{CONCERN_OUTCOME_LABELS[o]}</option>)}
-              </select>
-            </div>
-            <Button onClick={submitClose} disabled={!closingOutcome || closeBusy} className="rounded-full bg-emerald-500 text-slate-950 hover:bg-emerald-400">{closeBusy ? "Closing…" : "Close case"}</Button>
-            {closeError && <p className="text-xs text-rose-300">{closeError}</p>}
-          </div>
+          </details>
         )}
 
         {isTeam && concern.status === CONCERN_STATUSES.closed && (
@@ -507,7 +490,9 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
         <div className="mt-5"><StageProgress status={concern.status} /></div>
 
         {isTeam && (
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <details className="mt-5">
+          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">All the stage buttons</summary>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Button onClick={() => acknowledgeConcern(concern, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Mark acknowledged</Button>
             <Button onClick={() => recordListeningDiscussion(concern, actor, false)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Listening offered</Button>
             <Button onClick={() => recordListeningDiscussion(concern, actor, true)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Listening completed</Button>
@@ -516,6 +501,7 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
             <Button onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.response }, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Move to response</Button>
             <Button onClick={() => updateConcern(concern.id, { status: CONCERN_STATUSES.learning }, actor)} className="h-auto min-h-10 whitespace-normal rounded-full bg-slate-800 py-2.5 text-center leading-snug text-slate-100 hover:bg-slate-700">Move to learning</Button>
           </div>
+          </details>
         )}
       </SectionCard>
 
@@ -635,6 +621,9 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
           ))}
         </div>
       </SectionCard>
+
+      {showUpdate && <ConcernUpdateWizard concern={concern} actor={actor} users={users} onClose={() => setShowUpdate(false)} />}
+      {showClose && <ConcernCloseWizard concern={concern} actor={actor} onClose={() => setShowClose(false)} onClosed={() => setShowClose(false)} />}
 
       {confirmDelete && (
         <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4">
