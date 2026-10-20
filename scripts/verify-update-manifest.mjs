@@ -42,7 +42,7 @@ t("the desktop app is set up to read, verify and install updates", () => {
   assert.ok(JSON.parse(read("src-tauri/capabilities/default.json")).permissions.includes("updater:default"));
   const lib = read("src-tauri/src/lib.rs");
   assert.match(lib, /#\[cfg\(desktop\)\]\s*let builder = builder\.plugin\(tauri_plugin_updater::Builder::new\(\)\.build\(\)\);/, "registered on the desktop only");
-  assert.match(lib, /#[cfg(desktop)]s*let builder = builder.manage(AlertState/, "the desktop-only alert state keeps its own attribute, or the phone build fails");
+  assert.match(lib, /#\[cfg\(desktop\)\]\s*let builder = builder\.manage\(AlertState/, "the desktop-only alert state keeps its own attribute, or the phone build fails");
 });
 
 t("every hosting deploy carries the staged update files, and the private key is never in the project", () => {
