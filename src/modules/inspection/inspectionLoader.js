@@ -2,7 +2,7 @@ import { collection, getDocs, limit, orderBy, query, where } from "firebase/fire
 import { db } from "@/lib/firebase";
 import { getExpirySettings, summariseStockAlerts } from "@/lib/stockAlerts";
 import { normalizeStockItemCategory } from "@/services/stockService";
-import { CONCERNS_COLLECTION } from "@/modules/governance/services/concernService";
+import { CONCERNS_COLLECTION, CONCERN_STEPS_COLLECTION } from "@/modules/governance/services/concernService";
 import { SAR_COLLECTION } from "@/modules/governance/services/sarService";
 import { SE_COLLECTION } from "@/modules/governance/seModel";
 import { normaliseSubstance } from "@/modules/coshh/coshh";
@@ -33,7 +33,7 @@ export async function loadInspectionData(now = new Date()) {
   const available = {};
   const monthAgo = dayKey(new Date(now.getTime() - 31 * 86400000));
 
-  const [checks, fireWeekly, waterRounds, patSessions, patAssets, patTests, cleaningLogs, tempUnits, tempLogs, tempIncidents, stockDocs, coshhDocs, certDocs, concerns, sars, events, trainingPeople, trainingCourses, trainingRecords, wasteDocs] = await Promise.all([
+  const [checks, fireWeekly, waterRounds, patSessions, patAssets, patTests, cleaningLogs, tempUnits, tempLogs, tempIncidents, stockDocs, coshhDocs, certDocs, concerns, sars, events, trainingPeople, trainingCourses, trainingRecords, wasteDocs, assets, incidents, concernSteps] = await Promise.all([
     read("compliance checks", () => query(collection(db, "compliance_checks"), orderBy("createdAt", "desc"), limit(3000)), available, "fire"),
     read("fire records", () => query(collection(db, "fire_weekly_checks"), orderBy("createdAt", "desc"), limit(300))),
     read("water rounds", () => query(collection(db, "water_temp_rounds"), orderBy("createdAt", "desc"), limit(300))),
@@ -54,6 +54,9 @@ export async function loadInspectionData(now = new Date()) {
     read("training courses", () => collection(db, TRAINING_COURSES)),
     read("training records", () => collection(db, TRAINING_RECORDS)),
     read("clinical waste", () => collection(db, "waste_consignments"), available, "waste"),
+    read("compliance assets", () => collection(db, "compliance_assets"), available, "assets"),
+    read("compliance incidents", () => collection(db, "compliance_incidents"), available, "incidents"),
+    read("concern steps", () => query(collection(db, CONCERN_STEPS_COLLECTION), orderBy("createdAtMs", "desc"), limit(2000)), available, "concernSteps"),
   ]);
   // water uses the same compliance checks as fire
   available.water = available.fire;
@@ -65,6 +68,6 @@ export async function loadInspectionData(now = new Date()) {
 
   return {
     checks, fireWeekly, waterRounds, patSessions, patAssets, patTests, cleaningLogs, tempUnits, tempLogs, tempIncidents,
-    stockAlerts, stockCount: stock.length, coshh: coshhDocs.map((d) => normaliseSubstance(d.id, d)), certificates: certDocs.map((d) => normaliseCertificate(d.id, d)), concerns, sars, events, waste: wasteDocs.map((d) => normaliseConsignment(d.id, d)), training: { people: trainingPeople, courses: trainingCourses, records: trainingRecords }, available,
+    stockAlerts, stockCount: stock.length, coshh: coshhDocs.map((d) => normaliseSubstance(d.id, d)), certificates: certDocs.map((d) => normaliseCertificate(d.id, d)), concerns, concernSteps, sars, events, assets, incidents, waste: wasteDocs.map((d) => normaliseConsignment(d.id, d)), training: { people: trainingPeople, courses: trainingCourses, records: trainingRecords }, available,
   };
 }

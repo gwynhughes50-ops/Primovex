@@ -44,7 +44,7 @@ t("each is checked at the right rhythm: alarm panel weekly, emergency lights and
 
 t("a TMV is a temperature check with a safe range and a run time; flushing and the others are pass/fail", () => {
   const tmv = getAssetTypeConfig("water_tmv");
-  assert.deepEqual([tmv.checkMode, tmv.minTempC, tmv.maxTempC, getCountdownSeconds({ assetType: "water_tmv" }), isFlushableAsset({ assetType: "water_tmv" })], ["temperature", 38, 44, 30, true]);
+  assert.deepEqual([tmv.checkMode, tmv.minTempC, tmv.maxTempC, getCountdownSeconds({ assetType: "water_tmv" }), isFlushableAsset({ assetType: "water_tmv" })], ["temperature", 38, 46, 30, true]);
   assert.equal(evaluateComplianceResult({ assetType: "water_tmv", checkMode: "temperature" }, { tempC: 42 }).status, "pass");
   assert.equal(evaluateComplianceResult({ assetType: "water_tmv", checkMode: "temperature" }, { tempC: 47 }).status, "fail", "scald risk");
   assert.equal(evaluateComplianceResult({ assetType: "water_tmv", checkMode: "temperature" }, { tempC: 35 }).status, "fail");

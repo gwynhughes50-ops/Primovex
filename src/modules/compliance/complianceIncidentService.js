@@ -3,6 +3,8 @@ import { addDoc, arrayUnion, collection, doc, getDocs, limit, onSnapshot, orderB
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
+import { recordAudit } from "@/modules/audit/recordAudit";
+import { complianceIncidentEvent } from "@/modules/audit/auditEvents";
 import { PANEL_FAULT, PAT_FAIL, actionEntry, buildIncident, buildPanelFaultIncident, buildPatFailIncident, closesWithoutRecheck, isOpen, resolutionPatch, sortIncidents } from "./complianceIncidents";
 
 const COLLECTION = "compliance_incidents";
@@ -39,7 +41,9 @@ export async function openIncidentForFailedCheck({ asset, check, actor }) {
     const existing = await getDocs(query(collection(db, COLLECTION), where("assetId", "==", asset.id)));
     // an open panel fault on the same call point is a different problem and does not count (nor does a PAT failure)
     if (existing.docs.some((d) => isOpen(d.data()) && !closesWithoutRecheck(d.data()))) return null;
-    const ref = await addDoc(collection(db, COLLECTION), { ...buildIncident({ asset, check, actor }), openedAt: serverTimestamp() });
+    const failure = buildIncident({ asset, check, actor });
+    const ref = await addDoc(collection(db, COLLECTION), { ...failure, openedAt: serverTimestamp() });
+    recordAudit(complianceIncidentEvent("opened", { incident: { ...failure, id: ref.id } }));
     try {
       await httpsCallable(functions, "raiseComplianceAlert")({ incidentId: ref.id });
     } catch (error) {
@@ -59,7 +63,9 @@ export async function openIncidentForPanelFault({ asset, check, actor, note }) {
     if (!asset?.id) return null;
     const existing = await getDocs(query(collection(db, COLLECTION), where("kind", "==", PANEL_FAULT)));
     if (existing.docs.some((d) => isOpen(d.data()))) return null;
-    const ref = await addDoc(collection(db, COLLECTION), { ...buildPanelFaultIncident({ asset, check, actor, note }), openedAt: serverTimestamp() });
+    const fault = buildPanelFaultIncident({ asset, check, actor, note });
+    const ref = await addDoc(collection(db, COLLECTION), { ...fault, openedAt: serverTimestamp() });
+    recordAudit(complianceIncidentEvent("opened", { incident: { ...fault, id: ref.id } }));
     try {
       await httpsCallable(functions, "raiseComplianceAlert")({ incidentId: ref.id });
     } catch (error) {
@@ -72,11 +78,16 @@ export async function openIncidentForPanelFault({ asset, check, actor, note }) {
   }
 }
 
-export const recordIncidentAction = (incidentId, { choice, note, actor }) =>
-  updateDoc(doc(db, COLLECTION, incidentId), { actions: arrayUnion(actionEntry({ choice, note, actor })), updatedAt: serverTimestamp() });
+export const recordIncidentAction = (incidentId, { choice, note, actor, incident }) => {
+  recordAudit(complianceIncidentEvent("action", { incident: { ...(incident || {}), id: incidentId }, choice }));
+  return updateDoc(doc(db, COLLECTION, incidentId), { actions: arrayUnion(actionEntry({ choice, note, actor })), updatedAt: serverTimestamp() });
+};
 
-export const resolveIncident = ({ incident, checks, asset, actor, note }) =>
-  updateDoc(doc(db, COLLECTION, incident.id), { ...resolutionPatch({ incident, checks, asset, actor, note }), resolvedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+export const resolveIncident = ({ incident, checks, asset, actor, note }) => {
+  const patch = resolutionPatch({ incident, checks, asset, actor, note });
+  recordAudit(complianceIncidentEvent("resolved", { incident, outcome: patch.recheckCheckId ? "rechecked" : "closed" }));
+  return updateDoc(doc(db, COLLECTION, incident.id), { ...patch, resolvedAt: serverTimestamp(), updatedAt: serverTimestamp() });
+};
 
 // the latest checks on one asset, newest first (needs the compliance_checks assetId + createdAt index)
 export function useAssetChecks(assetId) {
@@ -105,7 +116,9 @@ export async function openIncidentForPatFail({ asset, test, actor }) {
     if (!asset?.id) return null;
     const existing = await getDocs(query(collection(db, COLLECTION), where("assetId", "==", asset.id)));
     if (existing.docs.some((d) => isOpen(d.data()) && d.data().kind === PAT_FAIL)) return null;
-    const ref = await addDoc(collection(db, COLLECTION), { ...buildPatFailIncident({ asset, test, actor }), openedAt: serverTimestamp() });
+    const failed = buildPatFailIncident({ asset, test, actor });
+    const ref = await addDoc(collection(db, COLLECTION), { ...failed, openedAt: serverTimestamp() });
+    recordAudit(complianceIncidentEvent("opened", { incident: { ...failed, id: ref.id } }));
     try {
       await httpsCallable(functions, "raiseComplianceAlert")({ incidentId: ref.id });
     } catch (error) {

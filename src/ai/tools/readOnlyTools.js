@@ -1,5 +1,8 @@
 import { Timestamp, collection, doc, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
-import { concernsOverviewAnswer, lastCheckAnswer, lastLoginAnswer, sarOverviewAnswer, waterTempsAnswer } from '@/ai/management/managementAsk';
+import { caseOutsideLine, concernsOverviewAnswer, lastCheckAnswer, lastLoginAnswer, sarOverviewAnswer, waterTempsAnswer } from '@/ai/management/managementAsk';
+import { dueNowAnswer, incidentsAnswer, patStatusAnswer } from '@/ai/management/complianceAsk';
+import { isOpen as incidentIsOpen, isPanelFault } from '@/modules/compliance/complianceIncidents';
+import { CONCERN_STEPS_COLLECTION } from '@/modules/governance/services/concernService';
 import { summariseUsers } from '@/lib/usageReport';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '@/lib/firebase';
@@ -726,9 +729,15 @@ export function registerApprovedReadOnlyTools() {
         return `${concern.reference}: ${friendly(concern.status)} case, ${friendly(concern.priority)} priority${concern.category ? `, category ${friendly(concern.category)}` : ''}. ${deadline.label}. Owned by ${concern.ownerName || 'Unassigned'}.`;
       };
 
+      // for one case, where it is with the indemnity insurer, GMPI and a solicitor (the concerns team can read these)
+      let outside = '';
+      if (matches.length === 1) {
+        const steps = await getDocs(query(collection(db, CONCERN_STEPS_COLLECTION), where('concernId', '==', matches[0].id))).then((snap) => snap.docs.map((row) => ({ id: row.id, ...row.data() }))).catch(() => []);
+        outside = caseOutsideLine(matches[0], steps);
+      }
       return {
         domain: 'governance', data: matches,
-        summary: matches.length === 1 ? describe(matches[0]) : `${matches.length} concerns matched: ${matches.map(describe).join(' ')}`,
+        summary: matches.length === 1 ? `${describe(matches[0])}${outside ? ` ${outside}` : ''}` : `${matches.length} concerns matched: ${matches.map(describe).join(' ')}`,
         confidence: 0.97,
         sources: [source('Governance concerns', `${matches.length} match${matches.length === 1 ? '' : 'es'} · live read ${nowLabel()}`)],
         actions: [{ label: 'Open Concerns', route: '/governance/concerns' }],
@@ -810,6 +819,11 @@ export function registerApprovedReadOnlyTools() {
         legacyName ? readRows(legacyName, [orderBy('createdAt', 'desc'), limit(5)]).catch(() => []) : Promise.resolve([]),
       ]);
       const answer = lastCheckAnswer({ kind, checks, assets, legacy });
+      // a fault the alarm panel showed during a test stays an open incident until the engineer has dealt with it
+      if (kind === 'fire_alarm') {
+        const faults = (await readRows('compliance_incidents').catch(() => [])).filter((incident) => incidentIsOpen(incident) && isPanelFault(incident));
+        if (faults.length) answer.text += ' The alarm panel is showing a fault from a test, and it has not been closed yet.';
+      }
       return {
         domain: 'compliance', data: { kind, overdue: Boolean(answer.overdue) }, summary: answer.text, confidence: answer.found ? 0.95 : 0.75,
         sources: [source('Compliance checks', `${checks.length} recent check${checks.length === 1 ? '' : 's'} read · live read ${nowLabel()}`)],
@@ -830,6 +844,57 @@ export function registerApprovedReadOnlyTools() {
         domain: 'compliance', data: { readings: answer.readings || 0, outOfRange: answer.outOfRange || 0 }, summary: answer.text, confidence: answer.found ? 0.95 : 0.75,
         warnings: answer.outOfRange ? [`${answer.outOfRange} reading${answer.outOfRange === 1 ? '' : 's'} outside the safe range`] : [],
         sources: [source('Compliance checks', `${checks.length} recent checks read · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Compliance', route: '/compliance' }],
+      };
+    },
+  });
+
+  registerTool({
+    id: 'compliance.dueNow', label: 'What is due in Compliance', requiredCapability: 'compliance.read',
+    async execute() {
+      const [assets, incidents, patAssets, patSessions] = await Promise.all([
+        readRows('compliance_assets').catch(() => []),
+        readRows('compliance_incidents').catch(() => []),
+        readRows('pat_assets').catch(() => []),
+        readRows('pat_test_sessions').catch(() => []),
+      ]);
+      const answer = dueNowAnswer({ assets, incidents, patAssets, patSessions });
+      return {
+        domain: 'compliance', data: { count: answer.count, urgent: answer.urgent }, summary: answer.text, confidence: 0.94,
+        warnings: answer.urgent ? [`${answer.urgent} urgent`] : [],
+        sources: [source('Compliance checks, incidents and PAT register', `${assets.length} asset${assets.length === 1 ? '' : 's'}, ${patAssets.length} appliance${patAssets.length === 1 ? '' : 's'} · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Compliance', route: '/compliance' }],
+      };
+    },
+  });
+
+  registerTool({
+    id: 'compliance.incidents', label: 'Open incidents in Compliance', requiredCapability: 'compliance.read',
+    async execute() {
+      let incidents;
+      try { incidents = await readRows('compliance_incidents'); } catch { return noAccess('compliance', 'compliance incidents', '/compliance'); }
+      const answer = incidentsAnswer({ incidents });
+      return {
+        domain: 'compliance', data: { count: answer.count }, summary: answer.text, confidence: 0.96,
+        warnings: answer.count ? [`${answer.count} open`] : [],
+        sources: [source('Compliance incidents', `${incidents.length} incident${incidents.length === 1 ? '' : 's'} on record · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Compliance', route: '/compliance' }],
+      };
+    },
+  });
+
+  registerTool({
+    id: 'pat.status', label: 'PAT testing', requiredCapability: 'compliance.read',
+    async execute({ query: asked = '' } = {}) {
+      const [patAssets, patTests] = await Promise.all([
+        readRows('pat_assets').catch(() => []),
+        readRows('pat_tests', [orderBy('testedOn', 'desc'), limit(1000)]).catch(() => []),
+      ]);
+      const answer = patStatusAnswer({ patAssets, patTests, query: asked });
+      return {
+        domain: 'compliance', data: { found: Boolean(answer.found), counts: answer.counts || null }, summary: answer.text, confidence: answer.found ? 0.95 : 0.75,
+        warnings: answer.counts && (answer.counts.overdue || answer.counts.outOfUse) ? [`${answer.counts.overdue + answer.counts.outOfUse} need attention`] : [],
+        sources: [source('PAT register', `${patAssets.length} appliance${patAssets.length === 1 ? '' : 's'}, ${patTests.length} test${patTests.length === 1 ? '' : 's'} · live read ${nowLabel()}`)],
         actions: [{ label: 'Open Compliance', route: '/compliance' }],
       };
     },
@@ -876,7 +941,9 @@ export function registerApprovedReadOnlyTools() {
     async execute() {
       let concerns;
       try { concerns = await readRows(CONCERNS_COLLECTION); } catch { return noAccess('governance', 'concerns', '/governance/concerns'); }
-      const answer = concernsOverviewAnswer({ concerns });
+      // the steps with the indemnity insurer, GMPI and a solicitor (only the concerns team can read them)
+      const steps = await readRows(CONCERN_STEPS_COLLECTION, [orderBy('createdAtMs', 'desc'), limit(2000)]).catch(() => null);
+      const answer = concernsOverviewAnswer({ concerns, steps });
       return {
         domain: 'governance', data: { count: answer.count, overdue: answer.overdue || 0 }, summary: answer.text, confidence: 0.96,
         sources: [source('Governance concerns', `${concerns.length} case${concerns.length === 1 ? '' : 's'} you can see · live read ${nowLabel()}`)],

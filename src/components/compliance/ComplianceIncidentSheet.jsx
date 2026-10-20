@@ -40,7 +40,7 @@ export default function ComplianceIncidentSheet({ incidentId, onClose }) {
   const record = () => {
     if (!choice) { setError("Choose what was done."); return; }
     if (choice === "other" && !note.trim()) { setError("Add a note to say what you did."); return; }
-    run(async () => { await recordIncidentAction(incidentId, { choice, note, actor }); setChoice(""); setNote(""); }, "Recorded.");
+    run(async () => { await recordIncidentAction(incidentId, { choice, note, actor, incident }); setChoice(""); setNote(""); }, "Recorded.");
   };
 
   return (

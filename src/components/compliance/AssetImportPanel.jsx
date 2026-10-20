@@ -2,6 +2,8 @@ import { useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createComplianceAsset } from "@/services/compliance/complianceQrService";
+import { recordAudit } from "@/modules/audit/recordAudit";
+import { complianceAssetEvent } from "@/modules/audit/auditEvents";
 import { getAssetTypeConfig } from "@/services/compliance/complianceRules";
 import { TEMPLATE_TEXT, buildImportPlan } from "@/services/compliance/assetImport";
 
@@ -45,7 +47,7 @@ export default function AssetImportPanel({ assets = [], rooms = [], siteId, site
       try {
         await createComplianceAsset({
           assetType: row.assetType, assetCode: row.code, label: row.label, location: row.location, checkMode: config.checkMode,
-          frequency: row.frequency, minTempC: row.minTempC ?? "", maxTempC: row.maxTempC ?? "", countdownSeconds: "", siteId,
+          frequency: row.frequency, minTempC: row.minTempC ?? "", maxTempC: row.maxTempC ?? "", countdownSeconds: "", siteId, skipAudit: true,
         });
         made += 1;
       } catch (error) {
@@ -54,7 +56,7 @@ export default function AssetImportPanel({ assets = [], rooms = [], siteId, site
     }
     setBusy(false);
     setResult({ made, failed });
-    if (made) onCreated?.(made);
+    if (made) { recordAudit(complianceAssetEvent("imported", { count: made })); onCreated?.(made); }
   }
 
   return (

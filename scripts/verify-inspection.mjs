@@ -196,4 +196,113 @@ t("PAT: tests done on the phone count, and appliances that are overdue, untested
   assert.equal(sec({ patSessions: [{ testDate: "2026-07-01" }], patAssets: [{ active: true }] }, "pat").status, "ok");
 });
 
+// ---- compliance, PAT and concern evidence added with the caretaker and concern wizards ----
+
+const full = { ...all, assets: true, incidents: true, concernSteps: true };
+const secF = (data, id) => buildSections({ ...base, available: full, ...data, now })[id];
+const ROW = (section, label) => section.rows.find(([l]) => l === label)?.[1];
+const firePoint = (id, days) => ({ id, assetType: "fire_point", active: true, lastCheckAt: days === null ? null : ago(days) });
+
+t("fire: the alarm checklist, panel faults and call points not yet tested are all shown", () => {
+  const steps = (...done) => done.map((d, i) => ({ key: `s${i}`, ok: d, required: true }));
+  const good = secF({
+    checks: [check("fire_point", 3, { checklist: steps(true, true) }), check("fire_point", 10, { checklist: steps(true, false) }), check("fire_point", 17)],
+    assets: [firePoint("a", 3), firePoint("b", 40)],
+    incidents: [],
+  }, "fire");
+  assert.equal(good.status, "ok");
+  assert.equal(ROW(good, "Alarm tests with every step of the checklist done"), "1 of 2");
+  assert.equal(ROW(good, "Alarm panel faults reported by a test"), "0");
+  assert.equal(ROW(good, "Call points on the register / not tested in 12 months"), "2 / 0");
+  const bad = secF({
+    checks: [check("fire_point", 3)],
+    assets: [firePoint("a", 3), firePoint("b", 400), firePoint("c", null), { ...firePoint("d", null), active: false }],
+    incidents: [{ kind: "panel_fault", assetType: "fire_alarm_panel", status: "open", openedAtMs: ago(2).getTime() }, { kind: "panel_fault", assetType: "fire_alarm_panel", status: "resolved", openedAtMs: ago(90).getTime() }],
+  }, "fire");
+  assert.equal(bad.status, "attention");
+  assert.equal(ROW(bad, "Alarm panel faults reported by a test"), "2");
+  assert.ok(bad.gaps.some((g) => /1 alarm panel fault still open/.test(g)));
+  assert.ok(bad.gaps.some((g) => /2 call points not tested in the last 12 months/.test(g)), "a retired call point is not counted");
+  // a person who cannot read the register or incidents is not told about them, and nothing breaks
+  const quiet = sec({ checks: [check("fire_point", 3)] }, "fire");
+  assert.equal(quiet.status, "ok");
+  assert.ok(!quiet.rows.some(([l]) => /panel faults|Call points/.test(l)));
+});
+
+t("fire and water say when a record was filed afterwards or typed in by hand", () => {
+  const f = secF({ checks: [check("fire_point", 3, { savedOffline: true }), check("fire_point", 10), check("fire_point", 17, { manualEntry: true })] }, "fire");
+  assert.equal(ROW(f, "Done without a signal and filed afterwards"), "1");
+  assert.equal(ROW(f, "Entered by hand afterwards"), "1");
+  const w = secF({ checks: [check("water_hot", 3, { savedOffline: true, assetId: "a" })] }, "water");
+  assert.equal(ROW(w, "Done without a signal and filed afterwards"), "1");
+  assert.equal(ROW(secF({ checks: [check("water_hot", 3, { assetId: "a" })] }, "water"), "Done without a signal and filed afterwards"), undefined, "nothing to say when every record was live");
+});
+
+t("fire and emergency equipment incidents that are still open are gaps", () => {
+  const open = { assetType: "fire_door", status: "open", openedAtMs: ago(3).getTime() };
+  const fire = secF({ checks: [check("fire_point", 3)], incidents: [open] }, "fire");
+  assert.ok(fire.gaps.some((g) => /1 fire equipment incident still open/.test(g)));
+  const aed = secF({ checks: [check("aed", 4)], incidents: [{ assetType: "aed", status: "open" }, { assetType: "aed", status: "resolved" }] }, "emergency");
+  assert.ok(aed.gaps.some((g) => /1 emergency equipment incident still open/.test(g)));
+  const fireWithAed = secF({ checks: [check("fire_point", 3)], incidents: [{ assetType: "aed", status: "open" }] }, "fire");
+  assert.ok(!fireWithAed.gaps.some((g) => /equipment incident/.test(g)), "an AED incident is the emergency section's");
+});
+
+t("water: outlets on the register that missed the month, and open water incidents", () => {
+  const outlet = (id, days) => ({ id, assetType: "water_hot", active: true, lastCheckAt: days === null ? null : ago(days) });
+  const w = secF({
+    checks: [check("water_hot", 5, { assetId: "a" })],
+    assets: [outlet("a", 5), outlet("b", 50), outlet("c", null)],
+    incidents: [{ assetType: "water_hot", status: "open", openedAtMs: ago(4).getTime() }, { assetType: "water_cold", status: "resolved", openedAtMs: ago(100).getTime() }],
+  }, "water");
+  assert.equal(ROW(w, "Outlets on the register / not checked in 31 days"), "3 / 2");
+  assert.equal(ROW(w, "Water incidents in the last 12 months / still open"), "2 / 1");
+  assert.ok(w.gaps.some((g) => /2 water outlets not checked in the last 31 days/.test(g)));
+  assert.ok(w.gaps.some((g) => /1 water incident still open/.test(g)));
+});
+
+t("PAT: failed tests and failed-appliance incidents are counted and the open ones flagged", () => {
+  const live = [{ active: true, nextDueOn: "2027-06-01", lastTestedOn: "2026-09-15" }];
+  const p = secF({
+    patTests: [{ testedOn: "2026-09-15", result: "pass" }, { testedOn: "2026-09-16", result: "fail" }],
+    patAssets: live,
+    incidents: [{ kind: "pat_fail", status: "open", openedAtMs: ago(3).getTime() }, { kind: "pat_fail", status: "resolved", openedAtMs: ago(20).getTime() }, { assetType: "water_hot", status: "open" }],
+  }, "pat");
+  assert.equal(ROW(p, "Failed tests in the last 12 months"), "1");
+  assert.equal(ROW(p, "Failed-appliance incidents closed / still open"), "1 / 1");
+  assert.ok(p.gaps.some((g) => /1 failed-appliance incident still open/.test(g)));
+});
+
+t("cold chain: readings entered by hand at the fridge are counted", () => {
+  const c = secF({ tempUnits: [{ active: true }], tempLogs: [{ dateKey: "2026-10-09", source: "manual-mobile" }, { dateKey: "2026-10-09", source: "sensor" }, { dateKey: "2026-10-08", source: "manual-mobile" }] }, "coldchain");
+  assert.equal(ROW(c, "...of which read from the thermometer and entered at the fridge"), "2");
+});
+
+t("governance: how cases were closed, and which are waiting on an outside party (counts only)", () => {
+  let k = 0;
+  const closed = (extra) => ({ id: `closed${k += 1}`, status: "closed", closedAt: ago(20), receivedAt: ago(80), dutyOfCandourConsidered: true, ...extra });
+  const open = { id: "open1", status: "in_progress", receivedAt: ago(40), mddusRequired: true, gmpiReference: "G-1" };
+  const steps = [
+    { concernId: "open1", party: "indemnity", action: "sent", occurredOn: "2026-09-26", createdAtMs: 1 },
+    { concernId: "open1", party: "indemnity", action: "changes", occurredOn: "2026-09-30", createdAtMs: 2 },
+    { concernId: "open1", party: "indemnity", action: "sent", occurredOn: "2026-10-02", createdAtMs: 3 },
+    { concernId: "open1", party: "gmpi", action: "sent", occurredOn: "2026-10-07", createdAtMs: 4 },
+  ];
+  const g = secF({
+    concerns: [open, closed({ dutyOfCandourTriggered: true }), closed({ sentBeforeAccepted: true, lfeReportStatus: "in_progress" }), closed({ dutyOfCandourConsidered: undefined })],
+    concernSteps: steps,
+  }, "governance");
+  assert.equal(ROW(g, "Cases closed (12 months) with every closing check recorded"), "2 of 3");
+  assert.equal(ROW(g, "...Duty of Candour triggered"), "1");
+  assert.equal(ROW(g, "...final response sent before everyone involved had accepted it"), "1");
+  assert.equal(ROW(g, "Welsh Risk Pool reports still being prepared"), "1");
+  assert.equal(ROW(g, "Open cases waiting on a reply from an outside party"), "2", "the insurer (sent again) and GMPI are both with them");
+  assert.equal(ROW(g, "...longest wait so far (days)"), "8");
+  // names and free text never get in
+  const leaky = secF({ concerns: [{ ...open, patientName: "Someone", description: "ZZ story" }], concernSteps: [{ concernId: "open1", party: "gmpi", action: "sent", occurredOn: "2026-10-07", note: "ZZ private" }] }, "governance");
+  assert.ok(!/Someone|ZZ/.test(JSON.stringify(leaky)));
+  // a role that cannot read the steps is not shown that line
+  assert.ok(!sec({ concerns: [open] }, "governance").rows.some(([l]) => /outside party/.test(l)));
+});
+
 console.log(`\n${n} passed`);

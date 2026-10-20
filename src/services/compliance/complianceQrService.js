@@ -17,6 +17,8 @@ import { auth, db } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import { demoComplianceAssets, demoComplianceChecks } from "@/data/demoCompliance";
 import { openIncidentForFailedCheck, openIncidentForPanelFault } from "@/modules/compliance/complianceIncidentService";
+import { recordAudit } from "@/modules/audit/recordAudit";
+import { complianceAssetEvent, complianceCheckEvent } from "@/modules/audit/auditEvents";
 import { deviceStorage, findCachedAsset, flushQueue, isOfflineError, queueCheck } from "@/modules/compliance/offlineChecks";
 import {
   FREQUENCY_MS, toDateValue, buildAssetPatch, RETIRE_REASONS, retireReasonLabel,
@@ -170,6 +172,7 @@ export async function createComplianceAsset(form = {}) {
 
   const ref = await addDocResendSafe(collection(db, COMPLIANCE_ASSETS_COLLECTION), payload);
   await updateDoc(ref, { qrPayload: `MEDTRAK:COMPLIANCE:${ref.id}`, docId: ref.id });
+  if (!form.skipAudit) recordAudit(complianceAssetEvent("created", { asset: { id: ref.id, ...payload } }));
   return { id: ref.id, ...payload, qrPayload: `MEDTRAK:COMPLIANCE:${ref.id}` };
 }
 
@@ -284,6 +287,7 @@ export async function recordComplianceCheck(asset, payload = {}) {
   };
 
   const ref = await addDocResendSafe(collection(db, COMPLIANCE_CHECKS_COLLECTION), check, payload.checkId || undefined);
+  recordAudit(complianceCheckEvent({ asset, check: { ...check, id: ref.id } }));
   // A back-dated manual record must not push the asset's "last checked" earlier
   // than a check that has already been recorded since.
   const lastKnown = toDateValue(asset.lastCheckAt);
@@ -404,6 +408,7 @@ export async function updateComplianceAsset(asset, form, actor) {
   const { patch, problems } = buildAssetPatch(form, asset?.assetType);
   if (problems.length) throw new Error(problems[0]);
   await updateDoc(doc(db, COMPLIANCE_ASSETS_COLLECTION, asset.id), { ...patch, updatedAt: serverTimestamp(), updatedByName: who(actor) });
+  recordAudit(complianceAssetEvent("updated", { asset }));
   return patch;
 }
 
@@ -411,8 +416,10 @@ export async function updateComplianceAsset(asset, form, actor) {
 export async function retireComplianceAsset(asset, { reason, actor }) {
   if (!RETIRE_REASONS.some((r) => r.key === reason)) throw new Error("Say why it is being retired.");
   await updateDoc(doc(db, COMPLIANCE_ASSETS_COLLECTION, asset.id), { active: false, retiredReason: reason, retiredReasonLabel: retireReasonLabel(reason), retiredAt: serverTimestamp(), retiredByName: who(actor), updatedAt: serverTimestamp() });
+  recordAudit(complianceAssetEvent("retired", { asset, reason }));
 }
 
 export async function restoreComplianceAsset(asset, actor) {
   await updateDoc(doc(db, COMPLIANCE_ASSETS_COLLECTION, asset.id), { active: true, retiredReason: "", retiredReasonLabel: "", restoredAt: serverTimestamp(), restoredByName: who(actor), updatedAt: serverTimestamp() });
+  recordAudit(complianceAssetEvent("restored", { asset }));
 }

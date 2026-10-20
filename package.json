@@ -115,6 +115,7 @@
     "test:hooks-order": "node scripts/verify-hooks-order.mjs",
     "test:message-card": "esbuild scripts/verify-message-card.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-message-card.bundle.mjs && node work/verify-message-card.bundle.mjs",
     "test:orb-management": "esbuild scripts/verify-orb-management.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-management.bundle.mjs && node work/verify-orb-management.bundle.mjs",
+    "test:orb-compliance": "esbuild scripts/verify-orb-compliance.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-compliance.bundle.mjs && node work/verify-orb-compliance.bundle.mjs",
     "test:spoken-commands": "esbuild scripts/verify-spoken-commands.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-spoken-commands.bundle.mjs && node work/verify-spoken-commands.bundle.mjs",
     "test:orb-unmatched": "esbuild scripts/verify-orb-unmatched.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-unmatched.bundle.mjs && node work/verify-orb-unmatched.bundle.mjs",
     "test:medicine-names": "esbuild scripts/verify-medicine-names.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-medicine-names.bundle.mjs && node work/verify-medicine-names.bundle.mjs",

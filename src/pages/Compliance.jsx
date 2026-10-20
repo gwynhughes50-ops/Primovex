@@ -214,7 +214,11 @@ function ComplianceFull({ canCoshh }) {
   const inSite = (row) => !siteId || String(row.siteId || row.site || "").trim() === siteId;
   const siteAssets = useMemo(() => allAssets.filter(inSite), [allAssets, siteId]);
   const siteChecks = useMemo(() => recentChecks.filter(inSite), [recentChecks, siteId]);
-  const [tab, setTab] = useState("overview"); // overview | history | cleaning | maintenance | assets | pat | certificates | coshh
+  // overview | history | cleaning | maintenance | assets | pat | certificates | coshh; a link such as /compliance?tab=pat opens that one
+  const [tab, setTab] = useState(() => {
+    const wanted = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search).get("tab");
+    return ["overview", "history", "cleaning", "maintenance", "assets", "pat", "certificates", "coshh"].includes(wanted) ? wanted : "overview";
+  });
 
   // For printing we keep our own “recent” datasets at page level
   const [printFireChecks, setPrintFireChecks] = useState([]);

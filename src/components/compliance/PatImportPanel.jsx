@@ -2,6 +2,8 @@ import { useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileSpreadsheet, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { addPatAsset } from "@/modules/pat/patService";
+import { recordAudit } from "@/modules/audit/recordAudit";
+import { patAssetEvent } from "@/modules/audit/auditEvents";
 import { categoryOf } from "@/modules/pat/pat";
 import { TEMPLATE_TEXT, buildPatImportPlan } from "@/modules/pat/patImport";
 
@@ -40,7 +42,7 @@ export default function PatImportPanel({ assets = [], rooms = [], siteId, siteNa
     const failed = [];
     for (const row of ready) {
       try {
-        await addPatAsset({ siteId, tag: row.tag, name: row.name, category: row.category, cls: row.cls, location: row.location, makeModel: row.makeModel, serialNumber: row.serialNumber });
+        await addPatAsset({ siteId, tag: row.tag, name: row.name, category: row.category, cls: row.cls, location: row.location, makeModel: row.makeModel, serialNumber: row.serialNumber, skipAudit: true });
         made += 1;
       } catch (error) {
         failed.push(`${row.tag} (${row.name}): ${error?.message || "could not be added"}`);
@@ -48,7 +50,7 @@ export default function PatImportPanel({ assets = [], rooms = [], siteId, siteNa
     }
     setBusy(false);
     setResult({ made, failed });
-    if (made) onCreated?.(made);
+    if (made) { recordAudit(patAssetEvent("imported", { count: made })); onCreated?.(made); }
   }
 
   return (

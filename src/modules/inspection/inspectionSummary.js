@@ -7,6 +7,8 @@ import { concernDeadline, concernOpen, sarDays, sarOpen } from "../../ai/managem
 import { reviewSummary, reviewStatus } from "../coshh/coshh.js";
 import { certLabel, certStatus, certSummary } from "../certificates/certificates.js";
 import { STATUS, courseSummary, tally, buildMatrix } from "../training/training.js";
+import { isOpen as incidentOpen, isPanelFault, isPatFail, assetGroup } from "../compliance/complianceIncidents.js";
+import { reviewStatus as caseReviewStatus } from "../governance/concernCase.js";
 import { LONG_GAP_DAYS, NO_SITE, siteGroups, stats as wasteStats, live as liveWaste } from "../waste/waste.js";
 
 const DAY = 86400000;
@@ -40,11 +42,29 @@ const unavailable = (id, title) => section(id, title, "unavailable", "Not shown:
 function checkDate(check) { return toDate(check.performedAt) || toDate(check.createdAt); }
 const failed = (check) => String(check.result || "").toLowerCase() === "fail";
 
+// Where a record came from matters to an inspector as much as what it says: a check done on a phone with no signal and filed
+// afterwards, or typed in by hand later, is still real, but the pack says so rather than letting it pass as live.
+function provenanceRows(list) {
+  const offline = list.filter((r) => r.offline).length;
+  const manual = list.filter((r) => r.manual).length;
+  const rows = [];
+  if (offline) rows.push(["Done without a signal and filed afterwards", String(offline)]);
+  if (manual) rows.push(["Entered by hand afterwards", String(manual)]);
+  return rows;
+}
+
+// the incidents of one group (fire, water, other) over the last 12 months, and how many are still open
+function incidentFacts(incidents, from, now, pick) {
+  const mine = (incidents || []).filter((i) => pick(i) && within(toDate(i.openedAt) || (i.openedAtMs ? new Date(i.openedAtMs) : null), from, now));
+  const open = (incidents || []).filter((i) => pick(i) && incidentOpen(i));
+  return { year: mine.length, open: open.length };
+}
+
 // ---- premises and safety -----------------------------------------------------------------------------------
-export function fireSection({ checks, fireWeekly, now, available }) {
+export function fireSection({ checks, fireWeekly, assets, incidents, now, available }) {
   if (!available.fire) return unavailable("fire", "Fire safety");
   const from = periodStart(now);
-  const tagged = (checks || []).filter((c) => String(c.assetType || "").startsWith("fire_")).map((c) => ({ date: checkDate(c), fail: failed(c), by: c.actor?.displayName, type: c.assetType }));
+  const tagged = (checks || []).filter((c) => String(c.assetType || "").startsWith("fire_")).map((c) => ({ date: checkDate(c), fail: failed(c), by: c.actor?.displayName, type: c.assetType, offline: c.savedOffline === true, manual: c.manualEntry === true, steps: Array.isArray(c.checklist) ? c.checklist : null }));
   const legacy = (fireWeekly || []).map((r) => ({ date: toDate(r.dateKey) || toDate(r.performedAt) || toDate(r.checkedAt) || toDate(r.createdAt), fail: false, by: r.checkedBy || r.performedBy || r.createdByName, type: "fire_point" }));
   const all = [...tagged, ...legacy].filter((r) => within(r.date, from, now));
   if (!all.length) return section("fire", "Fire safety", "none", "No fire checks recorded in the last 12 months.", [], ["No fire checks recorded in the last 12 months."]);
@@ -57,15 +77,40 @@ export function fireSection({ checks, fireWeekly, now, available }) {
   if (!lastAlarm) gaps.push("No weekly fire alarm test has been recorded in the last 12 months.");
   else if (daysAgo(lastAlarm.date, now) > 10) gaps.push(`The last fire check was ${plural(daysAgo(lastAlarm.date, now), "day")} ago (a weekly alarm test is expected).`);
   if (fails) gaps.push(`${plural(fails, "fire check")} failed in the last 12 months. Show what was done about each.`);
+  const rows = [["Weeks with an alarm test (of 52)", String(weeks)], ["Last check", `${ukDate(last.date)}${last.by ? `, ${last.by}` : ""}`], ["Failed checks", String(fails)]];
+  // the alarm test checklist (the alarm receiving centre told, the sounders, the reset...) was ticked step by step on the phone
+  const listed = alarm.filter((r) => r.steps && r.steps.length);
+  if (listed.length) {
+    const complete = listed.filter((r) => r.steps.every((st) => st?.required === false || st?.ok === true)).length;
+    rows.push(["Alarm tests with every step of the checklist done", `${complete} of ${listed.length}`]);
+  }
+  // a fault the alarm panel showed during a test, each one an incident for the alarm engineer
+  const faults = incidentFacts((available.incidents ? incidents : []), from, now, isPanelFault);
+  if (available.incidents) {
+    rows.push(["Alarm panel faults reported by a test", String(faults.year)]);
+    if (faults.open) gaps.push(`${plural(faults.open, "alarm panel fault")} still open.`);
+    const failedOpen = incidentFacts(incidents, from, now, (i) => !isPanelFault(i) && !isPatFail(i) && assetGroup(i.assetType) === "fire" && !EMERGENCY_TYPES.some(([type]) => type === i.assetType)).open;
+    if (failedOpen) gaps.push(`${plural(failedOpen, "fire equipment incident")} still open.`);
+  }
+  // every call point should have been tested at least once in the year (a different one each week)
+  if (available.assets) {
+    const points = (assets || []).filter((a) => a.assetType === "fire_point" && a.active !== false && !a.archivedAt);
+    if (points.length) {
+      const untested = points.filter((a) => !within(toDate(a.lastCheckAt), from, now)).length;
+      rows.push(["Call points on the register / not tested in 12 months", `${points.length} / ${untested}`]);
+      if (untested) gaps.push(`${plural(untested, "call point")} not tested in the last 12 months.`);
+    }
+  }
+  rows.push(...provenanceRows(tagged.filter((r) => within(r.date, from, now))));
   return section("fire", "Fire safety", gaps.length ? "attention" : "ok",
     `${plural(all.length, "check")} in the last 12 months; last on ${ukDate(last.date)}.`,
-    [["Weeks with an alarm test (of 52)", String(weeks)], ["Last check", `${ukDate(last.date)}${last.by ? `, ${last.by}` : ""}`], ["Failed checks", String(fails)]], gaps);
+    rows, gaps);
 }
 
-export function waterSection({ checks, waterRounds, now, available }) {
+export function waterSection({ checks, waterRounds, assets, incidents, now, available }) {
   if (!available.water) return unavailable("water", "Water safety (legionella)");
   const from = periodStart(now);
-  const tagged = (checks || []).filter((c) => String(c.assetType || "").startsWith("water_")).map((c) => ({ date: checkDate(c), fail: failed(c), by: c.actor?.displayName, asset: c.assetId }));
+  const tagged = (checks || []).filter((c) => String(c.assetType || "").startsWith("water_")).map((c) => ({ date: checkDate(c), fail: failed(c), by: c.actor?.displayName, asset: c.assetId, offline: c.savedOffline === true, manual: c.manualEntry === true }));
   const legacy = (waterRounds || []).map((r) => ({ date: toDate(r.dateKey) || toDate(r.performedAt) || toDate(r.checkedAt) || toDate(r.createdAt), fail: false, by: r.checkedBy || r.performedBy || r.createdByName, asset: null }));
   const all = [...tagged, ...legacy].filter((r) => within(r.date, from, now));
   if (!all.length) return section("water", "Water safety (legionella)", "none", "No water temperature checks recorded in the last 12 months.", [], ["No water temperature checks recorded in the last 12 months."]);
@@ -76,12 +121,29 @@ export function waterSection({ checks, waterRounds, now, available }) {
   const gaps = [];
   if (since > 35) gaps.push(`The last water temperature check was ${plural(since, "day")} ago (monthly is expected).`);
   if (fails) gaps.push(`${plural(fails, "water reading")} out of range in the last 12 months. Show what was done about each.`);
+  const rows = [["Outlets checked in the last 31 days", String(recentOutlets)], ["Last check", `${ukDate(last.date)}${last.by ? `, ${last.by}` : ""}`], ["Readings out of range", String(fails)]];
+  // the outlets on the register, so "checked" can be read against "should have been"
+  if (available.assets) {
+    const outlets = (assets || []).filter((a) => String(a.assetType || "").startsWith("water_") && a.active !== false && !a.archivedAt);
+    if (outlets.length) {
+      const monthAgo = new Date(now.getTime() - 31 * DAY);
+      const missed = outlets.filter((a) => !within(toDate(a.lastCheckAt), monthAgo, now)).length;
+      rows.push(["Outlets on the register / not checked in 31 days", `${outlets.length} / ${missed}`]);
+      if (missed) gaps.push(`${plural(missed, "water outlet")} not checked in the last 31 days (monthly is expected).`);
+    }
+  }
+  if (available.incidents) {
+    const water = incidentFacts(incidents, from, now, (i) => assetGroup(i.assetType) === "water" && !isPatFail(i));
+    rows.push(["Water incidents in the last 12 months / still open", `${water.year} / ${water.open}`]);
+    if (water.open) gaps.push(`${plural(water.open, "water incident")} still open.`);
+  }
+  rows.push(...provenanceRows(tagged.filter((r) => within(r.date, from, now))));
   return section("water", "Water safety (legionella)", gaps.length ? "attention" : "ok",
     `${plural(all.length, "check")} in the last 12 months; last on ${ukDate(last.date)}.`,
-    [["Outlets checked in the last 31 days", String(recentOutlets)], ["Last check", `${ukDate(last.date)}${last.by ? `, ${last.by}` : ""}`], ["Readings out of range", String(fails)]], gaps);
+    rows, gaps);
 }
 
-export function patSection({ patSessions, patAssets, patTests, now, available }) {
+export function patSection({ patSessions, patAssets, patTests, incidents, now, available }) {
   if (!available.pat) return unavailable("pat", "Electrical safety (PAT)");
   const from = periodStart(now);
   // a test done on the phone is one appliance on one day; a session is a day's testing recorded from paper
@@ -106,6 +168,13 @@ export function patSection({ patSessions, patAssets, patTests, now, available })
     if (overdue) gaps.push(`${plural(overdue, "appliance")} overdue for PAT testing.`);
     if (never) gaps.push(`${plural(never, "appliance")} not PAT tested yet.`);
     if (out) gaps.push(`${plural(out, "appliance")} out of use after a failed test. Show what was done about each.`);
+    const failedTests = (patTests || []).filter((t) => String(t.result || "").toLowerCase() === "fail" && within(toDate(t.testedOn), from, now)).length;
+    facts.push(["Failed tests in the last 12 months", String(failedTests)]);
+    if (available.incidents) {
+      const fails = incidentFacts(incidents, from, now, isPatFail);
+      facts.push(["Failed-appliance incidents closed / still open", `${Math.max(0, fails.year - fails.open)} / ${fails.open}`]);
+      if (fails.open) gaps.push(`${plural(fails.open, "failed-appliance incident")} still open.`);
+    }
   } else {
     facts.push(["Sessions in the last 12 months", String(recent.length)]);
   }
@@ -124,7 +193,7 @@ const EMERGENCY_TYPES = [
   ["fire_drill", "Fire drill", 200],
 ];
 
-export function emergencySection({ checks, now, available }) {
+export function emergencySection({ checks, incidents, now, available }) {
   const title = "Emergency and fire safety equipment";
   if (!available.fire) return unavailable("emergency", title);
   const from = periodStart(now);
@@ -142,6 +211,8 @@ export function emergencySection({ checks, now, available }) {
   }
   const fails = mine.filter((r) => r.fail).length;
   if (fails) gaps.push(`${plural(fails, "emergency or fire equipment check")} failed in the last 12 months.`);
+  const equipmentIncidents = (incidents || []).filter((i) => known.has(i.assetType) && !isPanelFault(i) && incidentOpen(i)).length;
+  if (equipmentIncidents) gaps.push(`${plural(equipmentIncidents, "emergency equipment incident")} still open.`);
   return section("emergency", title, gaps.length ? "attention" : "ok", `${plural(mine.length, "check")} in the last 12 months.`, rows, gaps);
 }
 
@@ -169,13 +240,14 @@ export function coldChainSection({ tempUnits, tempLogs, tempIncidents, now, avai
   if (!units.length && !logs.length) return section("coldchain", "Fridges and the cold chain", "none", "No fridges are set up in Primovex.", [], ["No fridges are set up in Primovex."]);
   const days = new Set(logs.map((l) => l.dateKey));
   const outOfRange = logs.filter((l) => l.outOfRange).length;
+  const byHand = logs.filter((l) => l.source === "manual-mobile").length;
   const lastKey = [...days].sort().at(-1);
   const gaps = [];
   if (open.length) gaps.push(`${plural(open.length, "fridge incident")} still open.`);
   if (units.length && (!lastKey || daysAgo(new Date(`${lastKey}T12:00:00`), now) > 2)) gaps.push("No fridge temperature has been recorded in the last 2 days.");
   return section("coldchain", "Fridges and the cold chain", gaps.length ? "attention" : "ok",
     `${plural(units.length, "fridge/freezer", "fridges and freezers")} checked on ${plural(days.size, "day")} in the last 30 days.`,
-    [["Readings in the last 30 days", String(logs.length)], ["Readings out of range", String(outOfRange)], ["Incidents in the last 12 months", String(year.length)], ["Incidents still open", String(open.length)]], gaps);
+    [["Readings in the last 30 days", String(logs.length)], ["Readings out of range", String(outOfRange)], ["...of which read from the thermometer and entered at the fridge", String(byHand)], ["Incidents in the last 12 months", String(year.length)], ["Incidents still open", String(open.length)]], gaps);
 }
 
 export function stockSection({ stockAlerts, stockCount, now, available }) {
@@ -266,7 +338,7 @@ export function trainingSection({ training, now, available }) {
 }
 
 // ---- governance: counts and dates only -------------------------------------------------------------------
-export function governanceSection({ concerns, sars, events, now, available }) {
+export function governanceSection({ concerns, concernSteps, sars, events, now, available }) {
   const from = periodStart(now);
   const rows = [];
   const gaps = [];
@@ -277,6 +349,31 @@ export function governanceSection({ concerns, sars, events, now, available }) {
     const overdue = open.filter((c) => concernDeadline(c, now)?.overdue).length;
     rows.push(["Concerns and complaints received (12 months)", String(recent.length)], ["Concerns still open", String(open.length)]);
     if (overdue) gaps.push(`${plural(overdue, "concern")} past a response deadline.`);
+    // how cases were closed: the checks made at closing, and whether anything went out before the outside parties agreed
+    const closedNow = (concerns || []).filter((c) => !concernOpen(c) && within(toDate(c.closedAt), from, now));
+    if (closedNow.length) {
+      const checked = closedNow.filter((c) => c.dutyOfCandourConsidered === true).length;
+      rows.push(["Cases closed (12 months) with every closing check recorded", `${checked} of ${closedNow.length}`],
+        ["...Duty of Candour triggered", String(closedNow.filter((c) => c.dutyOfCandourTriggered === true).length)],
+        ["...final response sent before everyone involved had accepted it", String(closedNow.filter((c) => c.sentBeforeAccepted === true).length)]);
+    }
+    const lfeOutstanding = (concerns || []).filter((c) => c.lfeReportStatus === "in_progress").length;
+    if (lfeOutstanding) rows.push(["Welsh Risk Pool reports still being prepared", String(lfeOutstanding)]);
+    // where the cases are with the insurer, GMPI or a solicitor (counts only)
+    if (available.concernSteps) {
+      const byCase = new Map();
+      for (const step of concernSteps || []) byCase.set(step.concernId, [...(byCase.get(step.concernId) || []), step]);
+      let waiting = 0;
+      let longest = 0;
+      for (const c of open) {
+        const review = caseReviewStatus(c, byCase.get(c.id) || [], now);
+        const withThem = review.parties.filter((party) => party.state === "with-them");
+        waiting += withThem.length;
+        for (const party of withThem) longest = Math.max(longest, party.waitingDays || 0);
+      }
+      rows.push(["Open cases waiting on a reply from an outside party", String(waiting)]);
+      if (waiting) rows.push(["...longest wait so far (days)", String(longest)]);
+    }
     anything = true;
   }
   if (available.sars) {

@@ -1,5 +1,7 @@
 import { collection, doc, onSnapshot, query, serverTimestamp, setDoc, updateDoc, where, limit, orderBy } from "firebase/firestore";
 import { addDocResendSafe } from "@/lib/resendSafeWrites";
+import { recordAudit } from "@/modules/audit/recordAudit";
+import { patAssetEvent, patIntervalsEvent, patTestEvent } from "@/modules/audit/auditEvents";
 import { db } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import { openIncidentForPatFail } from "@/modules/compliance/complianceIncidentService";
@@ -51,6 +53,7 @@ export async function savePatIntervals(intervals, actor = {}) {
     if (Number.isFinite(months) && months >= 1 && months <= 120) clean[key] = Math.round(months);
   }
   await setDoc(doc(db, PAT_SETTINGS, "main"), { intervals: clean, updatedAt: serverTimestamp(), updatedByUid: actor.uid || "", updatedByName: actor.displayName || actor.email || "" }, { merge: true });
+  recordAudit(patIntervalsEvent(clean));
 }
 
 // Record a test of one appliance: the test itself, what it changes on the appliance (last tested, next due, out of use), and,
@@ -60,12 +63,13 @@ export async function recordPatTest({ asset, answers, final, actor, settings }) 
   if (isSafeSyntheticMode()) return { id: "demo", ...test };
   const ref = await addDocResendSafe(collection(db, PAT_TESTS), { ...test, createdAt: serverTimestamp() });
   await updateDoc(doc(db, PAT_ASSETS, asset.id), { ...assetPatchAfterTest(test), updatedAt: serverTimestamp() });
+  recordAudit(patTestEvent({ asset, test: { ...test, id: ref.id } }));
   if (test.result === "fail") await openIncidentForPatFail({ asset, test: { ...test, id: ref.id }, actor });
   return { id: ref.id, ...test };
 }
 
 // A new appliance. Kind and class set how often it is retested and whether it has an earth test.
-export async function addPatAsset({ siteId, tag, name, category = "other", cls = "I", location = "", makeModel = "", serialNumber = "" }) {
+export async function addPatAsset({ siteId, tag, name, category = "other", cls = "I", location = "", makeModel = "", serialNumber = "", skipAudit = false }) {
   const cleanTag = String(tag || "").trim();
   const cleanName = String(name || "").trim();
   if (!cleanTag) throw new Error("Give it a tag number.");
@@ -76,5 +80,6 @@ export async function addPatAsset({ siteId, tag, name, category = "other", cls =
     siteId: siteId || "main_branch", equipmentId, tag: cleanTag, name: cleanName, category, cls: cls === "II" ? "II" : "I",
     location: String(location).trim(), makeModel: String(makeModel).trim(), serialNumber: String(serialNumber).trim(), active: true, outOfUse: false, createdAt: serverTimestamp(),
   });
+  if (!skipAudit) recordAudit(patAssetEvent("created", { asset: { id: ref.id, tag: cleanTag, name: cleanName, category } }));
   return { id: ref.id, equipmentId };
 }

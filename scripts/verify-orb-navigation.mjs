@@ -58,4 +58,16 @@ t("getting ready for a visit opens the inspection pack for that visit, for peopl
   assert.match(resolveNavigation({ id: "inspection" }, { capabilities: ["*"], platform: "mobile" }).text, /only on the desktop app/);
 });
 
+t("PAT, the tags register, the checks history and the audit trail can be opened by name", () => {
+  for (const [s, id] of [["go to PAT testing", "pat"], ["open the PAT register", "pat"], ["take me to assets and tags", "compliance-tags"], ["show me the fire test log", "compliance-history"], ["open the audit trail", "security"], ["go to the audit log", "security"]]) {
+    assert.equal(parseNavigation(s)?.id, id, s);
+  }
+  const caretaker = ["compliance.read", "compliance.recordChecks"];
+  const desktop = resolveNavigation({ id: "pat" }, { capabilities: caretaker, platform: "desktop" });
+  assert.equal(desktop.action.route, "/compliance?tab=pat");
+  assert.equal(resolveNavigation({ id: "pat" }, { capabilities: caretaker, platform: "mobile" }).action.tab, "compliance");
+  assert.match(resolveNavigation({ id: "security" }, { capabilities: caretaker, platform: "desktop" }).text, /don't have access/);
+  assert.match(resolveNavigation({ id: "pat" }, { capabilities: ["inventory.read"], platform: "desktop" }).text, /don't have access/);
+});
+
 console.log(`\n${n} passed`);

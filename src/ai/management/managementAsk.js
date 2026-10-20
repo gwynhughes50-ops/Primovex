@@ -5,6 +5,9 @@
 // Privacy: these answers name staff and reference numbers, never patients, and none of them is offered
 // to the language assistant (see scripts/verify-orb-catalog.mjs NEVER_SENT).
 
+import { parseComplianceQuestion } from "./complianceAsk.js";
+import { reviewStatus as caseReviewStatus } from "../../modules/governance/concernCase.js";
+
 const DAY = 86400000;
 
 // ---- dates ---------------------------------------------------------------------------------------
@@ -127,11 +130,19 @@ export function parseManagementQuestion(prompt, conversation = []) {
     return { toolId: "compliance.waterTemps", input: { days: daysFromQuestion(text, 30) } };
   }
 
+  // open incidents and the alarm panel, and PAT testing
+  const beforeCheck = parseComplianceQuestion(prompt, { stage: "before-last-check" });
+  if (beforeCheck) return beforeCheck;
+
   // when was the last <check> done?
   const kind = checkKindOf(text);
   if (kind && /\b(?:when|last|latest|most\s+recent|previous|overdue|due)\b/.test(text) && /\b(?:done|tested|test|checked|check|carried|completed|run|rung|did|happened|due|overdue|was|were)\b/.test(text)) {
     return { toolId: "compliance.lastCheck", input: { kind } };
   }
+
+  // what is due or overdue in Compliance, or what the caretaker has to do
+  const afterCheck = parseComplianceQuestion(prompt, { stage: "after-last-check" });
+  if (afterCheck) return afterCheck;
 
   // SARs
   if ((/\bsars?\b/.test(text) || /subject access/.test(text)) && !hasCaseId(text)) {
@@ -142,7 +153,7 @@ export function parseManagementQuestion(prompt, conversation = []) {
 
   // concerns: where are we up to
   if (/\b(?:concerns?|complaints?|listening to people)\b/.test(text) && !hasCaseId(text)
-    && /\b(?:where|up\s+to|status|how\s+many|outstanding|open|overdue|progress|update|summary|overview|any|all|current|ongoing|live)\b/.test(text)) {
+    && /\b(?:where|up\s+to|status|how\s+many|outstanding|open|overdue|progress|update|summary|overview|any|all|current|ongoing|live|waiting|with\s+(?:the\s+)?(?:indemnity|insurer|mddus|gmpi|solicitor)|indemnity|insurer|gmpi|nhs\s+resolution|solicitor)\b/.test(text)) {
     return { toolId: "governance.concernsOverview", input: {} };
   }
 
@@ -329,7 +340,44 @@ export function concernDeadline(concern, now) {
   return { days: d, label: d < 0 ? `final response overdue by ${plural(Math.abs(d), "day")}` : d === 0 ? "final response due today" : `final response in ${plural(d, "day")}`, overdue: d < 0 };
 }
 
-export function concernsOverviewAnswer({ concerns = [], now = new Date() }) {
+// Where the open cases are with the indemnity insurer, GMPI (NHS Resolution in England) and a solicitor. Counts and waits only:
+// no names, no notes. steps are the case steps for any concern (null when this person cannot read them).
+export function outsidePartyLines(openConcerns = [], steps = null, now = new Date()) {
+  if (!Array.isArray(steps)) return [];
+  const byCase = new Map();
+  for (const step of steps) byCase.set(step.concernId, [...(byCase.get(step.concernId) || []), step]);
+  const waiting = {};
+  const backToUs = {};
+  let ready = 0;
+  let involved = 0;
+  for (const concern of openConcerns) {
+    const review = caseReviewStatus(concern, byCase.get(concern.id) || [], now);
+    if (!review.parties.length) continue;
+    involved += 1;
+    if (review.ready) ready += 1;
+    for (const party of review.parties) {
+      if (party.state === "with-them") waiting[party.short] = { n: (waiting[party.short]?.n || 0) + 1, days: Math.max(waiting[party.short]?.days || 0, party.waitingDays || 0) };
+      if (party.state === "back-to-us") backToUs[party.short] = (backToUs[party.short] || 0) + 1;
+    }
+  }
+  if (!involved) return [];
+  const lines = [];
+  const withThem = Object.entries(waiting).map(([who, w]) => `${w.n} with the ${who.toLowerCase()} (longest wait ${plural(w.days, "day")})`);
+  if (withThem.length) lines.push(`Waiting for a reply: ${withThem.join(", ")}.`);
+  const back = Object.entries(backToUs).map(([who, n]) => `${n} back from the ${who.toLowerCase()}`);
+  if (back.length) lines.push(`Back with us to change or add to: ${back.join(", ")}.`);
+  if (ready) lines.push(`${plural(ready, "case")} ${ready === 1 ? "has" : "have"} everyone's agreement and ${ready === 1 ? "is" : "are"} ready for the final response.`);
+  return lines;
+}
+
+// One case: where it is with the outside parties, in a sentence or two (empty when none is involved).
+export function caseOutsideLine(concern = {}, steps = [], now = new Date()) {
+  const review = caseReviewStatus(concern, steps, now);
+  if (!review.parties.length) return "";
+  return review.ready ? "Everyone involved has accepted it, so it is ready for the final response." : `Still open with others: ${review.blockers.join(" ")}`;
+}
+
+export function concernsOverviewAnswer({ concerns = [], steps = null, now = new Date() }) {
   const open = concerns.filter(concernOpen).map((concern) => ({ concern, deadline: concernDeadline(concern, now) }));
   const yearStart = new Date(now.getFullYear(), 0, 1);
   const closedThisYear = concerns.filter((c) => !concernOpen(c) && (asDate(c.closedAt) || asDate(c.updatedAt) || yearStart) >= yearStart).length;
@@ -346,6 +394,7 @@ export function concernsOverviewAnswer({ concerns = [], now = new Date() }) {
   if (soon.length) lines.push(`${plural(soon.length, "concern")} due within 5 days.`);
   if (unacknowledged.length) lines.push(`${plural(unacknowledged.length, "concern")} not yet acknowledged.`);
   if (closedThisYear) lines.push(`${closedThisYear} closed so far this year.`);
+  lines.push(...outsidePartyLines(open.map((row) => row.concern), steps, now));
   const worst = [...open].sort((a, b) => (a.deadline.days ?? 9999) - (b.deadline.days ?? 9999)).slice(0, 4);
   lines.push("Closest to a deadline:", ...worst.map(({ concern, deadline }) => `• ${concern.reference || "Concern"}: ${CONCERN_STAGE_LABELS[concern.status] || concern.status}, ${deadline.label}${concern.ownerName ? `, owner ${concern.ownerName}` : ", no owner"}`));
   return { text: lines.join("\n"), count: open.length, overdue: overdue.length };

@@ -9,6 +9,7 @@ export const BRIEFING_SECTIONS = [
   { id: "coldChain.checksToday", label: "Fridge checks", lines: 2 },
   { id: "facilities.cleaningStatus", label: "Cleaning", lines: 2 },
   { id: "compliance.lastCheck", label: "Fire alarm test", input: { kind: "fire_alarm" }, lines: 2 },
+  { id: "compliance.dueNow", label: "Compliance", lines: 1 },
   { id: "tasks.quickNotes", label: "Your notes", lines: 1 },
   { id: "governance.sarOverview", label: "SARs", lines: 2 },
   { id: "governance.concernsOverview", label: "Concerns", lines: 2 },

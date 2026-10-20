@@ -18,6 +18,8 @@ import {
 
 import { db } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
+import { recordAudit } from "@/modules/audit/recordAudit";
+import { concernEvent } from "@/modules/audit/auditEvents";
 import { cleanContact, contactFromForm, hasContact, legacyContact } from "@/modules/governance/concernContact";
 import { STEP_ACTIONS, buildClosePatch, buildStep, partyOf, sentCount, ukDay } from "@/modules/governance/concernCase";
 import { demoGovernanceCases, demoConcernTimeline, demoLearningActions } from "@/data/demoDataset";
@@ -290,6 +292,7 @@ export async function createConcern(form, actor = {}) {
   // "already exists" (which reads as a failed save and invites a duplicate).
   const ref = doc(collection(db, CONCERNS_COLLECTION));
   await setDoc(ref, payload);
+  recordAudit(concernEvent("created", { concern: { id: ref.id, reference: payload.reference, source: payload.source || form?.source || "" } }));
   const contact = contactFromForm(form);
   if (hasContact(contact)) await saveConcernContact(ref.id, contact, actor);
   await addConcernTimeline(ref.id, {
@@ -404,6 +407,7 @@ export async function updateConcernDetails(concernId, form, actor = {}) {
 export async function deleteConcern(concernId, actor = {}) {
   if (isSafeSyntheticMode() || !concernId) return;
   await deleteDoc(doc(db, CONCERNS_COLLECTION, concernId));
+  recordAudit(concernEvent("deleted", { concern: { id: concernId } }));
 }
 
 // dueDateBefore is the concern's current finalResponseDueAt (pass the raw
@@ -411,6 +415,7 @@ export async function deleteConcern(concernId, actor = {}) {
 // what changed, not just the new value.
 export async function extendConcernDeadline(concernId, dueDateBefore, newDueDate, reason, actor = {}) {
   await updateConcern(concernId, { finalResponseDueAt: Timestamp.fromDate(new Date(newDueDate)) }, actor);
+  recordAudit(concernEvent("extended", { concern: { id: concernId } }));
   const before = toDate(dueDateBefore);
   const beforeLabel = before ? before.toLocaleDateString("en-GB") : "unknown";
   const afterLabel = new Date(newDueDate).toLocaleDateString("en-GB");
@@ -802,6 +807,7 @@ export async function addCaseStep(concernId, steps, input, actor = {}) {
     createdAt: serverTimestamp(),
     createdAtMs: Date.now(),
   });
+  recordAudit(concernEvent("step", { concern: { id: concernId }, party: step.party, action: step.action, round: step.round || 0 }));
   const who = partyOf(step.party)?.short || "An outside party";
   const rounds = step.round && step.round > 1 ? ` (time ${step.round})` : "";
   await addConcernTimeline(concernId, {
@@ -850,6 +856,7 @@ export async function closeConcernGuided({ concern, steps = [], closing = {}, le
     dutyOfCandourTriggered: patch.dutyOfCandourTriggered,
     dutyOfCandourNote: patch.dutyOfCandourNote,
   }, actor);
+  recordAudit(concernEvent("closed", { concern, outcome: patch.outcome, sentBeforeAccepted: patch.sentBeforeAccepted }));
   const lfe = { not_required: "not needed", in_progress: "being prepared", sent: "sent" }[patch.lfeReportStatus];
   await addConcernTimeline(concern.id, {
     type: "closed",

@@ -81,6 +81,17 @@ const PHRASINGS = [
   ["how do I change the expiry warning period", "expiry-warning-days"],
   ["how do I use the orb", "what-can-orb-do"],
   ["why has my screen locked", "screen-locked"],
+  ["how do I PAT test the kettle", "do-pat-test"],
+  ["an extension lead has failed its PAT test, what do I do", "do-pat-test"],
+  ["how do I do the fire alarm test on my phone", "fire-alarm-test"],
+  ["the fire panel is showing an earth fault, how do I record it", "panel-fault"],
+  ["how can I do the water checks in the basement when there is no signal", "checks-without-signal"],
+  ["how do I tap the tag on a water outlet", "check-with-a-tag"],
+  ["how do I put all our appliances in from a spreadsheet", "add-many-assets"],
+  ["how do I see which appliances are overdue for PAT", "pat-register"],
+  ["how do I record that the concern has gone to MDDUS", "update-concern-case"],
+  ["GMPI have replied to a concern, how do I record it", "update-concern-case"],
+  ["how do I close a complaint when the final response has been sent", "close-concern-case"],
 ];
 
 t("real questions in ordinary wording find the right article", () => {
