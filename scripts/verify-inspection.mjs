@@ -222,7 +222,8 @@ t("fire: the alarm checklist, panel faults and call points not yet tested are al
   assert.equal(bad.status, "attention");
   assert.equal(ROW(bad, "Alarm panel faults reported by a test"), "2");
   assert.ok(bad.gaps.some((g) => /1 alarm panel fault still open/.test(g)));
-  assert.ok(bad.gaps.some((g) => /2 call points not tested in the last 12 months/.test(g)), "a retired call point is not counted");
+  assert.equal(ROW(bad, "Call points on the register / not tested in 12 months"), "3 / 2", "a retired call point is not counted");
+  assert.ok(!bad.gaps.some((g) => /call point/.test(g)), "call points not yet tested are a figure, not a gap");
   // a person who cannot read the register or incidents is not told about them, and nothing breaks
   const quiet = sec({ checks: [check("fire_point", 3)] }, "fire");
   assert.equal(quiet.status, "ok");

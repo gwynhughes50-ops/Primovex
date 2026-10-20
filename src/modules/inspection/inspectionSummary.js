@@ -92,13 +92,13 @@ export function fireSection({ checks, fireWeekly, assets, incidents, now, availa
     const failedOpen = incidentFacts(incidents, from, now, (i) => !isPanelFault(i) && !isPatFail(i) && assetGroup(i.assetType) === "fire" && !EMERGENCY_TYPES.some(([type]) => type === i.assetType)).open;
     if (failedOpen) gaps.push(`${plural(failedOpen, "fire equipment incident")} still open.`);
   }
-  // every call point should have been tested at least once in the year (a different one each week)
+  // the weekly test operates one call point, a different one each week (BS 5839-1 clause 44.2 asks for the point used to be logged). Nothing
+  // requires every point within a year, so this is a figure for the inspector, not a gap.
   if (available.assets) {
     const points = (assets || []).filter((a) => a.assetType === "fire_point" && a.active !== false && !a.archivedAt);
     if (points.length) {
       const untested = points.filter((a) => !within(toDate(a.lastCheckAt), from, now)).length;
       rows.push(["Call points on the register / not tested in 12 months", `${points.length} / ${untested}`]);
-      if (untested) gaps.push(`${plural(untested, "call point")} not tested in the last 12 months.`);
     }
   }
   rows.push(...provenanceRows(tagged.filter((r) => within(r.date, from, now))));

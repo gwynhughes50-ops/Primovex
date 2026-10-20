@@ -356,7 +356,7 @@ export const HELP_ARTICLES = [
       "Save it. The test is recorded with which steps were done, who did it and when.",
       "A fault the panel showed opens its own incident for the fire alarm engineer and alerts the caretaker and the practice manager. The test itself is still recorded as passed.",
     ],
-    tip: "Every call point should be tested at least once in the year. The Inspection pack counts the ones not yet tested.",
+    tip: "The weekly test uses a different call point each week and the one used is recorded. The Inspection pack shows how many call points have not been tested in the year, as a figure for the inspector.",
     related: ["panel-fault", "check-with-a-tag"],
   },
   {
