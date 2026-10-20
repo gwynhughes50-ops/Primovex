@@ -142,6 +142,17 @@ export function buildComplianceQrPayload(asset) {
   return `MEDTRAK:COMPLIANCE:${assetId}`;
 }
 
+// The address a tag or QR label can hold instead: it opens Primovex straight to that asset's check when the phone's own
+// camera reads it, or an NFC tap wakes the phone (an iPhone can read a tag like this, and cannot read the older text).
+// `method` ("qr" or "nfc") only records how it was found; it never changes which asset opens. The older text form stays
+// readable, so labels already printed and tags already written keep working.
+export const COMPLIANCE_LINK_ORIGIN = "https://app.primovex.co.uk";
+export function buildComplianceLink(asset, { method = "", origin = COMPLIANCE_LINK_ORIGIN } = {}) {
+  const assetId = asset?.id || asset?.assetCode || asset?.code;
+  const base = `${String(origin).replace(/\/+$/, "")}/sense/open/compliance/${encodeURIComponent(assetId)}`;
+  return method ? `${base}?m=${encodeURIComponent(method)}` : base;
+}
+
 export function parseComplianceQrPayload(raw) {
   const value = String(raw || "").trim();
   if (!value) return null;
@@ -159,6 +170,8 @@ export function parseComplianceQrPayload(raw) {
 
   try {
     const url = new URL(value);
+    const link = url.pathname.match(/^\/sense\/open\/compliance\/([^/]+)\/?$/i);
+    if (link) return { type: "compliance", assetId: decodeURIComponent(link[1]), raw: value, via: url.searchParams.get("m") || "link" };
     const asset = url.searchParams.get("asset") || url.searchParams.get("assetId") || url.searchParams.get("a");
     if (asset) return { type: "compliance", assetId: asset, raw: value };
   } catch {

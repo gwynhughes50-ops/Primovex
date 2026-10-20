@@ -9,6 +9,7 @@ import MobileSignificantEvents from "@/mobile/MobileSignificantEvents";
 import SenseNfcOpen from "@/pages/SenseNfcOpen";
 import FridgeCheckLanding from "@/mobile/FridgeCheckLanding";
 import CoshhLanding from "@/mobile/CoshhLanding";
+import ComplianceLanding from "@/mobile/ComplianceLanding";
 import MobileBootSplash from "@/mobile/auth/MobileBootSplash";
 import MobileAccountLogin from "@/mobile/auth/MobileAccountLogin";
 import FirstRunSetupGate from "@/setup/FirstRunSetupGate";
@@ -62,6 +63,8 @@ function MobileSenseRoute() {
   if (entityType === "fridge") return <FridgeCheckLanding unitId={entityId} />;
   // a storage cupboard's QR code lists what is kept in it (COSHH)
   if (entityType === "coshh") return <CoshhLanding placeKey={entityId} />;
+  // a fire point, water outlet or other checked asset's own tag or QR code goes straight to its check
+  if (entityType === "compliance") return <ComplianceLanding assetId={entityId} />;
   return <SenseNfcOpen />;
 }
 

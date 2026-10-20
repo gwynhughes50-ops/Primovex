@@ -23,7 +23,6 @@ import { namesWithCurrent } from "@/lib/stockPickerOptions";
 import { FREQUENCY_OPTIONS, RETIRE_REASONS } from "@/services/compliance/complianceRules";
 import {
   COMPLIANCE_ASSET_TYPES,
-  buildComplianceQrPayload,
   createComplianceAsset,
   generateNextAssetCode,
   getAssetTypeConfig,
@@ -37,6 +36,7 @@ import {
   updateComplianceAsset,
 } from "@/services/compliance/complianceQrService";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
+import { complianceLink } from "@/services/compliance/complianceLinks";
 
 function typeIcon(type) {
   if (String(type || "").startsWith("fire")) return Flame;
@@ -65,7 +65,8 @@ function escapeHtml(value) {
 function printableLabelsHtml(assets) {
   const cards = assets
     .map((asset) => {
-      const payload = buildComplianceQrPayload(asset);
+      // the QR holds a web address: the phone's own camera opens Primovex at this asset's check, and the app's scanner reads it too
+      const payload = complianceLink(asset, "qr");
       return `
         <section class="label">
           <div class="topline">${escapeHtml(getAssetTypeConfig(asset.assetType).icon)} PRIMOVEX</div>
@@ -73,7 +74,7 @@ function printableLabelsHtml(assets) {
           <div class="code">${escapeHtml(asset.assetCode || asset.id)}</div>
           <div class="name">${escapeHtml(asset.label || "Compliance asset")}</div>
           <div class="loc">${escapeHtml(asset.location || "")}</div>
-          <div class="small">${escapeHtml(payload)}</div>
+          <div class="small">Scan with your phone's camera</div>
         </section>
       `;
     })
@@ -254,6 +255,16 @@ export default function ComplianceQrEngine({ assets: siteAssets = [], checks = [
     try { await restoreComplianceAsset(asset, actor); setRowMessage(`${asset.assetCode} is back in use.`); } catch (error) { setRowMessage(error?.message || "Could not restore it."); } finally { setRowBusy(""); }
   }
 
+  // the address to write onto an NFC tag with any tag-writing app (the Primovex Android app can also write it itself)
+  async function copyTagLink(asset) {
+    try {
+      await navigator.clipboard.writeText(complianceLink(asset, "nfc"));
+      setRowMessage(`The tag link for ${asset.assetCode} is copied. Paste it into an NFC tag-writing app as a web link, then tap a blank tag.`);
+    } catch {
+      setRowMessage(`Copy this into an NFC tag-writing app as a web link: ${complianceLink(asset, "nfc")}`);
+    }
+  }
+
   // edit / retire / print one label, under each asset in the register
   function RowActions({ asset }) {
     const type = getAssetTypeConfig(asset.assetType);
@@ -266,6 +277,7 @@ export default function ComplianceQrEngine({ assets: siteAssets = [], checks = [
         {!isEditing && !isRetiring && (
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => openPrintLabels([asset])} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-white/5"><Printer className="h-3.5 w-3.5" aria-hidden="true" /> Print this label</button>
+            <button type="button" onClick={() => copyTagLink(asset)} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-white/5"><SmartphoneNfc className="h-3.5 w-3.5" aria-hidden="true" /> Copy tag link</button>
             <button type="button" onClick={() => startEdit(asset)} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-200 hover:bg-white/5"><Pencil className="h-3.5 w-3.5" aria-hidden="true" /> Edit</button>
             <button type="button" onClick={() => { setEditing(null); setRowMessage(""); setRetiring({ id: asset.id, reason: "" }); }} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-slate-300 hover:bg-white/5"><Archive className="h-3.5 w-3.5" aria-hidden="true" /> Retire</button>
           </div>
@@ -510,7 +522,7 @@ export default function ComplianceQrEngine({ assets: siteAssets = [], checks = [
             ) : (
               assets.map((asset) => {
                 const Icon = typeIcon(asset.assetType);
-                const payload = buildComplianceQrPayload(asset);
+                const payload = complianceLink(asset, "qr");
                 return (
                   <div key={asset.id} className="rounded-2xl border border-white/10 bg-slate-950/30 p-4">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

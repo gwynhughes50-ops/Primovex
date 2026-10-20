@@ -13,8 +13,8 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { nativeNfcAvailable, writeNfcUrl } from "@/modules/sense/services/nfcService";
+import { complianceLink } from "@/services/compliance/complianceLinks";
 import {
-  buildComplianceQrPayload,
   findComplianceAssetByScan,
   getAssetTypeConfig,
   getCountdownSeconds,
@@ -155,7 +155,8 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
     setWritingTagFor(asset.id);
     setWriteMessage("Hold a blank NFC tag to the back of the phone…");
     try {
-      await writeNfcUrl(buildComplianceQrPayload(asset));
+      // a web address, not the older text: an iPhone can read it, and any phone can open Primovex from it
+      await writeNfcUrl(complianceLink(asset, "nfc"));
       setWriteMessage(`Tag written for ${asset.assetCode || asset.label}.`);
     } catch (error) {
       setWriteMessage(error?.message || "Could not write the tag.");

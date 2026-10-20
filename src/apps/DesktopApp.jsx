@@ -52,6 +52,9 @@ export default function DesktopApp() {
       <Route path="/demo" element={<DemoMode />} />
       <Route path="/loading" element={<LoadingPage />} />
 
+      {/* a fire point or water outlet's own tag, opened on a PC: the checks are done on a phone, so show the Compliance page */}
+      <Route path="/sense/open/compliance/:assetId" element={<Navigate to="/compliance" replace />} />
+
       <Route
         path="/sense/open/:entityType/:entityId"
         element={

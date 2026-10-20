@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  COMPLIANCE_ASSET_TYPES, buildComplianceQrPayload, evaluateComplianceResult, generateNextAssetCode, getAssetTypeConfig, getCountdownSeconds, getNextFirePointToTest,
+  COMPLIANCE_ASSET_TYPES, buildComplianceLink, buildComplianceQrPayload, evaluateComplianceResult, generateNextAssetCode, getAssetTypeConfig, getCountdownSeconds, getNextFirePointToTest,
   isComplianceCheckDue, isFireAlarmTestDueThisWeek, isFlushableAsset, normaliseAssetCode, parseComplianceQrPayload, buildAssetPatch, RETIRE_REASONS, retireReasonLabel,
 } from "../src/services/compliance/complianceRules.js";
 import { siteForNew, siteNameOf, siteOptions } from "../src/modules/compliance/siteOptions.js";
@@ -136,6 +136,25 @@ t("the site list is the practice's sites plus any site that existing records alr
   assert.equal(siteNameOf(options, "s1"), "Main Surgery");
   assert.equal(siteNameOf(options, "main_branch"), "Main Branch");
   assert.equal(siteNameOf(options, "zzz"), "zzz");
+});
+
+t("a link-style tag opens the asset's check, and the older text tags and labels still read", () => {
+  const link = buildComplianceLink({ id: "abc123" }, { method: "nfc" });
+  assert.equal(link, "https://app.primovex.co.uk/sense/open/compliance/abc123?m=nfc");
+  assert.equal(buildComplianceLink({ id: "abc123" }), "https://app.primovex.co.uk/sense/open/compliance/abc123");
+  assert.equal(buildComplianceLink({ id: "a b/c" }, { origin: "https://x.test/" }), "https://x.test/sense/open/compliance/a%20b%2Fc");
+  const read = parseComplianceQrPayload(link);
+  assert.equal(read.assetId, "abc123");
+  assert.equal(read.via, "nfc");
+  assert.equal(parseComplianceQrPayload(buildComplianceLink({ id: "a b/c" })).assetId, "a b/c", "an id with odd characters survives the round trip");
+  assert.equal(parseComplianceQrPayload(buildComplianceLink({ id: "q" }, { method: "qr" })).via, "qr");
+  assert.equal(parseComplianceQrPayload("https://app.primovex.co.uk/sense/open/compliance/q").via, "link");
+  // the older forms are untouched
+  assert.equal(parseComplianceQrPayload("MEDTRAK:COMPLIANCE:abc").assetId, "abc");
+  assert.equal(parseComplianceQrPayload("FP-007").assetId, "FP-007");
+  // a room or fridge link is not a compliance tag
+  assert.equal(parseComplianceQrPayload("https://app.primovex.co.uk/sense/open/space/room-1"), null);
+  assert.equal(parseComplianceQrPayload("https://app.primovex.co.uk/sense/open/fridge/f1"), null);
 });
 
 console.log(`\n${n} passed`);
