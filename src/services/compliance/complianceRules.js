@@ -4,8 +4,8 @@
 export const COMPLIANCE_ASSET_TYPES = [
   { key: "fire_point", label: "Fire Point", icon: "🔥", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "FP" },
   { key: "fire_door", label: "Fire Door", icon: "🚪", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "FD" },
-  { key: "water_hot", label: "Hot Water Outlet", icon: "💧", checkMode: "temperature", defaultFrequency: "monthly", minTempC: 50, maxTempC: 65, codePrefix: "WH", countdownSeconds: 30, flushable: true },
-  { key: "water_cold", label: "Cold Water Outlet", icon: "💧", checkMode: "temperature", defaultFrequency: "monthly", minTempC: 0, maxTempC: 20, codePrefix: "WC", countdownSeconds: 30, flushable: true },
+  { key: "water_hot", label: "Hot Water Outlet", icon: "💧", checkMode: "temperature", defaultFrequency: "monthly", minTempC: 50, maxTempC: 80, codePrefix: "WH", countdownSeconds: 60, flushable: true },
+  { key: "water_cold", label: "Cold Water Outlet", icon: "💧", checkMode: "temperature", defaultFrequency: "monthly", minTempC: 0, maxTempC: 20, codePrefix: "WC", countdownSeconds: 120, flushable: true },
   { key: "fridge", label: "Fridge", icon: "🌡️", checkMode: "temperature", defaultFrequency: "daily", minTempC: 2, maxTempC: 8, codePrefix: "FR" },
   { key: "freezer", label: "Freezer", icon: "❄️", checkMode: "temperature", defaultFrequency: "daily", minTempC: -25, maxTempC: -15, codePrefix: "FZ" },
   { key: "aed", label: "AED", icon: "❤️", checkMode: "pass_fail", defaultFrequency: "weekly", codePrefix: "AED" },
@@ -27,8 +27,12 @@ export function getAssetTypeConfig(type) {
 
 // Water outlets are checked after the water has been running for a set time:
 // the phone counts that down and keeps the temperature box locked until it
-// ends. 30 seconds by default; an outlet can carry its own time
-// (asset.countdownSeconds). 0 means no countdown.
+// ends. The type sets it (hot 1 minute, cold 2 minutes, as in the HSE's
+// legionella guidance: hot at least 50 °C within a minute, cold under 20 °C
+// within two); an outlet can carry its own time (asset.countdownSeconds).
+// 0 means no countdown. The hot range has no practical upper limit (80): the
+// check is that the water gets hot enough, and a hot reading above the old
+// 65 limit is not a fault.
 export const DEFAULT_WATER_COUNTDOWN_SECONDS = 30;
 export function getCountdownSeconds(asset) {
   const config = getAssetTypeConfig(asset?.assetType);

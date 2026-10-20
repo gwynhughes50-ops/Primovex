@@ -103,7 +103,9 @@ t("a tag holds the asset id, and every way a scan can arrive is understood", () 
 });
 
 t("water outlets run for a countdown before the reading; others don't", () => {
-  assert.equal(getCountdownSeconds({ assetType: "water_hot" }), 30);
+  assert.equal(getCountdownSeconds({ assetType: "water_hot" }), 60, "hot: a minute");
+  assert.equal(getCountdownSeconds({ assetType: "water_cold" }), 120, "cold: two minutes");
+  assert.equal(getCountdownSeconds({ assetType: "water_tmv" }), 30);
   assert.equal(getCountdownSeconds({ assetType: "water_hot", countdownSeconds: 90 }), 90);
   assert.equal(getCountdownSeconds({ assetType: "water_hot", countdownSeconds: 99999 }), 600, "capped");
   assert.equal(getCountdownSeconds({ assetType: "fire_point" }), 0);
@@ -122,7 +124,7 @@ t("editing an asset changes where it is, its name, how often and its safe range,
   assert.match(buildAssetPatch({ location: "Hall", minTempC: "", maxTempC: "65" }, "water_hot").problems[0], /lowest and highest/);
   assert.match(buildAssetPatch({ location: "Hall", minTempC: "70", maxTempC: "65" }, "water_hot").problems[0], /below the highest/);
   assert.equal(buildAssetPatch({ location: "Hall", minTempC: "50", maxTempC: "65", countdownSeconds: "9999" }, "water_hot").patch.countdownSeconds, 600);
-  assert.equal(buildAssetPatch({ location: "Hall", minTempC: "50", maxTempC: "65" }, "water_hot").patch.countdownSeconds, 30);
+  assert.equal(buildAssetPatch({ location: "Hall", minTempC: "50", maxTempC: "65" }, "water_hot").patch.countdownSeconds, 60);
   assert.ok(RETIRE_REASONS.length >= 3 && retireReasonLabel("mistake") === "Added by mistake" && retireReasonLabel("zzz") === "zzz");
 });
 
@@ -204,6 +206,14 @@ t("a freezer's default safe range is -25 to -15, the same as the fridge-check sc
   assert.equal(evaluateComplianceResult({ assetType: "freezer", checkMode: "temperature" }, { tempC: -20 }).status, "pass");
   assert.equal(evaluateComplianceResult({ assetType: "freezer", checkMode: "temperature" }, { tempC: -12 }).status, "fail", "too warm");
   assert.equal(evaluateComplianceResult({ assetType: "freezer", checkMode: "temperature" }, { tempC: -30 }).status, "fail", "too cold");
+});
+
+t("a hot outlet passes at any temperature from 50 up (no 65 limit), a cold one at 20 or below", () => {
+  const hotOutlet = { assetType: "water_hot", checkMode: "temperature" };
+  const cold = { assetType: "water_cold", checkMode: "temperature" };
+  for (const [asset, temp, status] of [[hotOutlet, 49.9, "fail"], [hotOutlet, 50, "pass"], [hotOutlet, 57.2, "pass"], [hotOutlet, 66.7, "pass"], [hotOutlet, 67, "pass"], [cold, 14.6, "pass"], [cold, 20, "pass"], [cold, 20.1, "fail"]]) {
+    assert.equal(evaluateComplianceResult(asset, { tempC: temp }).status, status, `${asset.assetType} ${temp}`);
+  }
 });
 
 console.log(`\n${n} passed`);
