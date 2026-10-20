@@ -37,6 +37,7 @@ import {
 } from "@/services/compliance/complianceQrService";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
 import { complianceLink } from "@/services/compliance/complianceLinks";
+import AssetImportPanel from "./AssetImportPanel";
 
 function typeIcon(type) {
   if (String(type || "").startsWith("fire")) return Flame;
@@ -129,6 +130,7 @@ export default function ComplianceQrEngine({ assets: siteAssets = [], checks = [
   });
   const [showFrequency, setShowFrequency] = useState(false);
 
+  const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
 
@@ -142,7 +144,8 @@ export default function ComplianceQrEngine({ assets: siteAssets = [], checks = [
   // What Primovex will assign the new asset - shown, never typed. Recomputed
   // live so it's still right if someone else creates an asset of the same
   // type in another tab while this form is open.
-  const nextAssetCode = useMemo(() => generateNextAssetCode(form.assetType, assets), [form.assetType, assets]);
+  // (counting retired assets too: a code is never given to a second asset)
+  const nextAssetCode = useMemo(() => generateNextAssetCode(form.assetType, siteAssets), [form.assetType, siteAssets]);
 
   // A name the person hasn't typed over yet tracks the type and location, so
   // "Reception" + Fire Point becomes "Reception Fire Point" without being asked.
@@ -174,7 +177,7 @@ export default function ComplianceQrEngine({ assets: siteAssets = [], checks = [
     }
     try {
       setSaving(true);
-      const assetCode = generateNextAssetCode(form.assetType, assets);
+      const assetCode = generateNextAssetCode(form.assetType, siteAssets);
       await createComplianceAsset({
         assetType: form.assetType,
         assetCode,
@@ -358,6 +361,13 @@ export default function ComplianceQrEngine({ assets: siteAssets = [], checks = [
             </div>
           </div>
           <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-xs text-slate-300">
+            {mayManage && (
+              <div className="mb-3 border-b border-white/10 pb-3">
+                <div className="font-semibold text-slate-100">Lots to add?</div>
+                <p className="mt-1 text-slate-400">Paste a list from a spreadsheet and create them all at once.</p>
+                <button type="button" onClick={() => setShowImport(true)} className="mt-2 rounded-full border border-teal-400/40 bg-teal-500/15 px-3 py-1.5 text-xs font-semibold text-teal-100 hover:bg-teal-500/25">Add many at once</button>
+              </div>
+            )}
             <div className="font-semibold text-slate-100">Have call points or outlets in the old lists?</div>
             <p className="mt-1 text-slate-400">Bring them across as assets, ready for a tag. The old records stay as they are.</p>
             <button type="button" onClick={importOld} disabled={importing} className="mt-2 rounded-full border border-white/10 bg-slate-900/60 px-3 py-1.5 text-xs font-semibold text-slate-100 hover:bg-slate-800 disabled:opacity-50">{importing ? "Bringing across…" : "Bring across the old lists"}</button>
@@ -366,6 +376,8 @@ export default function ComplianceQrEngine({ assets: siteAssets = [], checks = [
           </div>
         </div>
       </Card>
+
+      {showImport && <AssetImportPanel assets={siteAssets} rooms={rooms} siteId={newSite} siteName={sites?.nameOf?.(newSite) || ""} onClose={() => setShowImport(false)} />}
 
       {nextFirePoint && (
         <Card className={`border p-5 ${fireTestDue ? "border-amber-400/30 bg-amber-400/10" : "border-white/10 bg-slate-900/70"}`}>
