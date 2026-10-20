@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  ALERT_ROLES, actionChoicesFor, actionEntry, ageText, assetGroup, buildIncident, buildPanelFaultIncident, closeBlockedReason, describeFailure, incidentChoices, isOpen, isPanelFault, recheckState, resolutionPatch, sortIncidents,
+  ALERT_ROLES, actionChoicesFor, actionEntry, ageText, assetGroup, buildIncident, buildPanelFaultIncident, buildPatFailIncident, closeBlockedReason, isPatFail, describeFailure, incidentChoices, isOpen, isPanelFault, recheckState, resolutionPatch, sortIncidents,
 } from "../src/modules/compliance/complianceIncidents.js";
 import { ageDays, buildIssue, isOpenIssue, issueSummary, openIssuesIn, sortIssues, updateEntry, validateIssue } from "../src/modules/maintenance/maintenance.js";
 import { daysSinceFireTest, dueList, overdueDays, patRetest } from "../src/modules/compliance/complianceDue.js";
@@ -196,6 +196,52 @@ t("'what needs doing' says the alarm panel is showing a fault, not that an asset
   assert.match(item.detail, /Nothing recorded yet/);
   const dealt = dueList({ assets: [], incidents: [{ ...incident, actions: [actionEntry({ choice: "engineer", actor })] }], now }).find((i) => i.key === "incident-i1");
   assert.match(dealt.detail, /needs closing once it is put right/);
+});
+
+t("an appliance that fails its PAT test is an incident of its own: the note stays out of the summary, it closes once dealt with, and it shows in 'what needs doing'", () => {
+  const asset = { id: "p1", tag: "R-12", name: "Kettle", location: "Staff kitchen", siteId: "main_branch" };
+  const incident = buildPatFailIncident({ asset, test: { id: "t1", notes: "Flex frayed, ring me on 07700 900123" }, actor });
+  assert.equal(isPatFail(incident), true);
+  assert.equal(incident.severity, "high");
+  assert.equal(incident.assetLabel, "Kettle (R-12)");
+  assert.equal(incident.summary, "Kettle (R-12) failed its PAT test and has been taken out of use.");
+  assert.ok(!incident.summary.includes("07700") && incident.faultNote.includes("07700"), "what was typed is kept apart from the summary");
+  assert.deepEqual(incidentChoices(incident).map((c) => c.key), ["labelled", "pat_repaired", "pat_replaced", "contractor", "other"]);
+  assert.equal(actionEntry({ choice: "pat_repaired", actor }).label, "Repaired and retested");
+  const open = { ...incident, openedAtMs: 1000 };
+  assert.equal(closeBlockedReason(open, []), "Record what was done about it first.");
+  assert.equal(closeBlockedReason({ ...open, actions: [actionEntry({ choice: "pat_replaced", actor })] }, []), "", "no compliance recheck is asked for");
+  const item = dueList({ assets: [], incidents: [{ id: "i9", ...open }], now }).find((i) => i.key === "incident-i9");
+  assert.equal(item.label, "Kettle (R-12) failed its PAT test");
+  assert.equal(item.tone, "critical");
+});
+
+t("PAT in 'what needs doing': each appliance is judged on its own date once tests are done on the phone, and the old session date is used until then", () => {
+  const patAssets = [
+    { id: "p1", tag: "R-1", active: true, nextDueOn: "2026-09-20" },
+    { id: "p2", tag: "R-2", active: true, nextDueOn: "2026-10-20" },
+    { id: "p3", tag: "R-3", active: true, nextDueOn: "2027-08-01" },
+    { id: "p4", tag: "R-4", active: true },
+    { id: "p5", tag: "R-5", active: false, nextDueOn: "2020-01-01" },
+  ];
+  const list = dueList({ assets: [], patAssets, now: new Date(2026, 9, 10) });
+  const pat = Object.fromEntries(list.filter((i) => i.key.startsWith("pat")).map((i) => [i.key, i]));
+  assert.equal(pat["pat-overdue"].label, "1 appliance overdue for PAT testing");
+  assert.equal(pat["pat-overdue"].detail, "R-1");
+  assert.equal(pat["pat-overdue"].tone, "warning", "less than 30 days late is a warning");
+  assert.equal(pat["pat-soon"].label, "1 appliance due for PAT testing in the next 30 days");
+  assert.equal(pat["pat-never"].label, "1 appliance not PAT tested yet");
+  assert.equal(pat["pat-never"].detail, "R-4");
+  assert.deepEqual(pat["pat-overdue"].action, { type: "tab", tab: "pat" });
+  const late = dueList({ assets: [], patAssets: [{ id: "x", tag: "R-9", active: true, nextDueOn: "2026-08-01" }], now: new Date(2026, 9, 10) });
+  assert.equal(late.find((i) => i.key === "pat-overdue").tone, "critical", "more than 30 days overdue");
+  // nothing tracked on the appliances yet: the old session retest date still counts
+  const legacy = dueList({ assets: [], patAssets: [{ id: "x", tag: "R-1", active: true }], patSessions: [{ testDate: "2025-10-01", retestDate: "2026-10-05" }], now: new Date(2026, 9, 10) });
+  assert.ok(legacy.some((i) => i.key === "pat"), "the old way");
+  assert.ok(!legacy.some((i) => i.key === "pat-never"));
+  // an out-of-use appliance counts as tracked, so the old session date is no longer used
+  const out = dueList({ assets: [], patAssets: [{ id: "x", tag: "R-1", active: true, outOfUse: true }], patSessions: [{ testDate: "2025-10-01", retestDate: "2026-10-05" }], now: new Date(2026, 9, 10) });
+  assert.ok(!out.some((i) => i.key === "pat"));
 });
 
 console.log(`\n${n} passed`);

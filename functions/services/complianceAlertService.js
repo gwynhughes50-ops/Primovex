@@ -22,11 +22,12 @@ function buildComplianceAlert({ incident, incidentId, recipientUid }) {
   const where = tidy(incident.location, 80);
   // a fault the fire alarm panel showed during the weekly test; what the person typed about it (faultNote) is never in the alert
   const panelFault = incident.kind === "panel_fault";
+  const patFail = incident.kind === "pat_fail";
   return {
     recipientUid,
     module: "compliance",
     kind: "compliance-alert",
-    title: panelFault ? "Fire alarm panel fault" : `${name} failed its check`,
+    title: panelFault ? "Fire alarm panel fault" : patFail ? "Appliance failed its PAT test" : `${name} failed its check`,
     message: `${tidy(incident.summary, 220) || "A check failed."}${where ? ` Location: ${where}.` : ""} Recorded by ${tidy(incident.openedBy, 80) || "a colleague"}. Open this to say what was done.`,
     priority: incident.severity === "high" ? "critical" : "high",
     read: false,

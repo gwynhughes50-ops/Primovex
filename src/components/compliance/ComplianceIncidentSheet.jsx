@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, ClipboardCheck, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { ageText, closeBlockedReason, incidentChoices, isOpen, isPanelFault, openedMs, recheckState } from "@/modules/compliance/complianceIncidents";
+import { ageText, closeBlockedReason, closesWithoutRecheck, incidentChoices, isOpen, isPanelFault, isPatFail, openedMs, recheckState } from "@/modules/compliance/complianceIncidents";
 import { recordIncidentAction, resolveIncident, useAssetChecks, useAssetRecord, useComplianceIncident } from "@/modules/compliance/complianceIncidentService";
 
 // "Take action" on a failed compliance check, from the message card, the Compliance page or the phone: what failed
@@ -31,6 +31,8 @@ export default function ComplianceIncidentSheet({ incidentId, onClose }) {
   const recheck = incident ? recheckState(incident, checks) : { state: "none" };
   const choices = incidentChoices(incident);
   const panelFault = isPanelFault(incident);
+  const patFail = isPatFail(incident);
+  const closesOnAction = closesWithoutRecheck(incident);
   const run = async (work, done) => {
     setBusy(true); setError(""); setSaved("");
     try { await work(); setSaved(done); } catch (problem) { setError(problem?.message || "That didn't work. Try again."); } finally { setBusy(false); }
@@ -46,7 +48,7 @@ export default function ComplianceIncidentSheet({ incidentId, onClose }) {
       <section className="max-h-[calc(92dvh-var(--pvx-sheet-bottom-clearance,0px))] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-5 pb-6 pt-4 text-[var(--medtrak-text)] shadow-2xl sm:rounded-3xl">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--medtrak-accent)]">{panelFault ? "Alarm panel fault" : "Failed check"}</p>
+            <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--medtrak-accent)]">{panelFault ? "Alarm panel fault" : patFail ? "PAT test failed" : "Failed check"}</p>
             <h2 id="compliance-incident-title" className="mt-1 text-2xl font-bold">{incident === undefined ? "Loading…" : incident ? incident.assetLabel || incident.assetCode || "An asset" : "Not found"}</h2>
           </div>
           <button type="button" onClick={onClose} className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[var(--medtrak-border)]" aria-label="Close"><X className="h-5 w-5" /></button>
@@ -62,7 +64,7 @@ export default function ComplianceIncidentSheet({ incidentId, onClose }) {
                 {open ? `Open for ${ageText(incident)}` : "Closed"}
               </p>
               <p className="mt-1 text-sm">{incident.summary}</p>
-              {panelFault && incident.faultNote && <p className="mt-1 text-sm"><b>What it showed:</b> {incident.faultNote}</p>}
+              {(panelFault || patFail) && incident.faultNote && <p className="mt-1 text-sm"><b>{patFail ? "Note:" : "What it showed:"}</b> {incident.faultNote}</p>}
               <p className="mt-2 text-xs text-[var(--medtrak-muted)]">{[incident.assetCode, incident.location].filter(Boolean).join(" · ")}</p>
             </div>
 
@@ -91,9 +93,9 @@ export default function ComplianceIncidentSheet({ incidentId, onClose }) {
 
                 <div className="rounded-2xl border border-[var(--medtrak-border)] p-3">
                   <p className="flex items-center gap-2 text-sm font-bold"><ClipboardCheck className="h-4 w-4" aria-hidden="true" /> Close it</p>
-                  {blocked ? <p className="mt-1 text-sm text-[var(--medtrak-muted)]">{blocked}</p> : <p className="mt-1 text-sm text-emerald-700">{panelFault ? "Dealt with. It can be closed." : "Done and checked again. It can be closed."}</p>}
+                  {blocked ? <p className="mt-1 text-sm text-[var(--medtrak-muted)]">{blocked}</p> : <p className="mt-1 text-sm text-emerald-700">{closesOnAction ? "Dealt with. It can be closed." : "Done and checked again. It can be closed."}</p>}
                   <input value={closeNote} onChange={(e) => setCloseNote(e.target.value)} maxLength={200} placeholder="Closing note (optional)" aria-label="Closing note" className="mt-2 min-h-11 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 text-sm" />
-                  <button type="button" disabled={busy || Boolean(blocked)} onClick={() => run(() => resolveIncident({ incident, checks, asset, actor, note: closeNote }), "Closed.")} className="mt-2 min-h-12 w-full rounded-2xl border border-emerald-600/50 px-4 font-bold text-emerald-700 disabled:opacity-40">{panelFault ? "Close this panel fault" : "Close this failed check"}</button>
+                  <button type="button" disabled={busy || Boolean(blocked)} onClick={() => run(() => resolveIncident({ incident, checks, asset, actor, note: closeNote }), "Closed.")} className="mt-2 min-h-12 w-full rounded-2xl border border-emerald-600/50 px-4 font-bold text-emerald-700 disabled:opacity-40">{panelFault ? "Close this panel fault" : patFail ? "Close this PAT failure" : "Close this failed check"}</button>
                 </div>
               </div>
             )}

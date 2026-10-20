@@ -133,3 +133,12 @@ test("a panel fault incident is raised once and goes to the caretaker and the pr
   assert.deepEqual(toWho(db), ["care", "pm"]);
   assert.deepEqual(await raise(db), { sent: 0, alreadyAlerted: true, roles: [] }, "once per incident");
 });
+
+test("an appliance that failed its PAT test is announced as one, with only its name, tag and place", () => {
+  const failed = { kind: "pat_fail", assetLabel: "Kettle (R-12)", assetCode: "R-12", location: "Staff kitchen", summary: "Kettle (R-12) failed its PAT test and has been taken out of use.", faultNote: "Flex frayed, ring 07700 900123", severity: "high", openedBy: "Colin" };
+  const n = buildComplianceAlert({ incident: failed, incidentId: "i", recipientUid: "u" });
+  assert.equal(n.title, "Appliance failed its PAT test");
+  assert.equal(n.priority, "critical");
+  assert.match(n.message, /^Kettle \(R-12\) failed its PAT test and has been taken out of use\. Location: Staff kitchen\. Recorded by Colin\./);
+  assert.ok(!JSON.stringify(n).includes("07700"), "the note stays inside Primovex");
+});

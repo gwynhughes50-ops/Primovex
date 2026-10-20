@@ -624,7 +624,30 @@ match /subject_access_requests/{requestId} {
 
     match /pat_assets/{docId} {
       allow get, list: if signedIn();
-      allow create, update, delete: if isAdmin() || isCaretaker();
+      allow create, delete: if isAdmin() || isCaretaker();
+      // Someone who records checks (the caretaker's cover) can only stamp what a test changes on an appliance: when it was
+      // last tested, how it did, when it is next due, and whether it is out of use. Never what it is or where.
+      allow update: if isAdmin() || isCaretaker()
+        || (
+          signedIn() && hasPermission("compliance", "recordChecks")
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["lastTestedOn", "lastResult", "lastTestedByName", "nextDueOn", "outOfUse", "cls", "fuseRating", "updatedAt"])
+        );
+    }
+
+    // One record per appliance test: immutable, and only ever recorded as yourself.
+    match /pat_tests/{docId} {
+      allow get, list: if signedIn();
+      allow create: if signedIn()
+        && (hasPermission("compliance", "recordChecks") || isCaretaker() || isAdmin())
+        && request.resource.data.testerUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // How many months between tests for each kind of appliance: the practice's own setting.
+    match /pat_settings/{docId} {
+      allow get: if signedIn();
+      allow create, update: if signedIn() && (isAdmin() || isCaretaker() || hasPermission("compliance", "manageAssets"));
+      allow delete: if false;
     }
 
     match /pat_test_sessions/{docId} {

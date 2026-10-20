@@ -171,4 +171,29 @@ t("clinical waste by site: each site is judged on its own, and a site that has g
   assert.ok(mixed.gaps.some((g) => /1 collection has no site recorded/.test(g)));
 });
 
+t("PAT: tests done on the phone count, and appliances that are overdue, untested or out of use are named as gaps", () => {
+  const tests = [{ testedOn: "2026-09-15" }, { testedOn: "2026-09-15" }, { testedOn: "2026-06-01" }];
+  const healthy = sec({ patTests: tests, patAssets: [{ active: true, nextDueOn: "2027-06-01", lastTestedOn: "2026-09-15" }] }, "pat");
+  assert.equal(healthy.status, "ok");
+  assert.ok(healthy.rows.some(([label, value]) => label === "Tests in the last 12 months" && value === "3"));
+  const messy = sec({
+    patTests: tests,
+    patAssets: [
+      { active: true, nextDueOn: "2026-08-01" },
+      { active: true, nextDueOn: "2027-06-01" },
+      { active: true },
+      { active: true, outOfUse: true, nextDueOn: "2026-01-01" },
+      { active: false, nextDueOn: "2020-01-01" },
+    ],
+  }, "pat");
+  assert.equal(messy.status, "attention");
+  assert.ok(messy.gaps.some((g) => /1 appliance overdue for PAT testing/.test(g)));
+  assert.ok(messy.gaps.some((g) => /1 appliance not PAT tested yet/.test(g)));
+  assert.ok(messy.gaps.some((g) => /1 appliance out of use after a failed test/.test(g)));
+  // a plain test date is that day, not the day before
+  assert.equal(sec({ patTests: [{ testedOn: "2026-10-10" }], patAssets: [] }, "pat").status, "ok");
+  // with only older paper sessions the section reads as it always did
+  assert.equal(sec({ patSessions: [{ testDate: "2026-07-01" }], patAssets: [{ active: true }] }, "pat").status, "ok");
+});
+
 console.log(`\n${n} passed`);

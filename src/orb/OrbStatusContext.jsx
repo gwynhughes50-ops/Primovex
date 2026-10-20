@@ -1,3 +1,4 @@
+import { subscribePatAssets } from "@/modules/pat/patService";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { collection, getDocs, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
@@ -59,6 +60,7 @@ export default function OrbStatusProvider({ children }) {
   const [stockItems, setStockItems] = useState(null);
   const [assets, setAssets] = useState([]);
   const [patSessions, setPatSessions] = useState([]);
+  const [patAssets, setPatAssets] = useState([]);
   const [tick, setTick] = useState(() => Date.now());
   useExpirySettings();
   const { rows } = useNotifications(uid);
@@ -113,6 +115,11 @@ export default function OrbStatusProvider({ children }) {
     return () => { live = false; };
   }, [watchesCompliance, uid, synthetic]);
 
+  useEffect(() => {
+    if (!watchesCompliance || !uid || synthetic) { setPatAssets([]); return undefined; }
+    return subscribePatAssets(setPatAssets, () => setPatAssets([]));
+  }, [watchesCompliance, uid, synthetic]);
+
   const value = useMemo(() => {
     const now = new Date(tick);
     const stockAlerts = seesStock && stockItems
@@ -135,11 +142,11 @@ export default function OrbStatusProvider({ children }) {
     const status = buildOrbStatus({
       scope,
       chips,
-      dueInputs: watchesCompliance ? { assets, incidents: incidentList || [], patSessions, issues: issueList || [], coshh: seesCoshh ? coshhList : null, certificates: certList } : null,
+      dueInputs: watchesCompliance ? { assets, incidents: incidentList || [], patSessions, patAssets, issues: issueList || [], coshh: seesCoshh ? coshhList : null, certificates: certList } : null,
       now,
     });
     return { ...status, chips, scope, ready: true };
-  }, [tick, scope, seesStock, stockItems, seesFridges, units, todaysLogs, senseState?.assets, seesSars, sars, seesConcerns, concerns, rows, openFridgeIncidents, seesCoshh, coshhList, seesCompliance, incidentList, certList, watchesCompliance, assets, patSessions, issueList]);
+  }, [tick, scope, seesStock, stockItems, seesFridges, units, todaysLogs, senseState?.assets, seesSars, sars, seesConcerns, concerns, rows, openFridgeIncidents, seesCoshh, coshhList, seesCompliance, incidentList, certList, watchesCompliance, assets, patSessions, patAssets, issueList]);
 
   return <OrbStatusContext.Provider value={value}>{children}</OrbStatusContext.Provider>;
 }

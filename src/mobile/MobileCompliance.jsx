@@ -6,6 +6,7 @@ import {
   Droplets,
   Flame,
   Keyboard,
+  Plug,
   QrCode,
   ShieldCheck,
   Sparkles,
@@ -36,6 +37,9 @@ import { useComplianceIncidents } from "@/modules/compliance/complianceIncidentS
 import { useCertificates } from "@/modules/certificates/certificateService";
 import { certLabel, certStatus, expiryText } from "@/modules/certificates/certificates";
 import { openDocument } from "@/lib/openDocument";
+import PatWizard from "@/mobile/pat/PatWizard";
+import { subscribePatAssets, subscribePatSettings } from "@/modules/pat/patService";
+import { dueSummary as patDueSummary } from "@/modules/pat/pat";
 
 function assetLabel(asset) {
   return [asset?.assetCode, asset?.label].filter(Boolean).join(" • ") || "Compliance asset";
@@ -72,10 +76,19 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
   const [confirmRecent, setConfirmRecent] = useState(null); // an asset scanned again moments after it was checked
   const [showAllDue, setShowAllDue] = useState(false);
   const queued = useQueuedChecks();
+  const [patAssets, setPatAssets] = useState([]);
+  const [patSettings, setPatSettings] = useState({});
+  const [showPat, setShowPat] = useState(false);
+  const patSummary = useMemo(() => patDueSummary(patAssets), [patAssets]);
   const { list: certList } = useCertificates(can("compliance.read"));
   const certsNeeding = useMemo(() => (certList || []).filter((c) => c.active !== false && certStatus(c) !== "ok").sort((a, b) => (a.expiryDate || "").localeCompare(b.expiryDate || "")), [certList]);
   const { list: incidentList } = useComplianceIncidents(true);
   const openIncidents = useMemo(() => (incidentList || []).filter(incidentOpen), [incidentList]);
+
+  // the appliances for PAT testing and the practice's own retest intervals
+  const canTestPat = can("compliance.recordChecks");
+  useEffect(() => { if (!canTestPat) return undefined; return subscribePatAssets(setPatAssets, () => setPatAssets([])); }, [canTestPat]);
+  useEffect(() => { if (!canTestPat) return undefined; return subscribePatSettings(setPatSettings); }, [canTestPat]);
 
   // the list is also kept on the phone, so a tag can still be read and checked where there is no signal
   useEffect(() => subscribeComplianceAssets((rows) => { setAssets(rows); cacheAssets(deviceStorage(), rows); }, console.error, { siteId: "" }), []);
@@ -357,6 +370,19 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
           <p className="mt-5 text-center text-sm text-[var(--medtrak-muted)]">Nothing due. Compliance is up to date.</p>
         )}
 
+        {canTestPat && (
+          <div className="mt-5 rounded-[1.5rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4" aria-label="PAT testing">
+            <div className="flex items-center justify-between gap-2 text-sm font-semibold">
+              <span className="flex items-center gap-2"><Plug className="h-4 w-4 text-[var(--medtrak-accent)]" /> PAT testing</span>
+              {patSummary.counts.outOfUse > 0 && <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-xs font-bold text-rose-700">{patSummary.counts.outOfUse} out of use</span>}
+            </div>
+            <p className="mt-1 text-xs text-[var(--medtrak-muted)]">
+              {patSummary.counts.total === 0 ? "No appliances are on the register yet. Add the first as you test it." : patSummary.needsAttention ? `${patSummary.counts.overdue + patSummary.counts.never} to test now${patSummary.counts.dueSoon ? `, ${patSummary.counts.dueSoon} more due soon` : ""}. ${patSummary.counts.ok} in date.` : `All ${patSummary.counts.total} appliances are in date.`}
+            </p>
+            <button type="button" onClick={() => setShowPat(true)} className="mt-3 w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 py-3.5 text-base font-bold text-white">Start PAT testing</button>
+          </div>
+        )}
+
         {isAdmin && (
           <div className="mt-5 rounded-[1.5rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4">
             <button type="button" onClick={() => setShowAllAssets((v) => !v)} className="flex w-full items-center justify-between text-sm font-semibold">
@@ -434,6 +460,7 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
       )}
 
       {incidentId && <ComplianceIncidentSheet incidentId={incidentId} onClose={() => setIncidentId("")} />}
+      {showPat && <PatWizard assets={patAssets} settings={patSettings} onClose={() => setShowPat(false)} />}
 
       <MobileBarcodeScanner
         onScan={(code) => handleScan(code, "qr")}

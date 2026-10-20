@@ -12,6 +12,7 @@ import { useComplianceIncidents } from "@/modules/compliance/complianceIncidentS
 import { useMaintenanceIssues } from "@/modules/maintenance/maintenanceService";
 import { useCoshhSubstances } from "@/modules/coshh/coshhService";
 import { useCertificates } from "@/modules/certificates/certificateService";
+import { subscribePatAssets } from "@/modules/pat/patService";
 import ManualRecordDialog from "./ManualRecordDialog";
 import ComplianceIncidentSheet from "./ComplianceIncidentSheet";
 import { checkPerson, formatWhen, isFireType, isWaterType, toDate } from "./complianceView";
@@ -91,6 +92,7 @@ export default function ComplianceOverview({ assets = [], checks = [], onGoTab }
   const [saved, setSaved] = useState("");
   const [incidentId, setIncidentId] = useState("");
   const [patSessions, setPatSessions] = useState([]);
+  const [patAssets, setPatAssets] = useState([]);
   const { list: incidents } = useComplianceIncidents(can("compliance.read"));
   const { list: issues } = useMaintenanceIssues(true);
   const { list: certificates } = useCertificates(can("compliance.read"));
@@ -105,6 +107,9 @@ export default function ComplianceOverview({ assets = [], checks = [], onGoTab }
       .catch(() => { if (live) setPatSessions([]); });
     return () => { live = false; };
   }, []);
+
+  // the appliances, each with its own PAT due date once tests have been done on the phone
+  useEffect(() => subscribePatAssets(setPatAssets, () => setPatAssets([])), []);
 
   const latestCheck = useMemo(() => {
     const map = new Map();
@@ -123,7 +128,7 @@ export default function ComplianceOverview({ assets = [], checks = [], onGoTab }
   const weekAgo = Date.now() - 7 * 86400000;
   const checksThisWeek = checks.filter((c) => (toDate(c.performedAt) || toDate(c.createdAt) || new Date(0)).getTime() >= weekAgo).length;
 
-  const needs = useMemo(() => dueList({ assets, incidents: incidents || [], patSessions, issues: issues || [], coshh: canSeeCoshh ? coshh : null, certificates }), [assets, incidents, patSessions, issues, coshh, canSeeCoshh, certificates]);
+  const needs = useMemo(() => dueList({ assets, incidents: incidents || [], patSessions, patAssets, issues: issues || [], coshh: canSeeCoshh ? coshh : null, certificates }), [assets, incidents, patSessions, patAssets, issues, coshh, canSeeCoshh, certificates]);
   const canRecord = can("compliance.recordChecks");
 
   const go = (item) => {

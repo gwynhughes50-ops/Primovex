@@ -126,6 +126,7 @@ async function main() {
     await setDoc(doc(db, "users", "nurse-uid"), { role: "Nurse", displayName: "Nurse" });
     await setDoc(doc(db, "users", "cleaner-uid"), { role: "Cleaner", displayName: "Cleaner" });
     await setDoc(doc(db, "users", "cleaner2-uid"), { role: "Cleaner", displayName: "Cleaner Two" });
+    await setDoc(doc(db, "pat_assets", "pat-1"), { tag: "R-12", name: "Kettle", location: "Staff kitchen", category: "handheld", active: true });
     await setDoc(doc(db, "compliance_assets", "asset-wh1"), { assetCode: "WH-001", label: "Hot tap", assetType: "water_hot", qrPayload: "MEDTRAK:COMPLIANCE:asset-wh1", siteId: "main_branch" });
     // fridges: a custom "Nurse Manager" role that can resolve incidents; an incident and a unit to work on
     await setDoc(doc(db, "roles", "Nurse Manager"), { name: "Nurse Manager", capabilities: ["temperature.read", "temperature.write", "temperature.resolveIncident", "dashboard.read"], builtIn: false });
@@ -335,6 +336,41 @@ async function main() {
     assertFails(updateDoc(doc(cleaner, "compliance_assets", "asset-wh1"), { lastCheckAt: 3 })));
   await check("Caretaker CAN edit a compliance asset", () =>
     assertSucceeds(updateDoc(doc(caretaker, "compliance_assets", "asset-wh1"), { location: "Boiler room" })));
+  console.log("\n=== 9b. PAT testing (appliance tests) ===");
+  const aTest = (uid) => ({ assetId: "pat-1", tag: "R-12", result: "pass", testedOn: "2026-10-20", testerUid: uid, testerName: "x", nextDueOn: "2027-10-20" });
+  await check("Caretaker CAN record a PAT test as themselves", () =>
+    assertSucceeds(setDoc(doc(caretaker, "pat_tests", "pt-1"), aTest("caretaker-uid"))));
+  await check("Staff covering the caretaker (can record checks) CAN record a PAT test as themselves", () =>
+    assertSucceeds(setDoc(doc(nurse, "pat_tests", "pt-2"), aTest("nurse-uid"))));
+  await check("A PAT test CANNOT be recorded in someone else's name", () =>
+    assertFails(setDoc(doc(caretaker, "pat_tests", "pt-3"), aTest("nurse-uid"))));
+  await check("Cleaner CANNOT record a PAT test", () =>
+    assertFails(setDoc(doc(cleaner, "pat_tests", "pt-4"), aTest("cleaner-uid"))));
+  await check("ReadOnly CANNOT record a PAT test", () =>
+    assertFails(setDoc(doc(readonly, "pat_tests", "pt-5"), aTest("readonly-uid"))));
+  await check("Anonymous CANNOT record a PAT test", () =>
+    assertFails(setDoc(doc(anon, "pat_tests", "pt-6"), aTest("x"))));
+  await check("A recorded PAT test cannot be edited (audit record)", () =>
+    assertFails(updateDoc(doc(caretaker, "pat_tests", "pt-1"), { result: "fail" })));
+  await check("A recorded PAT test cannot be deleted", () =>
+    assertFails(deleteDoc(doc(admin, "pat_tests", "pt-1"))));
+  await check("Staff who can record checks CAN stamp an appliance's test fields", () =>
+    assertSucceeds(updateDoc(doc(nurse, "pat_assets", "pat-1"), { lastTestedOn: "2026-10-20", lastResult: "pass", lastTestedByName: "Nurse", nextDueOn: "2027-10-20", outOfUse: false, updatedAt: 1 })));
+  await check("...but CANNOT rename or move the appliance", () =>
+    assertFails(updateDoc(doc(nurse, "pat_assets", "pat-1"), { name: "Renamed", location: "Elsewhere" })));
+  await check("...and CANNOT mix an edit in with the test fields", () =>
+    assertFails(updateDoc(doc(nurse, "pat_assets", "pat-1"), { lastTestedOn: "2026-10-21", name: "Renamed" })));
+  await check("Cleaner CANNOT touch an appliance", () =>
+    assertFails(updateDoc(doc(cleaner, "pat_assets", "pat-1"), { outOfUse: false })));
+  await check("Caretaker CAN edit an appliance", () =>
+    assertSucceeds(updateDoc(doc(caretaker, "pat_assets", "pat-1"), { location: "Reception" })));
+  await check("Staff who can record checks CANNOT add an appliance", () =>
+    assertFails(setDoc(doc(nurse, "pat_assets", "pat-new"), { tag: "R-99", name: "Fan", active: true })));
+  await check("Caretaker CAN set how often each kind of appliance is retested", () =>
+    assertSucceeds(setDoc(doc(caretaker, "pat_settings", "main"), { intervals: { it: 24 } })));
+  await check("Cleaner CANNOT change the retest intervals", () =>
+    assertFails(setDoc(doc(cleaner, "pat_settings", "main"), { intervals: { it: 1 } })));
+
   await check("Cleaner CAN add a note to their own cleaning log", () =>
     assertSucceeds(updateDoc(doc(cleaner, "cleaning_logs", "log-c1"), { notes: "Sink blocked", issueReported: true, notedAt: 1 })));
   await check("...but only once (a second note is refused)", () =>

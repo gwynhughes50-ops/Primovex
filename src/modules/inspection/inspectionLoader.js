@@ -33,12 +33,13 @@ export async function loadInspectionData(now = new Date()) {
   const available = {};
   const monthAgo = dayKey(new Date(now.getTime() - 31 * 86400000));
 
-  const [checks, fireWeekly, waterRounds, patSessions, patAssets, cleaningLogs, tempUnits, tempLogs, tempIncidents, stockDocs, coshhDocs, certDocs, concerns, sars, events, trainingPeople, trainingCourses, trainingRecords, wasteDocs] = await Promise.all([
+  const [checks, fireWeekly, waterRounds, patSessions, patAssets, patTests, cleaningLogs, tempUnits, tempLogs, tempIncidents, stockDocs, coshhDocs, certDocs, concerns, sars, events, trainingPeople, trainingCourses, trainingRecords, wasteDocs] = await Promise.all([
     read("compliance checks", () => query(collection(db, "compliance_checks"), orderBy("createdAt", "desc"), limit(3000)), available, "fire"),
     read("fire records", () => query(collection(db, "fire_weekly_checks"), orderBy("createdAt", "desc"), limit(300))),
     read("water rounds", () => query(collection(db, "water_temp_rounds"), orderBy("createdAt", "desc"), limit(300))),
     read("PAT sessions", () => query(collection(db, "pat_test_sessions"), orderBy("createdAt", "desc"), limit(300)), available, "pat"),
     read("PAT appliances", () => collection(db, "pat_assets")),
+    read("PAT tests", () => query(collection(db, "pat_tests"), orderBy("testedOn", "desc"), limit(1000))),
     read("cleaning logs", () => collection(db, "cleaning_logs"), available, "cleaning"),
     read("fridges", () => collection(db, "temperature_units"), available, "temperature"),
     read("temperature readings", () => query(collection(db, "temperature_logs"), where("dateKey", ">=", monthAgo))),
@@ -63,7 +64,7 @@ export async function loadInspectionData(now = new Date()) {
     : [];
 
   return {
-    checks, fireWeekly, waterRounds, patSessions, patAssets, cleaningLogs, tempUnits, tempLogs, tempIncidents,
+    checks, fireWeekly, waterRounds, patSessions, patAssets, patTests, cleaningLogs, tempUnits, tempLogs, tempIncidents,
     stockAlerts, stockCount: stock.length, coshh: coshhDocs.map((d) => normaliseSubstance(d.id, d)), certificates: certDocs.map((d) => normaliseCertificate(d.id, d)), concerns, sars, events, waste: wasteDocs.map((d) => normaliseConsignment(d.id, d)), training: { people: trainingPeople, courses: trainingCourses, records: trainingRecords }, available,
   };
 }

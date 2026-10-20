@@ -77,12 +77,13 @@ test("the practice manager hears only about what has gone red", () => {
 });
 
 // a Firestore that keeps notifications in a map and refuses to create one twice, as the real one does
-function fakeDb(assetRows) {
+function fakeDb(assetRows, patRows = []) {
   const notes = new Map();
   const db = {
     notes,
     collection(name) {
       if (name === "compliance_assets") return { get: async () => ({ docs: assetRows.map((a) => ({ id: a.id, data: () => a })) }) };
+      if (name === "pat_assets") return { get: async () => ({ docs: patRows.map((a) => ({ id: a.id, data: () => a })) }) };
       if (name === "users") return { doc: (uid) => ({ collection: () => ({ doc: (id) => ({ create: async (data) => { const key = `${uid}/${id}`; if (notes.has(key)) { const e = new Error("6 ALREADY_EXISTS"); e.code = 6; throw e; } notes.set(key, data); } }) }) }) };
       throw new Error(`unexpected collection ${name}`);
     },
@@ -126,4 +127,62 @@ test("the day is the London day, not the cloud's (UTC) day", () => {
   const late = new Date(Date.UTC(2026, 9, 14, 23, 30));
   assert.equal(svc.londonDay(late).key, "2026-10-15");
   assert.equal(svc.londonDay(late).weekday, 4);
+});
+
+// ---- PAT ----
+
+const PAT_DAY = "2026-10-14"; // the Wednesday the other tests use
+const patAssets = [
+  { id: "p1", tag: "R-1", active: true, nextDueOn: "2026-09-01" }, // 43 days late: red
+  { id: "p2", tag: "R-2", active: true, nextDueOn: "2026-10-05" }, // 9 days late
+  { id: "p3", tag: "R-3", active: true, nextDueOn: "2026-10-30" }, // due soon
+  { id: "p4", tag: "R-4", active: true, nextDueOn: "2027-06-01" }, // fine
+  { id: "p5", tag: "R-5", active: true }, // never tested
+  { id: "p6", tag: "R-6", active: true, outOfUse: true, nextDueOn: "2026-01-01" }, // out of use: its own incident
+  { id: "p7", tag: "R-7", active: false, nextDueOn: "2020-01-01" }, // retired
+];
+
+test("the server's PAT rule agrees with the app's on every appliance", async () => {
+  const client = await import(pathToFileURL(path.resolve(__dirname, "../../src/modules/pat/pat.js")).href);
+  const now = new Date(2026, 9, 14, 8, 0);
+  for (const asset of patAssets) {
+    const mine = svc.patStatus(asset, new Date(2026, 9, 14));
+    const theirs = client.patStatus(asset, now);
+    assert.deepEqual([mine.state, mine.days], [theirs.state, theirs.days], asset.tag);
+  }
+});
+
+test("PAT: what is overdue, never tested, due soon and more than a month late", () => {
+  const pat = svc.patOutstanding(patAssets, PAT_DAY);
+  assert.deepEqual(pat.overdue.map((r) => r.asset.tag), ["R-1", "R-2"]);
+  assert.deepEqual(pat.redOverdue.map((r) => r.asset.tag), ["R-1"]);
+  assert.deepEqual(pat.dueSoon.map((r) => r.asset.tag), ["R-3"]);
+  assert.deepEqual(pat.never.map((r) => r.asset.tag), ["R-5"]);
+});
+
+test("the caretaker is told about overdue appliances each morning, and about those coming up only on a Monday", () => {
+  const base = { assets: [], patAssets, now: WED, dayKey: PAT_DAY };
+  const weekday = svc.caretakerNotice(svc.outstanding({ ...base, monday: false }));
+  assert.match(weekday.message, /2 appliances overdue for PAT testing: R-1, R-2./);
+  assert.ok(!/next 30 days/.test(weekday.message), "not every morning");
+  assert.equal(weekday.priority, "high", "one is a month late");
+  const monday = svc.caretakerNotice(svc.outstanding({ ...base, monday: true }));
+  assert.match(monday.message, /1 appliance due for PAT testing in the next 30 days./);
+  // nothing else due: PAT alone is enough for a notice, and with nothing overdue there is none
+  assert.ok(weekday.message.length > 0);
+  assert.equal(svc.caretakerNotice(svc.outstanding({ assets: [], patAssets: [{ id: "a", tag: "A", active: true, nextDueOn: "2027-06-01" }], now: WED, dayKey: PAT_DAY })), null);
+});
+
+test("the practice manager hears about PAT only when an appliance is more than a month overdue", () => {
+  const notice = svc.managerNotice(svc.outstanding({ assets: [], patAssets, now: WED, dayKey: PAT_DAY, monday: true }));
+  assert.match(notice.message, /1 appliance more than a month overdue for PAT testing: R-1./);
+  const mild = svc.managerNotice(svc.outstanding({ assets: [], patAssets: [{ id: "a", tag: "R-2", active: true, nextDueOn: "2026-10-05" }], now: WED, dayKey: PAT_DAY, monday: true }));
+  assert.equal(mild, null, "nine days late is not red");
+});
+
+test("the morning job reads the appliances as well", async () => {
+  const db = fakeDb([], patAssets);
+  const told = await svc.runComplianceReminders({ db, FieldValue, now: WED, caretakers: ["care"], managers: ["pm"] });
+  assert.equal(told.caretakers, 1);
+  assert.match(db.notes.get("care/cd-2026-10-14").message, /overdue for PAT testing/);
 });

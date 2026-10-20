@@ -2,7 +2,8 @@
 // hands in the records.
 
 import { FREQUENCY_MS, getNextFirePointToTest, isComplianceCheckDue, isFireAlarmTestDueThisWeek, toDateValue } from "../../services/compliance/complianceRules.js";
-import { isOpen as incidentOpen, ageText, isPanelFault } from "./complianceIncidents.js";
+import { dueSummary as patDueSummary } from "../pat/pat.js";
+import { isOpen as incidentOpen, ageText, closesWithoutRecheck, isPanelFault } from "./complianceIncidents.js";
 import { issueSummary } from "../maintenance/maintenance.js";
 import { reviewSummary } from "../coshh/coshh.js";
 import { certLabel, certStatus, daysUntilExpiry } from "../certificates/certificates.js";
@@ -45,7 +46,7 @@ export function patRetest(sessions = [], now = new Date()) {
   return { date: latest.retest, days };
 }
 
-export function dueList({ assets = [], incidents = [], patSessions = [], issues = [], coshh = null, certificates = null, now = new Date() } = {}) {
+export function dueList({ assets = [], incidents = [], patSessions = [], patAssets = [], issues = [], coshh = null, certificates = null, now = new Date() } = {}) {
   const items = [];
   const open = incidents.filter(incidentOpen);
   for (const incident of open) {
@@ -53,8 +54,8 @@ export function dueList({ assets = [], incidents = [], patSessions = [], issues 
     items.push({
       key: `incident-${incident.id}`,
       tone: "critical",
-      label: fault ? "The fire alarm panel is showing a fault" : `${label({ label: incident.assetLabel, assetCode: incident.assetCode })} failed its check`,
-      detail: `Open for ${ageText(incident, now)}. ${(incident.actions || []).length ? (fault ? "Action recorded; needs closing once it is put right." : "Action recorded; needs a passing recheck.") : "Nothing recorded yet."}`,
+      label: fault ? "The fire alarm panel is showing a fault" : incident.kind === "pat_fail" ? `${incident.assetLabel || "An appliance"} failed its PAT test` : `${label({ label: incident.assetLabel, assetCode: incident.assetCode })} failed its check`,
+      detail: `Open for ${ageText(incident, now)}. ${(incident.actions || []).length ? (closesWithoutRecheck(incident) ? "Action recorded; needs closing once it is put right." : "Action recorded; needs a passing recheck.") : "Nothing recorded yet."}`,
       action: { type: "incident", id: incident.id },
     });
   }
@@ -72,7 +73,20 @@ export function dueList({ assets = [], incidents = [], patSessions = [], issues 
   if (failingNoIncident.length) items.push({ key: "failing", tone: "critical", label: `${plural(failingNoIncident.length, "asset")} last failed its check`, detail: failingNoIncident.slice(0, 4).map(label).join(", "), action: { type: "section", section: sectionOf(failingNoIncident[0]) } });
   if (overdue.length) items.push({ key: "overdue", tone: Math.max(...overdue.map((a) => overdueDays(a, now))) >= RED_AFTER_DAYS ? "critical" : "warning", label: `${plural(overdue.length, "check")} overdue`, detail: `${overdue.slice(0, 4).map((a) => a.assetCode || label(a)).join(", ")}${overdue.length > 4 ? ` and ${overdue.length - 4} more` : ""}`, action: { type: "section", section: sectionOf(overdue[0]) } });
 
-  const pat = patRetest(patSessions, now);
+  // PAT: once appliances carry their own due dates (tests done on the phone) each is judged on its own; until then, the one
+  // retest date typed on the last session
+  const tracked = patAssets.some((a) => a && a.active !== false && (a.nextDueOn || a.outOfUse === true || a.lastTestedOn));
+  const pat = tracked ? null : patRetest(patSessions, now);
+  if (tracked) {
+    const summary = patDueSummary(patAssets, now);
+    const names = (rows) => `${rows.slice(0, 4).map((r) => r.asset.tag || r.asset.name).join(", ")}${rows.length > 4 ? ` and ${rows.length - 4} more` : ""}`;
+    const overdueRows = summary.rows.filter((r) => r.state === "overdue");
+    const neverRows = summary.rows.filter((r) => r.state === "never");
+    const soonRows = summary.rows.filter((r) => r.state === "due-soon");
+    if (overdueRows.length) items.push({ key: "pat-overdue", tone: overdueRows.some((r) => r.days <= -30) ? "critical" : "warning", label: `${plural(overdueRows.length, "appliance")} overdue for PAT testing`, detail: names(overdueRows), action: { type: "tab", tab: "pat" } });
+    if (neverRows.length) items.push({ key: "pat-never", tone: "warning", label: `${plural(neverRows.length, "appliance")} not PAT tested yet`, detail: names(neverRows), action: { type: "tab", tab: "pat" } });
+    if (soonRows.length) items.push({ key: "pat-soon", tone: "warning", label: `${plural(soonRows.length, "appliance")} due for PAT testing in the next 30 days`, detail: names(soonRows), action: { type: "tab", tab: "pat" } });
+  }
   if (pat && pat.days <= 30) items.push({ key: "pat", tone: pat.days < 0 ? "critical" : "warning", label: pat.days < 0 ? "PAT retesting is overdue" : "PAT retesting is due soon", detail: `Retest ${pat.days < 0 ? `was due ${Math.abs(pat.days)} day${Math.abs(pat.days) === 1 ? "" : "s"} ago` : pat.days === 0 ? "is due today" : `due in ${pat.days} day${pat.days === 1 ? "" : "s"}`}.`, action: { type: "tab", tab: "pat" } });
 
   const maintenance = issueSummary(issues, now);

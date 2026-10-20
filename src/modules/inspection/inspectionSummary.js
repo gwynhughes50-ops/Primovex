@@ -14,7 +14,7 @@ const DAY = 86400000;
 export function toDate(value) {
   if (!value) return null;
   // a plain day (2026-10-09) is that day at midday, local time, so it never slips to the day before
-  const date = value?.toDate ? value.toDate() : /^d{4}-d{2}-d{2}$/.test(String(value)) ? new Date(`${value}T12:00:00`) : new Date(value);
+  const date = value?.toDate ? value.toDate() : /^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? new Date(`${value}T12:00:00`) : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
@@ -81,18 +81,37 @@ export function waterSection({ checks, waterRounds, now, available }) {
     [["Outlets checked in the last 31 days", String(recentOutlets)], ["Last check", `${ukDate(last.date)}${last.by ? `, ${last.by}` : ""}`], ["Readings out of range", String(fails)]], gaps);
 }
 
-export function patSection({ patSessions, patAssets, now, available }) {
+export function patSection({ patSessions, patAssets, patTests, now, available }) {
   if (!available.pat) return unavailable("pat", "Electrical safety (PAT)");
   const from = periodStart(now);
-  const sessions = (patSessions || []).map((s) => toDate(s.testDate) || toDate(s.createdAt)).filter(Boolean);
+  // a test done on the phone is one appliance on one day; a session is a day's testing recorded from paper
+  const testDays = (patTests || []).map((t) => toDate(t.testedOn)).filter(Boolean);
+  const sessions = [...(patSessions || []).map((s) => toDate(s.testDate) || toDate(s.createdAt)).filter(Boolean), ...testDays];
   const recent = sessions.filter((d) => within(d, from, now));
-  const assets = (patAssets || []).filter((a) => a.active !== false).length;
+  const live = (patAssets || []).filter((a) => a.active !== false);
+  const assets = live.length;
   if (!sessions.length) return section("pat", "Electrical safety (PAT)", "none", "No PAT testing sessions recorded.", [["Appliances listed", String(assets)]], ["No PAT testing sessions recorded."]);
   const last = latest(sessions);
-  const gaps = recent.length ? [] : [`The last PAT testing session was on ${ukDate(last)}, over 12 months ago.`];
+  const gaps = recent.length ? [] : [`The last PAT testing was on ${ukDate(last)}, over 12 months ago.`];
+  // once appliances carry their own due dates, say how many are out of date
+  const tracked = live.some((a) => a.nextDueOn || a.outOfUse === true || a.lastTestedOn);
+  const facts = [["Appliances listed", String(assets)]];
+  if (tracked) {
+    const today = startOfDay(now).getTime();
+    const dueOf = (a) => toDate(a.nextDueOn);
+    const overdue = live.filter((a) => a.outOfUse !== true && dueOf(a) && dueOf(a).getTime() < today).length;
+    const never = live.filter((a) => a.outOfUse !== true && !dueOf(a)).length;
+    const out = live.filter((a) => a.outOfUse === true).length;
+    facts.push(["Tests in the last 12 months", String(testDays.filter((d) => within(d, from, now)).length)], ["Appliances overdue for testing", String(overdue)], ["Not tested yet", String(never)], ["Out of use after a failed test", String(out)]);
+    if (overdue) gaps.push(`${plural(overdue, "appliance")} overdue for PAT testing.`);
+    if (never) gaps.push(`${plural(never, "appliance")} not PAT tested yet.`);
+    if (out) gaps.push(`${plural(out, "appliance")} out of use after a failed test. Show what was done about each.`);
+  } else {
+    facts.push(["Sessions in the last 12 months", String(recent.length)]);
+  }
   return section("pat", "Electrical safety (PAT)", gaps.length ? "attention" : "ok",
-    `Last testing session ${ukDate(last)}; ${plural(recent.length, "session")} in the last 12 months.`,
-    [["Appliances listed", String(assets)], ["Sessions in the last 12 months", String(recent.length)]], gaps);
+    `Last testing ${ukDate(last)}; ${plural(recent.length, tracked ? "test day" : "session")} in the last 12 months.`,
+    facts, gaps);
 }
 
 // the equipment that has to work in an emergency, each judged against how often it should be checked (days allowed between checks)

@@ -32,6 +32,13 @@ const CHOICES = [
 export const PANEL_FAULT = "panel_fault";
 export const isPanelFault = (incident) => incident?.kind === PANEL_FAULT;
 
+// An appliance that failed its PAT test and was taken out of use. Put right (repaired and retested, or replaced) by the caretaker;
+// it is closed once that is recorded, not by checking a compliance asset again.
+export const PAT_FAIL = "pat_fail";
+export const isPatFail = (incident) => incident?.kind === PAT_FAIL;
+// the kinds of incident that are closed once something has been done, without a passing recheck
+export const closesWithoutRecheck = (incident) => isPanelFault(incident) || isPatFail(incident);
+
 const PANEL_CHOICES = [
   { key: "engineer", label: "Fire alarm engineer called" },
   { key: "monitoring", label: "Alarm receiving centre told about the fault" },
@@ -39,10 +46,18 @@ const PANEL_CHOICES = [
   { key: "other", label: "Something else (add a note)" },
 ];
 
+const PAT_CHOICES = [
+  { key: "labelled", label: "Labelled as failed and taken out of use" },
+  { key: "pat_repaired", label: "Repaired and retested" },
+  { key: "pat_replaced", label: "Replaced or disposed of" },
+  { key: "contractor", label: "Reported to the contractor" },
+  { key: "other", label: "Something else (add a note)" },
+];
+
 export const actionChoicesFor = (type) => CHOICES.filter((c) => c.groups.includes(assetGroup(type)));
 // the choices for one incident: a panel fault has its own
-export const incidentChoices = (incident) => (isPanelFault(incident) ? PANEL_CHOICES : actionChoicesFor(incident?.assetType));
-export const choiceLabel = (key) => CHOICES.find((c) => c.key === key)?.label || PANEL_CHOICES.find((c) => c.key === key)?.label || key;
+export const incidentChoices = (incident) => (isPanelFault(incident) ? PANEL_CHOICES : isPatFail(incident) ? PAT_CHOICES : actionChoicesFor(incident?.assetType));
+export const choiceLabel = (key) => CHOICES.find((c) => c.key === key)?.label || PANEL_CHOICES.find((c) => c.key === key)?.label || PAT_CHOICES.find((c) => c.key === key)?.label || key;
 
 const trim = (value, max = 200) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 const degrees = (value) => (value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)) ? `${Number(value)}°C` : "");
@@ -106,6 +121,34 @@ export function buildPanelFaultIncident({ asset, check, actor = {}, note = "" })
   };
 }
 
+// The document written when an appliance fails its PAT test. Only its tag, name and place are in the summary (it goes into the
+// alert on people's lock screens); what the person typed is kept on the incident as faultNote.
+export function buildPatFailIncident({ asset, test, actor = {} }) {
+  const name = trim(asset?.name || test?.name || "An appliance", 80);
+  const tag = trim(asset?.tag || test?.tag, 40);
+  const label = name + (tag ? " (" + tag + ")" : "");
+  return {
+    kind: PAT_FAIL,
+    siteId: asset?.siteId || test?.siteId || "main_branch",
+    assetId: asset?.id || test?.assetId || "",
+    assetCode: tag,
+    assetLabel: label,
+    assetType: "pat_appliance",
+    location: trim(asset?.location || test?.location, 120),
+    checkId: test?.id || "",
+    severity: "high",
+    summary: label + " failed its PAT test and has been taken out of use.",
+    faultNote: trim(test?.notes, 200),
+    observedTemp: null,
+    expectedRange: null,
+    status: INCIDENT_STATUS.open,
+    openedAtMs: Date.now(),
+    openedByUid: actor.uid || "",
+    openedBy: trim(actor.displayName || actor.name || actor.email, 80) || "A colleague",
+    actions: [],
+  };
+}
+
 export const isOpen = (incident) => incident?.status !== INCIDENT_STATUS.resolved;
 
 export const openedMs = (incident) => toDateValue(incident?.openedAt)?.getTime() || Number(incident?.openedAtMs) || 0;
@@ -140,7 +183,7 @@ export function recheckState(incident, checks = []) {
 export function closeBlockedReason(incident, checks = [], asset = null) {
   if (!(incident?.actions || []).length) return "Record what was done about it first.";
   // a panel fault is put right by the engineer, not by checking a call point again
-  if (isPanelFault(incident)) return "";
+  if (closesWithoutRecheck(incident)) return "";
   if (asset && asset.active === false) return "";
   const { state } = recheckState(incident, checks);
   if (state === "none") return "Check it again by scanning its tag. It has to pass before this can be closed.";

@@ -51,7 +51,7 @@ import { checkPerson, checkTime, localDateInput } from "@/components/compliance/
 import { getComplianceChecksBetween, subscribeComplianceAssets, subscribeRecentComplianceChecks } from "@/services/compliance/complianceQrService";
 import useComplianceSites from "@/modules/compliance/useComplianceSites";
 import { subscribeCleaningLogs } from "@/modules/facilities/services/cleaningRecordService";
-import { listEquipment, upsertEquipment } from "@/modules/equipment/services/equipmentRegistry";
+import PatRegisterPanel from "@/components/compliance/PatRegisterPanel";
 
 // ---------- UI helpers ----------
 function TabButton({ active, onClick, icon: Icon, label }) {
@@ -700,7 +700,7 @@ function ComplianceFull({ canCoshh }) {
       {tab === "cleaning" && <CleaningPanel />}
       {tab === "maintenance" && <MaintenancePanel />}
       {tab === "assets" && <ComplianceQrEngine assets={siteAssets} checks={siteChecks} sites={sites} />}
-      {tab === "pat" && <PatTestingTab siteId={siteId} newSiteId={sites.newSiteId} />}
+      {tab === "pat" && <PatTestingTab siteId={siteId} newSiteId={sites.newSiteId} siteName={sites.nameOf?.(sites.newSiteId) || ""} />}
       {tab === "certificates" && <CertificatesRegister />}
       {tab === "coshh" && canCoshh && <CoshhRegister />}
 
@@ -813,8 +813,8 @@ function ComplianceFull({ canCoshh }) {
 }
 
 // ---------- PAT TESTING (your existing PAT code preserved) ----------
-function PatTestingTab({ siteId = "", newSiteId = "main_branch" }) {
-  const [subTab, setSubTab] = useState("register"); // register | session
+function PatTestingTab({ siteId = "", newSiteId = "main_branch", siteName = "" }) {
+  const [subTab, setSubTab] = useState("register"); // register | history | session
 
   return (
     <div className="space-y-6">
@@ -823,202 +823,21 @@ function PatTestingTab({ siteId = "", newSiteId = "main_branch" }) {
           <div>
             <div className="text-slate-100 font-semibold">PAT Testing</div>
             <div className="text-xs text-slate-400 mt-1">
-              Maintain a register and save PAT sessions/certificates.
+              The register shows when each appliance is next due. The caretaker tests them on his phone, one at a time.
             </div>
           </div>
           <div className="flex gap-2">
             <TabButton active={subTab === "register"} onClick={() => setSubTab("register")} icon={ClipboardList} label="Register" />
-            <TabButton active={subTab === "session"} onClick={() => setSubTab("session")} icon={FileSignature} label="New Session" />
+            <TabButton active={subTab === "history"} onClick={() => setSubTab("history")} icon={History} label="Test history" />
+            <TabButton active={subTab === "session"} onClick={() => setSubTab("session")} icon={FileSignature} label="Paper session" />
           </div>
         </div>
       </Card>
 
-      {subTab === "register" && <PatRegister siteId={siteId} newSiteId={newSiteId} />}
+      {subTab === "register" && <PatRegisterPanel siteId={siteId} newSiteId={newSiteId} siteName={siteName} />}
+      {subTab === "history" && <PatRegisterPanel view="history" siteId={siteId} newSiteId={newSiteId} siteName={siteName} />}
       {subTab === "session" && <PatSession siteId={siteId} newSiteId={newSiteId} />}
     </div>
-  );
-}
-
-function PatRegister({ siteId, newSiteId }) {
-  const inSite = (row) => !siteId || String(row.siteId || "").trim() === siteId;
-  const [assets, setAssets] = useState([]);
-  const [err, setErr] = useState("");
-  const [form, setForm] = useState({
-    tag: "",
-    name: "",
-    makeModel: "",
-    location: "",
-    serialNumber: "",
-  });
-
-  useEffect(() => {
-    const qy = query(collection(db, "pat_assets"));
-    return onSnapshot(
-      qy,
-      (snap) => {
-        const rows = snap.docs.map((d) => {
-          const data = d.data() || {};
-          const siteId = String(data.siteId || "").trim();
-          const active = data.active !== false;
-          return { id: d.id, ...data, siteId, active };
-        });
-
-        const filtered = rows
-          .filter((r) => r.active && inSite(r))
-          .sort((a, b) => String(a.tag || "").localeCompare(String(b.tag || "")));
-
-        filtered.forEach((asset) => {
-          const equipmentId = asset.equipmentId || `EQ-PAT-${asset.id}`;
-          upsertEquipment({
-            equipmentId,
-            name: asset.name,
-            assetTag: asset.tag,
-            makeModel: asset.makeModel,
-            serialNumber: asset.serialNumber,
-            compliance: { patRequired: true, patAssetId: asset.id },
-          }, "pat-firestore-sync");
-        });
-        const firestoreIds = new Set(filtered.map((asset) => asset.equipmentId || `EQ-PAT-${asset.id}`));
-        const registryOnly = listEquipment()
-          .filter((item) => item.compliance?.patRequired && !firestoreIds.has(item.equipmentId))
-          .map((item) => ({
-            id: item.compliance?.patAssetId || item.equipmentId,
-            equipmentId: item.equipmentId,
-            tag: item.assetTag,
-            name: item.name,
-            makeModel: [item.make, item.model].filter(Boolean).join(" "),
-            location: item.currentSpaceId || "",
-            serialNumber: item.serialNumber,
-            active: true,
-            registryOnly: true,
-          }));
-        setAssets([...filtered, ...registryOnly]);
-      },
-      (e) => console.error("pat_assets subscribe error:", e)
-    );
-  }, [siteId]);
-
-  const addAsset = async () => {
-    setErr("");
-    const tag = form.tag.trim();
-    const name = form.name.trim();
-    if (!tag) return setErr("Tag is required (e.g. R-1).");
-    if (!name) return setErr("Name is required (e.g. PC + Lead).");
-
-    try {
-      const equipmentId = `EQ-PAT-${Date.now().toString().slice(-7)}`;
-      const created = await addDocResendSafe(collection(db, "pat_assets"), {
-        siteId: newSiteId,
-        equipmentId,
-        tag,
-        name,
-        makeModel: form.makeModel.trim(),
-        location: form.location.trim(),
-        serialNumber: form.serialNumber.trim(),
-        active: true,
-        createdAt: serverTimestamp(),
-      });
-      upsertEquipment({
-        equipmentId,
-        name,
-        assetTag: tag,
-        model: form.makeModel.trim(),
-        serialNumber: form.serialNumber.trim(),
-        compliance: { patRequired: true, patAssetId: created.id },
-      }, "pat-register");
-      setForm({ tag: "", name: "", makeModel: "", location: "", serialNumber: "" });
-    } catch (e) {
-      console.error("Add PAT asset error:", e);
-      setErr("Failed to add asset (check rules).");
-    }
-  };
-
-  const deleteAsset = async (id, tag) => {
-    if (!window.confirm(`Delete PAT asset "${tag}"?`)) return;
-    try {
-      await deleteDoc(doc(db, "pat_assets", id));
-    } catch (e) {
-      console.error("Delete PAT asset error:", e);
-      alert("Could not delete asset.");
-    }
-  };
-
-  return (
-    <Card className="border border-white/10 bg-slate-900/60 p-4">
-      <div className="text-slate-100 font-semibold">Equipment register</div>
-      <div className="text-xs text-slate-400 mt-1">
-        Add appliances once, then tick results in sessions.
-      </div>
-
-      {err && (
-        <div className="mt-3 rounded-xl bg-rose-500/10 border border-rose-500/20 px-3 py-2 text-xs text-rose-200">
-          {err}
-        </div>
-      )}
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-5">
-        <div>
-          <label className="text-xs text-slate-300">Tag</label>
-          <Input value={form.tag} onChange={(e) => setForm((p) => ({ ...p, tag: e.target.value }))} placeholder="R-1" />
-        </div>
-        <div className="sm:col-span-2">
-          <label className="text-xs text-slate-300">Name</label>
-          <Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} placeholder="PC + Lead" />
-        </div>
-        <div>
-          <label className="text-xs text-slate-300">Location</label>
-          <Input value={form.location} onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))} placeholder="Ground Floor Reception" />
-        </div>
-        <div>
-          <label className="text-xs text-slate-300">Serial (opt)</label>
-          <Input value={form.serialNumber} onChange={(e) => setForm((p) => ({ ...p, serialNumber: e.target.value }))} placeholder="15408108" />
-        </div>
-        <div className="sm:col-span-3">
-          <label className="text-xs text-slate-300">Make/Model (opt)</label>
-          <Input value={form.makeModel} onChange={(e) => setForm((p) => ({ ...p, makeModel: e.target.value }))} placeholder="Dell Monitor / Extension Lead etc" />
-        </div>
-        <div className="sm:col-span-2 flex items-end">
-          <Button className="w-full rounded-full bg-emerald-400 text-slate-950 hover:bg-emerald-300 text-xs" onClick={addAsset}>
-            <Plus className="mr-1.5 h-4 w-4" />
-            Add to register
-          </Button>
-        </div>
-      </div>
-
-      <div className="mt-5 rounded-2xl border border-white/10 bg-slate-950/30">
-        <div className="border-b border-white/10 px-4 py-2 text-xs text-slate-300">
-          Registered items ({assets.length})
-        </div>
-        <div className="divide-y divide-white/10">
-          {assets.length === 0 ? (
-            <div className="px-4 py-8 text-center text-xs text-slate-400">No PAT items yet.</div>
-          ) : (
-            assets.map((a) => (
-              <div key={a.id} className="px-4 py-3 flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm text-slate-100 font-medium">
-                    {a.tag} • {a.name}
-                  </div>
-                  <div className="text-xs text-slate-400 mt-0.5">
-                    {(a.location || "—")}
-                    {a.makeModel ? ` • ${a.makeModel}` : ""}
-                    {a.serialNumber ? ` • SN ${a.serialNumber}` : ""}
-                  </div>
-                </div>
-                {a.registryOnly ? <span className="rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1 text-[11px] font-semibold text-sky-200">Unified Registry</span> : <Button
-                  variant="outline"
-                  className="rounded-full border-white/10 bg-slate-900/40 text-xs text-rose-300 hover:bg-slate-900/60"
-                  onClick={() => deleteAsset(a.id, a.tag)}
-                >
-                  <Trash2 className="mr-1.5 h-4 w-4" />
-                  Delete
-                </Button>}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    </Card>
   );
 }
 
@@ -1182,8 +1001,8 @@ function PatSession({ siteId, newSiteId }) {
   return (
     <div className="space-y-6">
       <Card className="border border-white/10 bg-slate-900/60 p-4">
-        <div className="text-slate-100 font-semibold">New PAT test session</div>
-        <div className="text-xs text-slate-400 mt-1">Choose included items (all or subset), then save.</div>
+        <div className="text-slate-100 font-semibold">Record a session from paper</div>
+        <div className="text-xs text-slate-400 mt-1">For a test done by someone else, or a paper certificate. Tests the caretaker does on his phone do not need this.</div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div>

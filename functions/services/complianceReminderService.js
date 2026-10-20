@@ -65,10 +65,37 @@ function fireTestDue(assets, now) {
   return daysSinceFireTest(assets, now) >= 7;
 }
 
+// ---- PAT: each appliance's own due date (as in src/modules/pat/pat.js) ----
+const PAT_SOON_DAYS = 30;
+const PAT_RED_DAYS = 30;
+const parseKey = (key) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || ""));
+  if (!m) return null;
+  const date = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return Number.isNaN(date.getTime()) || date.getMonth() !== Number(m[2]) - 1 ? null : date;
+};
+// today as a calendar day in London, as a plain date, so a due date is compared with the right day
+function patStatus(asset, today) {
+  if (asset.outOfUse === true) return { state: "out-of-use", days: null };
+  const due = parseKey(asset.nextDueOn);
+  if (!due) return { state: "never", days: null };
+  const days = Math.round((due.getTime() - today.getTime()) / DAY);
+  if (days < 0) return { state: "overdue", days };
+  return { state: days <= PAT_SOON_DAYS ? "due-soon" : "ok", days };
+}
+function patOutstanding(patAssets, dayKey) {
+  const today = parseKey(dayKey);
+  const rows = patAssets.filter((a) => a && a.active !== false).map((asset) => ({ asset, ...patStatus(asset, today) }));
+  const pick = (state) => rows.filter((r) => r.state === state);
+  const overdue = pick("overdue");
+  return { overdue, never: pick("never"), dueSoon: pick("due-soon"), redOverdue: overdue.filter((r) => r.days <= -PAT_RED_DAYS) };
+}
+const tagNames = (rows, max = 3) => `${rows.slice(0, max).map((r) => tidy(r.asset.tag || r.asset.name, 40) || "an appliance").join(", ")}${rows.length > max ? ` and ${rows.length - max} more` : ""}`;
+
 const assetName = (a) => tidy(a.assetCode || a.label, 40) || "an asset";
 
 // What is outstanding today
-function outstanding({ assets = [], now = new Date() }) {
+function outstanding({ assets = [], patAssets = [], now = new Date(), dayKey = "", monday = false }) {
   const live = assets.filter(isLive);
   const due = live.filter((a) => isCheckDue(a, now));
   const failing = due.filter((a) => a.lastCheckResult === "fail");
@@ -83,6 +110,8 @@ function outstanding({ assets = [], now = new Date() }) {
     overdue,
     redOverdue,
     failing,
+    pat: dayKey ? patOutstanding(patAssets, dayKey) : { overdue: [], never: [], dueSoon: [], redOverdue: [] },
+    monday,
   };
 }
 
@@ -95,8 +124,11 @@ function caretakerNotice(state) {
   if (state.fireDue) lines.push(Number.isFinite(state.fireDays) ? `The weekly fire alarm test has not been done for ${plural(state.fireDays, "day")}.` : "The weekly fire alarm test has never been done.");
   if (state.overdue.length) lines.push(`${plural(state.overdue.length, "check")} due: ${names(state.overdue)}.`);
   if (state.failing.length) lines.push(`${plural(state.failing.length, "asset")} still failing: ${names(state.failing)}.`);
+  if (state.pat.overdue.length) lines.push(`${plural(state.pat.overdue.length, "appliance")} overdue for PAT testing: ${tagNames(state.pat.overdue)}.`);
+  // what is coming up is only said on a Monday, so it is not repeated every morning
+  if (state.monday && state.pat.dueSoon.length) lines.push(`${plural(state.pat.dueSoon.length, "appliance")} due for PAT testing in the next 30 days.`);
   if (!lines.length) return null;
-  const red = state.fireRed || state.redOverdue.length > 0 || state.failing.length > 0;
+  const red = state.fireRed || state.redOverdue.length > 0 || state.failing.length > 0 || state.pat.redOverdue.length > 0;
   return { title: "Compliance checks due", message: lines.join(" "), priority: red ? "high" : "routine" };
 }
 
@@ -106,6 +138,7 @@ function managerNotice(state) {
   if (state.fireRed) lines.push(Number.isFinite(state.fireDays) ? `No fire alarm test for ${plural(state.fireDays, "day")}.` : "No fire alarm test has ever been done.");
   if (state.redOverdue.length) lines.push(`${plural(state.redOverdue.length, "check")} more than a week overdue: ${names(state.redOverdue)}.`);
   if (state.failing.length) lines.push(`${plural(state.failing.length, "asset")} still failing: ${names(state.failing)}.`);
+  if (state.pat.redOverdue.length) lines.push(`${plural(state.pat.redOverdue.length, "appliance")} more than a month overdue for PAT testing: ${tagNames(state.pat.redOverdue)}.`);
   if (!lines.length) return null;
   return { title: "Compliance checks overdue", message: lines.join(" "), priority: "high" };
 }
@@ -119,9 +152,10 @@ async function runComplianceReminders({ db, FieldValue, now = new Date(), careta
   // weekdays only: nobody is chased on a Saturday or Sunday
   if (day.weekday === 0 || day.weekday === 6) return { ...told, skipped: "weekend" };
 
-  const assetSnap = await db.collection("compliance_assets").get();
+  const [assetSnap, patSnap] = await Promise.all([db.collection("compliance_assets").get(), db.collection("pat_assets").get()]);
   const assets = assetSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  const state = outstanding({ assets, now });
+  const patAssets = patSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const state = outstanding({ assets, patAssets, now, dayKey: day.key, monday: day.weekday === 1 });
 
   async function send(uid, kind, notice) {
     if (!notice || !uid) return false;
@@ -144,4 +178,4 @@ async function runComplianceReminders({ db, FieldValue, now = new Date(), careta
   return told;
 }
 
-module.exports = { CARETAKER_ROLE, MANAGER_ROLE, FIRE_RED_AFTER_DAYS, RED_AFTER_DAYS, caretakerNotice, daysSinceFireTest, fireTestDue, isCheckDue, londonDay, managerNotice, outstanding, overdueDays, runComplianceReminders };
+module.exports = { patOutstanding, patStatus, CARETAKER_ROLE, MANAGER_ROLE, FIRE_RED_AFTER_DAYS, RED_AFTER_DAYS, caretakerNotice, daysSinceFireTest, fireTestDue, isCheckDue, londonDay, managerNotice, outstanding, overdueDays, runComplianceReminders };

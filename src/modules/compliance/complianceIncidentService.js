@@ -3,7 +3,7 @@ import { addDoc, arrayUnion, collection, doc, getDocs, limit, onSnapshot, orderB
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
-import { PANEL_FAULT, actionEntry, buildIncident, buildPanelFaultIncident, isOpen, isPanelFault, resolutionPatch, sortIncidents } from "./complianceIncidents";
+import { PANEL_FAULT, PAT_FAIL, actionEntry, buildIncident, buildPanelFaultIncident, buildPatFailIncident, closesWithoutRecheck, isOpen, resolutionPatch, sortIncidents } from "./complianceIncidents";
 
 const COLLECTION = "compliance_incidents";
 
@@ -37,8 +37,8 @@ export async function openIncidentForFailedCheck({ asset, check, actor }) {
   try {
     if (!asset?.id) return null;
     const existing = await getDocs(query(collection(db, COLLECTION), where("assetId", "==", asset.id)));
-    // an open panel fault on the same call point is a different problem and does not count
-    if (existing.docs.some((d) => isOpen(d.data()) && !isPanelFault(d.data()))) return null;
+    // an open panel fault on the same call point is a different problem and does not count (nor does a PAT failure)
+    if (existing.docs.some((d) => isOpen(d.data()) && !closesWithoutRecheck(d.data()))) return null;
     const ref = await addDoc(collection(db, COLLECTION), { ...buildIncident({ asset, check, actor }), openedAt: serverTimestamp() });
     try {
       await httpsCallable(functions, "raiseComplianceAlert")({ incidentId: ref.id });
@@ -96,4 +96,24 @@ export function useAssetRecord(assetId) {
     return onSnapshot(doc(db, "compliance_assets", assetId), (snap) => setAsset(snap.exists() ? { id: snap.id, ...snap.data() } : null), () => setAsset(null));
   }, [assetId]);
   return asset;
+}
+
+// An appliance failed its PAT test: open an incident for it (unless that appliance already has one open) and tell the caretaker
+// and practice manager. Never throws: recording the test must not fail because of this.
+export async function openIncidentForPatFail({ asset, test, actor }) {
+  try {
+    if (!asset?.id) return null;
+    const existing = await getDocs(query(collection(db, COLLECTION), where("assetId", "==", asset.id)));
+    if (existing.docs.some((d) => isOpen(d.data()) && d.data().kind === PAT_FAIL)) return null;
+    const ref = await addDoc(collection(db, COLLECTION), { ...buildPatFailIncident({ asset, test, actor }), openedAt: serverTimestamp() });
+    try {
+      await httpsCallable(functions, "raiseComplianceAlert")({ incidentId: ref.id });
+    } catch (error) {
+      console.warn("Could not alert the caretaker and practice manager about the failed appliance", error);
+    }
+    return ref.id;
+  } catch (error) {
+    console.warn("Could not open an incident for the failed appliance", error);
+    return null;
+  }
 }
