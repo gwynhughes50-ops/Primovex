@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { getAssetTypeConfig, subscribeRecentComplianceChecks } from "@/services/compliance/complianceQrService";
+import { checklistGaps } from "@/services/compliance/complianceRules";
 import { checkPerson, checkTime, formatWhen, isFireType, isWaterType } from "./complianceView";
 
 const TH = "py-2 pr-3 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500";
@@ -68,11 +69,11 @@ export default function ChecksHistory({ siteId = "", legacyFire = [], legacyWate
                     {c.flushed && <span className="ml-2 text-xs text-slate-500">flushed</span>}
                   </td>
                   <td className={TD}>{checkPerson(c)}</td>
-                  <td className={TD}>{c.notes || "—"}</td>
+                  <td className={TD}>{c.notes || (checklistGaps(c.checklist) ? "" : "—")}{checklistGaps(c.checklist) && <div className="text-xs font-semibold text-amber-300">{checklistGaps(c.checklist)}</div>}{Array.isArray(c.checklist) && !checklistGaps(c.checklist) && <div className="text-xs text-slate-500">All steps of the test ticked</div>}</td>
                   <td className={TD}>
                     {c.manualEntry
                       ? <span title={c.manualReason || ""} className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">By hand{c.manualReason ? `: ${c.manualReason}` : ""}</span>
-                      : <span className="text-xs text-slate-500">Phone</span>}
+                      : <span className="text-xs text-slate-500">{c.savedOffline ? "Phone, saved with no signal" : "Phone"}</span>}
                   </td>
                 </tr>
               ))}

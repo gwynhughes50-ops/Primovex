@@ -82,6 +82,7 @@
     "test:no-undefined": "node scripts/verify-no-undefined.mjs",
     "test:view-as": "esbuild scripts/verify-view-as.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-view-as.bundle.mjs && node work/verify-view-as.bundle.mjs",
     "test:module-access": "esbuild scripts/verify-module-access.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-module-access.bundle.mjs && node work/verify-module-access.bundle.mjs",
+    "test:offline-checks": "esbuild scripts/verify-offline-checks.mjs --bundle --platform=node --format=esm --outfile=work/verify-offline-checks.bundle.mjs && node work/verify-offline-checks.bundle.mjs",
     "test:compliance-rules": "esbuild scripts/verify-compliance-rules.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-compliance-rules.bundle.mjs && node work/verify-compliance-rules.bundle.mjs",
     "test:compliance-follow-up": "esbuild scripts/verify-compliance-follow-up.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-compliance-follow-up.bundle.mjs && node work/verify-compliance-follow-up.bundle.mjs",
     "test:certificates": "esbuild scripts/verify-certificates.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-certificates.bundle.mjs && node work/verify-certificates.bundle.mjs",

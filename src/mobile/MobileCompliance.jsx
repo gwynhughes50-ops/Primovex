@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import MobileBarcodeScanner from "@/components/ui/MobileBarcodeScanner";
 import {
   CheckCircle2,
+  CloudOff,
   Droplets,
   Flame,
   Keyboard,
@@ -22,10 +23,13 @@ import {
   isComplianceCheckDue,
   isFireAlarmTestDueThisWeek,
   isFlushableAsset,
-  recordComplianceCheck,
+  saveComplianceCheck,
   subscribeComplianceAssets,
 } from "@/services/compliance/complianceQrService";
-import { PassFailSheet, TemperatureCheckSheet } from "@/mobile/compliance/CheckSheets";
+import { FireTestSheet, PassFailSheet, TemperatureCheckSheet } from "@/mobile/compliance/CheckSheets";
+import { recentCheck, upToDateCount } from "@/services/compliance/complianceRules";
+import { cacheAssets, deviceStorage } from "@/modules/compliance/offlineChecks";
+import useQueuedChecks from "@/mobile/useQueuedChecks";
 import ComplianceIncidentSheet from "@/components/compliance/ComplianceIncidentSheet";
 import { isOpen as incidentOpen, ageText } from "@/modules/compliance/complianceIncidents";
 import { useComplianceIncidents } from "@/modules/compliance/complianceIncidentService";
@@ -65,12 +69,16 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
   const [writeMessage, setWriteMessage] = useState("");
   const [incidentId, setIncidentId] = useState("");
   const [certMessage, setCertMessage] = useState("");
+  const [confirmRecent, setConfirmRecent] = useState(null); // an asset scanned again moments after it was checked
+  const [showAllDue, setShowAllDue] = useState(false);
+  const queued = useQueuedChecks();
   const { list: certList } = useCertificates(can("compliance.read"));
   const certsNeeding = useMemo(() => (certList || []).filter((c) => c.active !== false && certStatus(c) !== "ok").sort((a, b) => (a.expiryDate || "").localeCompare(b.expiryDate || "")), [certList]);
   const { list: incidentList } = useComplianceIncidents(true);
   const openIncidents = useMemo(() => (incidentList || []).filter(incidentOpen), [incidentList]);
 
-  useEffect(() => subscribeComplianceAssets(setAssets, console.error, { siteId: "" }), []);
+  // the list is also kept on the phone, so a tag can still be read and checked where there is no signal
+  useEffect(() => subscribeComplianceAssets((rows) => { setAssets(rows); cacheAssets(deviceStorage(), rows); }, console.error, { siteId: "" }), []);
 
   const dueAssets = useMemo(() => assets.filter((asset) => isComplianceCheckDue(asset)), [assets]);
   const dueWater = useMemo(() => dueAssets.filter((asset) => String(asset.assetType || "").startsWith("water_")), [dueAssets]);
@@ -78,12 +86,21 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
   const failing = useMemo(() => assets.filter((asset) => asset.lastCheckResult === "fail").length, [assets]);
   const fireTestDue = useMemo(() => isFireAlarmTestDueThisWeek(assets), [assets]);
   const nextFirePoint = useMemo(() => getNextFirePointToTest(assets), [assets]);
+  const progress = useMemo(() => upToDateCount(assets), [assets]);
+
+  function startCheck(asset, identificationMethod, scanRaw) {
+    setConfirmRecent(null);
+    setActiveAsset({ ...asset, identificationMethod, scanRaw });
+    setSheetKey((k) => k + 1);
+  }
 
   function openCheck(asset, identificationMethod, scanRaw) {
     setResult(null);
     setScanError("");
-    setActiveAsset({ ...asset, identificationMethod, scanRaw });
-    setSheetKey((k) => k + 1);
+    // scanned again within minutes of a check (a double tap, or the wrong tag): ask first, so there are not two records
+    const recent = recentCheck(asset);
+    if (recent) { setConfirmRecent({ asset, recent, identificationMethod, scanRaw }); return; }
+    startCheck(asset, identificationMethod, scanRaw);
   }
 
   async function handleScan(code, method = "qr") {
@@ -170,7 +187,7 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
     setBusy(true);
     setScanError("");
     try {
-      const check = await recordComplianceCheck(activeAsset, {
+      const check = await saveComplianceCheck(activeAsset, {
         ...fields,
         // The person's name as the practice knows them, not just their login email.
         actor: { uid: user?.uid || null, email: user?.email || null, displayName: displayName || user?.displayName || user?.email || "Unknown user" },
@@ -179,11 +196,12 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
         scanRaw: activeAsset.scanRaw,
       });
       const temp = check.checkMode === "temperature" && check.tempC !== null && check.tempC !== undefined ? ` (${check.tempC}°C)` : "";
-      setResult({ ok: check.result === "pass", label: assetLabel(activeAsset), temp });
+      setResult({ ok: check.result === "pass", label: assetLabel(activeAsset), temp, queued: check.queued === true });
       setActiveAsset(null);
+      queued.refresh();
     } catch (error) {
       console.error(error);
-      setScanError("Could not save the check. Check your connection and try again.");
+      setScanError(error?.message && /room|too many/i.test(error.message) ? error.message : "Could not save the check. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
@@ -237,13 +255,28 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
           </div>
         )}
 
-        {result && (
-          <div className={`mt-4 flex items-center gap-3 rounded-[1.5rem] border p-4 ${result.ok ? "border-emerald-500/40 bg-emerald-500/10" : "border-rose-500/40 bg-rose-500/10"}`} role="status">
-            {result.ok ? <CheckCircle2 className="h-7 w-7 text-emerald-600" /> : <XCircle className="h-7 w-7 text-rose-600" />}
-            <div>
-              <div className="font-bold">{result.ok ? "Saved: pass" : "Saved: fail"}{result.temp}</div>
-              <div className="text-sm text-[var(--medtrak-muted)]">{result.label}{result.ok ? "" : ". The caretaker has been alerted."}</div>
+        {(queued.waiting > 0 || queued.refused > 0) && (
+          <div className="mt-4 rounded-[1.5rem] border border-amber-500/40 bg-amber-500/10 p-4" role="status" aria-label="Checks waiting to send">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="font-bold text-amber-900">{queued.waiting} {queued.waiting === 1 ? "check is" : "checks are"} saved on this phone</div>
+                <div className="text-xs text-amber-900/80">{queued.refused > 0 ? `${queued.refused} could not be sent. Tap Try again, and tell the Practice Manager if it keeps happening.` : "They were done with no signal and will send by themselves when there is one."}</div>
+              </div>
+              <button type="button" disabled={queued.sending} onClick={queued.refused > 0 ? queued.tryAgain : queued.sendNow} className="shrink-0 rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{queued.sending ? "Sending…" : queued.refused > 0 ? "Try again" : "Send now"}</button>
             </div>
+          </div>
+        )}
+
+        {result && (
+          <div className={`mt-4 rounded-[1.5rem] border p-4 ${result.queued ? "border-amber-500/40 bg-amber-500/10" : result.ok ? "border-emerald-500/40 bg-emerald-500/10" : "border-rose-500/40 bg-rose-500/10"}`} role="status">
+            <div className="flex items-center gap-3">
+              {result.queued ? <CloudOff className="h-7 w-7 text-amber-700" /> : result.ok ? <CheckCircle2 className="h-7 w-7 text-emerald-600" /> : <XCircle className="h-7 w-7 text-rose-600" />}
+              <div>
+                <div className="font-bold">{result.queued ? `Saved on this phone: ${result.ok ? "pass" : "fail"}` : result.ok ? "Saved: pass" : "Saved: fail"}{result.temp}</div>
+                <div className="text-sm text-[var(--medtrak-muted)]">{result.label}{result.queued ? ". There is no signal, so it will send by itself when there is one." : result.ok ? "" : ". The caretaker has been alerted."}</div>
+              </div>
+            </div>
+            <button type="button" onClick={() => document.querySelector("[data-compliance-scan-button]")?.click()} className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-4 py-3 font-semibold"><QrCode className="h-5 w-5 text-[var(--medtrak-accent)]" /> Scan the next one</button>
           </div>
         )}
 
@@ -300,20 +333,23 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
         {(dueWater.length > 0 || dueOther.length > 0 || failing > 0) && (
           <div className="mt-5 rounded-[1.5rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4">
             <div className="mb-3 flex items-center justify-between gap-2 text-sm font-semibold">
-              <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[var(--medtrak-accent)]" /> To do</span>
+              <span className="flex items-center gap-2"><ShieldCheck className="h-4 w-4 text-[var(--medtrak-accent)]" /> To do{progress.total > 0 ? <span className="font-normal text-[var(--medtrak-muted)]"> · {progress.done} of {progress.total} up to date</span> : null}</span>
               {failing > 0 && <span className="rounded-full bg-rose-500/15 px-2 py-0.5 text-xs font-bold text-rose-700">{failing} failing</span>}
             </div>
             {dueWater.length > 0 && (
               <div className="mb-3">
                 <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--medtrak-muted)]"><Droplets className="h-3.5 w-3.5" /> Water outlets</p>
-                <div className="space-y-2">{dueWater.slice(0, 8).map((asset) => <DueRow key={asset.id} asset={asset} onOpen={(a) => openCheck(a, "manual_due_list")} />)}</div>
+                <div className="space-y-2">{(showAllDue ? dueWater : dueWater.slice(0, 8)).map((asset) => <DueRow key={asset.id} asset={asset} onOpen={(a) => openCheck(a, "manual_due_list")} />)}</div>
               </div>
             )}
             {dueOther.length > 0 && (
               <div>
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--medtrak-muted)]">Other checks</p>
-                <div className="space-y-2">{dueOther.slice(0, 8).map((asset) => <DueRow key={asset.id} asset={asset} onOpen={(a) => openCheck(a, "manual_due_list")} />)}</div>
+                <div className="space-y-2">{(showAllDue ? dueOther : dueOther.slice(0, 8)).map((asset) => <DueRow key={asset.id} asset={asset} onOpen={(a) => openCheck(a, "manual_due_list")} />)}</div>
               </div>
+            )}
+            {(dueWater.length > 8 || dueOther.length > 8) && (
+              <button type="button" onClick={() => setShowAllDue((v) => !v)} className="mt-3 w-full rounded-xl border border-[var(--medtrak-border)] px-3 py-2 text-sm font-semibold text-[var(--medtrak-accent)]">{showAllDue ? "Show fewer" : `Show all ${dueAssets.length}`}</button>
             )}
           </div>
         )}
@@ -368,7 +404,10 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
           onCancel={() => setActiveAsset(null)}
         />
       )}
-      {activeAsset && !isTemperature && (
+      {activeAsset && !isTemperature && activeAsset.assetType === "fire_point" && (
+        <FireTestSheet key={sheetKey} asset={activeAsset} busy={busy} onSubmit={submitCheck} onCancel={() => setActiveAsset(null)} />
+      )}
+      {activeAsset && !isTemperature && activeAsset.assetType !== "fire_point" && (
         <PassFailSheet
           key={sheetKey}
           asset={activeAsset}
@@ -377,6 +416,21 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
           onSubmit={submitCheck}
           onCancel={() => setActiveAsset(null)}
         />
+      )}
+
+      {confirmRecent && (
+        <div className="fixed inset-0 z-[210] flex items-end bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Checked a moment ago">
+          <div className="w-full rounded-t-[2rem] border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-[var(--medtrak-text)] shadow-2xl">
+            <div className="mx-auto max-w-md">
+              <p className="text-lg font-bold">{assetLabel(confirmRecent.asset)} was just checked</p>
+              <p className="mt-1 text-sm text-[var(--medtrak-muted)]">{confirmRecent.recent.minutes < 1 ? "Less than a minute ago" : `${confirmRecent.recent.minutes} ${confirmRecent.recent.minutes === 1 ? "minute" : "minutes"} ago`}{confirmRecent.recent.by ? `, by ${confirmRecent.recent.by}` : ""}. Check it again?</p>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <button type="button" onClick={() => setConfirmRecent(null)} className="rounded-2xl border border-[var(--medtrak-border)] px-4 py-4 font-semibold">No, leave it</button>
+                <button type="button" onClick={() => startCheck(confirmRecent.asset, confirmRecent.identificationMethod, confirmRecent.scanRaw)} className="rounded-2xl bg-[var(--medtrak-accent)] px-4 py-4 font-bold text-white">Yes, check again</button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {incidentId && <ComplianceIncidentSheet incidentId={incidentId} onClose={() => setIncidentId("")} />}

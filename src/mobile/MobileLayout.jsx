@@ -23,6 +23,7 @@ import MobileClinicalAssetReconciliation from "./MobileClinicalAssetReconciliati
 import MobileRapidStockAction from "./MobileRapidStockAction";
 import MobileStockMovementReceipt from "./MobileStockMovementReceipt";
 import { useAuth } from "@/contexts/AuthContext";
+import useQueuedChecks from "./useQueuedChecks";
 import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry";
 import { loadSenseState } from "@/modules/sense/services/senseStore";
 import { parsePrimovexSenseUrl } from "@/modules/sense/services/nfcService";
@@ -123,6 +124,8 @@ export default function MobileLayout({ initialTab = "home" }) {
   const { open: openPrimovexAI, ask: askPrimovexAI } = usePrimovexAI();
   const { activeSenseSession, activate } = useSenseSession();
   const { role, roleHomeType, user, displayName, can, capabilities = [] } = useAuth();
+  // checks done with no signal are sent from here whatever screen is open, as soon as there is one
+  useQueuedChecks();
   // The four places in the bottom bar are the ones this role uses.
   const navPlaces = navFor(getRoleHome(role, capabilities, roleHomeType));
   const routedChecklistTab = location.pathname === '/inventory' ? new URLSearchParams(location.search).get('tab') : null;

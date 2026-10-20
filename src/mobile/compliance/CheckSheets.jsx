@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, Droplets, Thermometer, X, XCircle } from "lucide-react";
 import { getAssetTypeConfig } from "@/services/compliance/complianceQrService";
+import { FIRE_TEST_STEPS, fireTestChecklist, fireTestPassable } from "@/services/compliance/complianceRules";
 import { playBeep } from "@/utils/beep";
 
 // The two "one job" screens a check opens into once a tag has been tapped.
@@ -214,6 +215,61 @@ export function PassFailSheet({ asset, eyebrow = "Check", busy, onSubmit, onCanc
         placeholder="Notes / issues (optional)"
         className={`${NOTES_CLASS} ${askedForNote ? "border-rose-500/60" : ""}`}
       />
+      {askedForNote && <p className="mt-2 text-sm text-rose-600">Add a note about the fault if you can, then tap FAIL again. Tapping FAIL with no note saves it as it is.</p>}
+      <button type="button" onClick={onCancel} className="mt-3 w-full rounded-2xl border border-[var(--medtrak-border)] px-4 py-3 text-[var(--medtrak-muted)]">Cancel</button>
+    </SheetFrame>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The weekly fire alarm test of one call point, as a short log. Each step is ticked as it is done; PASS only unlocks when
+// every required step is ticked, FAIL is always there (a note about the fault is asked for once). What was ticked is
+// saved with the check, so the fire log shows what was done, not just that it passed.
+// ---------------------------------------------------------------------------
+export function FireTestSheet({ asset, busy, onSubmit, onCancel }) {
+  const [ticked, setTicked] = useState([]);
+  const [notes, setNotes] = useState("");
+  const [askedForNote, setAskedForNote] = useState(false);
+  const notesRef = useRef(null);
+  const passable = fireTestPassable(ticked);
+  const toggle = (key) => setTicked((list) => (list.includes(key) ? list.filter((k) => k !== key) : [...list, key]));
+
+  function fail() {
+    if (!notes.trim() && !askedForNote) {
+      setAskedForNote(true);
+      notesRef.current?.focus();
+      return;
+    }
+    onSubmit({ status: "fail", notes, checklist: fireTestChecklist(ticked) });
+  }
+
+  return (
+    <SheetFrame asset={asset} eyebrow="Fire alarm test" onCancel={onCancel}>
+      <ul className="mt-5 space-y-2" aria-label="Steps of the test">
+        {FIRE_TEST_STEPS.map((step) => {
+          const on = ticked.includes(step.key);
+          return (
+            <li key={step.key}>
+              <button type="button" onClick={() => toggle(step.key)} aria-pressed={on} className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left ${on ? "border-emerald-500/50 bg-emerald-500/10" : "border-[var(--medtrak-border)] bg-[var(--medtrak-panel)]"}`}>
+                <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${on ? "bg-emerald-500 text-white" : "border border-[var(--medtrak-border)]"}`}>{on && <CheckCircle2 className="h-5 w-5" />}</span>
+                <span className="text-sm font-semibold">{step.label}{!step.required && <span className="ml-1 font-normal text-[var(--medtrak-muted)]">(optional)</span>}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <button type="button" onClick={() => onSubmit({ status: "pass", notes, checklist: fireTestChecklist(ticked) })} disabled={busy || !passable} className="rounded-[1.5rem] bg-emerald-500 px-4 py-6 text-center text-2xl font-bold text-white disabled:opacity-40">
+          <CheckCircle2 className="mx-auto mb-1 h-8 w-8" />
+          PASS
+        </button>
+        <button type="button" onClick={fail} disabled={busy} className="rounded-[1.5rem] bg-rose-600 px-4 py-6 text-center text-2xl font-bold text-white disabled:opacity-50">
+          <XCircle className="mx-auto mb-1 h-8 w-8" />
+          FAIL
+        </button>
+      </div>
+      {!passable && <p className="mt-2 text-xs text-[var(--medtrak-muted)]">PASS unlocks when every step above (except the optional one) is ticked. If something did not work, tap FAIL and say what.</p>}
+      <textarea ref={notesRef} value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Notes / issues (optional)" className={`${NOTES_CLASS} ${askedForNote ? "border-rose-500/60" : ""}`} />
       {askedForNote && <p className="mt-2 text-sm text-rose-600">Add a note about the fault if you can, then tap FAIL again. Tapping FAIL with no note saves it as it is.</p>}
       <button type="button" onClick={onCancel} className="mt-3 w-full rounded-2xl border border-[var(--medtrak-border)] px-4 py-3 text-[var(--medtrak-muted)]">Cancel</button>
     </SheetFrame>

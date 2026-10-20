@@ -252,3 +252,48 @@ export function buildAssetPatch(form = {}, type = "general") {
   }
   return { patch, problems };
 }
+
+// ---- the weekly fire alarm test, as a short log ----
+// What the person confirms as they test one call point. The first five must all be done for the test to pass; the last is
+// for a practice whose alarm is monitored. Kept in one list so it can be changed to match the practice's own fire log
+// (the fire risk assessor says what the log should hold).
+export const FIRE_TEST_STEPS = [
+  { key: "warned", label: "Everyone in the building was told a test was happening", short: "occupants warned", required: true },
+  { key: "operated", label: "The call point was operated with the test key", short: "call point operated", required: true },
+  { key: "sounders", label: "The alarm sounders were heard", short: "sounders heard", required: true },
+  { key: "panel", label: "The panel showed the right zone or call point", short: "panel zone", required: true },
+  { key: "reset", label: "The call point and panel were reset and the alarm silenced", short: "reset", required: true },
+  { key: "arc", label: "The alarm receiving centre was told (only if the alarm is monitored)", short: "alarm receiving centre told", required: false },
+];
+
+// a test can only pass when every required step has been ticked; `ticked` is a list of step keys
+export function fireTestPassable(ticked = []) {
+  const done = new Set(ticked);
+  return FIRE_TEST_STEPS.filter((s) => s.required).every((s) => done.has(s.key));
+}
+
+// the steps as saved on a check: each with whether it was done
+export const fireTestChecklist = (ticked = []) => FIRE_TEST_STEPS.map(({ key, label }) => ({ key, label, ok: ticked.includes(key) }));
+
+// A short note of what a saved checklist missed, for the history ("" when every required step was done)
+export function checklistGaps(checklist) {
+  if (!Array.isArray(checklist)) return "";
+  const names = new Map(FIRE_TEST_STEPS.filter((s) => s.required).map((s) => [s.key, s.short]));
+  const missed = checklist.filter((step) => names.has(step.key) && step.ok !== true).map((step) => names.get(step.key));
+  return missed.length ? `Not done: ${missed.join(", ")}` : "";
+}
+
+// Was this asset checked a moment ago (so a second scan is probably a mistake)? { minutes, by } or null.
+export function recentCheck(asset, now = new Date(), withinMinutes = 10) {
+  const last = toDateValue(asset?.lastCheckAt);
+  if (!last) return null;
+  const minutes = Math.floor((now.getTime() - last.getTime()) / 60000);
+  if (minutes < 0 || minutes >= withinMinutes) return null;
+  return { minutes, by: asset.lastCheckedByName || "" };
+}
+
+// how many of the checked assets (not the single call points) are up to date: for "11 of 15 up to date"
+export function upToDateCount(assets = [], now = new Date()) {
+  const counted = assets.filter((a) => a && a.active !== false && a.assetType !== "fire_point");
+  return { done: counted.filter((a) => !isComplianceCheckDue(a, now)).length, total: counted.length };
+}

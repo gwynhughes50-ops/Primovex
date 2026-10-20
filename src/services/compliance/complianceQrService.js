@@ -17,6 +17,7 @@ import { auth, db } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import { demoComplianceAssets, demoComplianceChecks } from "@/data/demoCompliance";
 import { openIncidentForFailedCheck } from "@/modules/compliance/complianceIncidentService";
+import { deviceStorage, findCachedAsset, flushQueue, isOfflineError, queueCheck } from "@/modules/compliance/offlineChecks";
 import {
   FREQUENCY_MS, toDateValue, buildAssetPatch, RETIRE_REASONS, retireReasonLabel,
   COMPLIANCE_ASSET_TYPES, DEFAULT_WATER_COUNTDOWN_SECONDS, buildComplianceQrPayload, evaluateComplianceResult, generateNextAssetCode, getAssetTypeConfig,
@@ -92,7 +93,18 @@ export async function getComplianceChecksBetween({ from, to, siteId = "", max = 
 export async function findComplianceAssetByScan(rawScan, { siteId = "" } = {}) {
   const parsed = parseComplianceQrPayload(rawScan);
   if (!parsed?.assetId) throw new Error("This QR/NFC tag is not a Primovex compliance asset.");
+  try {
+    return await lookupAssetOnline(parsed, rawScan, siteId);
+  } catch (error) {
+    if (!isOfflineError(error)) throw error;
+    // no signal: use the list kept on the phone from the last time Compliance was open with one
+    const saved = findCachedAsset(deviceStorage(), parsed.assetId);
+    if (saved && (!siteId || String(saved.siteId || "") === siteId)) return { ...saved, scanRaw: rawScan, fromCache: true };
+    throw new Error("There is no signal, and this asset is not saved on the phone yet. Open Compliance once with a signal and it will work without one.");
+  }
+}
 
+async function lookupAssetOnline(parsed, rawScan, siteId) {
   const assetId = String(parsed.assetId || "").trim();
 
   // Try direct document id first.
@@ -253,6 +265,10 @@ export async function recordComplianceCheck(asset, payload = {}) {
     performedAt: performedDate ? Timestamp.fromDate(performedDate) : serverTimestamp(),
     manualEntry: isManual,
     manualReason: isManual ? String(payload.manualReason || "").trim() : null,
+    // done with no signal and sent afterwards: performedAt is when it was really done, createdAt when it reached the server
+    savedOffline: payload.savedOffline === true,
+    // the steps of a fire alarm test, each with whether it was done (null for any other check)
+    checklist: Array.isArray(payload.checklist) ? payload.checklist.slice(0, 12).map((step) => ({ key: String(step?.key || "").slice(0, 40), label: String(step?.label || "").slice(0, 120), ok: step?.ok === true })) : null,
     source: payload.source || "mobile_qr",
     identificationMethod: payload.identificationMethod || "qr",
     scanRaw: payload.scanRaw || asset.scanRaw || null,
@@ -265,7 +281,7 @@ export async function recordComplianceCheck(asset, payload = {}) {
     updatedAt: serverTimestamp(),
   };
 
-  const ref = await addDocResendSafe(collection(db, COMPLIANCE_CHECKS_COLLECTION), check);
+  const ref = await addDocResendSafe(collection(db, COMPLIANCE_CHECKS_COLLECTION), check, payload.checkId || undefined);
   // A back-dated manual record must not push the asset's "last checked" earlier
   // than a check that has already been recorded since.
   const lastKnown = toDateValue(asset.lastCheckAt);
@@ -287,6 +303,65 @@ export async function recordComplianceCheck(asset, payload = {}) {
   }
 
   return { id: ref.id, ...check };
+}
+
+// ---- checking without a signal (see modules/compliance/offlineChecks.js) ----
+
+const withTimeout = (promise, ms) => new Promise((resolve, reject) => {
+  const timer = setTimeout(() => reject(new Error("The save timed out.")), ms);
+  promise.then((value) => { clearTimeout(timer); resolve(value); }, (error) => { clearTimeout(timer); reject(error); });
+});
+
+// Save a check. With a signal this is exactly recordComplianceCheck. With none (or a save that does not answer in time)
+// the check is kept on the phone, with the real time, and sent by flushQueuedComplianceChecks when there is a signal.
+// Returns the saved check, or { queued: true, ... } with what the result card needs.
+export async function saveComplianceCheck(asset, payload = {}, { timeoutMs = 9000 } = {}) {
+  const storage = deviceStorage();
+  const actor = payload.actor || getCurrentActor();
+  const checkId = doc(collection(db, COMPLIANCE_CHECKS_COLLECTION)).id;
+  const { performedAt, ...keep } = payload; // a queued check carries its own time
+  const queueIt = () => {
+    queueCheck(storage, { id: checkId, asset, payload: { ...keep, actor: undefined }, actor, performedAtMs: Date.now(), identificationMethod: payload.identificationMethod || "qr", scanRaw: payload.scanRaw || asset.scanRaw || null });
+    const result = evaluateComplianceResult(asset, payload);
+    return { queued: true, id: checkId, result: result.status, checkMode: asset.checkMode || "pass_fail", tempC: result.value ?? null };
+  };
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return queueIt();
+  try {
+    return await withTimeout(recordComplianceCheck(asset, { ...payload, actor, checkId }), timeoutMs);
+  } catch (error) {
+    if (isOfflineError(error)) return queueIt();
+    throw error;
+  }
+}
+
+let flushing = null;
+
+// Send the checks kept on this phone, for the person signed in. Safe to call often: one run at a time, and a repeat
+// lands on the same record. Resolves to { sent, waiting, otherPeople, failed, offline }.
+export function flushQueuedComplianceChecks() {
+  if (flushing) return flushing;
+  flushing = flushQueue({
+    storage: deviceStorage(),
+    currentUid: auth.currentUser?.uid || null,
+    online: typeof navigator === "undefined" ? true : navigator.onLine !== false,
+    record: async (entry) => {
+      // the asset as it is now (not as it was when the phone last saw it), so an older check never hides a newer one
+      const snap = await getDoc(doc(db, COMPLIANCE_ASSETS_COLLECTION, entry.asset.id));
+      if (!snap.exists()) throw new Error("That asset no longer exists.");
+      const asset = { ...entry.asset, ...snap.data(), id: snap.id };
+      await recordComplianceCheck(asset, {
+        ...entry.payload,
+        actor: entry.actor,
+        source: "mobile_offline",
+        savedOffline: true,
+        performedAt: new Date(entry.performedAtMs),
+        checkId: entry.id,
+        identificationMethod: entry.identificationMethod,
+        scanRaw: entry.scanRaw,
+      });
+    },
+  }).finally(() => { flushing = null; });
+  return flushing;
 }
 
 export async function createCompliancePulseEvent(asset, check, result) {

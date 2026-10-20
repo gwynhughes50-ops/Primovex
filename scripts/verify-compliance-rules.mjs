@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  FIRE_TEST_STEPS, checklistGaps, fireTestChecklist, fireTestPassable, recentCheck, upToDateCount,
   COMPLIANCE_ASSET_TYPES, buildComplianceLink, buildComplianceQrPayload, evaluateComplianceResult, generateNextAssetCode, getAssetTypeConfig, getCountdownSeconds, getNextFirePointToTest,
   isComplianceCheckDue, isFireAlarmTestDueThisWeek, isFlushableAsset, normaliseAssetCode, parseComplianceQrPayload, buildAssetPatch, RETIRE_REASONS, retireReasonLabel,
 } from "../src/services/compliance/complianceRules.js";
@@ -155,6 +156,45 @@ t("a link-style tag opens the asset's check, and the older text tags and labels 
   // a room or fridge link is not a compliance tag
   assert.equal(parseComplianceQrPayload("https://app.primovex.co.uk/sense/open/space/room-1"), null);
   assert.equal(parseComplianceQrPayload("https://app.primovex.co.uk/sense/open/fridge/f1"), null);
+});
+
+t("a fire alarm test can only pass when every required step is ticked; the alarm receiving centre is optional", () => {
+  const required = FIRE_TEST_STEPS.filter((s) => s.required).map((s) => s.key);
+  assert.equal(required.length, 5);
+  assert.equal(fireTestPassable([]), false);
+  assert.equal(fireTestPassable(required.slice(0, 4)), false);
+  assert.equal(fireTestPassable(required), true);
+  assert.equal(fireTestPassable([...required, "arc"]), true);
+  assert.equal(fireTestPassable(["arc"]), false, "the optional step alone is not enough");
+  const saved = fireTestChecklist(required.slice(0, 3));
+  assert.equal(saved.length, FIRE_TEST_STEPS.length);
+  assert.deepEqual(saved.filter((s) => s.ok).map((s) => s.key), required.slice(0, 3));
+  assert.equal(checklistGaps(fireTestChecklist(required)), "");
+  assert.equal(checklistGaps(saved), "Not done: panel zone, reset");
+  assert.equal(checklistGaps(null), "");
+  assert.equal(checklistGaps(fireTestChecklist([...required, "arc"].slice(0, 5))), "", "an unticked optional step is not a gap");
+});
+
+t("a second scan of an asset checked a moment ago is noticed, with who did it", () => {
+  const at = (minutes) => new Date(now.getTime() - minutes * 60000);
+  assert.deepEqual(recentCheck({ lastCheckAt: at(4), lastCheckedByName: "Gwyn" }, now), { minutes: 4, by: "Gwyn" });
+  assert.equal(recentCheck({ lastCheckAt: at(10) }, now), null, "ten minutes is not 'just now'");
+  assert.equal(recentCheck({ lastCheckAt: at(120) }, now), null);
+  assert.equal(recentCheck({}, now), null);
+  assert.equal(recentCheck({ lastCheckAt: new Date(now.getTime() + 60000) }, now), null, "a clock slightly ahead is not a recent check");
+});
+
+t("'up to date' counts the checked assets, not the single fire call points or retired ones", () => {
+  const list = [
+    { assetType: "water_hot", frequency: "monthly", lastCheckAt: ago(3) },
+    { assetType: "water_hot", frequency: "monthly", lastCheckAt: ago(40) },
+    { assetType: "fire_door", frequency: "weekly", lastCheckAt: ago(1) },
+    { assetType: "fire_point", frequency: "weekly", lastCheckAt: ago(30) },
+    { assetType: "water_cold", frequency: "monthly", lastCheckAt: ago(3), active: false },
+    { assetType: "aed", frequency: "weekly", lastCheckAt: ago(2), lastCheckResult: "fail" },
+  ];
+  assert.deepEqual(upToDateCount(list, now), { done: 2, total: 4 });
+  assert.deepEqual(upToDateCount([], now), { done: 0, total: 0 });
 });
 
 console.log(`\n${n} passed`);

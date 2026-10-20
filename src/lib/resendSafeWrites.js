@@ -13,8 +13,10 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 // write still reports one of the two "already there" errors, the record's own
 // id is checked: if it exists, this save worked. Anything else — including a
 // genuine permission problem, where nothing was written — is thrown as before.
-export async function addDocResendSafe(collectionRef, data) {
-  const ref = doc(collectionRef);
+// `id` (optional) is a record id made up earlier, so a record kept on a phone and sent later lands on one record however
+// many times it is sent.
+export async function addDocResendSafe(collectionRef, data, id) {
+  const ref = id ? doc(collectionRef, id) : doc(collectionRef);
   try {
     await setDoc(ref, data);
   } catch (err) {
