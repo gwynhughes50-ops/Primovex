@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs, limit, query, serverTimestamp, where } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
+import { useNavigate } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, ChevronLeft, Thermometer, X } from "lucide-react";
 import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { db, functions } from "@/lib/firebase";
@@ -24,6 +25,9 @@ const timeText = (date) => date.toLocaleTimeString("en-GB", { hour: "2-digit", m
 
 export default function MobileFridgeCheckSheet({ asset, onClose }) {
   const { user, displayName, email } = useAuth();
+  const navigate = useNavigate();
+  // after a check, or when it was already done, the person can go and look at the readings
+  const seeReadings = () => { onClose?.(); navigate("/temperature"); };
   const actor = useMemo(() => ({ uid: user?.uid || null, displayName: displayName || user?.displayName || "", email: email || user?.email || "" }), [user, displayName, email]);
   const [units, setUnits] = useState(null); // null while loading
   const [step, setStep] = useState(0);
@@ -156,7 +160,8 @@ export default function MobileFridgeCheckSheet({ asset, onClose }) {
               <p className="mt-1 text-sm">{done.outOfRange ? (done.incidentFailed ? "Tell the Practice Manager now." : done.alerted?.sent > 0 ? `An incident has been opened and ${done.alerted.sent === 1 ? "1 person has" : `${done.alerted.sent} people have`} been alerted (${(done.alerted.roles || []).join(", ")}).` : "An incident has been opened, but nobody could be alerted automatically. Tell the Practice Manager now.") : `${asset.name} is in range.`} Recorded by {actor.displayName || actor.email || "you"} at {timeText(new Date())}.</p>
             </div>
             {error && <p className="mt-3 rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-700" role="alert">{error}</p>}
-            <button type="button" onClick={onClose} className="mt-4 min-h-12 w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 font-bold text-white">Done</button>
+            <button type="button" onClick={seeReadings} className="mt-4 min-h-12 w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 font-bold text-white">See the fridge readings</button>
+            <button type="button" onClick={onClose} className="mt-2 min-h-12 w-full rounded-2xl border border-[var(--medtrak-border)] px-4 font-bold">Done</button>
           </div>
         ) : already ? (
           <div className="mt-5">
@@ -164,7 +169,8 @@ export default function MobileFridgeCheckSheet({ asset, onClose }) {
               <p className="flex items-center gap-2 font-bold"><CheckCircle2 className="h-5 w-5 text-emerald-600" aria-hidden="true" /> Already checked this {slotOf(opened) === "AM" ? "morning" : "afternoon"}</p>
               <p className="mt-1 text-sm text-[var(--medtrak-muted)]">{already.recordedBy || "Someone"} recorded {already.temp}°C{Number.isFinite(already.minTemp) ? ` (min ${already.minTemp}°C, max ${already.maxTemp}°C)` : ""}{already.measured_at?.toDate ? ` at ${timeText(already.measured_at.toDate())}` : ""}.</p>
             </div>
-            <button type="button" onClick={onClose} className="mt-4 min-h-12 w-full rounded-2xl border border-[var(--medtrak-border)] px-4 font-bold">Close</button>
+            <button type="button" onClick={seeReadings} className="mt-4 min-h-12 w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 font-bold text-white">See the fridge readings</button>
+            <button type="button" onClick={onClose} className="mt-2 min-h-12 w-full rounded-2xl border border-[var(--medtrak-border)] px-4 font-bold">Close</button>
           </div>
         ) : (
           <>

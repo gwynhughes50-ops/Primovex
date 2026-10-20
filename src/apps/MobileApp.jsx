@@ -109,6 +109,7 @@ export default function MobileApp() {
       <Route path="/governance/sars" element={<MobileGovernanceSARsRoute />} />
       <Route path="/governance/significant-events" element={<MobileSignificantEventsRoute />} />
       <Route path="/spaces" element={<MobileBootController initialTab="sense" />} />
+      <Route path="/temperature" element={<MobileBootController initialTab="temperature" />} />
       <Route path="/dashboard" element={<MobileBootController initialTab="home" />} />
       <Route path="*" element={<MobileBootController />} />
     </Routes>

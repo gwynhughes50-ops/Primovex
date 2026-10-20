@@ -24,6 +24,7 @@ import MobileRapidStockAction from "./MobileRapidStockAction";
 import MobileStockMovementReceipt from "./MobileStockMovementReceipt";
 import { useAuth } from "@/contexts/AuthContext";
 import useQueuedChecks from "./useQueuedChecks";
+import MobileTemperature from "./MobileTemperature";
 import { loadSpaceRegistry } from "@/modules/sense/services/sharedSpaceRegistry";
 import { loadSenseState } from "@/modules/sense/services/senseStore";
 import { parsePrimovexSenseUrl } from "@/modules/sense/services/nfcService";
@@ -693,7 +694,7 @@ export default function MobileLayout({ initialTab = "home" }) {
       {activeTab === "connect" ? (
         <MobileConnect />
       ) : activeTab === "temperature" ? (
-        <MobileConnect onBack={() => setActiveTab("home")} />
+        <MobileTemperature onBack={() => setActiveTab("home")} />
       ) : activeTab === "compliance" ? (
         <MobileCompliance pendingNfcScan={pendingComplianceScan} onConsumeNfcScan={() => setPendingComplianceScan(null)} />
       ) : activeTab === "sense" ? (
