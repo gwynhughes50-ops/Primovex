@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { checkForDesktopUpdate, installDesktopUpdate, isDesktopApp } from "@/release/updateService";
 
-// "A new version of Primovex is ready": shown in the installed Windows app when a newer signed release has been published. It checks
+// "A new version of Primovex is ready": a box in the middle of the screen, shown in the installed Windows app when a newer signed release has been published. It checks
 // shortly after the app opens and every few hours while it stays open. Nothing is forced: the person presses Update now at a good
 // point, the new version downloads, and the app restarts into it. Later hides it until the next check.
 
@@ -22,7 +22,7 @@ export default function DesktopUpdateBanner() {
       if (busy.current) return;
       try {
         const result = await checkForDesktopUpdate();
-        if (live && result.supported && result.available) { setFound({ update: result.update, version: result.version }); setHidden(false); }
+        if (live && result.supported && result.available) { setFound({ update: result.update, version: result.version, notes: result.notes }); setHidden(false); }
       } catch (error) {
         console.warn("Primovex update check failed", error?.message || error);
       }
@@ -50,15 +50,24 @@ export default function DesktopUpdateBanner() {
   };
 
   return (
-    <div role="status" className="fixed bottom-4 right-4 z-[400] flex max-w-sm flex-col gap-3 rounded-2xl border border-teal-300/50 bg-slate-900 px-4 py-3 text-sm font-semibold text-slate-50 shadow-2xl">
-      <span>{phase === "installing" ? message : `A new version of Primovex${found.version ? ` (${found.version})` : ""} is ready.`}</span>
-      {phase === "error" && <span className="text-xs font-normal text-rose-300">{message}</span>}
-      {phase !== "installing" && (
-        <div className="flex gap-2">
-          <button type="button" onClick={install} className="min-h-10 flex-1 rounded-xl bg-teal-400 px-4 font-bold text-slate-950">{phase === "error" ? "Try again" : "Update now"}</button>
-          <button type="button" onClick={() => setHidden(true)} className="min-h-10 rounded-xl border border-slate-600 px-4 font-bold">Later</button>
-        </div>
-      )}
+    <div className="fixed inset-0 z-[500] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div role="dialog" aria-modal="true" aria-labelledby="desktop-update-title" className="w-full max-w-md rounded-3xl border border-teal-300/50 bg-slate-900 p-6 text-slate-50 shadow-2xl">
+        <p id="desktop-update-title" className="text-xl font-black">{phase === "installing" ? "Updating Primovex" : "A new version of Primovex is ready"}</p>
+        {phase === "installing" ? (
+          <p className="mt-3 text-sm text-slate-300">{message} Primovex will restart by itself when it is done.</p>
+        ) : (
+          <>
+            {found.version && <p className="mt-1 text-sm font-semibold text-teal-300">Version {found.version}</p>}
+            {found.notes && <p className="mt-3 text-sm text-slate-300">{found.notes}</p>}
+            {phase === "error" && <p className="mt-3 text-sm text-rose-300">{message}</p>}
+            <div className="mt-5 flex gap-3">
+              <button type="button" onClick={install} className="min-h-11 flex-1 rounded-xl bg-teal-400 px-4 font-bold text-slate-950">{phase === "error" ? "Try again" : "Update now"}</button>
+              <button type="button" onClick={() => setHidden(true)} className="min-h-11 rounded-xl border border-slate-600 px-5 font-bold">Later</button>
+            </div>
+            <p className="mt-3 text-xs text-slate-400">Save anything you are in the middle of first. Primovex restarts to finish.</p>
+          </>
+        )}
+      </div>
     </div>
   );
 }
