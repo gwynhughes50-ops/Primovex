@@ -6,7 +6,7 @@ import { auth, db } from "@/lib/firebase";
 import { blockedModuleDomains, shouldPurgeClinFlowLocalData } from "@/core/identity/moduleAccess";
 import { purgeClinFlowLocalData } from "@/modules/clinflow/clinflowDocumentCache";
 import { VIEW_AS_KEY, readViewAs, resolveViewAs, writeViewAs } from "@/core/identity/viewAs";
-import { getCapabilitiesForProfile, hasCapability, hasAnyCapability, withLegacyKits, CAPABILITY_CATALOG } from "@/core/identity/capabilities";
+import { getCapabilitiesForProfile, hasCapability, hasAnyCapability, withLegacyCapabilities, CAPABILITY_CATALOG } from "@/core/identity/capabilities";
 import { getStoredPlatformMode, isSafeSyntheticMode, setPlatformMode } from "@/config/platformMode";
 import { getActiveDemoProfile } from "@/config/demoMode";
 import { writeAuditEvent } from "@/core/identity/auditService";
@@ -234,7 +234,7 @@ export function AuthProvider({ children }) {
   }, [platformMode, authUid]);
 
   const customRoleCapabilities = useMemo(
-    () => Object.fromEntries(customRoles.map((r) => [r.name, withLegacyKits(r.capabilities || [], r.capabilitiesVersion)])),
+    () => Object.fromEntries(customRoles.map((r) => [r.name, withLegacyCapabilities(r.capabilities || [], r.capabilitiesVersion)])),
     [customRoles]
   );
 

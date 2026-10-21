@@ -171,7 +171,7 @@ t("expired and running-out certificates are on the strip for the people who keep
 });
 
 t("a nurse manager gets the clinical home with the briefing and the attention strip, not the Practice Manager's office home", () => {
-  const caps = ["inventory.read", "inventory.write", "inventory.kits", "temperature.write", "stocktake.count"];
+  const caps = ["inventory.read", "inventory.write", "inventory.kits", "governance.reportEvents", "temperature.write", "stocktake.count"];
   const lead = getRoleHome("Nurse Manager", caps);
   assert.equal(lead.id, "clinical");
   assert.equal(lead.attention, true);

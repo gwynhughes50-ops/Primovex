@@ -17,7 +17,7 @@ test("a change in role_overrides replaces the built-in permissions for that role
 });
 
 test("System Admin ignores any override; User and ReadOnly can be changed; a malformed one is ignored", async () => {
-  const db = fakeDb({ "role_overrides/System Admin": { capabilities: [] }, "role_overrides/User": { capabilities: ["inventory.read"], capabilitiesVersion: 2 }, "role_overrides/ReadOnly": { capabilities: ["admin.access"] }, "role_overrides/Nurse": { capabilities: "all" } });
+  const db = fakeDb({ "role_overrides/System Admin": { capabilities: [] }, "role_overrides/User": { capabilities: ["inventory.read"], capabilitiesVersion: 3 }, "role_overrides/ReadOnly": { capabilities: ["admin.access"] }, "role_overrides/Nurse": { capabilities: "all" } });
   assert.deepEqual(await getEffectiveCapabilities(db, "System Admin"), ["*"]);
   assert.deepEqual(await getEffectiveCapabilities(db, "User"), ["inventory.read"]);
   assert.equal(hasCapability(await getEffectiveCapabilities(db, "ReadOnly"), "admin.access"), true);
@@ -25,7 +25,7 @@ test("System Admin ignores any override; User and ReadOnly can be changed; a mal
 });
 
 test("a custom role is read from roles as before, and the overridable list is the one the app and rules use", async () => {
-  const db = fakeDb({ "roles/Assistant Practitioner": { capabilities: ["inventory.read"], capabilitiesVersion: 2 } });
+  const db = fakeDb({ "roles/Assistant Practitioner": { capabilities: ["inventory.read"], capabilitiesVersion: 3 } });
   assert.deepEqual(await getEffectiveCapabilities(db, "Assistant Practitioner"), ["inventory.read"]);
   assert.deepEqual(await getEffectiveCapabilities(db, "Nobody"), []);
   assert.deepEqual([...OVERRIDABLE_ROLES].sort(), ["Caretaker", "Cleaner", "HCA", "Nurse", "Partner", "Practice Manager", "ReadOnly", "Reception", "User"]);
@@ -34,10 +34,10 @@ test("a custom role is read from roles as before, and the overridable list is th
 test("a role saved before the emergency drugs and anaphylaxis boxes had their own permission keeps seeing them; a role saved since decides for itself", async () => {
   const db = fakeDb({
     "roles/Old role": { capabilities: ["inventory.read", "inventory.write"] },
-    "roles/New role": { capabilities: ["inventory.read", "inventory.write"], capabilitiesVersion: 2 },
+    "roles/New role": { capabilities: ["inventory.read", "inventory.write"], capabilitiesVersion: 3 },
     "roles/No stock": { capabilities: ["dashboard.read"] },
     "role_overrides/HCA": { capabilities: ["inventory.read"] },
-    "role_overrides/Nurse": { capabilities: ["inventory.read"], capabilitiesVersion: 2 },
+    "role_overrides/Nurse": { capabilities: ["inventory.read"], capabilitiesVersion: 3 },
   });
   assert.ok((await getEffectiveCapabilities(db, "Old role")).includes("inventory.kits"));
   assert.ok(!(await getEffectiveCapabilities(db, "New role")).includes("inventory.kits"));
@@ -48,7 +48,7 @@ test("a role saved before the emergency drugs and anaphylaxis boxes had their ow
 });
 
 test("one person's exceptions add to and take from their role, and never narrow a System Admin", async () => {
-  const db = fakeDb({ "roles/Salaried GP": { capabilities: ["inventory.read", "inventory.adjust", "dashboard.read"], capabilitiesVersion: 2 } });
+  const db = fakeDb({ "roles/Salaried GP": { capabilities: ["inventory.read", "inventory.adjust", "dashboard.read"], capabilitiesVersion: 3 } });
   const person = { role: "Salaried GP", permissionExceptions: { allow: ["training.manage"], deny: ["inventory.adjust", "not-a-real-one"] } };
   const caps = await getEffectiveCapabilities(db, "Salaried GP", person);
   assert.deepEqual([...caps].sort(), ["dashboard.read", "inventory.read", "training.manage"]);

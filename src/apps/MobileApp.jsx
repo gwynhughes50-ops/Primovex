@@ -97,6 +97,7 @@ function MobileSignificantEventsRoute() {
   if (!user) return <MobileAccountLogin />;
   if (profile?.mustChangePassword === true) return <MustChangePassword />;
   if (!can("mobile.access")) return <MobileAccessDenied />;
+  if (!can("governance.reportEvents") && !can("governance.seTeam") && !can("governance.partnerAccess")) return <MobileAccessDenied />;
   // Behind the same PIN / biometric lock: events can carry a patient's EMIS number.
   return <MobileSessionShell><MobileSignificantEvents /></MobileSessionShell>;
 }

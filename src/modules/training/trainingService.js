@@ -10,6 +10,7 @@ import { recordKey } from "./training";
 // the rules; this reads the right slice so the query is allowed:
 //   training.manage          everyone
 //   training.manageClinical  the clinical group
+//   training.view            everyone, read only (partners)
 //   anyone else              their own record only (the person linked to their account)
 
 export const COURSES = "training_courses";
@@ -20,8 +21,12 @@ export const RECORDS = "training_records";
 export function trainingScope(can) {
   if (can("training.manage")) return "all";
   if (can("training.manageClinical")) return "clinical";
+  if (can("training.view")) return "all";
   return "own";
 }
+
+// true when this login can look at everyone's training but not change it
+export const trainingReadOnly = (can) => !can("training.manage") && !can("training.manageClinical") && can("training.view");
 
 const withId = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 

@@ -7,6 +7,7 @@
 const BUILT_IN_ROLE_CAPABILITIES = {
   "System Admin": ["*"],
   "Practice Manager": [
+    "governance.reportEvents",
     "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
     "dashboard.read", "operations.read", "operations.manage",
     "inventory.read", "inventory.kits", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",
@@ -23,6 +24,7 @@ const BUILT_IN_ROLE_CAPABILITIES = {
     "audit.read", "audit.write", "orb.learning.review", "security.read", "security.manage",
   ],
   User: [
+    "governance.reportEvents",
     "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
     "inventory.read", "inventory.kits", "inventory.write", "inventory.adjust", "inventory.verify",
     "purchasing.read", "suppliers.read", "connect.view",
@@ -31,6 +33,7 @@ const BUILT_IN_ROLE_CAPABILITIES = {
     "mobile.access", "mobile.biometricUnlock",
   ],
   Nurse: [
+    "governance.reportEvents",
     "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
     "inventory.read", "inventory.kits", "inventory.write", "inventory.verify", "connect.view",
     "temperature.read", "temperature.write", "temperature.resolveIncident",
@@ -38,17 +41,20 @@ const BUILT_IN_ROLE_CAPABILITIES = {
     "mobile.access", "mobile.biometricUnlock",
   ],
   HCA: [
+    "governance.reportEvents",
     "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "inventory.write", "inventory.verify",
     "connect.view", "temperature.read", "temperature.write",
     "mobile.access", "mobile.biometricUnlock",
   ],
   Reception: [
+    "governance.reportEvents",
     "clinflow.read", "clinflow.capture", "clinflow.workflow",
     "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "purchasing.read",
     "governance.read", "governance.write", "governance.manageConcerns", "governance.concernsTeam",
     "connect.view", "mobile.access",
   ],
   Caretaker: [
+    "governance.reportEvents",
     "dashboard.read", "operations.read", "connect.view",
     "temperature.read", "temperature.write",
     "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets",
@@ -59,9 +65,11 @@ const BUILT_IN_ROLE_CAPABILITIES = {
     "mobile.access",
   ],
   Partner: [
+    "governance.reportEvents",
     "dashboard.read", "governance.read", "governance.partnerAccess", "mobile.access",
   ],
   ReadOnly: [
+    "governance.reportEvents",
     "clinflow.read", "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "purchasing.read",
     "suppliers.read", "governance.read", "connect.view", "temperature.read", "compliance.read",
     "reports.read",
@@ -72,13 +80,17 @@ const BUILT_IN_ROLE_CAPABILITIES = {
 // roles/{roleName} with a `capabilities` array — same document shape
 // firestore.rules' customRoleCapabilities() reads.
 const OVERRIDABLE_ROLES = ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner", "User", "ReadOnly"];
-const CAPABILITIES_VERSION = 2;
+const CAPABILITIES_VERSION = 3;
 
-// Roles saved before the emergency drugs and anaphylaxis boxes had their own permission keep seeing them if they could see
-// inventory (mirrors withLegacyKits in src/core/identity/capabilities.js).
-function withLegacyKits(capabilities, version) {
+// Roles saved before a permission existed keep what they could do (mirrors withLegacyCapabilities in
+// src/core/identity/capabilities.js): the emergency kits for anyone who could see inventory, and reporting a significant event.
+function withLegacyCapabilities(capabilities, version) {
   if (!Array.isArray(capabilities) || Number(version) >= CAPABILITIES_VERSION) return capabilities;
-  return capabilities.includes("inventory.read") && !capabilities.includes("inventory.kits") ? [...capabilities, "inventory.kits"] : capabilities;
+  const v = Number(version) || 1;
+  const out = [...capabilities];
+  if (v < 2 && out.includes("inventory.read") && !out.includes("inventory.kits")) out.push("inventory.kits");
+  if (!out.includes("governance.reportEvents")) out.push("governance.reportEvents");
+  return out;
 }
 
 async function getEffectiveCapabilities(db, role, profile = null) {
@@ -101,16 +113,16 @@ async function roleCapabilitiesOf(db, role) {
     // an administrator's change to this original role's permissions (role_overrides), else the original
     const override = await db.collection("role_overrides").doc(role).get();
     const capabilities = override.exists ? override.data()?.capabilities : null;
-    return Array.isArray(capabilities) ? withLegacyKits(capabilities, override.data()?.capabilitiesVersion) : builtIn;
+    return Array.isArray(capabilities) ? withLegacyCapabilities(capabilities, override.data()?.capabilitiesVersion) : builtIn;
   }
   if (builtIn) return builtIn;
   if (!role) return [];
   const roleDoc = await db.collection("roles").doc(role).get();
-  return roleDoc.exists ? withLegacyKits(roleDoc.data()?.capabilities || [], roleDoc.data()?.capabilitiesVersion) : [];
+  return roleDoc.exists ? withLegacyCapabilities(roleDoc.data()?.capabilities || [], roleDoc.data()?.capabilitiesVersion) : [];
 }
 
 function hasCapability(capabilities, required) {
   return Array.isArray(capabilities) && (capabilities.includes("*") || capabilities.includes(required));
 }
 
-module.exports = { OVERRIDABLE_ROLES, BUILT_IN_ROLE_CAPABILITIES, CAPABILITIES_VERSION, applyExceptions, withLegacyKits, getEffectiveCapabilities, hasCapability };
+module.exports = { OVERRIDABLE_ROLES, BUILT_IN_ROLE_CAPABILITIES, CAPABILITIES_VERSION, applyExceptions, withLegacyCapabilities, getEffectiveCapabilities, hasCapability };

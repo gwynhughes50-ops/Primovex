@@ -92,14 +92,14 @@ export default function DesktopApp() {
         <Route path="mileage" element={<Mileage />} />
         <Route path="timesheets" element={<PermissionGate capability="timesheets.manage"><Timesheets /></PermissionGate>} />
         <Route path="waste" element={<PermissionGate anyOf={["waste.read", "waste.manage"]}><WasteNotes /></PermissionGate>} />
-        <Route path="training" element={<PermissionGate anyOf={["training.manage", "training.manageClinical"]}><Training /></PermissionGate>} />
+        <Route path="training" element={<PermissionGate anyOf={["training.manage", "training.manageClinical", "training.view"]}><Training /></PermissionGate>} />
         <Route path="reorder-centre" element={<ReorderCentre />} />
         <Route path="purchasing" element={<Purchasing />} />
         <Route path="suppliers" element={<SupplierDirectory />} />
         <Route path="practice-admin" element={<PermissionGate capability="practiceAdmin.read"><PracticeAdministration /></PermissionGate>} />
         <Route path="governance/concerns" element={<PermissionGate anyOf={["governance.read", "governance.concernsInvolved"]}><GovernanceConcerns /></PermissionGate>} />
         <Route path="governance/sars" element={<GovernanceSARs />} />
-        <Route path="governance/significant-events" element={<GovernanceSignificantEvents />} />
+        <Route path="governance/significant-events" element={<PermissionGate anyOf={["governance.reportEvents", "governance.seTeam", "governance.partnerAccess"]}><GovernanceSignificantEvents /></PermissionGate>} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="connect" element={<PermissionGate capability="connect.view"><Connect /></PermissionGate>} />
         <Route path="theme-lab" element={<ThemeLab />} />

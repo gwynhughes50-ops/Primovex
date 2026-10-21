@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CAPABILITY_CATALOG, OVERRIDABLE_ROLES, ROLE_TEMPLATES, getCapabilitiesForProfile, permissionExceptionsOf, withLegacyKits } from "../src/core/identity/capabilities.js";
+import { CAPABILITY_CATALOG, OVERRIDABLE_ROLES, ROLE_TEMPLATES, getCapabilitiesForProfile, permissionExceptionsOf, withLegacyCapabilities } from "../src/core/identity/capabilities.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
@@ -11,17 +11,17 @@ t("an original role has its own permissions until an administrator changes them"
 });
 
 t("a change replaces the original's permissions for everyone with that role", () => {
-  const overrides = { HCA: { capabilities: [...ROLE_TEMPLATES.HCA, "waste.read", "training.manageClinical"] } };
+  const overrides = { HCA: { capabilities: [...ROLE_TEMPLATES.HCA, "waste.read", "training.manageClinical"], capabilitiesVersion: 3 } };
   const caps = getCapabilitiesForProfile({ role: "HCA" }, {}, overrides);
   assert.ok(caps.includes("waste.read") && caps.includes("training.manageClinical") && caps.includes("inventory.verify"));
   assert.equal(getCapabilitiesForProfile({ role: "Nurse" }, {}, overrides).includes("waste.read"), false, "other roles are untouched");
-  const narrower = getCapabilitiesForProfile({ role: "HCA" }, {}, { HCA: { capabilities: ["dashboard.read"] } });
+  const narrower = getCapabilitiesForProfile({ role: "HCA" }, {}, { HCA: { capabilities: ["dashboard.read"], capabilitiesVersion: 3 } });
   assert.deepEqual(narrower, ["dashboard.read"], "a change can also take permissions away");
 });
 
 t("System Admin cannot be changed, whatever is stored; User and ReadOnly can", () => {
   assert.deepEqual([...OVERRIDABLE_ROLES].sort(), ["Caretaker", "Cleaner", "HCA", "Nurse", "Partner", "Practice Manager", "ReadOnly", "Reception", "User"]);
-  const stored = { "System Admin": { capabilities: [] }, User: { capabilities: ["inventory.read", "dashboard.read"], capabilitiesVersion: 2 }, ReadOnly: { capabilities: ["admin.access"] } };
+  const stored = { "System Admin": { capabilities: [] }, User: { capabilities: ["inventory.read", "dashboard.read"], capabilitiesVersion: 3 }, ReadOnly: { capabilities: ["admin.access"] } };
   assert.deepEqual(getCapabilitiesForProfile({ role: "System Admin" }, {}, stored), ["*"]);
   assert.deepEqual([...getCapabilitiesForProfile({ role: "User" }, {}, stored)].sort(), ["dashboard.read", "inventory.read"]);
   assert.equal(getCapabilitiesForProfile({ role: "ReadOnly" }, {}, stored).includes("admin.access"), true);
@@ -41,14 +41,25 @@ t("the emergency drugs and anaphylaxis boxes have a permission of their own, and
   assert.ok(!ROLE_TEMPLATES.Cleaner.includes("inventory.kits"));
 });
 
-t("a role saved before that permission existed keeps the kits; one saved since decides for itself", () => {
-  assert.deepEqual(withLegacyKits(["inventory.read", "inventory.write"], undefined), ["inventory.read", "inventory.write", "inventory.kits"]);
-  assert.deepEqual(withLegacyKits(["inventory.read", "inventory.write"], 2), ["inventory.read", "inventory.write"]);
-  assert.deepEqual(withLegacyKits(["dashboard.read"], 1), ["dashboard.read"], "no stock, no kits");
-  assert.deepEqual(withLegacyKits(["inventory.read", "inventory.kits"], undefined), ["inventory.read", "inventory.kits"], "not added twice");
+t("a role saved before a permission existed keeps what it could do; one saved since decides for itself", () => {
+  // before version 2: the emergency kits for anyone who could see inventory. Before version 3: reporting a significant event.
+  assert.deepEqual(withLegacyCapabilities(["inventory.read", "inventory.write"], undefined), ["inventory.read", "inventory.write", "inventory.kits", "governance.reportEvents"]);
+  assert.deepEqual(withLegacyCapabilities(["inventory.read", "inventory.write"], 2), ["inventory.read", "inventory.write", "governance.reportEvents"], "version 2 knew about the kits, not about reporting");
+  assert.deepEqual(withLegacyCapabilities(["inventory.read", "inventory.write"], 3), ["inventory.read", "inventory.write"], "saved since: it decides for itself");
+  assert.deepEqual(withLegacyCapabilities(["dashboard.read"], 1), ["dashboard.read", "governance.reportEvents"], "no stock, no kits; anyone could report");
+  assert.deepEqual(withLegacyCapabilities(["inventory.read", "inventory.kits", "governance.reportEvents"], undefined), ["inventory.read", "inventory.kits", "governance.reportEvents"], "nothing is added twice");
   // an original role changed before the permission existed
   assert.ok(getCapabilitiesForProfile({ role: "HCA" }, {}, { HCA: { capabilities: ["inventory.read"] } }).includes("inventory.kits"));
-  assert.ok(!getCapabilitiesForProfile({ role: "HCA" }, {}, { HCA: { capabilities: ["inventory.read"], capabilitiesVersion: 2 } }).includes("inventory.kits"));
+  assert.ok(getCapabilitiesForProfile({ role: "HCA" }, {}, { HCA: { capabilities: ["inventory.read"] } }).includes("governance.reportEvents"));
+  const now = getCapabilitiesForProfile({ role: "HCA" }, {}, { HCA: { capabilities: ["inventory.read"], capabilitiesVersion: 3 } });
+  assert.ok(!now.includes("inventory.kits") && !now.includes("governance.reportEvents"));
+});
+
+t("every original role but the cleaner can report a significant event; the cleaner cannot", () => {
+  for (const [role, caps] of Object.entries(ROLE_TEMPLATES)) {
+    if (role === "System Admin") continue;
+    assert.equal(caps.includes("governance.reportEvents"), role !== "Cleaner", role);
+  }
 });
 
 t("one person's exceptions add to and take from their role, and never narrow a System Admin", () => {

@@ -1187,7 +1187,7 @@ export function registerApprovedReadOnlyTools() {
   // confirm. Anyone can report one, so this needs no permission, and an administrator's Orb limit does
   // not stop it (reporting something that went wrong should never be blocked).
   registerTool({
-    id: 'se.reportDraft', label: 'Report a significant event', requiredCapability: 'dashboard.read',
+    id: 'se.reportDraft', label: 'Report a significant event', requiredCapability: 'governance.reportEvents',
     async execute(input = {}) {
       let spaces = [];
       try { spaces = (loadSpaceRegistry()?.spaces || []).filter((s) => !s.archivedAt && s.status !== 'archived').map((s) => ({ id: s.id, name: s.name })); } catch { /* the room is optional */ }

@@ -7,7 +7,8 @@ import { GROUPS, LIGHT, STATUS, STATUS_LABEL, buildMatrix, dateKey, dueOf, filte
 import { likelyLiveSheet, parseTrainingSheets, planImport, suggestAccountLinks } from "@/modules/training/trainingImport";
 import { readWorkbook } from "@/modules/training/readWorkbook";
 import { matrixHtml } from "@/modules/training/trainingPrint";
-import { applyImportPlan, deletePerson, newCourseId, newPersonId, saveCourse, savePerson, saveRecord, useTrainingData } from "@/modules/training/trainingService";
+import { Link } from "react-router-dom";
+import { applyImportPlan, deletePerson, newCourseId, newPersonId, saveCourse, savePerson, saveRecord, trainingReadOnly, useTrainingData } from "@/modules/training/trainingService";
 
 // Staff training (Operations > Staff training): everyone's courses in one matrix with a traffic light for each, who is due or
 // overdue, the people and courses behind it, and a way to bring in the practice's existing spreadsheet. The Practice Manager and
@@ -81,7 +82,7 @@ function RecordDialog({ person, course, record, actor, onClose }) {
   );
 }
 
-function MatrixTab({ data, actor, canManageAll }) {
+function MatrixTab({ data, actor, canManageAll, readOnly = false }) {
   const { courses, people, records, scope } = data;
   const [group, setGroup] = useState("");
   const [search, setSearch] = useState("");
@@ -118,7 +119,7 @@ function MatrixTab({ data, actor, canManageAll }) {
       </div>
       <div className="flex flex-wrap gap-2 text-xs text-slate-300">
         {[STATUS.inDate, STATUS.dueSoon, STATUS.overdue, STATUS.notRequired, STATUS.onLeave, STATUS.none].map((s) => <span key={s} className={`rounded-full px-2.5 py-1 ${CELL[LIGHT[s]]}`}>{STATUS_LABEL[s]}</span>)}
-        <span className="py-1 text-slate-500">Each cell shows the date it runs out. Click one to update it.</span>
+        <span className="py-1 text-slate-500">{readOnly ? "Each cell shows the date it runs out." : "Each cell shows the date it runs out. Click one to update it."}</span>
         <span className="ml-auto flex items-center gap-1"><button type="button" className={BTN} onClick={() => scrollAcross(-1)} aria-label="Scroll the matrix to the left"><ChevronLeft className="h-4 w-4" /> Left</button><button type="button" className={BTN} onClick={() => scrollAcross(1)} aria-label="Scroll the matrix to the right">Right <ChevronRight className="h-4 w-4" /></button></span>
       </div>
       <div ref={scroller} tabIndex={0} aria-label="Training matrix. Use the arrow keys or the Left and Right buttons to move across." className="max-h-[68vh] overflow-auto rounded-2xl border border-white/10 [scrollbar-width:auto]">
@@ -139,7 +140,7 @@ function MatrixTab({ data, actor, canManageAll }) {
                 <th className="sticky left-0 z-10 bg-slate-900 px-2 py-1.5 text-left font-semibold text-slate-100">{row.person.name}<span className="block text-[10px] font-normal text-slate-400">{row.person.jobRole}</span></th>
                 {row.cells.map((cell) => (
                   <td key={cell.course.id} className="border-l border-t border-white/5 p-0">
-                    <button type="button" onClick={() => setEditing({ person: row.person, course: cell.course, record: cell.record })} title={`${row.person.name}: ${cell.course.name}. ${STATUS_LABEL[cell.status]}`} aria-label={`${row.person.name}, ${cell.course.name}: ${STATUS_LABEL[cell.status]}${cell.due ? `, runs out ${uk(cell.due)}` : ""}`} className={`block h-full min-h-[2.2rem] w-full px-1 py-1.5 text-center ${CELL[LIGHT[cell.status]]}`}>
+                    <button type="button" onClick={() => { if (!readOnly) setEditing({ person: row.person, course: cell.course, record: cell.record }); }} title={`${row.person.name}: ${cell.course.name}. ${STATUS_LABEL[cell.status]}`} aria-label={`${row.person.name}, ${cell.course.name}: ${STATUS_LABEL[cell.status]}${cell.due ? `, runs out ${uk(cell.due)}` : ""}`} className={`block h-full min-h-[2.2rem] w-full px-1 py-1.5 text-center ${CELL[LIGHT[cell.status]]}`}>
                       {cell.status === STATUS.notRequired ? "n/r" : cell.status === STATUS.onLeave ? "away" : cell.due ? short(cell.due) : cell.status === STATUS.inDate ? "done" : ""}
                     </button>
                   </td>
@@ -358,8 +359,9 @@ export default function Training() {
   const actor = { displayName: displayName || user?.email || "", email: user?.email || "" };
   const data = useTrainingData(true);
   const canManageAll = can("training.manage");
+  const readOnly = trainingReadOnly(can); // partners: everyone's, to look at
   const [tab, setTab] = useState("matrix");
-  const tabs = [["matrix", "Matrix"], ["people", "People"], ["courses", "Courses"], ...(canManageAll ? [["import", "Import"]] : [])];
+  const tabs = readOnly ? [["matrix", "Matrix"]] : [["matrix", "Matrix"], ["people", "People"], ["courses", "Courses"], ...(canManageAll ? [["import", "Import"]] : [])];
 
   return (
     <div className="space-y-4">
@@ -368,12 +370,13 @@ export default function Training() {
           <h1 className="flex items-center gap-2 text-2xl font-black text-slate-50"><GraduationCap className="h-6 w-6 text-teal-300" aria-hidden="true" /> Staff training</h1>
           <p className="text-sm text-slate-400">{data.scope === "clinical" ? "The clinical team's training: who has done what, and when it runs out." : "Everyone's training: who has done what, and when it runs out."} Staff are reminded 60 days before a course runs out and when it has.</p>
         </div>
+        <Link to="/my-training" className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-white/5">Show only my own training</Link>
       </div>
       <div className="flex gap-1 border-b border-white/10" role="tablist">
         {tabs.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={`rounded-t-lg px-4 py-2 text-sm font-semibold ${tab === key ? "bg-white/10 text-slate-50" : "text-slate-400 hover:text-slate-200"}`}>{label}</button>)}
       </div>
       {data.error && <p className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100" role="alert">{data.error}</p>}
-      {!data.ready ? <p className="text-sm text-slate-400">Opening…</p> : tab === "matrix" ? <MatrixTab data={data} actor={actor} canManageAll={canManageAll} />
+      {!data.ready ? <p className="text-sm text-slate-400">Opening…</p> : tab === "matrix" ? <MatrixTab data={data} actor={actor} canManageAll={canManageAll} readOnly={readOnly} />
         : tab === "people" ? <PeopleTab data={data} canManageAll={canManageAll} />
           : tab === "courses" ? <CoursesTab data={data} canManageAll={canManageAll} />
             : <ImportTab data={data} />}

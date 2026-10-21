@@ -80,8 +80,14 @@ export default function SignificantEventsView({ variant = "desktop", onBack }) {
   const { user, displayName, can } = useAuth();
   const actor = useMemo(() => actorFrom(user, displayName), [user, displayName]);
   const uid = user?.uid || null;
-  const isTeam = can("governance.seTeam");
-  const seesAll = isTeam || can("governance.partnerAccess");
+  // The team and partners see every event. Each can also choose the restricted view: only the events they reported or are named on,
+  // as an ordinary member of staff would see, for checking what others see or just for a shorter list.
+  const teamAccess = can("governance.seTeam");
+  const overseeAccess = teamAccess || can("governance.partnerAccess");
+  const [restricted, setRestricted] = useState(() => { try { return globalThis.localStorage?.getItem("primovex.se.restricted") === "1"; } catch { return false; } });
+  const chooseView = (on) => { setRestricted(on); try { globalThis.localStorage?.setItem("primovex.se.restricted", on ? "1" : "0"); } catch { /* the choice just is not remembered */ } };
+  const isTeam = teamAccess && !restricted;
+  const seesAll = overseeAccess && !restricted;
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [events, setEvents] = useState([]);
@@ -96,6 +102,7 @@ export default function SignificantEventsView({ variant = "desktop", onBack }) {
   const [search, setSearch] = useState("");
   const [openId, setOpenId] = useState(searchParams.get("open") || "");
   const [reporting, setReporting] = useState(false);
+  useEffect(() => { if (restricted) setTab("events"); }, [restricted]);
 
   useEffect(() => subscribeEvents({ seesAll, uid }, setEvents, (err) => { console.error(err); setError("Couldn't load significant events."); }), [seesAll, uid]);
   useEffect(() => subscribeMeetings({ seesAll, uid }, setMeetings, console.error), [seesAll, uid]);
@@ -138,6 +145,15 @@ export default function SignificantEventsView({ variant = "desktop", onBack }) {
           </div>
           <button type="button" onClick={() => setReporting(true)} className={`${PRIMARY} inline-flex items-center gap-1.5`}><Plus className="h-4 w-4" /> Report</button>
         </div>
+        {overseeAccess && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" role="group" aria-label="What to show">
+            <span className="font-semibold text-[var(--medtrak-muted)]">Show</span>
+            {[[false, "Every event"], [true, "Only mine"]].map(([value, label]) => (
+              <button key={label} type="button" aria-pressed={restricted === value} onClick={() => chooseView(value)} className={`rounded-full border px-3 py-1 font-bold ${restricted === value ? "border-[var(--medtrak-accent)] bg-[var(--medtrak-accent)] text-white" : "border-[var(--medtrak-border)]"}`}>{label}</button>
+            ))}
+            <span className="text-[var(--medtrak-muted)]">{restricted ? "The ones you reported or are named on." : "Everything the team can see."}</span>
+          </div>
+        )}
         {seesAll && (
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Metric label="Open" value={metrics.open} /><Metric label="To triage" value={metrics.toTriage} /><Metric label="Awaiting meeting" value={metrics.awaitingMeeting} /><Metric label="Overdue actions" value={metrics.overdueActions} />

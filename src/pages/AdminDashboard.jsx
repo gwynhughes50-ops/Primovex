@@ -74,7 +74,7 @@ import { loadFacilitiesState } from "@/modules/facilities/services/facilitiesSto
 // ✅ Firestore activity feed
 import { collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { CAPABILITIES_VERSION, CAPABILITY_CATALOG, OVERRIDABLE_ROLES, ROLE_PRESETS, ROLE_TEMPLATES, getCapabilitiesForProfile, withLegacyKits } from "@/core/identity/capabilities";
+import { CAPABILITIES_VERSION, CAPABILITY_CATALOG, OVERRIDABLE_ROLES, ROLE_PRESETS, ROLE_TEMPLATES, getCapabilitiesForProfile, recommendedPresetFor, withLegacyCapabilities } from "@/core/identity/capabilities";
 import { cleanExceptions, describeExceptions, hasExceptions, permissionRows, setCapability } from "@/core/identity/permissionExceptions";
 import { HOME_TYPES, homeTypeOfName } from "@/mobile/roleHomes";
 import { describeNotificationAccess, ON_THEIR_COMPUTER } from "@/lib/notificationAccess";
@@ -443,7 +443,7 @@ export default function AdminDashboard() {
   const [permError, setPermError] = useState("");
   const roleCapsOf = (role) => getCapabilitiesForProfile(
     { role },
-    Object.fromEntries((liveCustomRoles || []).map((r) => [r.name, withLegacyKits(r.capabilities || [], r.capabilitiesVersion)])),
+    Object.fromEntries((liveCustomRoles || []).map((r) => [r.name, withLegacyCapabilities(r.capabilities || [], r.capabilitiesVersion)])),
     roleOverrides
   );
   const openPermissions = (u) => { setPermTarget(u); setPermDraft(cleanExceptions(u.permissionExceptions, roleCapsOf(u.role))); setPermError(""); };
@@ -1645,6 +1645,25 @@ export default function AdminDashboard() {
               <div className="text-lg font-semibold text-slate-50">{editingRole ? "Edit Role" : "Add Role"}</div>
               <div className="text-xs text-slate-400 mt-1">{editingRole ? `Update ${editingRole.name}'s permissions.` : "Create a non-admin role."}</div>
 
+              {editingRole && recommendedPresetFor(editingRole.name) && (
+                <div className="mt-3 rounded-xl border border-teal-500/30 bg-teal-500/10 p-3 text-xs text-slate-200">
+                  <b className="text-teal-200">Recommended for {editingRole.name}:</b> {recommendedPresetFor(editingRole.name).description}
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      className="rounded-full border border-teal-400/50 px-3 py-1 font-semibold text-teal-100 hover:bg-teal-500/20"
+                      onClick={() => {
+                        const preset = recommendedPresetFor(editingRole.name);
+                        setAddRoleError("");
+                        setNewRole((current) => ({ ...current, permissions: [...preset.permissions], homeType: preset.homeType || current.homeType || "" }));
+                      }}
+                    >
+                      Fill in the ticks below with this set
+                    </button>
+                    <span className="ml-2 text-slate-400">Nothing changes until you press Save.</span>
+                  </div>
+                </div>
+              )}
               {!editingRole && (
                 <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400">
                   <span>Start from:</span>

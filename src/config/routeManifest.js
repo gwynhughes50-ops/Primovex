@@ -10,13 +10,13 @@ export const ROUTE_MANIFEST = [
   { path: "/governance/concerns", label: "Concerns", section: "core", iconKey: "governance", capability: "governance.manageConcerns", anyOf: ["governance.manageConcerns", "governance.concernsInvolved"] },
   { path: "/governance/sars", label: "SARs", section: "core", iconKey: "sar", capability: "governance.manageSars" },
   // Anyone can report a significant event, so there is no permission to see this one.
-  { path: "/governance/significant-events", label: "Significant events", section: "core", iconKey: "governance" },
+  { path: "/governance/significant-events", label: "Significant events", section: "core", iconKey: "governance", capability: "governance.reportEvents", anyOf: ["governance.reportEvents", "governance.seTeam", "governance.partnerAccess"] },
 
   { path: "/reorder-centre", label: "Reorder Centre", section: "operations", iconKey: "reorder", capability: "purchasing.read", children: ["Pending", "Approved", "Ordered", "Rejected"] },
   { path: "/purchasing", label: "Purchasing", section: "operations", iconKey: "purchasing", capability: "purchasing.read", children: ["Basket", "Purchase Orders", "Deliveries", "Supplier Performance"] },
   { path: "/suppliers", label: "Suppliers", section: "operations", iconKey: "suppliers", capability: "suppliers.read" },
   { path: "/facilities", label: "Facilities", section: "operations", iconKey: "facilities", children: ["Overview", "Spaces", "Equipment"] },
-  { path: "/training", label: "Staff training", section: "operations", iconKey: "training", capability: "training.manage", anyOf: ["training.manage", "training.manageClinical"] },
+  { path: "/training", label: "Staff training", section: "operations", iconKey: "training", capability: "training.manage", anyOf: ["training.manage", "training.manageClinical", "training.view"] },
   { path: "/my-timesheet", label: "Timesheet", section: "operations", iconKey: "myTimesheet" },
   { path: "/my-training", label: "My training", section: "operations", iconKey: "training" },
   { path: "/mileage", label: "Mileage", section: "operations", iconKey: "mileage" },

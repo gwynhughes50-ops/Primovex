@@ -1506,7 +1506,7 @@ async function main() {
 
   console.log("\n=== 11. Emergency kits are for people allowed to see them; one person's exceptions ===");
   await seed(async (db) => {
-    await setDoc(doc(db, "roles", "Salaried GP"), { name: "Salaried GP", capabilities: ["inventory.read", "inventory.adjust", "dashboard.read"], capabilitiesVersion: 2, builtIn: false });
+    await setDoc(doc(db, "roles", "Salaried GP"), { name: "Salaried GP", capabilities: ["governance.reportEvents", "inventory.read", "inventory.adjust", "dashboard.read"], capabilitiesVersion: 3, builtIn: false });
     await setDoc(doc(db, "roles", "Old stock role"), { name: "Old stock role", capabilities: ["inventory.read"], builtIn: false });
     await setDoc(doc(db, "users", "gp-uid"), { role: "Salaried GP", displayName: "GP" });
     await setDoc(doc(db, "users", "gp2-uid"), { role: "Salaried GP", displayName: "GP Two", permissionExceptions: { allow: ["inventory.kits", "training.manage"] } });
@@ -1623,13 +1623,65 @@ async function main() {
     assertSucceeds(setDoc(doc(gp2, "training_courses", "course-gp2"), { name: "Fire safety", months: 12 })));
   await check("...but a Salaried GP without it CANNOT", () =>
     assertFails(setDoc(doc(gp, "training_courses", "course-gp"), { name: "Fire safety", months: 12 })));
+  // reporting a significant event is a permission: everyone but the cleaner has it, and a role can leave it out
+  await seed(async (db) => {
+    await setDoc(doc(db, "users", "cleaner-se-uid"), { role: "Cleaner", displayName: "Cleaner SE" });
+    await setDoc(doc(db, "roles", "Reports Nothing"), { name: "Reports Nothing", capabilities: ["dashboard.read"], capabilitiesVersion: 3, builtIn: false });
+    await setDoc(doc(db, "users", "norep-uid"), { role: "Reports Nothing", displayName: "No Report" });
+    await setDoc(doc(db, "roles", "Old Role Reports"), { name: "Old Role Reports", capabilities: ["dashboard.read"], builtIn: false });
+    await setDoc(doc(db, "users", "oldrep-uid"), { role: "Old Role Reports", displayName: "Old Reporter" });
+  });
+  const cleanerSe = testEnv.authenticatedContext("cleaner-se-uid").firestore();
+  const noRep = testEnv.authenticatedContext("norep-uid").firestore();
+  const oldRep = testEnv.authenticatedContext("oldrep-uid").firestore();
+  await check("SE report: a Cleaner CANNOT report a significant event (the table says none)", () =>
+    assertFails(setDoc(doc(cleanerSe, "governance_significant_events", "se-cleaner"), newEvent("cleaner-se-uid"))));
+  await check("SE report: a role saved without the permission CANNOT report one", () =>
+    assertFails(setDoc(doc(noRep, "governance_significant_events", "se-norep"), newEvent("norep-uid"))));
+  await check("SE report: a role saved before the permission existed CAN still report one", () =>
+    assertSucceeds(setDoc(doc(oldRep, "governance_significant_events", "se-oldrep"), newEvent("oldrep-uid"))));
+  await check("SE report: a Nurse, a Salaried GP and an administrator CAN report one", async () => {
+    await assertSucceeds(setDoc(doc(nurse, "governance_significant_events", "se-nurse-rep"), newEvent("nurse-uid")));
+    await assertSucceeds(setDoc(doc(gp, "governance_significant_events", "se-gp-rep"), newEvent("gp-uid")));
+    await assertSucceeds(setDoc(doc(admin, "governance_significant_events", "se-admin-rep"), newEvent("admin-uid")));
+  });
+  await check("SE report: a person with the permission switched off for them as an exception CANNOT report one", async () => {
+    await seed(async (db) => { await setDoc(doc(db, "users", "nurse-deny-uid"), { role: "Nurse", displayName: "Nurse X", permissionExceptions: { deny: ["inventory.kits", "inventory.verify", "governance.reportEvents"] } }); });
+    await assertFails(setDoc(doc(nurseDeny, "governance_significant_events", "se-nurse-deny"), newEvent("nurse-deny-uid")));
+  });
+
+  // a partner can look at everyone's training (training.view) but not change it
+  await seed(async (db) => {
+    await setDoc(doc(db, "roles", "Training Viewer"), { name: "Training Viewer", capabilities: ["training.view", "dashboard.read"], capabilitiesVersion: 3, builtIn: false });
+    await setDoc(doc(db, "users", "tview-uid"), { role: "Training Viewer", displayName: "Viewer" });
+  });
+  const tview = testEnv.authenticatedContext("tview-uid").firestore();
+  await check("A role with training.view CAN read everyone's training records, and list them", async () => {
+    await assertSucceeds(getDoc(doc(tview, "training_people", "p-clin")));
+    await assertSucceeds(getDoc(doc(tview, "training_people", "p-admin")));
+    await assertSucceeds(getDoc(doc(tview, "training_records", "p-clin_c1")));
+    await assertSucceeds(getDocs(collection(tview, "training_records")));
+    await assertSucceeds(getDocs(collection(tview, "training_people")));
+  });
+  await check("...but CANNOT change any of it, or the course list", async () => {
+    await assertFails(updateDoc(doc(tview, "training_records", "p-clin_c1"), { completedOn: "2026-09-09" }));
+    await assertFails(setDoc(doc(tview, "training_records", "p-clin_c8"), { personId: "p-clin", courseId: "c8", group: "clinical", ownerUid: "nurse-uid", completedOn: "2026-09-09" }));
+    await assertFails(deleteDoc(doc(tview, "training_records", "p-clin_c1")));
+    await assertFails(setDoc(doc(tview, "training_people", "p-new"), { name: "New", group: "admin" }));
+    await assertFails(setDoc(doc(tview, "training_courses", "c-new"), { name: "x", intervalMonths: 12 }));
+  });
+  await check("...and it gives them nothing else (no timesheet staff, no concerns)", async () => {
+    await assertFails(getDoc(doc(tview, "timesheet_staff", "ts-gp")));
+    await assertFails(getDocs(collection(tview, "governance_concerns")));
+  });
+
   // User and ReadOnly can now be changed by an administrator, and only by one
   await check("Admin CAN change the User role's permissions", () =>
-    assertSucceeds(setDoc(doc(admin, "role_overrides", "User"), { capabilities: ["dashboard.read"], capabilitiesVersion: 2 })));
+    assertSucceeds(setDoc(doc(admin, "role_overrides", "User"), { capabilities: ["dashboard.read"], capabilitiesVersion: 3 })));
   await check("Practice Manager CANNOT change the User role's permissions", () =>
-    assertFails(setDoc(doc(pm, "role_overrides", "User"), { capabilities: ["admin.access"], capabilitiesVersion: 2 })));
+    assertFails(setDoc(doc(pm, "role_overrides", "User"), { capabilities: ["admin.access"], capabilitiesVersion: 3 })));
   await check("System Admin's role can never be overridden", () =>
-    assertFails(setDoc(doc(admin, "role_overrides", "System Admin"), { capabilities: [], capabilitiesVersion: 2 })));
+    assertFails(setDoc(doc(admin, "role_overrides", "System Admin"), { capabilities: [], capabilitiesVersion: 3 })));
   await check("...and a User now with only the dashboard CANNOT read the kits", () => assertFails(getDoc(doc(user, "emergency_assets", "kit-1"))));
   await check("Admin CAN restore the User role", () => assertSucceeds(deleteDoc(doc(admin, "role_overrides", "User"))));
   await check("...and a User can see the kits again", () => assertSucceeds(getDoc(doc(user, "emergency_assets", "kit-1"))));

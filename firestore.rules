@@ -427,6 +427,7 @@ match /governance_concern_meetings/{meetingId} {
 match /governance_significant_events/{eventId} {
   allow get, list: if canSeeSe(resource.data);
   allow create: if signedIn()
+    && hasPermission("governance", "reportEvents")
     && request.resource.data.reportedByUid == request.auth.uid
     && request.resource.data.status == "reported"
     && request.resource.data.investigation == "pending"
@@ -688,7 +689,7 @@ match /subject_access_requests/{requestId} {
     function builtInRoleCapabilities(role) {
       return
         role == "System Admin" ? ["*"] :
-        role == "Practice Manager" ? [
+        role == "Practice Manager" ? ["governance.reportEvents", 
           "stocktake.count", "stocktake.manage", "training.manage", "waste.read", "waste.manage", "timesheets.manage",
           "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
           "dashboard.read", "operations.read", "operations.manage",
@@ -706,7 +707,7 @@ match /subject_access_requests/{requestId} {
           "admin.access", "admin.manageUsers", "admin.manageRoles", "admin.manageSettings",
           "audit.read", "audit.write", "orb.learning.review", "security.read", "security.manage"
         ] :
-        role == "User" ? [
+        role == "User" ? ["governance.reportEvents", 
           "stocktake.count",
           "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
           "inventory.read", "inventory.kits", "inventory.write", "inventory.adjust", "inventory.verify",
@@ -715,7 +716,7 @@ match /subject_access_requests/{requestId} {
           "compliance.read", "compliance.recordChecks",
           "mobile.access", "mobile.biometricUnlock"
         ] :
-        role == "Nurse" ? [
+        role == "Nurse" ? ["governance.reportEvents", 
           "stocktake.count",
           "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
           "inventory.read", "inventory.kits", "inventory.write", "inventory.verify", "connect.view",
@@ -723,20 +724,20 @@ match /subject_access_requests/{requestId} {
           "compliance.read", "compliance.recordChecks",
           "mobile.access", "mobile.biometricUnlock"
         ] :
-        role == "HCA" ? [
+        role == "HCA" ? ["governance.reportEvents", 
           "stocktake.count",
           "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "inventory.write", "inventory.verify",
           "connect.view", "temperature.read", "temperature.write",
           "mobile.access", "mobile.biometricUnlock"
         ] :
-        role == "Reception" ? [
+        role == "Reception" ? ["governance.reportEvents", 
           "stocktake.count",
           "clinflow.read", "clinflow.capture", "clinflow.workflow",
           "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "purchasing.read",
           "governance.read", "governance.write", "governance.manageConcerns", "governance.concernsTeam",
           "connect.view", "mobile.access"
         ] :
-        role == "Caretaker" ? [
+        role == "Caretaker" ? ["governance.reportEvents", 
           "stocktake.count",
           "dashboard.read", "operations.read", "connect.view",
           "temperature.read", "temperature.write",
@@ -749,10 +750,10 @@ match /subject_access_requests/{requestId} {
           "coshh.read",
           "mobile.access"
         ] :
-        role == "Partner" ? [
+        role == "Partner" ? ["governance.reportEvents", 
           "dashboard.read", "governance.read", "governance.partnerAccess", "coshh.read", "mobile.access"
         ] :
-        role == "ReadOnly" ? [
+        role == "ReadOnly" ? ["governance.reportEvents", 
           "clinflow.read", "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "purchasing.read",
           "suppliers.read", "governance.read", "connect.view", "temperature.read", "compliance.read",
           "reports.read"
@@ -772,17 +773,18 @@ match /subject_access_requests/{requestId} {
     // `capabilities` array field.
     // Roles (and role changes) saved before the emergency drugs and anaphylaxis boxes had their own permission, capabilitiesVersion
     // below 2, could see them if they could see inventory, so they keep doing so until the role is next saved.
-    function withLegacyKits(capabilities, version) {
-      return (version >= 2 || !("inventory.read" in capabilities) || "inventory.kits" in capabilities)
+    function withLegacyCapabilities(capabilities, version) {
+      return version >= 3
         ? capabilities
-        : capabilities.concat(["inventory.kits"]);
+        : ((version < 2 && "inventory.read" in capabilities && !("inventory.kits" in capabilities)) ? capabilities.concat(["inventory.kits"]) : capabilities)
+            .concat("governance.reportEvents" in capabilities ? [] : ["governance.reportEvents"]);
     }
-    function legacyKitsOf(roleDoc) {
-      return withLegacyKits(roleDoc.capabilities, roleDoc.get("capabilitiesVersion", 1));
+    function legacyCapabilitiesOf(roleDoc) {
+      return withLegacyCapabilities(roleDoc.capabilities, roleDoc.get("capabilitiesVersion", 1));
     }
     function customRoleCapabilities(role) {
       return exists(/databases/$(database)/documents/roles/$(role))
-        ? legacyKitsOf(get(/databases/$(database)/documents/roles/$(role)).data)
+        ? legacyCapabilitiesOf(get(/databases/$(database)/documents/roles/$(role)).data)
         : [];
     }
 
@@ -797,7 +799,7 @@ match /subject_access_requests/{requestId} {
     function effectiveRoleCapabilities(role) {
       return isBuiltInRole(role)
         ? (hasRoleOverride(role)
-            ? legacyKitsOf(get(/databases/$(database)/documents/role_overrides/$(role)).data)
+            ? legacyCapabilitiesOf(get(/databases/$(database)/documents/role_overrides/$(role)).data)
             : builtInRoleCapabilities(role))
         : customRoleCapabilities(role);
     }
@@ -872,13 +874,13 @@ match /subject_access_requests/{requestId} {
       allow create, update, delete: if isAdmin() || hasPermission("training", "manage");
     }
     match /training_people/{personId} {
-      allow get, list: if trainingManages(resource.data.group) || trainingOwn(resource.data.uid);
+      allow get, list: if trainingManages(resource.data.group) || trainingOwn(resource.data.uid) || hasPermission("training", "view");
       allow create: if trainingManages(request.resource.data.group) && request.resource.data.name is string && request.resource.data.name.size() > 0;
       allow update: if trainingManages(resource.data.group) && trainingManages(request.resource.data.group);
       allow delete: if trainingManages(resource.data.group);
     }
     match /training_records/{recordId} {
-      allow get, list: if trainingManages(resource.data.group) || trainingOwn(resource.data.ownerUid);
+      allow get, list: if trainingManages(resource.data.group) || trainingOwn(resource.data.ownerUid) || hasPermission("training", "view");
       allow create: if trainingManages(request.resource.data.group) && request.resource.data.personId is string && request.resource.data.courseId is string;
       allow update: if trainingManages(resource.data.group) && trainingManages(request.resource.data.group);
       allow delete: if trainingManages(resource.data.group);

@@ -125,6 +125,7 @@ export const ROLE_PRESETS = [
     description: "Uses stock but not the emergency drugs or anaphylaxis boxes. Sees only their own training, timesheet and mileage, the significant events they report or are named in, and the concerns they are named in (where they can add a statement or note). Nothing else is switched on.",
     homeType: "clinical",
     permissions: [
+      "governance.reportEvents",
       "dashboard.read",
       "inventory.read",
       "inventory.adjust",
@@ -179,6 +180,7 @@ export const CAPABILITY_CATALOG = [
   { id: "governance.manageSars", label: "Manage SARs", group: "Governance" },
   { id: "governance.manageComplaints", label: "Manage complaints", group: "Governance" },
   { id: "governance.manageConcerns", label: "Manage Listening to People concerns", group: "Governance" },
+  { id: "governance.reportEvents", label: "Significant events: report one, and see the ones they report or are named on", group: "Governance" },
   { id: "governance.concernsInvolved", label: "Concerns: see only the ones they are named in, and add a statement or note to them", group: "Governance" },
   { id: "governance.concernsTeam", label: "Concerns team — full access to every concern", group: "Governance" },
   { id: "governance.seTeam", label: "Significant events team — full access to every significant event", group: "Governance" },
@@ -197,6 +199,7 @@ export const CAPABILITY_CATALOG = [
   { id: "compliance.manageAssets", label: "Manage QR/NFC compliance assets", group: "Compliance" },
   { id: "stocktake.count", label: "Take part in a stock take (claim places, count, add items found)", group: "Inventory" },
   { id: "stocktake.manage", label: "Request, review and apply a stock take", group: "Inventory" },
+  { id: "training.view", label: "Staff training: see everyone's record, read only", group: "Staff" },
   { id: "training.manage", label: "Staff training: see and update everyone's training record", group: "Staff" },
   { id: "training.manageClinical", label: "Staff training: see and update the clinical team's training record", group: "Staff" },
   { id: "timesheets.manage", label: "Timesheets: set up everyone's working pattern and hours, and see and update their timesheets", group: "Staff" },
@@ -233,6 +236,7 @@ export const CAPABILITY_CATALOG = [
 export const ROLE_TEMPLATES = {
   "System Admin": ["*"],
   "Practice Manager": [
+    "governance.reportEvents",
     "stocktake.count",
     "stocktake.manage",
     "training.manage",
@@ -294,6 +298,7 @@ export const ROLE_TEMPLATES = {
     "security.manage",
   ],
   "User": [
+    "governance.reportEvents",
     "stocktake.count",
     "clinflow.read",
     "clinflow.workflow",
@@ -315,6 +320,7 @@ export const ROLE_TEMPLATES = {
     "mobile.biometricUnlock",
   ],
   "Nurse": [
+    "governance.reportEvents",
     "stocktake.count",
     "clinflow.read",
     "clinflow.workflow",
@@ -334,6 +340,7 @@ export const ROLE_TEMPLATES = {
     "mobile.biometricUnlock",
   ],
   "HCA": [
+    "governance.reportEvents",
     "stocktake.count",
     "dashboard.read",
     "operations.read",
@@ -348,6 +355,7 @@ export const ROLE_TEMPLATES = {
     "mobile.biometricUnlock",
   ],
   "Reception": [
+    "governance.reportEvents",
     "stocktake.count",
     "clinflow.read",
     "clinflow.capture",
@@ -365,6 +373,7 @@ export const ROLE_TEMPLATES = {
     "mobile.access",
   ],
   "Caretaker": [
+    "governance.reportEvents",
     "stocktake.count",
     "dashboard.read",
     "operations.read",
@@ -391,6 +400,7 @@ export const ROLE_TEMPLATES = {
   // Only the Concerns team (a capability layered onto any role, not a
   // separate role) can actually change a case.
   "Partner": [
+    "governance.reportEvents",
     "dashboard.read",
     "governance.read",
     "governance.partnerAccess",
@@ -398,6 +408,7 @@ export const ROLE_TEMPLATES = {
     "mobile.access",
   ],
   "ReadOnly": [
+    "governance.reportEvents",
     "clinflow.read",
     "dashboard.read",
     "operations.read",
@@ -412,6 +423,101 @@ export const ROLE_TEMPLATES = {
     "reports.read",
   ],
 };
+
+// ---- ready-made sets from the practice's "who sees what" table (October 2026) -------------------------------------------------
+// Each is a starting point in Roles & Permissions (Add Role, or Edit on an original role): nothing changes until the role is saved.
+// `appliesTo` names the original roles a set is the recommended one for, so Edit can offer it.
+const dropFrom = (list, drop) => list.filter((id) => !drop.includes(id));
+const GP_SET = ["governance.reportEvents", "dashboard.read", "inventory.read", "inventory.adjust", "governance.concernsInvolved", "mobile.access", "mobile.biometricUnlock"];
+
+ROLE_PRESETS.push(
+  {
+    name: "Advanced Practitioner",
+    description: "The same as a Salaried GP: uses stock only (no emergency drugs or anaphylaxis boxes), sees their own training, timesheet and mileage, the significant events they report or are named in, and the concerns they are named in. Give an individual the fridge checks or anything else as an exception.",
+    homeType: "clinical",
+    permissions: GP_SET,
+  },
+  {
+    name: "Partner (stock and oversight)",
+    description: "Uses stock only. Can look at (not change) every concern, SAR and significant event, compliance, COSHH, everyone's training and the inspection pack and reports.",
+    homeType: "partner",
+    appliesTo: ["Partner"],
+    permissions: [
+      "governance.reportEvents", "dashboard.read", "inventory.read", "inventory.adjust",
+      "governance.read", "governance.partnerAccess",
+      "compliance.read", "coshh.read", "training.view", "reports.read", "reports.inspection",
+      "mobile.access", "mobile.biometricUnlock",
+    ],
+  },
+  {
+    name: "Nurse and HCA",
+    description: "Uses, checks and counts stock, checks the emergency drugs and anaphylaxis boxes, records fridge temperatures, can look at COSHH, and sees the concerns they are named in. No compliance, ClinFlow or management screens. A clinical lead is given the clinical team's training as an exception.",
+    homeType: "clinical",
+    appliesTo: ["Nurse", "HCA"],
+    permissions: [
+      "governance.reportEvents", "dashboard.read", "operations.read",
+      "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.kits", "stocktake.count",
+      "temperature.read", "temperature.write", "temperature.resolveIncident", "connect.view", "coshh.read",
+      "governance.concernsInvolved", "mobile.access", "mobile.biometricUnlock",
+    ],
+  },
+  {
+    name: "Reception and front desk",
+    description: "Looks at stock and orders it, and sees only the concerns they are named in (not the whole register).",
+    homeType: "reception",
+    appliesTo: ["Reception"],
+    permissions: [
+      "governance.reportEvents", "dashboard.read", "operations.read", "inventory.read", "purchasing.read", "purchasing.write",
+      "governance.concernsInvolved", "mobile.access",
+    ],
+  },
+  {
+    name: "Medical Secretary",
+    description: "Runs the concerns and the SARs (full access to both). Nothing else beyond their own timesheet, mileage and training.",
+    homeType: "reception",
+    permissions: [
+      "governance.reportEvents", "dashboard.read", "governance.read", "governance.write", "governance.manageSars", "governance.manageConcerns", "governance.concernsTeam",
+      "mobile.access", "mobile.biometricUnlock",
+    ],
+  },
+  {
+    name: "Caretaker (premises)",
+    description: "Does the fire, water, PAT and certificate checks and manages the compliance register, clinical waste and COSHH, maintenance and cleaning. Looks at fridge temperatures but does not record them. Sees the concerns they are named in.",
+    homeType: "caretaker",
+    appliesTo: ["Caretaker"],
+    permissions: [
+      "governance.reportEvents", "dashboard.read", "operations.read", "operations.manage", "connect.view", "temperature.read",
+      "compliance.read", "compliance.write", "compliance.recordChecks", "compliance.manageAssets",
+      "coshh.read", "waste.read", "waste.manage", "governance.concernsInvolved", "mobile.access",
+    ],
+  },
+  {
+    name: "Cleaner (cleaning)",
+    description: "Records the cleaning and reports issues. Nothing else.",
+    homeType: "general",
+    appliesTo: ["Cleaner"],
+    permissions: ["dashboard.read", "operations.read", "mobile.access"],
+  },
+  {
+    name: "Sub Manager",
+    description: "Everything the Practice Manager has except setting up and seeing everyone's timesheets. They sign off timesheets and mileage for the people who name them as their line manager.",
+    homeType: "manager",
+    permissions: dropFrom(ROLE_TEMPLATES["Practice Manager"], ["timesheets.manage"]),
+  },
+  {
+    name: "IT Team",
+    description: "Every permission, for the people who run Primovex. (A System Admin has everything as well, and nothing can narrow that.)",
+    homeType: "manager",
+    permissions: CAPABILITY_CATALOG.map((c) => c.id),
+  },
+);
+
+// the set this practice recommends for a role, matched by the role's name or the original role it applies to
+export function recommendedPresetFor(roleName) {
+  const wanted = String(roleName || "").trim().toLowerCase();
+  if (!wanted) return null;
+  return ROLE_PRESETS.find((preset) => preset.name.toLowerCase() === wanted || (preset.appliesTo || []).some((name) => name.toLowerCase() === wanted)) || null;
+}
 
 const LEGACY_PERMISSION_MAP = {
   "stock:read": "inventory.read",
@@ -471,13 +577,20 @@ function flattenProfilePermissions(profile) {
 // in role_overrides/{role}; the same list is mirrored by hand in firestore.rules, storage.rules and functions/services/roleCapabilities.js.
 export const OVERRIDABLE_ROLES = ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner", "User", "ReadOnly"];
 
-// Roles and role changes saved before the emergency drugs and anaphylaxis boxes had a permission of their own (capabilitiesVersion
-// below 2) could see them if they could see inventory, so they keep doing so until the role is next saved. Mirrored by hand in
-// firestore.rules, storage.rules and functions/services/roleCapabilities.js.
-export const CAPABILITIES_VERSION = 2;
-export function withLegacyKits(capabilities, version) {
+// Roles and role changes saved before a permission existed keep what they could do until the role is next saved (which writes the
+// current capabilitiesVersion): the emergency drugs and anaphylaxis boxes for anyone who could see inventory (before version 2), and
+// reporting a significant event (before version 3). Mirrored by hand in firestore.rules, storage.rules and
+// functions/services/roleCapabilities.js.
+export const CAPABILITIES_VERSION = 3;
+export function withLegacyCapabilities(capabilities, version) {
   if (!Array.isArray(capabilities) || Number(version) >= CAPABILITIES_VERSION) return capabilities;
-  return capabilities.includes("inventory.read") && !capabilities.includes("inventory.kits") ? [...capabilities, "inventory.kits"] : capabilities;
+  const v = Number(version) || 1;
+  const out = [...capabilities];
+  // before version 2 anyone who could see inventory could see the emergency drugs and anaphylaxis boxes
+  if (v < 2 && out.includes("inventory.read") && !out.includes("inventory.kits")) out.push("inventory.kits");
+  // before version 3 anyone could report a significant event
+  if (!out.includes("governance.reportEvents")) out.push("governance.reportEvents");
+  return out;
 }
 
 // One person's exceptions to their role, set by an administrator and kept on their own record: things switched on that the role
@@ -491,7 +604,7 @@ export function permissionExceptionsOf(profile) {
 export function getCapabilitiesForProfile(profile, customRoleCapabilities = {}, roleOverrides = {}) {
   const role = profile?.role || "ReadOnly";
   const override = OVERRIDABLE_ROLES.includes(role) && Array.isArray(roleOverrides?.[role]?.capabilities) ? roleOverrides[role] : null;
-  const overridden = override ? withLegacyKits(override.capabilities, override.capabilitiesVersion) : null;
+  const overridden = override ? withLegacyCapabilities(override.capabilities, override.capabilitiesVersion) : null;
   const roleCapabilities = overridden || ROLE_TEMPLATES[role] || customRoleCapabilities[role] || ROLE_TEMPLATES.User || [];
   const profileCapabilities = flattenProfilePermissions(profile);
   const merged = new Set([...roleCapabilities, ...profileCapabilities]);

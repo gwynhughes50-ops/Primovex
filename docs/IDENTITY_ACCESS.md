@@ -104,3 +104,17 @@ New permissions:
 - `governance.concernsInvolved`: Concerns appears for the person, showing only the cases they are named on (the security rules already limit what they can read), and they can add a statement or note to those.
 
 The Salaried GP preset (Roles & Permissions, Add Role, Start from) is stock use only, with their own training, timesheet and mileage, the significant events they report or are named in, and the concerns they are named in.
+
+## Who sees what: the practice's table (October 2026)
+
+The practice filled in a "who sees what" table (job groups by screen). It is built as ready-made sets in Roles & Permissions (`ROLE_PRESETS` in `src/core/identity/capabilities.js`; tests in `scripts/verify-role-presets.mjs`): Salaried GP, Advanced Practitioner, Partner (stock and oversight), Nurse and HCA, Reception and front desk, Medical Secretary, Caretaker (premises), Cleaner (cleaning), Sub Manager and IT Team. Add Role offers each under "Start from"; Edit on an original role (Nurse, HCA, Reception, Caretaker, Cleaner, Partner) or a role with a set's name offers "Fill in the ticks below with this set". Nothing changes until the role is saved. The Practice Manager already has everything.
+
+More permissions added for it:
+
+- `training.view`: everyone's training, read only (partners). The Staff training page shows the matrix only and cells do not open for editing.
+- `governance.reportEvents`: reporting a significant event, and seeing the ones reported by or naming the person. Every original role except the Cleaner has it; roles saved before it existed (capabilitiesVersion below 3) keep it until next saved. The rules require it to create an event. The significant events menu, the desktop and phone routes, the phone tile and the Orb's "report an event" follow it.
+- `capabilitiesVersion` is now 3 (`withLegacyCapabilities` in all four mirrors).
+
+The significant events page has a "Show: Every event / Only mine" switch for people who see every event (the team, partners, administrators). The Staff training page links to My training.
+
+Not built yet from the table: hiding the Orb from the Cleaner, and "order" (as opposed to view) for Reception beyond `purchasing.write`.

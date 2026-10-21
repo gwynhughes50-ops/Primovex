@@ -89,7 +89,7 @@ export function getRoleHome(role, capabilities = [], homeType = "") {
         { key: "fridge-check", label: "Fridge check", helper: "Scan the tag on the fridge", Icon: Thermometer, capability: "temperature.write" },
         { key: "issue", label: "Report an issue", helper: "To the right person", Icon: Wrench },
         { key: "stocktake", label: "Stock take", helper: "Count with the team", Icon: ClipboardList, capability: "stocktake.count" },
-        { key: "significant-events", label: "Significant event", helper: "Report something that happened", Icon: TriangleAlert },
+        { key: "significant-events", label: "Significant event", helper: "Report something that happened", Icon: TriangleAlert, capability: "governance.reportEvents" },
         { key: "training", label: "Team training", helper: "Who is due or overdue", Icon: GraduationCap, capability: "training.manageClinical" },
         { key: "quick-note", label: "Quick note", helper: "A reminder for yourself", Icon: NotebookPen },
         { key: "messages", label: "Messages", helper: "From colleagues", Icon: MessageSquare },

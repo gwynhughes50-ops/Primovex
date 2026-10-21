@@ -41,7 +41,7 @@ service firebase.storage {
     function builtInRoleCapabilities(role) {
       return
         role == "System Admin" ? ["*"] :
-        role == "Practice Manager" ? [
+        role == "Practice Manager" ? ["governance.reportEvents", 
           "stocktake.count", "stocktake.manage", "waste.read", "waste.manage",
           "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
           "dashboard.read", "operations.read", "operations.manage",
@@ -59,7 +59,7 @@ service firebase.storage {
           "admin.access", "admin.manageUsers", "admin.manageRoles", "admin.manageSettings",
           "audit.read", "audit.write", "orb.learning.review", "security.read", "security.manage"
         ] :
-        role == "User" ? [
+        role == "User" ? ["governance.reportEvents", 
           "stocktake.count",
           "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
           "inventory.read", "inventory.kits", "inventory.write", "inventory.adjust", "inventory.verify",
@@ -68,7 +68,7 @@ service firebase.storage {
           "compliance.read", "compliance.recordChecks",
           "mobile.access", "mobile.biometricUnlock"
         ] :
-        role == "Nurse" ? [
+        role == "Nurse" ? ["governance.reportEvents", 
           "stocktake.count",
           "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
           "inventory.read", "inventory.kits", "inventory.write", "inventory.verify", "connect.view",
@@ -76,20 +76,20 @@ service firebase.storage {
           "compliance.read", "compliance.recordChecks",
           "mobile.access", "mobile.biometricUnlock"
         ] :
-        role == "HCA" ? [
+        role == "HCA" ? ["governance.reportEvents", 
           "stocktake.count",
           "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "inventory.write", "inventory.verify",
           "connect.view", "temperature.read", "temperature.write",
           "mobile.access", "mobile.biometricUnlock"
         ] :
-        role == "Reception" ? [
+        role == "Reception" ? ["governance.reportEvents", 
           "stocktake.count",
           "clinflow.read", "clinflow.capture", "clinflow.workflow",
           "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "purchasing.read",
           "governance.read", "governance.write", "governance.manageConcerns", "governance.concernsTeam",
           "connect.view", "mobile.access"
         ] :
-        role == "Caretaker" ? [
+        role == "Caretaker" ? ["governance.reportEvents", 
           "stocktake.count",
           "dashboard.read", "operations.read", "connect.view",
           "temperature.read", "temperature.write",
@@ -102,10 +102,10 @@ service firebase.storage {
           "coshh.read",
           "mobile.access"
         ] :
-        role == "Partner" ? [
+        role == "Partner" ? ["governance.reportEvents", 
           "dashboard.read", "governance.read", "governance.partnerAccess", "coshh.read", "mobile.access"
         ] :
-        role == "ReadOnly" ? [
+        role == "ReadOnly" ? ["governance.reportEvents", 
           "clinflow.read", "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "purchasing.read",
           "suppliers.read", "governance.read", "connect.view", "temperature.read", "compliance.read",
           "reports.read"
@@ -113,17 +113,18 @@ service firebase.storage {
         [];
     }
 
-    function withLegacyKits(capabilities, version) {
-      return (version >= 2 || !("inventory.read" in capabilities) || "inventory.kits" in capabilities)
+    function withLegacyCapabilities(capabilities, version) {
+      return version >= 3
         ? capabilities
-        : capabilities.concat(["inventory.kits"]);
+        : ((version < 2 && "inventory.read" in capabilities && !("inventory.kits" in capabilities)) ? capabilities.concat(["inventory.kits"]) : capabilities)
+            .concat("governance.reportEvents" in capabilities ? [] : ["governance.reportEvents"]);
     }
-    function legacyKitsOf(roleDoc) {
-      return withLegacyKits(roleDoc.capabilities, roleDoc.get("capabilitiesVersion", 1));
+    function legacyCapabilitiesOf(roleDoc) {
+      return withLegacyCapabilities(roleDoc.capabilities, roleDoc.get("capabilitiesVersion", 1));
     }
     function customRoleCapabilities(role) {
       return firestore.exists(/databases/(default)/documents/roles/$(role))
-        ? legacyKitsOf(firestore.get(/databases/(default)/documents/roles/$(role)).data)
+        ? legacyCapabilitiesOf(firestore.get(/databases/(default)/documents/roles/$(role)).data)
         : [];
     }
 
@@ -136,7 +137,7 @@ service firebase.storage {
     function effectiveRoleCapabilities(role) {
       return isBuiltInRole(role)
         ? (hasRoleOverride(role)
-            ? legacyKitsOf(firestore.get(/databases/(default)/documents/role_overrides/$(role)).data)
+            ? legacyCapabilitiesOf(firestore.get(/databases/(default)/documents/role_overrides/$(role)).data)
             : builtInRoleCapabilities(role))
         : customRoleCapabilities(role);
     }
