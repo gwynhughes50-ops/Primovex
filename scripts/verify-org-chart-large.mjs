@@ -38,8 +38,9 @@ t("the tree has everyone once under their manager, and people with no valid mana
   const { roots, childrenOf } = buildTree(staff);
   assert.deepEqual(roots.map((r) => r.id).sort(), ["orphan", "partner"]); // the orphan's manager left
   assert.equal((childrenOf.get("reclead") || []).length, 20);
-  // two managers -> appears under each
-  assert.ok(childrenOf.get("pm").some((c) => c.id === "fin") && childrenOf.get("partner").some((c) => c.id === "fin"));
+  // two managers -> drawn once, under the first listed
+  const homes = ["pm", "partner"].filter((id) => (childrenOf.get(id) || []).some((c) => c.id === "fin"));
+  assert.equal(homes.length, 1);
 });
 
 t("highlighted people lead, the rest are alphabetical", () => {
@@ -182,7 +183,7 @@ t("people with no reports beside managers are stacked; a lone manager's team is 
   const split = splitKids(childrenOf.get("partner"), childrenOf);
   assert.equal(split.stacked, true);
   assert.deepEqual(split.branches.map((u) => u.id), ["pm"]);
-  assert.equal(split.leaves.length, 5); // four GPs and the finance officer
+  assert.equal(split.leaves.length, 4); // the four GPs (the finance officer is drawn under the practice manager, the first listed)
   assert.equal(splitKids(childrenOf.get("reclead"), childrenOf).stacked, false); // all leaves: they hang instead
   assert.equal(splitKids([{ id: "a" }, { id: "b" }], new Map()).stacked, false);
 });

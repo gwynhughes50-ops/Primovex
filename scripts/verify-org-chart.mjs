@@ -35,12 +35,23 @@ t("buildTree: no manager at all is a root", () => {
   const { roots } = buildTree(users);
   assert.deepEqual(roots.map((u) => u.id).sort(), ["a", "b"]);
 });
-t("buildTree: a person with two managers appears under both", () => {
+t("buildTree: a person with several managers is drawn once, under the first listed, and still counts as reporting to all", () => {
   const users = [{ id: "pm" }, { id: "partner" }, { id: "gp", reportsTo: ["pm", "partner"] }];
-  const { childrenOf, roots } = buildTree(users);
+  const { childrenOf, linksOf, roots } = buildTree(users);
   assert.deepEqual(roots.map((u) => u.id).sort(), ["partner", "pm"]);
   assert.deepEqual((childrenOf.get("pm") || []).map((u) => u.id), ["gp"]);
-  assert.deepEqual((childrenOf.get("partner") || []).map((u) => u.id), ["gp"]);
+  assert.deepEqual((childrenOf.get("partner") || []).map((u) => u.id), [], "not drawn a second time");
+  assert.deepEqual((linksOf.get("partner") || []).map((u) => u.id), ["gp"], "but still one of the partner's reports");
+  const everyone = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }, ...["g1", "g2", "g3"].map((id) => ({ id, reportsTo: ["a", "b", "c", "d"] }))];
+  const drawn = buildTree(everyone).childrenOf;
+  assert.equal([...drawn.values()].flat().length, 3, "three GPs, each appearing once, not four times");
+});
+t("buildTree: the first listed manager that is in the chart is the one used", () => {
+  const users = [{ id: "pm" }, { id: "gp", reportsTo: ["gone", "pm"] }];
+  assert.deepEqual((buildTree(users).childrenOf.get("pm") || []).map((u) => u.id), ["gp"]);
+  // in a department view where the first manager is not shown, the next one is used
+  const shown = [{ id: "partner" }, { id: "gp", reportsTo: ["pm", "partner"] }];
+  assert.deepEqual((buildTree(shown).childrenOf.get("partner") || []).map((u) => u.id), ["gp"]);
 });
 t("buildTree: several people reporting to the same manager", () => {
   const users = [{ id: "boss" }, { id: "a", reportsTo: "boss" }, { id: "b", reportsTo: "boss" }, { id: "c", reportsTo: "boss" }];
@@ -54,10 +65,11 @@ t("collectDescendants: multi-level chain", () => {
   assert.deepEqual([...collectDescendants("a", childrenOf)].sort(), ["b", "c"]);
   assert.deepEqual([...collectDescendants("c", childrenOf)], []);
 });
-t("collectDescendants: a person under two managers is only counted once", () => {
+t("collectDescendants: a person under two managers is only counted once, and counts for both", () => {
   const users = [{ id: "pm" }, { id: "partner" }, { id: "gp", reportsTo: ["pm", "partner"] }];
-  const { childrenOf } = buildTree(users);
-  assert.deepEqual([...collectDescendants("pm", childrenOf)], ["gp"]);
+  const { linksOf } = buildTree(users);
+  assert.deepEqual([...collectDescendants("pm", linksOf)], ["gp"]);
+  assert.deepEqual([...collectDescendants("partner", linksOf)], ["gp"], "so nobody can be put under their own subordinate by their second manager either");
 });
 t("collectDescendants: does not infinite-loop on a cycle already present in bad data", () => {
   // a -> b -> a (shouldn't be possible via the UI's own blocking, but the

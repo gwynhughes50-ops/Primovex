@@ -346,7 +346,7 @@ export default function OrgChart({ users, departments = [], practiceName = "Prac
           user={editing}
           users={active}
           byId={everyone.byId}
-          childrenOf={everyone.childrenOf}
+          childrenOf={everyone.linksOf}
           departments={departments}
           busy={busy}
           onChangeManager={onChangeManager}

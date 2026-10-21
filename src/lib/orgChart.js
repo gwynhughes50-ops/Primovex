@@ -20,23 +20,31 @@ export function managersOf(user, byId) {
   return [...new Set(raw)].filter((id) => id && id !== user.id && byId.has(id));
 }
 
-// manager -> direct reports (sorted), and the people at the top. Someone with
-// more than one manager appears under each of them.
+// The manager a person is drawn under: the first one listed (that is in the list being drawn). Their other managers are written
+// on their card as "Also reports to", so everyone appears once however many managers they have.
+export const placementManagerOf = (user, byId) => managersOf(user, byId)[0] || null;
+
+// childrenOf: manager -> the people drawn under them (sorted), each person once. linksOf: manager -> everyone who reports to
+// them by any of their managers (for checking nobody is placed under their own subordinate). roots: the people at the top.
 export function buildTree(users) {
   const byId = new Map(users.map((u) => [u.id, u]));
   const childrenOf = new Map();
+  const linksOf = new Map();
   const roots = [];
+  const add = (map, managerId, user) => {
+    if (!map.has(managerId)) map.set(managerId, []);
+    map.get(managerId).push(user);
+  };
   for (const user of users) {
     const managers = managersOf(user, byId);
     if (managers.length === 0) { roots.push(user); continue; }
-    for (const managerId of managers) {
-      if (!childrenOf.has(managerId)) childrenOf.set(managerId, []);
-      childrenOf.get(managerId).push(user);
-    }
+    add(childrenOf, managers[0], user);
+    for (const managerId of managers) add(linksOf, managerId, user);
   }
   for (const list of childrenOf.values()) list.sort(byRank);
+  for (const list of linksOf.values()) list.sort(byRank);
   roots.sort(byRank);
-  return { byId, childrenOf, roots };
+  return { byId, childrenOf, linksOf, roots };
 }
 
 // Everyone below this person by any path. Stops the "reports to" picker letting
@@ -143,7 +151,8 @@ export function searchPath(users, term) {
   const climb = (id, seen) => {
     if (seen.has(id)) return;
     seen.add(id);
-    managersOf(byId.get(id), byId).forEach((managerId) => { open.add(managerId); climb(managerId, seen); });
+    const managerId = placementManagerOf(byId.get(id), byId); // the chart shows them under this manager
+    if (managerId) { open.add(managerId); climb(managerId, seen); }
   };
   matches.forEach((id) => climb(id, new Set()));
   return { matches, open };
