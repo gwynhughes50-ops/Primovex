@@ -21,10 +21,11 @@ import {
   subscribeLearningActions,
   toDate,
   updateConcern,
+  withdrawCaseStep,
 } from "@/modules/governance/services/concernService";
 import {
   ASKED_BY, ASKED_FOR, LEARNING, closeStepsFor, isStatementOnly, LFE_STATUSES, OUTCOMES, RESPONSE_HOW, SENT_WHAT, STEP_ACTIONS,
-  closeStepProblems, dayKey, orderedSteps, partyOf, reviewStatus, ukDay, updateChoices,
+  closeStepProblems, dayKey, orderedSteps, partyOf, reviewStatus, ukDay, updateChoices, withdrawalOf, WITHDRAWN,
 } from "@/modules/governance/concernCase";
 
 // The two wizards for a concern, shared by the desktop and the phone: "Update this case" (usable at any time: a reply from the
@@ -87,10 +88,19 @@ export function useCaseSteps(concernId) {
   return steps;
 }
 
-export function CaseReviewPanel({ concern, steps, onUpdate }) {
+export function CaseReviewPanel({ concern, steps, onUpdate, actor }) {
   const review = useMemo(() => reviewStatus(concern, steps), [concern, steps]);
   const [open, setOpen] = useState(false);
-  const history = [...steps].reverse();
+  const [taking, setTaking] = useState(""); // the step being taken back
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState("");
+  // the steps taken back are shown struck through with the reason; the withdrawal records themselves are not listed twice
+  const history = [...steps].filter((s) => s.action !== WITHDRAWN).reverse();
+  async function takeBack(step) {
+    setBusy(true); setProblem("");
+    try { await withdrawCaseStep(concern.id, step, steps, reason, actor); setTaking(""); setReason(""); } catch (error) { setProblem(error?.message || "That could not be saved. Try again."); } finally { setBusy(false); }
+  }
   if (!review.parties.length && !steps.length) return null;
   return (
     <section className="mt-4 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-3 text-[var(--medtrak-text)]" aria-label="Outside review">
@@ -102,6 +112,7 @@ export function CaseReviewPanel({ concern, steps, onUpdate }) {
         {review.parties.map((p) => (
           <li key={p.key} className={`rounded-xl border px-3 py-2 text-sm ${STATE_TONE[p.state]}`}>
             <b>{p.short}</b>{p.instructed ? " · solicitor instructed" : ""}<span className="block text-xs">{stateText(p)}</span>
+            {p.state === "none" && <span className="block text-xs">Added in the case details. If that was a mistake, use Edit to clear it.</span>}
           </li>
         ))}
       </ul>
@@ -110,12 +121,28 @@ export function CaseReviewPanel({ concern, steps, onUpdate }) {
           <button type="button" onClick={() => setOpen((v) => !v)} className="mt-2 text-xs font-semibold text-[var(--medtrak-accent)] underline">{open ? "Hide the history" : `Show the history (${history.length})`}</button>
           {open && (
             <ul className="mt-2 divide-y divide-[var(--medtrak-border)] rounded-xl border border-[var(--medtrak-border)] text-sm">
-              {history.map((s) => (
-                <li key={s.id} className="px-3 py-2">
-                  <span className="font-semibold">{ukDay(s.occurredOn)} · {partyOf(s.party)?.short}: {STEP_ACTIONS[s.action]}{s.round > 1 ? ` (time ${s.round})` : ""}</span>
-                  {(s.what || s.note) && <span className="block text-xs text-[var(--medtrak-muted)]">{[SENT_WHAT.find((w) => w.key === s.what)?.label, s.note].filter(Boolean).join(" · ")}</span>}
-                </li>
-              ))}
+              {history.map((s) => {
+                const taken = withdrawalOf(steps, s);
+                return (
+                  <li key={s.id} className="px-3 py-2">
+                    <span className={`font-semibold ${taken ? "line-through opacity-60" : ""}`}>{ukDay(s.occurredOn)} · {partyOf(s.party)?.short}: {STEP_ACTIONS[s.action]}{s.round > 1 ? ` (time ${s.round})` : ""}</span>
+                    {(s.what || s.note) && <span className={`block text-xs text-[var(--medtrak-muted)] ${taken ? "line-through opacity-60" : ""}`}>{[SENT_WHAT.find((w) => w.key === s.what)?.label, s.note].filter(Boolean).join(" · ")}</span>}
+                    {taken && <span className="block text-xs font-semibold text-rose-700">Taken back as recorded by mistake ({ukDay(taken.occurredOn)}): {taken.note}</span>}
+                    {onUpdate && !taken && taking !== s.id && <button type="button" onClick={() => { setTaking(s.id); setReason(""); setProblem(""); }} className="mt-1 text-xs font-semibold text-[var(--medtrak-accent)] underline">Recorded by mistake?</button>}
+                    {taking === s.id && (
+                      <div className="mt-2 space-y-2">
+                        <label className="block text-xs font-bold">Why was it recorded by mistake?<textarea rows={2} value={reason} onChange={(e) => { setReason(e.target.value); setProblem(""); }} placeholder="e.g. put under GMPI by mistake" className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] px-3 py-2 text-sm font-normal" /></label>
+                        {problem && <p className="text-xs font-semibold text-rose-700" role="alert">{problem}</p>}
+                        <div className="flex gap-2">
+                          <button type="button" disabled={busy} onClick={() => takeBack(s)} className="rounded-xl bg-[var(--medtrak-accent)] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-40">{busy ? "Saving…" : "Take it back"}</button>
+                          <button type="button" onClick={() => { setTaking(""); setProblem(""); }} className="rounded-xl border border-[var(--medtrak-border)] px-3 py-1.5 text-xs font-semibold">Cancel</button>
+                        </div>
+                        <p className="text-xs text-[var(--medtrak-muted)]">Nothing is deleted. It stays in the history, struck through with your reason, and the case carries on as if it had not been recorded.</p>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </>

@@ -64,6 +64,26 @@ export function buildStep({ party, action, occurredOn, what = "", note = "", rou
   return { party, action, occurredOn, what: action === "sent" ? what : "", note: text(note, 600), round: Number.isFinite(round) ? round : null };
 }
 
+// A step recorded by mistake (the wrong party, the wrong case) is never deleted: a withdrawal is recorded against it, with the reason,
+// and from then on the case behaves as if neither the step nor the withdrawal were there. The history still shows both.
+export const WITHDRAWN = "withdrawn";
+export function liveSteps(steps = []) {
+  const taken = new Set(steps.filter((s) => s.action === WITHDRAWN && s.withdrawsId).map((s) => s.withdrawsId));
+  return steps.filter((s) => s.action !== WITHDRAWN && !taken.has(s.id));
+}
+// the withdrawal that took a step back, if one did
+export const withdrawalOf = (steps = [], step) => steps.find((s) => s.action === WITHDRAWN && s.withdrawsId === step?.id) || null;
+
+// The record that takes a step back. Throws a sentence for the person when it cannot be.
+export function buildWithdrawal({ step, steps = [], reason, now = new Date() } = {}) {
+  if (!step?.id || !partyOf(step.party)) throw new Error("Choose the step to take back.");
+  if (step.action === WITHDRAWN) throw new Error("That is already a record of a step being taken back.");
+  if (withdrawalOf(steps, step)) throw new Error("That step has already been taken back.");
+  const why = text(reason, 300);
+  if (!why) throw new Error("Say why it was recorded by mistake.");
+  return { party: step.party, action: WITHDRAWN, withdrawsId: step.id, occurredOn: dayKey(now), what: "", note: why, round: null };
+}
+
 // oldest first (steps made the same day keep the order they were recorded in)
 export function orderedSteps(steps = []) {
   const created = (s) => (s.createdAt?.toDate ? s.createdAt.toDate().getTime() : Number(s.createdAtMs) || 0);
@@ -71,11 +91,12 @@ export function orderedSteps(steps = []) {
 }
 
 // how many times it has been sent to this party so far
-export const sentCount = (steps = [], party) => steps.filter((s) => s.party === party && s.action === "sent").length;
+export const sentCount = (steps = [], party) => liveSteps(steps).filter((s) => s.party === party && s.action === "sent").length;
 
 // Where one party has got to. state: "none" (nothing yet), "with-them" (we sent it, waiting for a reply), "back-to-us" (they came
 // back wanting changes or more information), "accepted".
-export function partyState(steps = [], party, now = new Date()) {
+export function partyState(allSteps = [], party, now = new Date()) {
+  const steps = liveSteps(allSteps);
   const mine = orderedSteps(steps.filter((s) => s.party === party));
   const instructed = mine.some((s) => s.action === "instructed");
   const flow = mine.filter((s) => s.action !== "instructed");
@@ -93,7 +114,8 @@ export function partyState(steps = [], party, now = new Date()) {
 
 // Is a party part of this case: it has steps, or the case says it is (the indemnity flag, a GMPI reference). The solicitor is
 // part of it once GMPI has instructed one, or it has steps of its own.
-export function involvedParties(concern = {}, steps = []) {
+export function involvedParties(concern = {}, allSteps = []) {
+  const steps = liveSteps(allSteps);
   const has = (key) => steps.some((s) => s.party === key);
   return PARTIES.filter((p) => has(p.key)
     || (p.key === "indemnity" && concern.mddusRequired === true)

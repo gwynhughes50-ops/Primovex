@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  CLOSE_STEPS, PARTIES, buildClosePatch, buildStep, closeProblems, closeStepProblems, closeStepsFor, involvedParties, isStatementOnly, orderedSteps, partyState, reviewStatus, sentCount, ukDay, updateChoices,
+  CLOSE_STEPS, PARTIES, buildClosePatch, buildStep, buildWithdrawal, closeProblems, closeStepProblems, closeStepsFor, involvedParties, isStatementOnly, liveSteps, orderedSteps, partyState, reviewStatus, sentCount, ukDay, updateChoices, withdrawalOf,
 } from "../src/modules/governance/concernCase.js";
 
 let n = 0;
@@ -180,6 +180,39 @@ t("the update wizard offers the switch to a statement-only case, and the switch 
 t("there are three parties, named in plain words", () => {
   assert.deepEqual(PARTIES.map((p) => p.key), ["indemnity", "gmpi", "solicitor"]);
   assert.ok(PARTIES.every((p) => p.label && p.short));
+});
+
+t("a step recorded by mistake is taken back, not deleted: the case behaves as if it had not happened, and the history keeps both", () => {
+  const gmpi = { ...step("gmpi", "sent", "2026-10-19"), id: "s-gmpi" };
+  const instr = { ...step("gmpi", "instructed", "2026-10-19"), id: "s-instr" };
+  const steps = [gmpi, instr];
+  assert.deepEqual(involvedParties({}, steps), ["gmpi", "solicitor"]);
+  assert.equal(sentCount(steps, "gmpi"), 1);
+  const w = buildWithdrawal({ step: gmpi, steps, reason: "  Put under GMPI by mistake ", now: NOW });
+  assert.deepEqual(w, { party: "gmpi", action: "withdrawn", withdrawsId: "s-gmpi", occurredOn: "2026-10-20", what: "", note: "Put under GMPI by mistake", round: null });
+  const after = [...steps, { ...w, id: "w1" }];
+  assert.deepEqual(liveSteps(after).map((s) => s.id), ["s-instr"], "the step and the withdrawal both stop counting");
+  assert.equal(sentCount(after, "gmpi"), 0, "so the next time it is sent is the first time again");
+  assert.equal(partyState(after, "gmpi").state, "none");
+  assert.deepEqual(involvedParties({}, after), ["gmpi", "solicitor"], "GMPI is still involved while it has a live instruction");
+  const both = [...after, { ...buildWithdrawal({ step: instr, steps: after, reason: "Same mistake", now: NOW }), id: "w2" }];
+  assert.deepEqual(involvedParties({}, both), [], "take both back and nobody is involved");
+  assert.deepEqual(reviewStatus({}, both).blockers, []);
+  assert.equal(reviewStatus({}, both).ready, true, "nothing outside is holding the final response up");
+  assert.equal(withdrawalOf(after, gmpi).id, "w1");
+  assert.equal(withdrawalOf(after, instr), null);
+  assert.equal(orderedSteps(both).length, 4, "the history still has all four records");
+});
+
+t("a step cannot be taken back without a reason, twice, or by taking back a withdrawal", () => {
+  const sent = { ...step("indemnity", "sent", "2026-10-10"), id: "a" };
+  assert.throws(() => buildWithdrawal({ step: sent, steps: [sent], reason: "  " }), /Say why/);
+  assert.throws(() => buildWithdrawal({ step: null, steps: [], reason: "x" }), /Choose the step/);
+  const w = { ...buildWithdrawal({ step: sent, steps: [sent], reason: "wrong case", now: NOW }), id: "w" };
+  assert.throws(() => buildWithdrawal({ step: sent, steps: [sent, w], reason: "again" }), /already been taken back/);
+  assert.throws(() => buildWithdrawal({ step: w, steps: [sent, w], reason: "undo" }), /already a record/);
+  // the flag on the case still makes the party involved: that is changed in Edit
+  assert.deepEqual(involvedParties({ mddusRequired: true }, [sent, w]), ["indemnity"]);
 });
 
 console.log(`\n${n} passed`);

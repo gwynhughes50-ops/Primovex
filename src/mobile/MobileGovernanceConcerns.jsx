@@ -347,7 +347,7 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, isAdmi
             {concern.status !== CONCERN_STATUSES.closed && <button type="button" onClick={() => setShowClose(true)} className="min-h-12 w-full rounded-2xl border border-emerald-500/50 bg-emerald-500/10 px-4 text-base font-bold text-emerald-800">Close this case</button>}
           </div>
         )}
-        <CaseReviewPanel concern={concern} steps={caseSteps} onUpdate={isTeam ? () => setShowUpdate(true) : undefined} />
+        <CaseReviewPanel concern={concern} steps={caseSteps} actor={actor} onUpdate={isTeam ? () => setShowUpdate(true) : undefined} />
 
         {isTeam && (
           <div className="mt-3 flex gap-2">

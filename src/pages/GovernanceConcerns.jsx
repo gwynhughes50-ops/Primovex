@@ -468,7 +468,7 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
             {concern.status !== CONCERN_STATUSES.closed && <Button onClick={() => setShowClose(true)} className="rounded-full bg-emerald-500 text-slate-950 hover:bg-emerald-400">Close this case</Button>}
           </div>
         )}
-        <CaseReviewPanel concern={concern} steps={caseSteps} onUpdate={isTeam ? () => setShowUpdate(true) : undefined} />
+        <CaseReviewPanel concern={concern} steps={caseSteps} actor={actor} onUpdate={isTeam ? () => setShowUpdate(true) : undefined} />
 
         {isTeam && (
           <details className="mt-4">

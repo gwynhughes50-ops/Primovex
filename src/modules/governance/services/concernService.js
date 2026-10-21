@@ -22,7 +22,7 @@ import { identityFields, identityProblems } from "@/modules/governance/patientId
 import { recordAudit } from "@/modules/audit/recordAudit";
 import { concernEvent } from "@/modules/audit/auditEvents";
 import { cleanContact, contactFromForm, hasContact, legacyContact } from "@/modules/governance/concernContact";
-import { STEP_ACTIONS, buildClosePatch, buildStep, partyOf, sentCount, ukDay } from "@/modules/governance/concernCase";
+import { STEP_ACTIONS, WITHDRAWN, buildClosePatch, buildStep, buildWithdrawal, partyOf, sentCount, ukDay } from "@/modules/governance/concernCase";
 import { demoGovernanceCases, demoConcernTimeline, demoLearningActions } from "@/data/demoDataset";
 
 export const CONCERNS_COLLECTION = "governance_concerns";
@@ -801,6 +801,18 @@ export function subscribeCaseSteps(concernId, callback, onError) {
 }
 
 // Record one step with a party. `steps` is what the case already has, so a "sent" knows which round it is.
+// Takes back a step that was recorded by mistake: nothing is deleted, a withdrawal with the reason is recorded against it
+export async function withdrawCaseStep(concernId, step, steps, reason, actor = {}) {
+  const record = buildWithdrawal({ step, steps, reason });
+  if (isSafeSyntheticMode()) return `demo-step-${Date.now()}`;
+  const ref = doc(collection(db, CONCERN_STEPS_COLLECTION));
+  await setDoc(ref, { concernId, ...record, createdByUid: actor.uid || null, createdByName: actor.displayName || actor.email || "Unknown", createdAt: serverTimestamp(), createdAtMs: Date.now() });
+  recordAudit(concernEvent("step", { concern: { id: concernId }, party: record.party, action: WITHDRAWN }));
+  const who = partyOf(record.party)?.short || "An outside party";
+  await addConcernTimeline(concernId, { type: "step_withdrawn", title: `${who}: a step was recorded by mistake`, message: `${STEP_ACTIONS[step.action] || "A step"} on ${ukDay(step.occurredOn)} was taken back. ${record.note}`, actor });
+  return ref.id;
+}
+
 export async function addCaseStep(concernId, steps, input, actor = {}) {
   const round = input?.action === "sent" ? sentCount(steps, input.party) + 1 : null;
   const step = buildStep({ ...input, round });
