@@ -49,6 +49,7 @@ const steps = {
     const lockPath = path.join(root, "package-lock.json");
     let seen = 0;
     fs.writeFileSync(lockPath, read("package-lock.json").replace(new RegExp(`"version": "${current.replace(/\./g, "\\.")}"`, "g"), (m) => (++seen <= 2 ? `"version": "${next}"` : m)));
+    run("npm", ["run", "version:sync"]); // the desktop and Cargo versions follow package.json straight away
     console.log(`Version ${current} -> ${next}`);
   },
 
