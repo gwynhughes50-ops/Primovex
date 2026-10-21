@@ -219,6 +219,20 @@ function injectThemeStyles() {
       border-color: var(--medtrak-border) !important;
     }
 
+    /* The list a dropdown opens is drawn from its options, which several screens colour with a fixed dark slate
+       ([&>option]:bg-slate-900). On a light theme that left a black list with dark text. The options follow the theme. */
+    html[data-medtrak-theme] select option,
+    html[data-medtrak-theme] select optgroup {
+      background-color: var(--medtrak-panel) !important;
+      color: var(--medtrak-text) !important;
+    }
+    html.medtrak-light select option,
+    html.medtrak-light select optgroup {
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+    }
+    html.medtrak-light { color-scheme: light; }
+
 
     html.medtrak-light body {
       background: var(--medtrak-bg) !important;
