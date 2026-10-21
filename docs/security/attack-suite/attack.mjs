@@ -635,6 +635,41 @@ async function main() {
     await assertFails(deleteDoc(doc(admin, "governance_se_timeline", "tl-1")));
   });
 
+  // A person named on an event (involvedUserIds) sees that event and only that one, the same as someone named on a concern.
+  await seed(async (db) => {
+    await setDoc(doc(db, "governance_significant_events", "se-named"), {
+      reference: "SE-N", status: "investigating", investigation: "required", title: "Named", reportedByUid: "reporter-uid",
+      leadUid: "lead-uid", reviewerUids: [], involvedUserIds: ["user-uid"], harm: "low",
+    });
+    await setDoc(doc(db, "governance_se_timeline", "tl-named"), { seId: "se-named", type: "note", title: "Note" });
+  });
+  await check("SE named: a person named on an event CAN read it, and list the ones they are named on", async () => {
+    await assertSucceeds(getDoc(doc(user, "governance_significant_events", "se-named")));
+    await assertSucceeds(getDocs(query(collection(user, "governance_significant_events"), where("involvedUserIds", "array-contains", "user-uid"))));
+  });
+  await check("SE named: ...but CANNOT list every event, and CANNOT read one they are not named on", async () => {
+    await assertFails(getDocs(collection(user, "governance_significant_events")));
+    await assertFails(getDoc(doc(user, "governance_significant_events", "se-1")));
+  });
+  await check("SE named: a person NOT named cannot read the event, its timeline, reviews or actions", async () => {
+    await assertFails(getDoc(doc(bystander, "governance_significant_events", "se-named")));
+    await assertFails(getDoc(doc(bystander, "governance_se_timeline", "tl-named")));
+    await assertFails(getDocs(query(collection(bystander, "governance_se_timeline"), where("seId", "==", "se-named"))));
+    await assertFails(getDocs(query(collection(bystander, "governance_se_reviews"), where("seId", "==", "se-1"))));
+    await assertFails(getDocs(query(collection(bystander, "governance_se_actions"), where("seId", "==", "se-1"))));
+  });
+  await check("SE named: a named person CAN read the timeline and add a note, but CANNOT forge a stage change or edit the event", async () => {
+    await assertSucceeds(getDoc(doc(user, "governance_se_timeline", "tl-named")));
+    await assertSucceeds(addDoc(collection(user, "governance_se_timeline"), { seId: "se-named", type: "note", title: "My statement", message: "What I saw" }));
+    await assertFails(addDoc(collection(user, "governance_se_timeline"), { seId: "se-named", type: "stage", title: "Forged" }));
+    await assertFails(updateDoc(doc(user, "governance_significant_events", "se-named"), { harm: "none" }));
+  });
+  await check("SE named: being named does not open the reviews, the meetings or other people's actions", async () => {
+    await assertFails(getDoc(doc(user, "governance_se_reviews", "se-1_reviewer-uid")));
+    await assertFails(getDoc(doc(user, "governance_se_meetings", "meet-1")));
+    await assertFails(getDoc(doc(user, "governance_se_actions", "act-2")));
+  });
+
   await check("Stock review: anyone who can see stock reads it, nobody writes it; people who verify stock set its thresholds", async () => {
     await seed(async (db) => setDoc(doc(db, "stock_reviews", "latest"), { dormant: [], overstocked: [], understocked: [] }));
     await assertSucceeds(getDoc(doc(nurse, "stock_reviews", "latest")));
@@ -1497,6 +1532,82 @@ async function main() {
     await check(`[${coll}] Another Nurse (no exception) CAN still read the kit`, () => assertSucceeds(getDoc(doc(nurse, coll, "kit-1"))));
   }
   await check("A Salaried GP CAN still read stock", () => assertSucceeds(getDoc(doc(gp, "stock_items", "stock-gp"))));
+  // a Salaried GP sees their own training, own timesheet and own mileage, and nobody else's
+  await seed(async (db) => {
+    await setDoc(doc(db, "training_people", "p-gp"), { name: "GP Person", group: "clinical", uid: "gp-uid", jobRole: "GP", active: true });
+    await setDoc(doc(db, "training_records", "p-gp_c1"), { personId: "p-gp", courseId: "c1", group: "clinical", ownerUid: "gp-uid", completedOn: "2026-02-01" });
+  });
+  await check("A Salaried GP CAN read their own training record", async () => {
+    await assertSucceeds(getDoc(doc(gp, "training_people", "p-gp")));
+    await assertSucceeds(getDoc(doc(gp, "training_records", "p-gp_c1")));
+    await assertSucceeds(getDocs(query(collection(gp, "training_records"), where("ownerUid", "==", "gp-uid"))));
+  });
+  await check("...but NOT anyone else's, and CANNOT list everyone's", async () => {
+    await assertFails(getDoc(doc(gp, "training_people", "p-clin")));
+    await assertFails(getDoc(doc(gp, "training_records", "p-clin_c1")));
+    await assertFails(getDoc(doc(gp, "training_records", "p-admin_c1")));
+    await assertFails(getDocs(collection(gp, "training_records")));
+    await assertFails(getDocs(collection(gp, "training_people")));
+  });
+  await check("...and CANNOT change their own training record", async () => {
+    await assertFails(updateDoc(doc(gp, "training_records", "p-gp_c1"), { completedOn: "2026-09-09" }));
+    await assertFails(setDoc(doc(gp, "training_records", "p-gp_c9"), { personId: "p-gp", courseId: "c9", group: "clinical", ownerUid: "gp-uid", completedOn: "2026-09-09" }));
+  });
+  await check("A colleague with no training permission CANNOT read the GP's training (a person given training.manage as an exception CAN, as intended)", async () => {
+    await assertFails(getDoc(doc(oldRole, "training_records", "p-gp_c1")));
+    await assertSucceeds(getDoc(doc(gp2, "training_records", "p-gp_c1")));
+  });
+  // ...and their own timesheet and mileage, and nobody else's
+  await seed(async (db) => {
+    await setDoc(doc(db, "timesheet_staff", "ts-gp"), { name: "GP Person", uid: "gp-uid", managerUid: "pm-uid", patterns: [], active: true });
+    await setDoc(doc(db, "timesheet_staff", "ts-gp2"), { name: "GP Two", uid: "gp2-uid", managerUid: "pm-uid", patterns: [], active: true });
+    await setDoc(doc(db, "timesheets", "p1_ts-gp"), { uid: "gp-uid", staffId: "ts-gp", periodId: "p1", managerUid: "pm-uid", state: "submitted", lines: [] });
+    await setDoc(doc(db, "timesheets", "p1_ts-gp2"), { uid: "gp2-uid", staffId: "ts-gp2", periodId: "p1", managerUid: "pm-uid", state: "submitted", lines: [] });
+    await setDoc(doc(db, "mileage_claims", "m-gp"), { uid: "gp-uid", staffId: "ts-gp", managerUid: "pm-uid", status: "submitted", miles: 10 });
+    await setDoc(doc(db, "mileage_claims", "m-gp2"), { uid: "gp2-uid", staffId: "ts-gp2", managerUid: "pm-uid", status: "submitted", miles: 12 });
+  });
+  await check("A Salaried GP CAN read their own working pattern, timesheet and mileage claim", async () => {
+    await assertSucceeds(getDoc(doc(gp, "timesheet_staff", "ts-gp")));
+    await assertSucceeds(getDoc(doc(gp, "timesheets", "p1_ts-gp")));
+    await assertSucceeds(getDoc(doc(gp, "mileage_claims", "m-gp")));
+    await assertSucceeds(getDocs(query(collection(gp, "timesheets"), where("uid", "==", "gp-uid"))));
+    await assertSucceeds(getDocs(query(collection(gp, "mileage_claims"), where("uid", "==", "gp-uid"))));
+  });
+  await check("...but NOT a colleague's, and CANNOT list everyone's", async () => {
+    await assertFails(getDoc(doc(gp, "timesheet_staff", "ts-gp2")));
+    await assertFails(getDoc(doc(gp, "timesheets", "p1_ts-gp2")));
+    await assertFails(getDoc(doc(gp, "mileage_claims", "m-gp2")));
+    await assertFails(getDocs(collection(gp, "timesheet_staff")));
+    await assertFails(getDocs(collection(gp, "timesheets")));
+    await assertFails(getDocs(collection(gp, "mileage_claims")));
+  });
+  await check("...and CANNOT approve their own timesheet or mileage, or change their pattern", async () => {
+    await assertFails(updateDoc(doc(gp, "timesheets", "p1_ts-gp"), { state: "approved" }));
+    await assertFails(updateDoc(doc(gp, "mileage_claims", "m-gp"), { status: "approved" }));
+    await assertFails(updateDoc(doc(gp, "timesheet_staff", "ts-gp"), { managerUid: "gp-uid" }));
+  });
+  // a line manager (named on a team member's staff record) sees that team's, to sign them off, and nothing else
+  await seed(async (db) => {
+    await setDoc(doc(db, "timesheets", "p1_ts-team"), { uid: "gp2-uid", staffId: "ts-gp2", periodId: "p1", managerUid: "gp-uid", state: "submitted", lines: [] });
+    await setDoc(doc(db, "mileage_claims", "m-team"), { uid: "gp2-uid", staffId: "ts-gp2", managerUid: "gp-uid", status: "submitted", miles: 8 });
+  });
+  await check("A line manager CAN read their team member's timesheet and mileage claim, and list the ones that name them", async () => {
+    await assertSucceeds(getDoc(doc(gp, "timesheets", "p1_ts-team")));
+    await assertSucceeds(getDoc(doc(gp, "mileage_claims", "m-team")));
+    await assertSucceeds(getDocs(query(collection(gp, "timesheets"), where("managerUid", "==", "gp-uid"))));
+    await assertSucceeds(getDocs(query(collection(gp, "mileage_claims"), where("managerUid", "==", "gp-uid"))));
+  });
+  await check("...and CAN sign off the timesheet and approve the mileage claim", async () => {
+    await assertSucceeds(updateDoc(doc(gp, "timesheets", "p1_ts-team"), { state: "approved", decision: { byUid: "gp-uid", outcome: "approved" }, lastActorUid: "gp-uid", lastActorName: "GP", updatedAt: serverTimestamp() }));
+    await assertSucceeds(updateDoc(doc(gp, "mileage_claims", "m-team"), { status: "approved", decidedByName: "GP", decidedAt: serverTimestamp(), updatedAt: serverTimestamp() }));
+  });
+  await check("...but still CANNOT see a colleague who is not on their team, or sign off their own", async () => {
+    await assertFails(getDoc(doc(gp, "timesheets", "p1_ts-gp2")));
+    await assertFails(getDoc(doc(gp, "mileage_claims", "m-gp2")));
+    await assertFails(updateDoc(doc(gp, "timesheets", "p1_ts-gp"), { state: "approved", decision: { byUid: "gp-uid", outcome: "approved" }, lastActorUid: "gp-uid", lastActorName: "GP", updatedAt: serverTimestamp() }));
+  });
+
+
   await check("A person CANNOT give themselves an exception (own record)", () =>
     assertFails(updateDoc(doc(gp, "users", "gp-uid"), { permissionExceptions: { allow: ["admin.manageUsers"] } })));
   await check("A person CANNOT remove an exception someone put against them", () =>
