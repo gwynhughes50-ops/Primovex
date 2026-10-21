@@ -1,5 +1,5 @@
 // src/hooks/useNotifications.js
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import {
   collection,
   doc,
@@ -16,15 +16,18 @@ import {
 import { buildSnoozeUpdate, NOTIFICATION_STATUS, summariseNotifications } from "@/services/notificationCentreService";
 import { db } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
+import { retireStaleDueNotifications } from "@/services/dueNotificationReconcile";
 import { demoNotifications } from "@/data/demoDataset";
 
 export default function useNotifications(uid) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const tried = useRef(new Set()); // notifications already checked this session
 
   useEffect(() => {
     // reset when uid changes
+    tried.current = new Set();
     setRows([]);
     setError(null);
 
@@ -50,6 +53,10 @@ export default function useNotifications(uid) {
       (snap) => {
         const next = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         setRows(next);
+        // due and overdue notices for cases that have since been closed are completed, so they stop showing
+        const fresh = next.filter((row) => !tried.current.has(row.id));
+        fresh.forEach((row) => tried.current.add(row.id));
+        if (fresh.length) retireStaleDueNotifications(uid, fresh);
         setLoading(false);
         setError(null);
       },

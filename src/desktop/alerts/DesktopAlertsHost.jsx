@@ -13,6 +13,7 @@ import { normalizeStockItemCategory } from "@/services/stockService";
 import { isCardMessage } from "@/messaging/messageCard";
 import { SAR_STATUSES } from "@/modules/governance/services/sarService";
 import { CONCERN_STATUSES } from "@/modules/governance/services/concernService";
+import { retireStaleDueNotifications } from "@/services/dueNotificationReconcile";
 import {
   afterDismiss,
   afterShown,
@@ -133,8 +134,12 @@ export default function DesktopAlertsHost() {
         query(collection(db, "users", uid, "notifications"), orderBy("createdAt", "desc"), limit(50)),
         (snap) => {
           const unread = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((row) => row.read !== true && !isCardMessage(row));
-          rows.current.notifications = summariseNotifications(unread).active.map((row) => ({ id: row.id, priority: row.priority }));
-          evaluateRef.current();
+          // a due or overdue notice for a case that has since been closed is out of date: complete it rather than pop it up
+          retireStaleDueNotifications(uid, unread).then((gone) => {
+            const live = gone.length ? unread.filter((row) => !gone.includes(row.id)) : unread;
+            rows.current.notifications = summariseNotifications(live).active.map((row) => ({ id: row.id, priority: row.priority }));
+            evaluateRef.current();
+          });
         },
         (err) => console.warn("Desktop alerts: could not read notifications.", err)
       )

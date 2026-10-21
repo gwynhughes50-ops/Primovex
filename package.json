@@ -116,6 +116,7 @@
     "test:hooks-order": "node scripts/verify-hooks-order.mjs",
     "test:message-card": "esbuild scripts/verify-message-card.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-message-card.bundle.mjs && node work/verify-message-card.bundle.mjs",
     "test:orb-management": "esbuild scripts/verify-orb-management.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-orb-management.bundle.mjs && node work/verify-orb-management.bundle.mjs",
+    "test:stale-notifications": "esbuild scripts/verify-stale-notifications.mjs --bundle --platform=node --format=esm --alias:@=./src --alias:firebase/firestore=./scripts/stubs/timestampStub.js --outfile=work/verify-stale-notifications.bundle.mjs && node work/verify-stale-notifications.bundle.mjs",
     "test:patient-identity": "esbuild scripts/verify-patient-identity.mjs --bundle --platform=node --format=esm --outfile=work/verify-patient-identity.bundle.mjs && node work/verify-patient-identity.bundle.mjs",
     "test:release-plan": "node scripts/verify-release-plan.mjs",
     "test:update-manifest": "esbuild scripts/verify-update-manifest.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-update-manifest.bundle.mjs && node work/verify-update-manifest.bundle.mjs",
