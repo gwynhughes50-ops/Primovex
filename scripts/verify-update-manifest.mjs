@@ -53,4 +53,13 @@ t("every hosting deploy carries the staged update files, and the private key is 
   assert.ok(!/untrusted comment: minisign encrypted secret key|RWRTY0Iy/.test(tracked), "no private key text");
 });
 
+t("only one Primovex runs at a time: a second launch shows the first, and the plugin is the first one registered on the desktop", () => {
+  const lib = read("src-tauri/src/lib.rs");
+  assert.match(lib, /#\[cfg\(desktop\)\]\s*let builder = builder\.plugin\(tauri_plugin_single_instance::init\(/, "desktop only, or the phone build fails");
+  assert.ok(lib.indexOf("tauri_plugin_single_instance") < lib.indexOf("tauri_plugin_deep_link"), "it has to be registered before any other plugin");
+  assert.match(read("src-tauri/Cargo.toml"), /tauri-plugin-single-instance\s*=\s*\{[^}]*"deep-link"/, "and forwards primovex:// links to the running copy");
+  const cargo = read("src-tauri/Cargo.toml");
+  assert.ok(cargo.indexOf("tauri-plugin-single-instance") > cargo.indexOf("cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))"), "a desktop-only dependency");
+});
+
 console.log(`\n${n} passed`);

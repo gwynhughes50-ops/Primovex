@@ -1,6 +1,6 @@
 [package]
 name = "primovex"
-version = "0.15.48"
+version = "0.15.49"
 description = "Primovex AI Practice Intelligence"
 authors = ["Primovex"]
 license = ""
@@ -30,6 +30,9 @@ tauri-plugin-opener = "2"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-updater = "2"
+# One Primovex at a time: opening it again (or an update starting it) brings the running one forward instead of starting a
+# second copy, which used to be left behind in the tray with its own orb on the desktop.
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 # Local-network HTTP client for reading practice-owned WiFi sensors (e.g. a
 # mains-powered Shelly thermometer) directly on the practice's own LAN — see
 # fetch_local_device_reading in lib.rs. Desktop-only: this is meant to run

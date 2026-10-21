@@ -561,7 +561,16 @@ async fn orb_drag(app: tauri::AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  let builder = tauri::Builder::default()
+  let builder = tauri::Builder::default();
+
+  // Must be the first plugin: a second Primovex tells the first to show itself, then quits. Without this, closing Primovex to the
+  // tray and opening it again left two copies running, each with its own Pulse orb on the desktop.
+  #[cfg(desktop)]
+  let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+    show_main_window(app);
+  }));
+
+  let builder = builder
     .plugin(tauri_plugin_deep_link::init())
     .plugin(tauri_plugin_process::init())
     .plugin(tauri_plugin_os::init())
