@@ -42,4 +42,4 @@ work/
 .firebase/
 
 # Staged desktop updates (installer + latest.json) published with the next hosting deploy
-release/
+/release/

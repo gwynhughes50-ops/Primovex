@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { withRetries } from "../src/release/updateService.js";
 import { UPDATE_BASE_URL, UPDATE_PLATFORM, buildLatestJson, compareVersions, installerName } from "../src/release/updateManifest.js";
 
 let n = 0;
@@ -48,7 +49,7 @@ t("the desktop app is set up to read, verify and install updates", () => {
 t("every hosting deploy carries the staged update files, and the private key is never in the project", () => {
   const firebase = JSON.parse(read("firebase.json"));
   assert.ok(firebase.hosting.predeploy.some((c) => c.includes("stage-updates.mjs")));
-  assert.match(read(".gitignore"), /^release\/$/m, "the staged installer is not committed");
+  assert.match(read(".gitignore"), /^\/release\/$/m, "the staged installer is not committed, but only the top-level release folder is ignored (not src/release)");
   const tracked = [read("src-tauri/tauri.conf.json"), read("scripts/desktop-release.mjs")].join("\n");
   assert.ok(!/untrusted comment: minisign encrypted secret key|RWRTY0Iy/.test(tracked), "no private key text");
 });
@@ -61,5 +62,23 @@ t("only one Primovex runs at a time: a second launch shows the first, and the pl
   const cargo = read("src-tauri/Cargo.toml");
   assert.ok(cargo.indexOf("tauri-plugin-single-instance") > cargo.indexOf("cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))"), "a desktop-only dependency");
 });
+
+// a connection that drops now and then must not stop an update being found or downloaded
+{
+  const waits = [];
+  const wait = async (ms) => { waits.push(ms); };
+  let calls = 0;
+  const found = await withRetries(async () => { calls += 1; if (calls < 3) throw new Error("tls handshake"); return "update"; }, { delayMs: 10, wait });
+  assert.deepEqual([found, calls, waits], ["update", 3, [10, 20]], "the third attempt works, with a longer pause each time");
+  let tried = 0;
+  await assert.rejects(() => withRetries(async () => { tried += 1; throw new Error("still down"); }, { tries: 4, delayMs: 1, wait }), /still down/);
+  assert.equal(tried, 4, "then the last failure is reported");
+  assert.equal(await withRetries(async () => "first time", { wait }), "first time");
+  const lib = readFileSync(new URL("../src/release/updateService.js", import.meta.url), "utf8");
+  assert.match(lib, /withRetries\(\(\) => check\(/, "the check retries");
+  assert.match(lib, /withRetries\(async \(\) => \{[\s\S]*downloadAndInstall/, "the download retries");
+  assert.match(readFileSync(new URL("../src/components/system/DesktopUpdateBanner.jsx", import.meta.url), "utf8"), /AFTER_FAILURE_MS/, "and a failed check looks again soon, not hours later");
+  n += 1; console.log("ok  a dropped connection is retried, for the check and the download, and a failed check is repeated soon");
+}
 
 console.log(`\n${n} passed`);

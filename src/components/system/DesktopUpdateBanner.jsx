@@ -7,6 +7,8 @@ import { checkForDesktopUpdate, installDesktopUpdate, isDesktopApp } from "@/rel
 
 const FIRST_CHECK_MS = 20 * 1000;
 const EVERY_MS = 4 * 60 * 60 * 1000;
+// when a check could not reach the update address at all, look again soon (after 2, 10 and 30 minutes) instead of waiting hours
+const AFTER_FAILURE_MS = [2 * 60 * 1000, 10 * 60 * 1000, 30 * 60 * 1000];
 
 export default function DesktopUpdateBanner() {
   const [found, setFound] = useState(null); // { update, version }
@@ -18,18 +20,23 @@ export default function DesktopUpdateBanner() {
   useEffect(() => {
     if (!import.meta.env.PROD || !isDesktopApp()) return undefined;
     let live = true;
+    let retry;
+    let failures = 0;
     const check = async () => {
       if (busy.current) return;
       try {
         const result = await checkForDesktopUpdate();
+        failures = 0;
         if (live && result.supported && result.available) { setFound({ update: result.update, version: result.version, notes: result.notes }); setHidden(false); }
       } catch (error) {
         console.warn("Primovex update check failed", error?.message || error);
+        if (live && failures < AFTER_FAILURE_MS.length) retry = setTimeout(check, AFTER_FAILURE_MS[failures]);
+        failures += 1;
       }
     };
     const first = setTimeout(check, FIRST_CHECK_MS);
-    const timer = setInterval(check, EVERY_MS);
-    return () => { live = false; clearTimeout(first); clearInterval(timer); };
+    const timer = setInterval(() => { failures = 0; check(); }, EVERY_MS);
+    return () => { live = false; clearTimeout(first); clearTimeout(retry); clearInterval(timer); };
   }, []);
 
   if (!found || hidden) return null;
