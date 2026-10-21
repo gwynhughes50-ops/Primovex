@@ -22,7 +22,7 @@ import { identityFields, identityProblems } from "@/modules/governance/patientId
 import { recordAudit } from "@/modules/audit/recordAudit";
 import { concernEvent } from "@/modules/audit/auditEvents";
 import { cleanContact, contactFromForm, hasContact, legacyContact } from "@/modules/governance/concernContact";
-import { STEP_ACTIONS, WITHDRAWN, buildClosePatch, buildStep, buildWithdrawal, partyOf, sentCount, ukDay } from "@/modules/governance/concernCase";
+import { STEP_ACTIONS, WITHDRAWN, buildClosePatch, buildStep, buildWithdrawal, otherKey, partyOf, sentCount, ukDay } from "@/modules/governance/concernCase";
 import { demoGovernanceCases, demoConcernTimeline, demoLearningActions } from "@/data/demoDataset";
 
 export const CONCERNS_COLLECTION = "governance_concerns";
@@ -808,14 +808,16 @@ export async function withdrawCaseStep(concernId, step, steps, reason, actor = {
   const ref = doc(collection(db, CONCERN_STEPS_COLLECTION));
   await setDoc(ref, { concernId, ...record, createdByUid: actor.uid || null, createdByName: actor.displayName || actor.email || "Unknown", createdAt: serverTimestamp(), createdAtMs: Date.now() });
   recordAudit(concernEvent("step", { concern: { id: concernId }, party: record.party, action: WITHDRAWN }));
-  const who = partyOf(record.party)?.short || "An outside party";
+  const who = partyOf(record.party, [record])?.short || "An outside party";
   await addConcernTimeline(concernId, { type: "step_withdrawn", title: `${who}: a step was recorded by mistake`, message: `${STEP_ACTIONS[step.action] || "A step"} on ${ukDay(step.occurredOn)} was taken back. ${record.note}`, actor });
   return ref.id;
 }
 
 export async function addCaseStep(concernId, steps, input, actor = {}) {
-  const round = input?.action === "sent" ? sentCount(steps, input.party) + 1 : null;
-  const step = buildStep({ ...input, round });
+  // someone typed in ("other") is kept under a key made from their name; one already on the case keeps the name it was given
+  const key = input?.party === "other" ? otherKey(input.partyName) : input?.party;
+  const round = input?.action === "sent" ? sentCount(steps, key) + 1 : null;
+  const step = buildStep({ ...input, partyName: input?.partyName || partyOf(key, steps)?.short || "", round });
   if (isSafeSyntheticMode()) return `demo-step-${Date.now()}`;
   // the id is made up first and the record set, so a re-sent write after a dropped connection lands on the same record
   const ref = doc(collection(db, CONCERN_STEPS_COLLECTION));
@@ -828,7 +830,7 @@ export async function addCaseStep(concernId, steps, input, actor = {}) {
     createdAtMs: Date.now(),
   });
   recordAudit(concernEvent("step", { concern: { id: concernId }, party: step.party, action: step.action, round: step.round || 0 }));
-  const who = partyOf(step.party)?.short || "An outside party";
+  const who = partyOf(step.party, [step])?.short || "An outside party";
   const rounds = step.round && step.round > 1 ? ` (time ${step.round})` : "";
   await addConcernTimeline(concernId, {
     type: "step",

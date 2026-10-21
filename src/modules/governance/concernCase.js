@@ -9,9 +9,32 @@
 export const PARTIES = [
   { key: "indemnity", label: "Our indemnity insurer", short: "Indemnity insurer" },
   { key: "gmpi", label: "GMPI (NHS Resolution in England)", short: "GMPI" },
+  { key: "healthboard", label: "The Health Board", short: "Health Board" },
   { key: "solicitor", label: "The solicitor", short: "Solicitor" },
 ];
-export const partyOf = (key) => PARTIES.find((p) => p.key === key) || null;
+
+// Anyone else a case goes to (an expert, a regulator, another practice…) is typed in by name. They are kept by a key made from the
+// name ("other-acme-ltd") and the name itself is stored on each of their steps, so each one is tracked like the fixed parties.
+export const OTHER_PREFIX = "other-";
+const isOtherKey = (key) => typeof key === "string" && key.startsWith(OTHER_PREFIX) && key.length > OTHER_PREFIX.length;
+export function otherKey(name) {
+  const slug = String(name ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "");
+  return slug ? `${OTHER_PREFIX}${slug}` : "";
+}
+// steps are only needed to find the name typed in for one of the others
+export function partyOf(key, steps = []) {
+  const fixed = PARTIES.find((p) => p.key === key);
+  if (fixed) return fixed;
+  if (!isOtherKey(key)) return null;
+  const named = [...steps].reverse().find((s) => s.party === key && s.partyName);
+  const name = named?.partyName || key.slice(OTHER_PREFIX.length).replace(/-/g, " ");
+  return { key, label: name, short: name, other: true };
+}
+// the fixed parties, then each of the others that has a step
+export function allParties(steps = []) {
+  const others = [...new Set(steps.filter((s) => isOtherKey(s.party)).map((s) => s.party))];
+  return [...PARTIES, ...others.map((key) => partyOf(key, steps))];
+}
 
 // what happened with a party
 export const STEP_ACTIONS = {
@@ -53,15 +76,19 @@ const daysBetween = (fromKey, toKey) => dayNumber(toKey) - dayNumber(fromKey);
 const text = (value, max) => String(value ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 
 // The record of one step. Throws a sentence for the person when it cannot be recorded.
-export function buildStep({ party, action, occurredOn, what = "", note = "", round, now = new Date() } = {}) {
-  if (!partyOf(party)) throw new Error("Choose who it was with.");
+//   party "other" with a partyName is someone typed in; the step is kept under a key made from the name
+export function buildStep({ party: chosen, partyName = "", action, occurredOn, what = "", note = "", round, now = new Date() } = {}) {
+  const typed = text(partyName, 60);
+  if (chosen === "other" && !typed) throw new Error("Say who it was with.");
+  const party = chosen === "other" ? otherKey(typed) : chosen;
+  if (!partyOf(party, [{ party, partyName: typed }])) throw new Error("Choose who it was with.");
   if (!STEP_ACTIONS[action]) throw new Error("Say what happened.");
   if (action === "instructed" && party !== "gmpi") throw new Error("Only GMPI instructs a solicitor.");
   if (!DATE.test(String(occurredOn || ""))) throw new Error("Give the date it happened.");
   if (occurredOn > dayKey(now)) throw new Error("That date is in the future.");
   if (action === "sent" && what && !SENT_WHAT.some((w) => w.key === what)) throw new Error("Choose what was sent.");
   if ((action === "changes" || action === "info") && !text(note, 600)) throw new Error(action === "changes" ? "Say what changes they want." : "Say what more information they need.");
-  return { party, action, occurredOn, what: action === "sent" ? what : "", note: text(note, 600), round: Number.isFinite(round) ? round : null };
+  return { party, ...(isOtherKey(party) ? { partyName: typed || partyOf(party).short } : {}), action, occurredOn, what: action === "sent" ? what : "", note: text(note, 600), round: Number.isFinite(round) ? round : null };
 }
 
 // A step recorded by mistake (the wrong party, the wrong case) is never deleted: a withdrawal is recorded against it, with the reason,
@@ -76,12 +103,12 @@ export const withdrawalOf = (steps = [], step) => steps.find((s) => s.action ===
 
 // The record that takes a step back. Throws a sentence for the person when it cannot be.
 export function buildWithdrawal({ step, steps = [], reason, now = new Date() } = {}) {
-  if (!step?.id || !partyOf(step.party)) throw new Error("Choose the step to take back.");
+  if (!step?.id || !partyOf(step.party, [step])) throw new Error("Choose the step to take back.");
   if (step.action === WITHDRAWN) throw new Error("That is already a record of a step being taken back.");
   if (withdrawalOf(steps, step)) throw new Error("That step has already been taken back.");
   const why = text(reason, 300);
   if (!why) throw new Error("Say why it was recorded by mistake.");
-  return { party: step.party, action: WITHDRAWN, withdrawsId: step.id, occurredOn: dayKey(now), what: "", note: why, round: null };
+  return { party: step.party, ...(step.partyName ? { partyName: step.partyName } : {}), action: WITHDRAWN, withdrawsId: step.id, occurredOn: dayKey(now), what: "", note: why, round: null };
 }
 
 // oldest first (steps made the same day keep the order they were recorded in)
@@ -117,7 +144,7 @@ export function partyState(allSteps = [], party, now = new Date()) {
 export function involvedParties(concern = {}, allSteps = []) {
   const steps = liveSteps(allSteps);
   const has = (key) => steps.some((s) => s.party === key);
-  return PARTIES.filter((p) => has(p.key)
+  return allParties(steps).filter((p) => has(p.key)
     || (p.key === "indemnity" && concern.mddusRequired === true)
     || (p.key === "gmpi" && Boolean(text(concern.gmpiReference, 80)))
     || (p.key === "solicitor" && steps.some((s) => s.party === "gmpi" && s.action === "instructed"))).map((p) => p.key);
@@ -128,7 +155,7 @@ export function involvedParties(concern = {}, allSteps = []) {
 //   ready:    every involved party has accepted (or none is involved)
 //   blockers: in words, what is still outstanding
 export function reviewStatus(concern = {}, steps = [], now = new Date()) {
-  const parties = involvedParties(concern, steps).map((key) => ({ ...partyState(steps, key, now), ...partyOf(key) }));
+  const parties = involvedParties(concern, steps).map((key) => ({ ...partyState(steps, key, now), ...partyOf(key, steps) }));
   const blockers = [];
   for (const p of parties) {
     if (p.state === "accepted") continue;
@@ -148,7 +175,7 @@ export function updateChoices(concern = {}, steps = [], now = new Date()) {
   const review = reviewStatus(concern, steps, now);
   const state = (key) => review.parties.find((p) => p.key === key)?.state || "none";
   const choices = [];
-  for (const p of PARTIES) {
+  for (const p of allParties(liveSteps(steps))) {
     const involved = review.parties.some((x) => x.key === p.key) || p.key !== "solicitor";
     if (!involved) continue;
     const s = state(p.key);
@@ -156,6 +183,8 @@ export function updateChoices(concern = {}, steps = [], now = new Date()) {
     choices.push({ key: `sent:${p.key}`, group: p.short, label: s === "none" ? `We sent it to ${p.short}` : `We sent it to ${p.short} again`, hint: s === "back-to-us" ? "After making the changes they asked for" : "The letter, a reply or documents", urgent: s === "back-to-us" });
     if (p.key === "gmpi" && !review.parties.find((x) => x.key === "gmpi")?.instructed) choices.push({ key: "gmpi_instructed", group: p.short, label: "GMPI instructed a solicitor", hint: "Or the equivalent in England" });
   }
+  // someone not on the list: the person types who (the wizard asks for the name)
+  choices.push({ key: "sent:other", group: "Someone else", label: "We sent it to someone else", hint: "Another organisation or person: you type who" });
   choices.push(
     { key: "asked_meeting", group: "The patient", label: "They asked for a face-to-face meeting", hint: "Records the request on the case" },
     { key: "asked_other", group: "The patient", label: "They asked for something else", hint: "More time, their records, someone else to deal with it" },

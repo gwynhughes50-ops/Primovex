@@ -457,10 +457,11 @@ export const HELP_ARTICLES = [
     where: "both",
     steps: [
       "Open the concern and press \"Update this case\". You can use it at any time.",
-      "Choose what happened: the patient asked for a meeting or something else, you were in contact, it was sent to the indemnity insurer or to GMPI (NHS Resolution in England), a reply came back (accepted, wants changes, needs more information), GMPI instructed a solicitor, more time was agreed, it was passed on, or just a note.",
+      "Choose what happened: the patient asked for a meeting or something else, you were in contact, it was sent to the indemnity insurer, GMPI (NHS Resolution in England), the Health Board or someone else you name, a reply came back (accepted, wants changes, needs more information), GMPI instructed a solicitor, more time was agreed, it was passed on, or just a note.",
       "Say what was sent or what they said, and the date. Each step is kept with who recorded it and cannot be changed afterwards.",
       "A case often goes round more than once. Send it again after changes and Primovex counts the times. The panel on the case shows where each outside party has got to, and says when everyone has accepted and the final response letter is ready to send.",
     ],
+    tip: "It can also go to the Health Board, or to someone else: choose \"We sent it to someone else\" and type who (an expert, another practice…). They are tracked like the others. Recorded something by mistake? Under \"Show the history\" press \"Recorded by mistake?\" and give the reason: it stays in the history, struck through, and the case carries on as if it had not been recorded.",
     open: { label: "Open Concerns", route: "/governance/concerns" },
     related: ["close-concern-case", "new-concern"],
   },

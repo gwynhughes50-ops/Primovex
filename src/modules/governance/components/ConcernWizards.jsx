@@ -125,7 +125,7 @@ export function CaseReviewPanel({ concern, steps, onUpdate, actor }) {
                 const taken = withdrawalOf(steps, s);
                 return (
                   <li key={s.id} className="px-3 py-2">
-                    <span className={`font-semibold ${taken ? "line-through opacity-60" : ""}`}>{ukDay(s.occurredOn)} · {partyOf(s.party)?.short}: {STEP_ACTIONS[s.action]}{s.round > 1 ? ` (time ${s.round})` : ""}</span>
+                    <span className={`font-semibold ${taken ? "line-through opacity-60" : ""}`}>{ukDay(s.occurredOn)} · {partyOf(s.party, steps)?.short}: {STEP_ACTIONS[s.action]}{s.round > 1 ? ` (time ${s.round})` : ""}</span>
                     {(s.what || s.note) && <span className={`block text-xs text-[var(--medtrak-muted)] ${taken ? "line-through opacity-60" : ""}`}>{[SENT_WHAT.find((w) => w.key === s.what)?.label, s.note].filter(Boolean).join(" · ")}</span>}
                     {taken && <span className="block text-xs font-semibold text-rose-700">Taken back as recorded by mistake ({ukDay(taken.occurredOn)}): {taken.note}</span>}
                     {onUpdate && !taken && taking !== s.id && <button type="button" onClick={() => { setTaking(s.id); setReason(""); setProblem(""); }} className="mt-1 text-xs font-semibold text-[var(--medtrak-accent)] underline">Recorded by mistake?</button>}
@@ -157,6 +157,7 @@ export function CaseReviewPanel({ concern, steps, onUpdate, actor }) {
 const REASONS_FOR_MORE_TIME = [
   { key: "indemnity", label: "Waiting for the indemnity insurer" },
   { key: "gmpi", label: "Waiting for GMPI" },
+  { key: "healthboard", label: "Waiting for the Health Board" },
   { key: "patient", label: "The patient asked for more time" },
   { key: "investigation", label: "The investigation is taking longer" },
   { key: "other", label: "Something else" },
@@ -187,7 +188,8 @@ export function ConcernUpdateWizard({ concern, actor, users = [], onClose, initi
   const groups = useMemo(() => [...new Set(choices.map((c) => c.group))], [choices]);
   const chosen = choices.find((c) => c.key === choice) || null;
   const [kind, party] = choice.includes(":") ? choice.split(":") : [choice, ""];
-  const partyName = partyOf(party)?.short || "";
+  // someone not on the list ("other") is named by the person in the form
+  const partyName = party === "other" ? String(form.partyName || "").trim() || "them" : partyOf(party, steps)?.short || "";
   const involvedIds = concern?.involvedUserIds || [];
 
   function pick(key) { setChoice(key); setProblems([]); setDone(""); setForm({ date: today, outcome: "", what: "draft_response" }); }
@@ -204,7 +206,8 @@ export function ConcernUpdateWizard({ concern, actor, users = [], onClose, initi
     setBusy(true);
     try {
       if (kind === "sent") {
-        await addCaseStep(concern.id, steps, { party, action: "sent", occurredOn: form.date, what: form.what || "draft_response", note: form.note }, actor);
+        if (party === "other" && !String(form.partyName || "").trim()) throw new Error("Say who it was sent to.");
+        await addCaseStep(concern.id, steps, { party, partyName: party === "other" ? form.partyName : "", action: "sent", occurredOn: form.date, what: form.what || "draft_response", note: form.note }, actor);
         setDone(`Recorded: sent to ${partyName}${steps.filter((s) => s.party === party && s.action === "sent").length ? " again" : ""}. It now shows as waiting for their reply.`);
       } else if (kind === "reply") {
         if (!form.outcome) throw new Error("Say what they replied: accepted, wants changes, or needs more information.");
@@ -323,6 +326,11 @@ export function ConcernUpdateWizard({ concern, actor, users = [], onClose, initi
       {kind === "sent" && (
         <>
           <p className="text-sm text-[var(--medtrak-muted)]">{review.parties.find((p) => p.key === party)?.state === "back-to-us" ? `After making the changes ${partyName} asked for.` : `Record that it went to ${partyName}.`}</p>
+          {party === "other" && (
+            <label className={`${LABEL} mt-4`}>Who was it sent to?
+              <input value={form.partyName || ""} onChange={(e) => set({ partyName: e.target.value })} maxLength={60} placeholder="e.g. the clinical expert, or the other practice" className={INPUT} />
+            </label>
+          )}
           {dateField("Date sent")}
           <p className={`${LABEL} mt-4`}>What did you send?</p>
           <div className="mt-2 grid gap-2" role="radiogroup" aria-label="What was sent">{SENT_WHAT.map((w) => <Tile key={w.key} selected={(form.what || "draft_response") === w.key} onClick={() => set({ what: w.key })}>{w.label}</Tile>)}</div>

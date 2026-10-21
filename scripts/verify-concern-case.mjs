@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  CLOSE_STEPS, PARTIES, buildClosePatch, buildStep, buildWithdrawal, closeProblems, closeStepProblems, closeStepsFor, involvedParties, isStatementOnly, liveSteps, orderedSteps, partyState, reviewStatus, sentCount, ukDay, updateChoices, withdrawalOf,
+  CLOSE_STEPS, PARTIES, otherKey, partyOf, buildClosePatch, buildStep, buildWithdrawal, closeProblems, closeStepProblems, closeStepsFor, involvedParties, isStatementOnly, liveSteps, orderedSteps, partyState, reviewStatus, sentCount, ukDay, updateChoices, withdrawalOf,
 } from "../src/modules/governance/concernCase.js";
 
 let n = 0;
@@ -177,8 +177,8 @@ t("the update wizard offers the switch to a statement-only case, and the switch 
   assert.match(off.label, /full response/);
 });
 
-t("there are three parties, named in plain words", () => {
-  assert.deepEqual(PARTIES.map((p) => p.key), ["indemnity", "gmpi", "solicitor"]);
+t("the fixed parties are named in plain words", () => {
+  assert.deepEqual(PARTIES.map((p) => p.key), ["indemnity", "gmpi", "healthboard", "solicitor"]);
   assert.ok(PARTIES.every((p) => p.label && p.short));
 });
 
@@ -213,6 +213,42 @@ t("a step cannot be taken back without a reason, twice, or by taking back a with
   assert.throws(() => buildWithdrawal({ step: w, steps: [sent, w], reason: "undo" }), /already a record/);
   // the flag on the case still makes the party involved: that is changed in Edit
   assert.deepEqual(involvedParties({ mddusRequired: true }, [sent, w]), ["indemnity"]);
+});
+
+t("the Health Board is a party like the insurer, and anyone else is typed in by name and tracked the same way", () => {
+  assert.deepEqual(PARTIES.map((p) => p.key), ["indemnity", "gmpi", "healthboard", "solicitor"]);
+  assert.equal(partyOf("healthboard").short, "Health Board");
+  // the Health Board goes through the same rounds
+  let steps = [step("healthboard", "sent", "2026-10-10")];
+  assert.deepEqual(involvedParties({}, steps), ["healthboard"]);
+  assert.equal(partyState(steps, "healthboard", NOW).state, "with-them");
+  assert.match(reviewStatus({}, steps, NOW).blockers[0], /Health Board: waiting for a reply/);
+  // someone else, named by the person
+  assert.equal(otherKey("  Dr A. Expert & Partners "), "other-dr-a-expert-partners");
+  assert.equal(otherKey("   "), "");
+  const built = buildStep({ party: "other", partyName: "  The  clinical expert ", action: "sent", occurredOn: "2026-10-12", now: NOW });
+  assert.deepEqual([built.party, built.partyName], ["other-the-clinical-expert", "The clinical expert"]);
+  assert.throws(() => buildStep({ party: "other", partyName: " ", action: "sent", occurredOn: "2026-10-12", now: NOW }), /Say who/);
+  assert.throws(() => buildStep({ party: "nobody", action: "sent", occurredOn: "2026-10-12", now: NOW }), /Choose who/);
+  assert.throws(() => buildStep({ party: "other", partyName: "X", action: "instructed", occurredOn: "2026-10-12", now: NOW }), /Only GMPI/);
+  steps = [...steps, { ...built, id: "o1" }];
+  assert.deepEqual(involvedParties({}, steps), ["healthboard", "other-the-clinical-expert"]);
+  assert.equal(partyOf("other-the-clinical-expert", steps).short, "The clinical expert", "the name typed in is what is shown");
+  assert.match(reviewStatus({}, steps, NOW).blockers.join(" "), /The clinical expert: waiting for a reply/);
+  // they can reply, and the update list offers it under their own name, plus a way to add someone new
+  const choices = updateChoices({}, steps, NOW);
+  assert.ok(choices.some((c) => c.key === "reply:other-the-clinical-expert" && c.label === "The clinical expert replied"));
+  assert.ok(choices.some((c) => c.key === "sent:other-the-clinical-expert"));
+  assert.ok(choices.some((c) => c.key === "sent:healthboard"));
+  assert.ok(choices.some((c) => c.key === "sent:other" && /someone else/.test(c.label)));
+  const reply = { ...step("other-the-clinical-expert", "accepted", "2026-10-15"), partyName: "The clinical expert", id: "o2" };
+  assert.equal(partyState([...steps, reply], "other-the-clinical-expert", NOW).state, "accepted");
+  // two different others do not get mixed up, and an "other" can be taken back like any step
+  const second = { ...buildStep({ party: "other", partyName: "Other practice", action: "sent", occurredOn: "2026-10-13", now: NOW }), id: "o3" };
+  assert.deepEqual(involvedParties({}, [...steps, second]).slice(1), ["other-the-clinical-expert", "other-other-practice"]);
+  const w = { ...buildWithdrawal({ step: second, steps: [...steps, second], reason: "wrong case", now: NOW }), id: "w" };
+  assert.equal(w.partyName, "Other practice");
+  assert.deepEqual(involvedParties({}, [...steps, second, w]), ["healthboard", "other-the-clinical-expert"]);
 });
 
 console.log(`\n${n} passed`);
