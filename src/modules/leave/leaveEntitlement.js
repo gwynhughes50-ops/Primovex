@@ -60,8 +60,8 @@ export function serviceTier(serviceFrom, onDate) {
   return tier;
 }
 
-// Bank holidays a doctor does not work, by sessions: holidays x sessions worked / the most sessions in a week, up to the half day.
-// e.g. 6 holidays x 7 of 8 sessions = 5.25, so 5.5 days.
+// A doctor's share of the bank holidays, by sessions: holidays x sessions worked / the most sessions in a week, up to the half day.
+// e.g. 10 holidays x 7 of 8 sessions = 8.75, so 9 days (the practice's own example used 6 holidays: 5.25, so 5.5 days).
 export function gpBankHolidayDays({ bankHolidays: holidays, sessions, maxSessions }) {
   const h = Number(holidays);
   const s = Number(sessions);
@@ -100,12 +100,17 @@ export function calculateEntitlement(person, year, settings = {}) {
 
   if (group.key === "doctor") {
     const fixed = Math.max(0, Number(adjust.fixedDays) || 0);
-    const bhDays = gpBankHolidayDays({ bankHolidays: settings.gpBankHolidays, sessions: person.leaveSessions, maxSessions: settings.gpMaxSessions });
+    // Doctors do not work bank holidays either, so every one in the part of the year they are employed counts (from the calendar, as for
+    // everyone else), shared by sessions: a day off that lands on a bank holiday is not lost. A number typed into the year's settings
+    // overrides the calendar count.
+    const period = employmentPeriod(person, year);
+    const holidays = period.none ? [] : bankHolidaysBetween(period.from, period.to, settings.practiceDays);
+    const counted = Number(settings.gpBankHolidays) > 0 ? Number(settings.gpBankHolidays) : holidays.length;
+    const bhDays = gpBankHolidayDays({ bankHolidays: counted, sessions: person.leaveSessions, maxSessions: settings.gpMaxSessions || 8 });
     if (!fixed) warnings.push("Type in their leave in days for this year.");
-    if (!(Number(settings.gpBankHolidays) > 0)) warnings.push("Set how many bank holidays doctors do not work this year (Leave settings).");
     if (!(Number(person.leaveSessions) > 0)) warnings.push("Set how many sessions a week they work.");
     const total = fixed + bhDays;
-    return { ...base, ready: warnings.length === 0, fixedDays: fixed, bankHolidayDays: bhDays, annual: fixed, bankHolidayAmount: bhDays, exact: total, rounded: total, total: total + carryOver };
+    return { ...base, ready: warnings.length === 0, fixedDays: fixed, bankHolidayDays: bhDays, bankHolidaysCounted: counted, holidays, annual: fixed, bankHolidayAmount: bhDays, exact: total, rounded: total, total: total + carryOver };
   }
 
   // the part of the year they were employed

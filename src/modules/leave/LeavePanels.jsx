@@ -60,7 +60,7 @@ function Workings({ s, result }) {
     return (
       <dl className={`mt-2 space-y-1 text-sm ${s.body}`}>
         <div className="flex justify-between gap-3"><dt>Leave for the year</dt><dd>{fix(result.fixedDays)} days</dd></div>
-        <div className="flex justify-between gap-3"><dt>Bank holidays not worked (by sessions)</dt><dd>{fix(result.bankHolidayDays)} days</dd></div>
+        <div className="flex justify-between gap-3"><dt>{fix(result.bankHolidaysCounted)} bank holidays, by sessions worked</dt><dd>{fix(result.bankHolidayDays)} days</dd></div>
       </dl>
     );
   }
@@ -251,10 +251,10 @@ export function LeaveSettings({ year, settings, actor }) {
         <button type="button" className={`${s.btn} mt-2`} onClick={() => setForm((f) => ({ ...f, practiceDays: [...f.practiceDays, { date: "", name: "" }] }))}><Plus className="h-4 w-4" /> Add a day</button>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className={s.label}>Bank holidays GPs do not work, {year.key}<input type="number" min="0" step="1" className={s.field} value={form.gpBankHolidays} onChange={(e) => setForm({ ...form, gpBankHolidays: e.target.value })} /></label>
+        <label className={s.label}>Bank holidays for GPs: leave blank to count them from the calendar<input type="number" min="0" step="1" className={s.field} value={form.gpBankHolidays} onChange={(e) => setForm({ ...form, gpBankHolidays: e.target.value })} /></label>
         <label className={s.label}>Most sessions in a working week<input type="number" min="1" step="1" className={s.field} value={form.gpMaxSessions} onChange={(e) => setForm({ ...form, gpMaxSessions: e.target.value })} /></label>
       </div>
-      <p className="text-xs text-slate-500">A GP's share of those bank holidays is the number above × their sessions ÷ the most sessions in a week, rounded up to the half day (6 × 7 ÷ 8 = 5.25, so 5.5 days).</p>
+      <p className="text-xs text-slate-500">GPs do not work bank holidays either, so all of them count. A GP's share is the number of bank holidays in the part of the year they are employed × their sessions ÷ the most sessions in a week, rounded up to the half day (10 × 7 ÷ 8 = 8.75, so 9 days).</p>
       <div className="flex items-center gap-3"><button type="button" className={s.primary} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save"}</button>{message && <span className="text-sm text-slate-300" role="status">{message}</span>}</div>
     </div>
   );

@@ -139,12 +139,18 @@ t("doctors are counted in days, with the bank holidays they do not work worked o
   assert.equal(gpBankHolidayDays({ bankHolidays: 6, sessions: 4, maxSessions: 8 }), 3);
   assert.equal(gpBankHolidayDays({ bankHolidays: 0, sessions: 4, maxSessions: 8 }), 0);
   assert.equal(gpBankHolidayDays({ bankHolidays: 6, sessions: 4, maxSessions: 0 }), 0);
-  const settings = { gpBankHolidays: 6, gpMaxSessions: 8 };
+  const settings = { gpMaxSessions: 8 };
+  // every bank holiday counts, from the calendar, shared by sessions: 10 x 7/8 = 8.75, so 9 days
   const r = calculateEntitlement({ leaveGroup: "doctor", leaveSessions: 7, leaveAdjust: { "2026-27": { fixedDays: 32, carryOver: 2 } } }, Y, settings);
-  assert.deepEqual([r.unit, r.fixedDays, r.bankHolidayDays, r.rounded, r.total, r.ready], ["days", 32, 5.5, 37.5, 39.5, true]);
+  assert.deepEqual([r.unit, r.fixedDays, r.bankHolidaysCounted, r.bankHolidayDays, r.rounded, r.total, r.ready], ["days", 32, 10, 9, 41, 43, true]);
+  // a full-time doctor (8 of 8) gets all ten, and a number typed into the year's settings overrides the calendar
+  assert.equal(calculateEntitlement({ leaveGroup: "doctor", leaveSessions: 8, leaveAdjust: { "2026-27": { fixedDays: 32 } } }, Y, settings).bankHolidayDays, 10);
+  assert.equal(calculateEntitlement({ leaveGroup: "doctor", leaveSessions: 7, leaveAdjust: { "2026-27": { fixedDays: 32 } } }, Y, { gpBankHolidays: 6, gpMaxSessions: 8 }).bankHolidayDays, 5.5);
+  // starting part-way through the year, only the holidays after the start count (6 from 1 July: 6 x 4/8 = 3)
+  assert.equal(calculateEntitlement({ leaveGroup: "doctor", leaveSessions: 4, startDate: "2026-07-01", leaveAdjust: { "2026-27": { fixedDays: 20 } } }, Y, settings).bankHolidayDays, 3);
   const missing = calculateEntitlement({ leaveGroup: "doctor" }, Y, {});
   assert.equal(missing.ready, false);
-  assert.equal(missing.warnings.length, 3);
+  assert.equal(missing.warnings.length, 2);
 });
 
 t("each person's figure is checked against what BrightHR holds, for the same year and unit", () => {
