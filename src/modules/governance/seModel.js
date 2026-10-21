@@ -10,6 +10,8 @@ export const SE_COLLECTION = "governance_significant_events";
 export const SE_REVIEWS_COLLECTION = "governance_se_reviews";
 export const SE_MEETINGS_COLLECTION = "governance_se_meetings";
 export const SE_ACTIONS_COLLECTION = "governance_se_actions";
+// who reported an event anonymously (readable only by that person; see firestore.rules)
+export const SE_REPORTERS_COLLECTION = "governance_se_reporters";
 export const SE_TIMELINE_COLLECTION = "governance_se_timeline";
 export const SE_SETTINGS_DOC = "significantEvents"; // settings/significantEvents
 
@@ -98,8 +100,19 @@ export function normaliseReport(form = {}) {
     emisNumber: involved ? clean(form.emisNumber, 40) : "",
     patientInitials: involved ? clean(form.patientInitials, 12).toUpperCase() : "",
     dateOfBirth: involved && !clean(form.emisNumber, 40) ? clean(form.dateOfBirth, 10) : "",
+    // the reporter's choice: an anonymous report carries no name or account id (see reportEvent)
+    anonymous: form.anonymous === true,
   };
 }
+
+// who the event says reported it
+export const ANONYMOUS_REPORTER = "Anonymous reporter";
+export function reporterLabel(event = {}) {
+  if (event.anonymous === true) return event.iAmAnonymousReporter === true ? "You (anonymously)" : "Anonymous";
+  return event.reportedByName || "Unknown";
+}
+// did this person report it (by name or anonymously)
+export const reportedByMe = (event = {}, uid = null) => Boolean(uid) && (event.reportedByUid === uid || event.iAmAnonymousReporter === true);
 
 // ---- what can happen next ---------------------------------------------------------------------------------
 

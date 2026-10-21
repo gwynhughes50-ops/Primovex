@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ROLE_TEMPLATES } from "@/core/identity/capabilities";
 import { listStaffDirectory } from "@/services/staffDirectoryService";
 import {
-  ACTION_STATUSES, REVIEW_STATUSES, SE_STATUSES, actionTone, formatDate, friendly, saveReviewerRoles, seMetrics, setActionDone,
+  ACTION_STATUSES, REVIEW_STATUSES, SE_STATUSES, actionTone, formatDate, friendly, reportedByMe, saveReviewerRoles, seMetrics, setActionDone,
   subscribeActions, subscribeEvents, subscribeMeetings, subscribeMyReviews, subscribeSeSettings,
 } from "../services/seService";
 import SeDetail from "./SeDetail";
@@ -122,7 +122,7 @@ export default function SignificantEventsView({ variant = "desktop", onBack }) {
       if (term && ![e.reference, e.title, e.category, e.locationName].some((v) => String(v || "").toLowerCase().includes(term))) return false;
       if (filter === "all") return true;
       if (filter === "closed") return e.status === SE_STATUSES.closed;
-      if (filter === "mine") return e.reportedByUid === uid;
+      if (filter === "mine") return reportedByMe(e, uid);
       if (filter === "review") return waitingReviewIds.has(e.id);
       if (filter === "triage") return e.status === SE_STATUSES.reported;
       return e.status !== SE_STATUSES.closed;

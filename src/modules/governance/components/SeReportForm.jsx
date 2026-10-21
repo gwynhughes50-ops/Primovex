@@ -13,7 +13,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 export default function SeReportForm({ actor, onClose, onReported }) {
   const [form, setForm] = useState({
     title: "", description: "", immediateAction: "", eventDate: today(), category: "other", harm: "none",
-    locationId: "", locationName: "", patientInvolved: false, emisNumber: "", patientInitials: "", dateOfBirth: "",
+    locationId: "", locationName: "", patientInvolved: false, emisNumber: "", patientInitials: "", dateOfBirth: "", anonymous: false,
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -100,6 +100,21 @@ export default function SeReportForm({ actor, onClose, onReported }) {
             )}
           </div>
         )}
+        <div className="rounded-xl border border-[var(--medtrak-border)] p-3">
+          <label className="flex items-start gap-3 text-sm font-semibold">
+            <input type="checkbox" className="mt-1 h-4 w-4" checked={form.anonymous} onChange={(e) => update({ anonymous: e.target.checked })} />
+            <span>Report this anonymously
+              <span className="mt-0.5 block text-xs font-normal text-[var(--medtrak-muted)]">Your name is not kept with the report, and neither the team nor the partners can see who made it.</span>
+            </span>
+          </label>
+          {form.anonymous && (
+            <div className="mt-2 space-y-1 text-xs text-[var(--medtrak-muted)]">
+              <p>Only you can see that you reported it. It appears under your events as "You (anonymously)", and you can add notes to it that show as "Anonymous reporter".</p>
+              <p>The team cannot ask you questions directly, so say everything they will need. Leave out anything that would show who you are: what you write is not hidden.</p>
+              <p>Someone with direct access to the database (the IT team or the system provider) could still find out. Use the practice's Speak Up route if you need stronger protection.</p>
+            </div>
+          )}
+        </div>
         <ErrorText>{error}</ErrorText>
         <div className="sticky bottom-0 -mx-5 -mb-6 mt-3 flex justify-end gap-2 border-t border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-5 py-3">
           <button type="button" onClick={onClose} disabled={busy} className={SECONDARY}>Cancel</button>

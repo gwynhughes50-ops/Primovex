@@ -24,8 +24,9 @@ function buildSeNotification({ kind, seId, event = {}, action = null, recipientU
     status: "open",
     actionUrl: `${ACTION_URL}?open=${encodeURIComponent(seId)}`,
     automated: false,
-    createdByUid: callerUid || null,
-    createdByName: callerName || "Primovex",
+    // an anonymous report must not carry the reporter's name or id into anyone's notification
+    createdByUid: event.anonymous === true ? null : callerUid || null,
+    createdByName: event.anonymous === true ? "Primovex" : callerName || "Primovex",
   };
   if (kind === "reported") return { id: `se-reported-${seId}-${recipientUid}`, data: { ...base, title: `New significant event reported: ${ref}`, message: title } };
   if (kind === "lead_assigned") return { id: `se-lead-${seId}-${recipientUid}`, data: { ...base, title: `You are leading the investigation: ${ref}`, message: title } };
@@ -39,9 +40,9 @@ function buildSeNotification({ kind, seId, event = {}, action = null, recipientU
 // Who may ask for which notification. Pure, so it can be tested.
 //   reported: the person who reported it (to tell the team)
 //   everything else: the significant events team
-function callerMayNotify({ kind, event, callerUid, callerIsTeam }) {
+function callerMayNotify({ kind, event, callerUid, callerIsTeam, isAnonymousOwner = false }) {
   if (!KINDS.includes(kind)) return { ok: false, reason: "unknown-kind" };
-  if (kind === "reported") return event?.reportedByUid === callerUid || callerIsTeam ? { ok: true } : { ok: false, reason: "not-reporter" };
+  if (kind === "reported") return event?.reportedByUid === callerUid || isAnonymousOwner === true || callerIsTeam ? { ok: true } : { ok: false, reason: "not-reporter" };
   return callerIsTeam ? { ok: true } : { ok: false, reason: "not-team" };
 }
 
@@ -66,7 +67,13 @@ async function notifySignificantEvent({ db, callerUid, callerName, callerIsTeam,
   const event = snap.exists ? snap.data() : null;
   if (!event) throw new HttpsError("not-found", "That significant event no longer exists.");
 
-  const allowed = callerMayNotify({ kind, event, callerUid, callerIsTeam });
+  // an anonymous report has no reporter id on it: the private record (readable only by the reporter and by this server) says who made it
+  let isAnonymousOwner = false;
+  if (event.anonymous === true && kind === "reported") {
+    const owner = await db.collection("governance_se_reporters").doc(id).get();
+    isAnonymousOwner = Boolean(owner.exists && owner.data()?.uid === callerUid);
+  }
+  const allowed = callerMayNotify({ kind, event, callerUid, callerIsTeam, isAnonymousOwner });
   if (!allowed.ok) throw new HttpsError("permission-denied", "You can't send that notification.");
 
   let action = null;

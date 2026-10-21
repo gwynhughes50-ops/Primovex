@@ -1,10 +1,10 @@
 import {
-  Timestamp, addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where,
+  Timestamp, addDoc, arrayRemove, arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc, updateDoc, where, writeBatch,
 } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase";
 import {
-  ACTION_STATUSES, MEETING_STATUSES, REVIEW_STATUSES, SE_ACTIONS_COLLECTION, SE_COLLECTION, SE_MEETINGS_COLLECTION, SE_REVIEWS_COLLECTION,
+  ACTION_STATUSES, ANONYMOUS_REPORTER, MEETING_STATUSES, REVIEW_STATUSES, SE_ACTIONS_COLLECTION, SE_COLLECTION, SE_MEETINGS_COLLECTION, SE_REPORTERS_COLLECTION, SE_REVIEWS_COLLECTION,
   SE_SETTINGS_DOC, SE_STATUSES, SE_TIMELINE_COLLECTION, createSeReference, normaliseReport, reviewDocId, stageLabel, validateAction, validateReport, validateReview,
 } from "../seModel";
 
@@ -63,25 +63,36 @@ export async function notifyEvent(seId, kind, extra = {}) {
 // ---- reporting ----------------------------------------------------------------------------------------------------
 
 // Anyone signed in. The rules allow only this exact shape: as yourself, at the first stage.
+// Reporting anonymously is the reporter's choice. An anonymous report carries no name and no account id; the id is kept in a private
+// record (governance_se_reporters) written in the same batch, which only the reporter can read, so only they can find the report again.
 export async function reportEvent(form, actor = {}) {
   const problem = validateReport(form);
   if (problem) throw new Error(problem);
   if (!actor.uid) throw new Error("You need to be signed in to report an event.");
   const fields = normaliseReport(form);
+  const anonymous = fields.anonymous === true;
   const ref = doc(collection(db, SE_COLLECTION));
-  await setDoc(ref, {
+  const record = {
     reference: createSeReference(new Date()),
     status: SE_STATUSES.reported,
     investigation: "pending",
     ...fields,
     eventDate: toTimestamp(fields.eventDate),
-    reportedByUid: actor.uid,
-    reportedByName: actorName(actor),
+    reportedByUid: anonymous ? null : actor.uid,
+    reportedByName: anonymous ? ANONYMOUS_REPORTER : actorName(actor),
     reportedAt: serverTimestamp(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  });
-  await addTimeline(ref.id, { type: "reported", title: "Reported", message: "" }, actor).catch((err) => console.warn("Timeline entry failed", err));
+  };
+  if (anonymous) {
+    const batch = writeBatch(db);
+    batch.set(ref, record);
+    batch.set(doc(db, SE_REPORTERS_COLLECTION, ref.id), { uid: actor.uid, createdAt: serverTimestamp() });
+    await batch.commit();
+  } else {
+    await setDoc(ref, record);
+  }
+  await addTimeline(ref.id, { type: "reported", title: "Reported", message: "" }, anonymous ? { displayName: ANONYMOUS_REPORTER } : actor).catch((err) => console.warn("Timeline entry failed", err));
   notifyEvent(ref.id, "reported");
   return ref.id;
 }
@@ -116,7 +127,20 @@ export function subscribeEvents({ seesAll, uid }, callback, onError) {
     (snap) => { parts.set(key, snap.docs.map((d) => ({ id: d.id, ...d.data() }))); emit(); },
     onError
   ));
-  return () => unsubs.forEach((u) => u());
+  // the events this person reported anonymously: their private records say which, and each event is then read by its id
+  let followed = [];
+  const stopFollowing = () => { followed.forEach((u) => u()); followed = []; };
+  const mine = onSnapshot(query(collection(db, SE_REPORTERS_COLLECTION), where("uid", "==", uid)), (snap) => {
+    stopFollowing();
+    const ids = snap.docs.map((d) => d.id);
+    [...parts.keys()].filter((key) => key.startsWith("anonymous:") && !ids.includes(key.slice(10))).forEach((key) => parts.delete(key));
+    followed = ids.map((id) => onSnapshot(doc(db, SE_COLLECTION, id), (d) => {
+      if (d.exists()) parts.set(`anonymous:${id}`, [{ id: d.id, ...d.data(), iAmAnonymousReporter: true }]); else parts.delete(`anonymous:${id}`);
+      emit();
+    }, onError));
+    emit();
+  }, onError);
+  return () => { unsubs.forEach((u) => u()); mine(); stopFollowing(); };
 }
 
 export function subscribeTimeline(seId, callback, onError) {
@@ -164,14 +188,17 @@ export function subscribeActions({ seesAll, uid }, callback, onError) {
 export async function loadVisibleSe({ seesAll, uid }) {
   const rows = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   const merge = (lists) => [...new Map(lists.flat().map((r) => [r.id, r])).values()];
+  const anonymousIds = seesAll ? [] : (await getDocs(query(collection(db, SE_REPORTERS_COLLECTION), where("uid", "==", uid))).catch(() => ({ docs: [] }))).docs.map((d) => d.id);
+  const anonymousMine = (await Promise.all(anonymousIds.map((id) => getDoc(doc(db, SE_COLLECTION, id)).catch(() => null))))
+    .filter((d) => d?.exists()).map((d) => ({ id: d.id, ...d.data(), iAmAnonymousReporter: true }));
   const events = seesAll
     ? rows(await getDocs(query(collection(db, SE_COLLECTION), orderBy("createdAt", "desc"), limit(500))))
-    : merge(await Promise.all([
+    : merge([anonymousMine, ...(await Promise.all([
         getDocs(query(collection(db, SE_COLLECTION), where("reportedByUid", "==", uid))),
         getDocs(query(collection(db, SE_COLLECTION), where("leadUid", "==", uid))),
         getDocs(query(collection(db, SE_COLLECTION), where("involvedUserIds", "array-contains", uid))),
         getDocs(query(collection(db, SE_COLLECTION), where("reviewerUids", "array-contains", uid))),
-      ]).then((snaps) => snaps.map(rows)));
+      ]).then((snaps) => snaps.map(rows)))]);
   const [actions, reviews, meetings] = await Promise.all([
     getDocs(seesAll ? query(collection(db, SE_ACTIONS_COLLECTION), limit(500)) : query(collection(db, SE_ACTIONS_COLLECTION), where("ownerUid", "==", uid))).then(rows),
     getDocs(query(collection(db, SE_REVIEWS_COLLECTION), where("reviewerUid", "==", uid))).then(rows),

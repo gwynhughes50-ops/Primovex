@@ -94,4 +94,25 @@ t("stage names and references", () => {
   assert.equal(M.SE_STAGES.length, 6);
 });
 
+t("reporting anonymously is the reporter's choice, off unless they tick it, and says so on the event", () => {
+  const form = { title: "T", description: "d", eventDate: "2026-10-01" };
+  assert.equal(M.normaliseReport(form).anonymous, false);
+  assert.equal(M.normaliseReport({ ...form, anonymous: "yes" }).anonymous, false, "only a real yes counts");
+  assert.equal(M.normaliseReport({ ...form, anonymous: true }).anonymous, true);
+  assert.equal(M.reporterLabel({ reportedByName: "Pat Smith" }), "Pat Smith");
+  assert.equal(M.reporterLabel({ anonymous: true, reportedByName: "Anonymous reporter" }), "Anonymous");
+  assert.equal(M.reporterLabel({ anonymous: true, iAmAnonymousReporter: true }), "You (anonymously)");
+  assert.equal(M.reporterLabel({}), "Unknown");
+  assert.equal(M.ANONYMOUS_REPORTER, "Anonymous reporter");
+  assert.equal(M.SE_REPORTERS_COLLECTION, "governance_se_reporters");
+});
+
+t("who reported an event: by name, or anonymously (only the person themself can tell)", () => {
+  assert.ok(M.reportedByMe({ reportedByUid: "u1" }, "u1"));
+  assert.ok(!M.reportedByMe({ reportedByUid: "u1" }, "u2"));
+  assert.ok(M.reportedByMe({ anonymous: true, reportedByUid: null, iAmAnonymousReporter: true }, "u1"));
+  assert.ok(!M.reportedByMe({ anonymous: true, reportedByUid: null }, "u1"), "without the private record nobody is the reporter");
+  assert.ok(!M.reportedByMe({ reportedByUid: null, iAmAnonymousReporter: true }, null));
+});
+
 console.log(`\n${n} passed`);

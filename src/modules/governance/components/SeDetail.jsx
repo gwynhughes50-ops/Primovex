@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  ACTION_STATUSES, REVIEW_STATUSES, SE_STATUSES, actionTone, defaultReviewers, formatDate, friendly, nextSteps, reviewProgress,
+  ACTION_STATUSES, ANONYMOUS_REPORTER, REVIEW_STATUSES, SE_STATUSES, actionTone, defaultReviewers, formatDate, friendly, nextSteps, reporterLabel, reviewProgress,
   addEventToMeeting, addNote, createAction, removeReviewer, requestReviews, saveFindings, setActionDone, setInvolved, setLead, moveStage,
   subscribeReviews, subscribeTimeline, submitReview,
 } from "../services/seService";
@@ -106,7 +106,7 @@ export default function SeDetail({ event, actor, isTeam, seesAll, staff, setting
       <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Fact label="Happened">{formatDate(event.eventDate)}</Fact>
         <Fact label="Where">{event.locationName}</Fact>
-        <Fact label="Reported by">{event.reportedByName}</Fact>
+        <Fact label="Reported by">{reporterLabel(event)}</Fact>
         <Fact label="Leading">{event.leadName || "Nobody yet"}</Fact>
         {event.patientInvolved && <Fact label="Patient">{event.emisNumber ? `EMIS ${event.emisNumber}` : `${event.patientInitials || "?"}${event.dateOfBirth ? ` · DOB ${event.dateOfBirth}` : ""}`}</Fact>}
         {(event.involvedNames || []).length > 0 && <Fact label="People involved">{event.involvedNames.join(", ")}</Fact>}
@@ -248,7 +248,7 @@ export default function SeDetail({ event, actor, isTeam, seesAll, staff, setting
       <SectionTitle>Notes and history</SectionTitle>
       <div className="mt-2 flex gap-2">
         <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a note (no names)" className={`${FIELD} mt-0`} />
-        <button type="button" disabled={busy || !note.trim()} onClick={() => run(async () => { await addNote(event.id, note, actor); setNote(""); })} className={PRIMARY}>Add</button>
+        <button type="button" disabled={busy || !note.trim()} onClick={() => run(async () => { await addNote(event.id, note, event.iAmAnonymousReporter ? { displayName: ANONYMOUS_REPORTER } : actor); setNote(""); })} className={PRIMARY}>Add</button>
       </div>
       <div className="mt-2 space-y-1.5">
         {timeline.map((t) => (

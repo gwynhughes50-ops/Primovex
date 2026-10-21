@@ -16,7 +16,7 @@ const USERS = {
 const caps = { "Practice Manager": ["governance.seTeam"], Nurse: ["inventory.read"], HCA: ["inventory.read"] };
 const capsForRole = async (role) => caps[role] || [];
 
-function fakeDb({ event = EVENT, actions = {} } = {}) {
+function fakeDb({ event = EVENT, actions = {}, reporters = {} } = {}) {
   const written = [];
   return {
     written,
@@ -25,6 +25,7 @@ function fakeDb({ event = EVENT, actions = {} } = {}) {
       doc: (id) => ({
         get: async () => {
           if (name === "governance_significant_events") return { exists: id === "se1", data: () => event };
+          if (name === "governance_se_reporters") return { exists: Boolean(reporters[id]), data: () => reporters[id] };
           if (name === "governance_se_actions") return { exists: Boolean(actions[id]), id, data: () => actions[id] };
           return { exists: Boolean(USERS[id]), data: () => USERS[id], ref: { collection: () => ({ doc: (nid) => ({ set: async (data) => written.push({ uid: id, id: nid, ...data }) }) }) } };
         },
@@ -52,6 +53,33 @@ test("a new report tells the team (not the reporter), with the reference and tit
 test("only the reporter (or the team) can announce a report", async () => {
   await assert.rejects(() => notifySignificantEvent({ db: fakeDb(), callerUid: "stranger", callerIsTeam: false, seId: "se1", kind: "reported", capsForRole }), /can't send/);
   assert.equal(callerMayNotify({ kind: "reported", event: EVENT, callerUid: "stranger", callerIsTeam: true }).ok, true);
+});
+
+const ANON = { ...EVENT, anonymous: true, reportedByUid: null, reportedByName: "Anonymous reporter" };
+
+test("an anonymous report can be announced by the person who made it (found in the private record), and by nobody else but the team", async () => {
+  const db = () => fakeDb({ event: ANON, reporters: { se1: { uid: "rep" } } });
+  const ok = await notifySignificantEvent({ db: db(), callerUid: "rep", callerName: "Rep", callerIsTeam: false, seId: "se1", kind: "reported", capsForRole });
+  assert.equal(ok.sent, 2);
+  await assert.rejects(() => notifySignificantEvent({ db: db(), callerUid: "stranger", callerName: "S", callerIsTeam: false, seId: "se1", kind: "reported", capsForRole }), /can't send/);
+  const noRecord = fakeDb({ event: ANON, reporters: {} });
+  await assert.rejects(() => notifySignificantEvent({ db: noRecord, callerUid: "rep", callerName: "Rep", callerIsTeam: false, seId: "se1", kind: "reported", capsForRole }), /can't send/);
+  assert.equal(callerMayNotify({ kind: "reported", event: ANON, callerUid: "rep", callerIsTeam: false, isAnonymousOwner: true }).ok, true);
+  assert.equal(callerMayNotify({ kind: "reported", event: ANON, callerUid: "rep", callerIsTeam: false }).ok, false, "an event with no reporter id cannot be claimed without the private record");
+});
+
+test("an anonymous report's notification carries no reporter name or id", async () => {
+  const db = fakeDb({ event: ANON, reporters: { se1: { uid: "rep" } } });
+  await notifySignificantEvent({ db, callerUid: "rep", callerName: "Rep Person", callerIsTeam: false, seId: "se1", kind: "reported", capsForRole });
+  for (const note of db.written) {
+    assert.equal(note.createdByUid, null);
+    assert.equal(note.createdByName, "Primovex");
+    assert.ok(!JSON.stringify(note).includes("Rep Person"), "the reporter's name does not appear anywhere");
+  }
+  // a named report still says who sent it
+  const named = fakeDb();
+  await notifySignificantEvent({ db: named, callerUid: "rep", callerName: "Rep Person", callerIsTeam: false, seId: "se1", kind: "reported", capsForRole });
+  assert.equal(named.written[0].createdByName, "Rep Person");
 });
 
 test("only the team can assign a lead, ask for reviews or assign actions", async () => {

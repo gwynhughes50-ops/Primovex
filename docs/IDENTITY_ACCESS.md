@@ -118,3 +118,11 @@ More permissions added for it:
 The significant events page has a "Show: Every event / Only mine" switch for people who see every event (the team, partners, administrators). The Staff training page links to My training.
 
 Not built yet from the table: hiding the Orb from the Cleaner, and "order" (as opposed to view) for Reception beyond `purchasing.write`.
+
+## Anonymous significant event reports (October 2026)
+
+A person reporting a significant event can choose to report it anonymously. An anonymous event has `anonymous: true`, `reportedByUid: null` and `reportedByName: "Anonymous reporter"`: no name and no account id. The reporter's id is kept in `governance_se_reporters/{eventId}` (`{ uid, createdAt }`), written in the same batch as the event (`reportEvent` in `seService.js`), readable only by that person (not the significant events team, partners, or administrators using the app), never creatable for an event that already exists, never changed or removed (`firestore.rules`). `canSeeSe` lets the owner of that record read the event and its timeline; the app finds their anonymous events by listing their own records and reading each event by id. Their notes carry no actor id and show as "Anonymous reporter".
+
+The server (`significantEventNotify.js`) announces an anonymous report to the team without the reporter's name or id (`createdBy` is Primovex), and accepts the announcement from the owner found in the private record.
+
+What this does not protect against: someone with direct access to the database (Firebase console, Admin SDK, the system provider), and a report whose text identifies the reporter. The form says so. The attack suite (`docs/security/attack-suite/attack.mjs`, section 11b) covers: no reporter id on the event, no orphan anonymous events, no claiming someone else's, nobody can read the private record, and the reporter can find, read and add notes to their own.

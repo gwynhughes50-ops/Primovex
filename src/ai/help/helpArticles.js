@@ -1020,10 +1020,11 @@ export const HELP_ARTICLES = [
     keywords: ["significant", "event", "incident", "near", "miss", "report", "learning", "se"],
     where: "both",
     steps: [
-      "Anyone can do this. On a computer: Significant events in the left menu, then Report. On the phone: Significant events on the Home screen, then Report.",
+      "On a computer: Significant events in the left menu, then Report. On the phone: Significant events on the Home screen, then Report. (A few roles, such as the cleaner, do not have this.)",
       "Give it a short title, the date, where it happened (pick the room) and how much harm it caused. Say what happened and what was done straight away.",
       "Never use anyone's name. Use roles (the nurse, a receptionist). If a patient was involved, give their EMIS number, or initials and date of birth if there isn't one.",
       "Or tell the Orb: say \"report a significant event: the wrong vaccine was drawn up in Treatment Room 1 yesterday, no harm\". It sets the report up for you to check, and nothing is sent until you press Report event. No names, and use an EMIS number for any patient.",
+      "If you are reporting someone else's mistake and want to stay unnamed, tick \"Report this anonymously\". Your name is not kept with the report and the team and partners cannot see who made it; only you can find it again, under \"Reported by me\" as \"You (anonymously)\". The team cannot ask you questions, so say everything they will need, and leave out anything that would show who you are. Someone with direct access to the database could still find out.",
       "The significant events team is told. You can follow what happens to it under \"Reported by me\", and add notes.",
     ],
     open: { label: "Open Significant events", route: "/governance/significant-events" },

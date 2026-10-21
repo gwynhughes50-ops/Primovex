@@ -1650,6 +1650,57 @@ async function main() {
     await assertFails(setDoc(doc(nurseDeny, "governance_significant_events", "se-nurse-deny"), newEvent("nurse-deny-uid")));
   });
 
+  // ---- anonymous reporting: the reporter's choice; nobody in the app can see who made it, only they can find it again
+  console.log("\n=== 11b. Anonymous significant event reports ===");
+  const anonEvent = (extra = {}) => newEvent("ignored", { reportedByUid: null, reportedByName: "Anonymous reporter", anonymous: true, ...extra });
+  const anonBatch = async (ctx, eventId, owner, extra = {}, ownerDoc = {}) => {
+    const batch = writeBatch(ctx);
+    batch.set(doc(ctx, "governance_significant_events", eventId), anonEvent(extra));
+    batch.set(doc(ctx, "governance_se_reporters", eventId), { uid: owner, createdAt: serverTimestamp(), ...ownerDoc });
+    return batch.commit();
+  };
+  await check("Anon: a person CAN report anonymously (the event and the private record in one batch)", () => assertSucceeds(anonBatch(bystander, "se-anon-1", "bystander-uid")));
+  await check("Anon: ...the event carries no reporter id and no name", async () => {
+    const snap = await getDoc(doc(admin, "governance_significant_events", "se-anon-1"));
+    if (snap.data().reportedByUid !== null || snap.data().reportedByName !== "Anonymous reporter") throw new Error("the event names someone");
+  });
+  await check("Anon: an anonymous event CANNOT be created without its private record (nobody could find it again)", () =>
+    assertFails(setDoc(doc(bystander, "governance_significant_events", "se-anon-orphan"), anonEvent())));
+  await check("Anon: ...nor with the private record naming someone else", () => assertFails(anonBatch(bystander, "se-anon-forge", "reporter-uid")));
+  await check("Anon: ...nor claiming to be named while hiding the reporter", () => assertFails(setDoc(doc(bystander, "governance_significant_events", "se-anon-mix"), anonEvent({ reportedByUid: "bystander-uid" }))));
+  await check("Anon: ...nor with a name that is not 'Anonymous reporter'", () => assertFails(anonBatch(bystander, "se-anon-name", "bystander-uid", { reportedByName: "Bystander" })));
+  await check("Anon: a Cleaner (no reporting permission) CANNOT report anonymously either", () => assertFails(anonBatch(cleanerSe, "se-anon-cleaner", "cleaner-se-uid")));
+  await check("Anon: a private record CANNOT be created for an event that already exists (nobody can claim someone else's)", async () => {
+    await assertFails(setDoc(doc(reporter, "governance_se_reporters", "se-anon-1"), { uid: "reporter-uid", createdAt: serverTimestamp() }));
+    await assertFails(setDoc(doc(reporter, "governance_se_reporters", "se-1"), { uid: "reporter-uid", createdAt: serverTimestamp() }));
+  });
+  await check("Anon: the reporter CAN find their own anonymous report, read it and its timeline, and add a note", async () => {
+    await assertSucceeds(getDoc(doc(bystander, "governance_significant_events", "se-anon-1")));
+    await assertSucceeds(getDocs(query(collection(bystander, "governance_se_reporters"), where("uid", "==", "bystander-uid"))));
+    await assertSucceeds(addDoc(collection(bystander, "governance_se_timeline"), { seId: "se-anon-1", type: "reported", title: "Reported", message: "", actorUid: null, actorName: "Anonymous reporter" }));
+    await assertSucceeds(addDoc(collection(bystander, "governance_se_timeline"), { seId: "se-anon-1", type: "note", title: "Note", message: "more", actorUid: null, actorName: "Anonymous reporter" }));
+    await assertFails(addDoc(collection(bystander, "governance_se_timeline"), { seId: "se-anon-1", type: "stage", title: "Forged", actorUid: null }));
+  });
+  await check("Anon: nobody else can read the private record: not another user, the team, a partner, an investigation lead, or an administrator in the app", async () => {
+    for (const who of [reporter, lead, reviewer, user, pm, partner, admin]) await assertFails(getDoc(doc(who, "governance_se_reporters", "se-anon-1")));
+    await assertFails(getDocs(collection(pm, "governance_se_reporters")));
+    await assertFails(getDocs(collection(admin, "governance_se_reporters")));
+  });
+  await check("Anon: ...and it can never be changed or removed", async () => {
+    await assertFails(updateDoc(doc(bystander, "governance_se_reporters", "se-anon-1"), { uid: "admin-uid" }));
+    await assertFails(deleteDoc(doc(bystander, "governance_se_reporters", "se-anon-1")));
+    await assertFails(deleteDoc(doc(admin, "governance_se_reporters", "se-anon-1")));
+  });
+  await check("Anon: the team and partners CAN read the anonymous event (it is still theirs to run) but another member of staff CANNOT", async () => {
+    await assertSucceeds(getDoc(doc(pm, "governance_significant_events", "se-anon-1")));
+    await assertSucceeds(getDoc(doc(partner, "governance_significant_events", "se-anon-1")));
+    await assertFails(getDoc(doc(user, "governance_significant_events", "se-anon-1")));
+  });
+  await check("Anon: the reporter's other queries still work, and do not reveal anonymous events to anyone else", async () => {
+    await assertSucceeds(getDocs(query(collection(bystander, "governance_significant_events"), where("reportedByUid", "==", "bystander-uid"))));
+    await assertFails(getDocs(collection(bystander, "governance_significant_events")));
+  });
+
   // a partner can look at everyone's training (training.view) but not change it
   await seed(async (db) => {
     await setDoc(doc(db, "roles", "Training Viewer"), { name: "Training Viewer", capabilities: ["training.view", "dashboard.read"], capabilitiesVersion: 3, builtIn: false });

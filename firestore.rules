@@ -327,13 +327,16 @@ function isSeTeam() {
 }
 // Who can open a significant event: the team, oversight (partners), the person who reported it,
 // whoever leads the investigation, people named on it and the reviewers asked to look at it.
-function canSeeSe(eventData) {
+function canSeeSe(eventData, eventId) {
   return signedIn() && (
     isSeTeam() || isGovernancePartner()
     || eventData.reportedByUid == request.auth.uid
     || eventData.get("leadUid", "") == request.auth.uid
     || request.auth.uid in eventData.get("involvedUserIds", [])
     || request.auth.uid in eventData.get("reviewerUids", [])
+    // Someone who reported anonymously: their id is kept apart (governance_se_reporters) where only they can read it.
+    || (eventData.get("anonymous", false) == true
+        && get(/databases/$(database)/documents/governance_se_reporters/$(eventId)).data.uid == request.auth.uid)
   );
 }
 function isInvolvedInConcern(concernData) {
@@ -425,17 +428,27 @@ match /governance_concern_meetings/{meetingId} {
 // After that the significant events team runs it; the person leading the investigation can record
 // findings; reviewers write their own review; everyone who can see it can add notes.
 match /governance_significant_events/{eventId} {
-  allow get, list: if canSeeSe(resource.data);
+  allow get, list: if canSeeSe(resource.data, eventId);
+  // As yourself, or anonymously: an anonymous report carries no reporter id or name at all, and is written in the same batch as the
+  // private record (governance_se_reporters) that lets only the reporter find it again.
   allow create: if signedIn()
     && hasPermission("governance", "reportEvents")
-    && request.resource.data.reportedByUid == request.auth.uid
     && request.resource.data.status == "reported"
     && request.resource.data.investigation == "pending"
     && request.resource.data.keys().hasOnly([
       "reference", "status", "investigation", "title", "description", "immediateAction", "eventDate",
       "category", "harm", "locationId", "locationName", "patientInvolved", "emisNumber", "patientInitials",
-      "dateOfBirth", "reportedByUid", "reportedByName", "reportedAt", "createdAt", "updatedAt"
-    ]);
+      "dateOfBirth", "reportedByUid", "reportedByName", "reportedAt", "createdAt", "updatedAt", "anonymous"
+    ])
+    && (
+      (request.resource.data.reportedByUid == request.auth.uid && request.resource.data.get("anonymous", false) == false)
+      || (
+        request.resource.data.get("anonymous", false) == true
+        && request.resource.data.reportedByUid == null
+        && request.resource.data.reportedByName == "Anonymous reporter"
+        && getAfter(/databases/$(database)/documents/governance_se_reporters/$(eventId)).data.uid == request.auth.uid
+      )
+    );
   allow update: if isSeTeam()
     || (
       resource.data.get("leadUid", "") == request.auth.uid
@@ -446,17 +459,31 @@ match /governance_significant_events/{eventId} {
   allow delete: if isAdmin();
 }
 
+// Who reported an event anonymously. One record per anonymous event (its id is the event's id), readable only by that person: not
+// the significant events team, not partners, not administrators using the app. It is created in the same batch as the event, never
+// for an event that already exists, and can never be changed or removed.
+match /governance_se_reporters/{eventId} {
+  allow get, list: if signedIn() && resource.data.uid == request.auth.uid;
+  allow create: if signedIn()
+    && request.resource.data.uid == request.auth.uid
+    && request.resource.data.keys().hasOnly(["uid", "createdAt"])
+    && request.resource.data.createdAt == request.time
+    && !exists(/databases/$(database)/documents/governance_significant_events/$(eventId))
+    && getAfter(/databases/$(database)/documents/governance_significant_events/$(eventId)).data.get("anonymous", false) == true;
+  allow update, delete: if false;
+}
+
 match /governance_se_timeline/{timelineId} {
   allow get, list: if signedIn() && (
     isSeTeam() || isGovernancePartner()
-    || canSeeSe(get(/databases/$(database)/documents/governance_significant_events/$(resource.data.seId)).data)
+    || canSeeSe(get(/databases/$(database)/documents/governance_significant_events/$(resource.data.seId)).data, resource.data.seId)
   );
   allow create: if signedIn() && (
     isSeTeam()
     || get(/databases/$(database)/documents/governance_significant_events/$(request.resource.data.seId)).data.get("leadUid", "") == request.auth.uid
     || (
       request.resource.data.type in ["note", "reported"]
-      && canSeeSe(get(/databases/$(database)/documents/governance_significant_events/$(request.resource.data.seId)).data)
+      && canSeeSe(get(/databases/$(database)/documents/governance_significant_events/$(request.resource.data.seId)).data, request.resource.data.seId)
     )
   );
   allow update, delete: if false;

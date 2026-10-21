@@ -45,10 +45,10 @@ function summaryAnswer({ events, actions, uid, seesAll, mine }) {
     if (parts.length) lines.push(`${joinList(parts, 5)}.`);
     if (overdue) lines.push(`${plural(overdue, "action")} ${overdue === 1 ? "is" : "are"} overdue.`);
   } else {
-    const mineEvents = events.filter((e) => e.reportedByUid === uid || e.leadUid === uid || (e.involvedUserIds || []).includes(uid) || (e.reviewerUids || []).includes(uid));
+    const mineEvents = events.filter((e) => e.reportedByUid === uid || e.iAmAnonymousReporter === true || e.leadUid === uid || (e.involvedUserIds || []).includes(uid) || (e.reviewerUids || []).includes(uid));
     const open = mineEvents.filter(OPEN);
     lines.push(`You're involved in ${plural(mineEvents.length, "significant event")}, ${open.length} still open.`);
-    const reportedOpen = open.filter((e) => e.reportedByUid === uid);
+    const reportedOpen = open.filter((e) => e.reportedByUid === uid || e.iAmAnonymousReporter === true);
     if (reportedOpen.length) lines.push(`Of the ones you reported: ${joinList(reportedOpen.slice(0, 5).map((e) => `${e.reference} is ${stageLabel(e.status).toLowerCase()}`), 5)}.`);
     const myOverdue = actions.filter((a) => a.ownerUid === uid && actionTone(a).id === "overdue").length;
     if (myOverdue) lines.push(`${plural(myOverdue, "action")} of yours ${myOverdue === 1 ? "is" : "are"} overdue.`);
