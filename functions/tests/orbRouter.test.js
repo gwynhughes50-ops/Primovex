@@ -4,7 +4,7 @@ const { scrubQuestion, toolsFor, buildInstructions, checkRoute, routeQuestion, c
 const { ORB_TOOLS } = require("../config/orbToolCatalog");
 
 const NOW = new Date(Date.UTC(2026, 9, 6, 10, 30, 0));
-const STAFF = ["inventory.read", "operations.read", "temperature.read"];
+const STAFF = ["inventory.read", "inventory.kits", "operations.read", "temperature.read"];
 const AZURE = { endpoint: "https://example.openai.azure.com", key: "k", deployment: "d" };
 
 // ---- a tiny in-memory Firestore stand-in (settings + usage counters)

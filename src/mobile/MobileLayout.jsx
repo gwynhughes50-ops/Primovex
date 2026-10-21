@@ -130,7 +130,7 @@ export default function MobileLayout({ initialTab = "home" }) {
   // The four places in the bottom bar are the ones this role uses.
   const navPlaces = navFor(getRoleHome(role, capabilities, roleHomeType));
   const routedChecklistTab = location.pathname === '/inventory' ? new URLSearchParams(location.search).get('tab') : null;
-  const showRoutedChecklist = routedChecklistTab === 'emergency' || routedChecklistTab === 'anaphylaxis';
+  const showRoutedChecklist = (routedChecklistTab === 'emergency' || routedChecklistTab === 'anaphylaxis') && can('inventory.kits');
   const routedChecklistAssetId = showRoutedChecklist ? new URLSearchParams(location.search).get('asset') : null;
 
   const handleBottomNavigation = (nextTab) => {

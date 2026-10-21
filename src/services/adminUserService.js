@@ -1,4 +1,4 @@
-import { collection, doc, onSnapshot, updateDoc } from "firebase/firestore";
+import { collection, deleteField, doc, onSnapshot, updateDoc } from "firebase/firestore";
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase";
 
@@ -58,6 +58,21 @@ export async function updateUserDepartment(uid, department) {
 // What the Orb and the Pulse orb will talk about for this person: null = everything their role
 // allows, otherwise a list of topic ids (see src/lib/orbScope.js). It can only narrow what their
 // role already allows. Admin-only (the rules stop people changing their own).
+// One person's exceptions to their role: permissions switched on that the role does not give, and ones switched off that it does
+// (src/core/identity/permissionExceptions.js). Only an administrator can write this, and the security rules honour it.
+export async function updateUserPermissionExceptions(uid, exceptions) {
+  const allow = Array.isArray(exceptions?.allow) ? exceptions.allow : [];
+  const deny = Array.isArray(exceptions?.deny) ? exceptions.deny : [];
+  await updateDoc(doc(db, "users", uid), { permissionExceptions: allow.length || deny.length ? { allow, deny } : deleteField() });
+  try {
+    globalThis.dispatchEvent?.(new CustomEvent("primovex:governed-audit", { detail: {
+      action: "admin.permissions.exceptions", module: "admin", targetType: "user", targetId: uid,
+      summary: allow.length || deny.length ? "An administrator set permission exceptions for a user" : "An administrator cleared a user's permission exceptions",
+      classification: "security", metadata: { added: allow.length, removed: deny.length },
+    } }));
+  } catch { /* an audit hiccup must not undo the change */ }
+}
+
 export async function updateUserOrbScope(uid, scope) {
   const value = Array.isArray(scope) ? scope : null;
   await updateDoc(doc(db, "users", uid), { orbScope: value });

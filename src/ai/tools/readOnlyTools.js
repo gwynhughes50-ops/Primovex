@@ -125,7 +125,7 @@ function isExpiringWithin(value, days = 60) {
 
 export function registerApprovedReadOnlyTools() {
   const registerClinicalReadinessTool = ({ id, label, collectionName, listEntities, route }) => registerTool({
-    id, label, requiredCapability: 'inventory.read',
+    id, label, requiredCapability: 'inventory.kits',
     async execute({ mode = 'status' } = {}) {
       const entities = await listEntities();
       const checks = await Promise.allSettled(entities.map((entity) => getLatestCheck(collectionName, entity.id)));

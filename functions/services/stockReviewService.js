@@ -1,5 +1,5 @@
 const { FieldValue, Timestamp } = require("firebase-admin/firestore");
-const { getEffectiveCapabilities, hasCapability } = require("./roleCapabilities");
+const { applyExceptions, getEffectiveCapabilities, hasCapability } = require("./roleCapabilities");
 
 // A daily look at the stock for two things people can't easily see for themselves:
 //
@@ -232,7 +232,7 @@ async function findRecipients({ db, capsForRole = (role) => getEffectiveCapabili
     activeUids.add(doc.id);
     if (!user.role) continue;
     if (!cache.has(user.role)) cache.set(user.role, await capsForRole(user.role));
-    if (hasCapability(cache.get(user.role), "inventory.verify")) controllerUids.push(doc.id);
+    if (hasCapability(applyExceptions(cache.get(user.role), user), "inventory.verify")) controllerUids.push(doc.id);
   }
   return { activeUids, controllerUids };
 }

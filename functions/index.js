@@ -23,7 +23,7 @@ const { appendGovernedAuditEvent } = require("./services/governedAuditService");
 const { reportRoomIssue } = require("./services/roomIssueService");
 const { recordSensePresenceTap } = require("./services/sensePresenceService");
 const { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink, resetUserMfa, setTemporaryPassword } = require("./services/userAccountService");
-const { getEffectiveCapabilities, hasCapability } = require("./services/roleCapabilities");
+const { applyExceptions, getEffectiveCapabilities, hasCapability } = require("./services/roleCapabilities");
 const { notifySarAssignment } = require("./services/notificationService");
 const { listStaffDirectory } = require("./services/staffDirectoryService");
 const { sendDueNotifications } = require("./services/dueNotificationService");
@@ -75,7 +75,7 @@ async function assertConnectManager(request) {
   const profile = await db.collection("users").doc(request.auth.uid).get();
   const data = profile.data() || {};
   if (data.role === "System Admin") return;
-  const capabilities = await getEffectiveCapabilities(db, data.role);
+  const capabilities = await getEffectiveCapabilities(db, data.role, data);
   if (!hasCapability(capabilities, "connect.manageDevices")) {
     throw new HttpsError("permission-denied", "Connect device management permission is required.");
   }
@@ -90,7 +90,7 @@ async function assertAdmin(request) {
   const profile = await db.collection("users").doc(request.auth.uid).get();
   const data = profile.data() || {};
   if (data.role === "System Admin") return data.role;
-  const capabilities = await getEffectiveCapabilities(db, data.role);
+  const capabilities = await getEffectiveCapabilities(db, data.role, data);
   if (!hasCapability(capabilities, "admin.access")) {
     throw new HttpsError("permission-denied", "Admin access is required.");
   }
@@ -107,7 +107,7 @@ async function requireClinFlowCapture(request) {
   const snapshot = await db.collection("users").doc(request.auth.uid).get();
   const profile = snapshot.data() || {};
   if (profile.role !== "System Admin") {
-    const capabilities = await getEffectiveCapabilities(db, profile.role);
+    const capabilities = await getEffectiveCapabilities(db, profile.role, profile);
     if (!hasCapability(capabilities, "clinflow.capture")) {
       throw new HttpsError("permission-denied", "ClinFlow capture permission is required.");
     }
@@ -460,7 +460,7 @@ exports.notifySarAssignment = onCall({ region: "europe-west2" }, async (request)
   assertSignedIn(request);
   const callerProfile = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
   if (callerProfile.role !== "System Admin") {
-    const capabilities = await getEffectiveCapabilities(db, callerProfile.role);
+    const capabilities = await getEffectiveCapabilities(db, callerProfile.role, callerProfile);
     if (!hasCapability(capabilities, "governance.manageSars")) {
       throw new HttpsError("permission-denied", "SAR management permission is required.");
     }
@@ -480,7 +480,7 @@ exports.notifySarAssignment = onCall({ region: "europe-west2" }, async (request)
 exports.notifySignificantEvent = onCall({ region: "europe-west2", timeoutSeconds: 30 }, async (request) => {
   assertSignedIn(request);
   const callerProfile = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
-  const capabilities = await getEffectiveCapabilities(db, callerProfile.role);
+  const capabilities = await getEffectiveCapabilities(db, callerProfile.role, callerProfile);
   const data = request.data || {};
   return notifySignificantEvent({
     db,
@@ -503,7 +503,7 @@ exports.listStaffDirectory = onCall({ region: "europe-west2" }, async (request) 
   assertSignedIn(request);
   const profile = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
   if (profile.role !== "System Admin") {
-    const capabilities = await getEffectiveCapabilities(db, profile.role);
+    const capabilities = await getEffectiveCapabilities(db, profile.role, profile);
     const allowed = hasCapability(capabilities, "governance.manageSars")
       || hasCapability(capabilities, "governance.concernsTeam")
       || hasCapability(capabilities, "governance.seTeam") // picking leads, reviewers and action owners for a significant event
@@ -524,7 +524,7 @@ async function assertCanVerifyStock(request) {
   assertSignedIn(request);
   const profile = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
   if (profile.role !== "System Admin") {
-    const capabilities = await getEffectiveCapabilities(db, profile.role);
+    const capabilities = await getEffectiveCapabilities(db, profile.role, profile);
     if (!hasCapability(capabilities, "inventory.verify")) {
       throw new HttpsError("permission-denied", "Stock verification permission is required.");
     }
@@ -610,7 +610,7 @@ exports.orbPhrase = onCall(
     const snapshot = await db.collection("users").doc(request.auth.uid).get();
     if (!snapshot.exists) throw new HttpsError("failed-precondition", "A Primovex user profile is required.");
     const profile = snapshot.data() || {};
-    const capabilities = await getEffectiveCapabilities(db, profile.role);
+    const capabilities = await getEffectiveCapabilities(db, profile.role, profile);
     const startedAt = Date.now();
     const result = await phraseAnswer({
       db,
@@ -831,7 +831,7 @@ exports.scheduledStockReview = onSchedule(
 exports.runStockReviewNow = onCall({ region: "europe-west2", timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
   assertSignedIn(request);
   const profile = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
-  const capabilities = await getEffectiveCapabilities(db, profile.role);
+  const capabilities = await getEffectiveCapabilities(db, profile.role, profile);
   if (!hasCapability(capabilities, "inventory.write") && !hasCapability(capabilities, "inventory.verify")) {
     throw new HttpsError("permission-denied", "Stock permission is required.");
   }
@@ -966,7 +966,7 @@ exports.scheduledTimesheetReminders = onSchedule({ region: "europe-west2", sched
     const data = user.data() || {};
     if (data.active === false || !data.role) continue;
     if (!capabilitiesByRole.has(data.role)) capabilitiesByRole.set(data.role, await getEffectiveCapabilities(db, data.role));
-    const capabilities = capabilitiesByRole.get(data.role);
+    const capabilities = applyExceptions(capabilitiesByRole.get(data.role), data);
     // named in the role itself: a System Admin's "everything" does not make them the payroll team
     if (Array.isArray(capabilities) && capabilities.includes("timesheets.manage")) managerUids.push(user.id);
     if (Array.isArray(capabilities) && capabilities.includes("timesheets.payroll")) payrollUids.push(user.id);
@@ -982,7 +982,7 @@ exports.scheduledTrainingReminders = onSchedule({ region: "europe-west2", schedu
     const data = user.data() || {};
     if (data.active === false || !data.role) continue;
     if (!capabilitiesByRole.has(data.role)) capabilitiesByRole.set(data.role, await getEffectiveCapabilities(db, data.role));
-    const capabilities = capabilitiesByRole.get(data.role);
+    const capabilities = applyExceptions(capabilitiesByRole.get(data.role), data);
     if (hasCapability(capabilities, "training.manage")) managers.push({ uid: user.id, scope: "all" });
     else if (hasCapability(capabilities, "training.manageClinical")) managers.push({ uid: user.id, scope: "clinical" });
   }

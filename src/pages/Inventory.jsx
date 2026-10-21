@@ -85,6 +85,8 @@ export default function Inventory() {
   const canDeleteInventory = !authLoading && can("inventory.delete");
   // Permanent delete is a separate permission from archiving - only logins whose role has it see the button.
   const canPurgeInventory = !authLoading && can("inventory.purge");
+  // the emergency drugs and the anaphylaxis boxes are for the people whose role (or exceptions) allow them; everyone else sees stock only
+  const canSeeKits = !authLoading && can("inventory.kits");
 
   /* tabs */
   const [tab, setTab] = useState("stock"); // "stock" | "emergency" | "anaphylaxis"
@@ -106,7 +108,8 @@ export default function Inventory() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    if (['stock', 'emergency', 'anaphylaxis'].includes(params.get('tab'))) setTab(params.get('tab'));
+    const wanted = params.get('tab');
+    if (wanted === 'stock' || ((wanted === 'emergency' || wanted === 'anaphylaxis') && canSeeKits)) setTab(wanted);
     // A message can open the list already searched for one item (?find=Tongue%20depressors)
     if (params.get("find")) setSearch(params.get("find"));
     if (params.get("add") === "1") {
@@ -432,12 +435,16 @@ const handleBarcodeScan = (code) => {
         <TabButton active={tab === "stock"} onClick={() => setTab("stock")}>
           Stock
         </TabButton>
-        <TabButton active={tab === "emergency"} onClick={() => setTab("emergency")}>
-          Emergency Drugs & Equipment (Monthly)
-        </TabButton>
-        <TabButton active={tab === "anaphylaxis"} onClick={() => setTab("anaphylaxis")}>
-          Anaphylaxis Emergency Boxes
-        </TabButton>
+        {canSeeKits && (
+          <TabButton active={tab === "emergency"} onClick={() => setTab("emergency")}>
+            Emergency Drugs & Equipment (Monthly)
+          </TabButton>
+        )}
+        {canSeeKits && (
+          <TabButton active={tab === "anaphylaxis"} onClick={() => setTab("anaphylaxis")}>
+            Anaphylaxis Emergency Boxes
+          </TabButton>
+        )}
       </div>
 
       {/* STOCK TAB */}
@@ -912,14 +919,14 @@ const handleBarcodeScan = (code) => {
       )}
 
       {/* EMERGENCY TAB */}
-      {tab === "emergency" && (
+      {tab === "emergency" && canSeeKits && (
         <div className="bg-slate-950/50 border border-slate-800/60 rounded-2xl p-3 sm:p-4">
           <EmergencyMonthlyChecklistTab />
         </div>
       )}
 
       {/* ANAPHYLAXIS TAB */}
-      {tab === "anaphylaxis" && (
+      {tab === "anaphylaxis" && canSeeKits && (
         <div className="bg-slate-950/50 border border-slate-800/60 rounded-2xl p-3 sm:p-4">
           <AnaphylaxisBoxesTab />
         </div>

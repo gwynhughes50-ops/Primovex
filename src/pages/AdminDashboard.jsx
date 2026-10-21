@@ -74,14 +74,15 @@ import { loadFacilitiesState } from "@/modules/facilities/services/facilitiesSto
 // ✅ Firestore activity feed
 import { collection, deleteDoc, doc, limit, onSnapshot, orderBy, query, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebase";
-import { CAPABILITY_CATALOG, OVERRIDABLE_ROLES, ROLE_PRESETS, ROLE_TEMPLATES } from "@/core/identity/capabilities";
+import { CAPABILITIES_VERSION, CAPABILITY_CATALOG, OVERRIDABLE_ROLES, ROLE_PRESETS, ROLE_TEMPLATES, getCapabilitiesForProfile, withLegacyKits } from "@/core/identity/capabilities";
+import { cleanExceptions, describeExceptions, hasExceptions, permissionRows, setCapability } from "@/core/identity/permissionExceptions";
 import { HOME_TYPES, homeTypeOfName } from "@/mobile/roleHomes";
 import { describeNotificationAccess, ON_THEIR_COMPUTER } from "@/lib/notificationAccess";
 import { sendDueNotificationsNow } from "@/services/dueNotificationsService";
 import { describeDueRun } from "@/lib/dueNotificationsText";
 import { useAuth } from "@/contexts/AuthContext";
 import ViewAsPanel from "@/components/admin/ViewAsPanel";
-import { subscribeUsers, updateUserRole, updateUserOrbScope, setUserActive, deleteUserAccount, createPasswordLink, setTemporaryPassword, resetUserMfa, sendTestAlert } from "@/services/adminUserService";
+import { subscribeUsers, updateUserRole, updateUserOrbScope, updateUserPermissionExceptions, setUserActive, deleteUserAccount, createPasswordLink, setTemporaryPassword, resetUserMfa, sendTestAlert } from "@/services/adminUserService";
 import { ORB_TOPICS, describeOrbScope, normaliseOrbScope } from "@/lib/orbScope";
 
 // --------------------------
@@ -435,6 +436,30 @@ export default function AdminDashboard() {
   // and won't receive (src/lib/notificationAccess.js).
   const [notifCheckTarget, setNotifCheckTarget] = useState(null);
 
+  // One person's exceptions to their role (src/core/identity/permissionExceptions.js).
+  const [permTarget, setPermTarget] = useState(null);
+  const [permDraft, setPermDraft] = useState({ allow: [], deny: [] });
+  const [permBusy, setPermBusy] = useState(false);
+  const [permError, setPermError] = useState("");
+  const roleCapsOf = (role) => getCapabilitiesForProfile(
+    { role },
+    Object.fromEntries((liveCustomRoles || []).map((r) => [r.name, withLegacyKits(r.capabilities || [], r.capabilitiesVersion)])),
+    roleOverrides
+  );
+  const openPermissions = (u) => { setPermTarget(u); setPermDraft(cleanExceptions(u.permissionExceptions, roleCapsOf(u.role))); setPermError(""); };
+  const savePermissions = async () => {
+    try {
+      setPermBusy(true);
+      setPermError("");
+      await updateUserPermissionExceptions(permTarget.id, cleanExceptions(permDraft, roleCapsOf(permTarget.role)));
+      setPermTarget(null);
+    } catch (err) {
+      setPermError(err?.message || "Could not save that.");
+    } finally {
+      setPermBusy(false);
+    }
+  };
+
   // What the Orb answers for one person (src/lib/orbScope.js).
   const [orbScopeTarget, setOrbScopeTarget] = useState(null);
   const [orbScopeDraft, setOrbScopeDraft] = useState(null); // null = everything their role allows
@@ -558,7 +583,7 @@ export default function AdminDashboard() {
     try {
       if (editingRole?.builtInRole) {
         // an original role: keep the change in role_overrides (the original stays in the program and can be restored)
-        await setDoc(doc(db, "role_overrides", editingRole.name), { capabilities: newRole.permissions, homeType: newRole.homeType || "", updatedAt: serverTimestamp(), updatedByName: displayName || user?.email || "" }, { merge: true });
+        await setDoc(doc(db, "role_overrides", editingRole.name), { capabilities: newRole.permissions, capabilitiesVersion: CAPABILITIES_VERSION, homeType: newRole.homeType || "", updatedAt: serverTimestamp(), updatedByName: displayName || user?.email || "" }, { merge: true });
         setNewRole({ name: "", description: "", permissions: ["inventory.read"], homeType: "" });
         setEditingRole(null);
         setIsAddRoleOpen(false);
@@ -575,6 +600,7 @@ export default function AdminDashboard() {
           name,
           description: newRole.description.trim(),
           capabilities: newRole.permissions,
+          capabilitiesVersion: CAPABILITIES_VERSION,
           homeType: newRole.homeType || "",
           builtIn: false,
           ...(editingRole ? {} : { createdAt: serverTimestamp(), createdByUid: user?.uid || null, active: true }),
@@ -865,6 +891,14 @@ export default function AdminDashboard() {
                                         <KeyRound className="h-4 w-4 mr-2" /> Temporary password
                                       </Button>
                                     )}
+                                    <Button
+                                      variant="outline"
+                                      className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
+                                      title={hasExceptions(u.permissionExceptions) ? `This person's permissions differ from their role: ${describeExceptions(u.permissionExceptions)}` : "See and change what this person can do, on top of their role"}
+                                      onClick={() => openPermissions(u)}
+                                    >
+                                      <KeyRound className="h-4 w-4 mr-2" /> Permissions{hasExceptions(u.permissionExceptions) ? ` (${describeExceptions(u.permissionExceptions)})` : ""}
+                                    </Button>
                                     <Button
                                       variant="outline"
                                       className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
@@ -1414,6 +1448,47 @@ export default function AdminDashboard() {
       )}
 
       {/* What the Orb answers for one person */}
+      {permTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur p-4" role="dialog" aria-modal="true" aria-label="Permissions">
+          <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-2xl flex-col rounded-2xl border border-slate-800/70 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
+            <div className="flex items-center gap-2 text-lg font-semibold text-slate-50"><KeyRound className="h-5 w-5" /> Permissions for {permTarget.displayName || permTarget.email}</div>
+            <p className="mt-1 text-xs text-slate-400">
+              This starts from their role ({permTarget.role || "no role"}). Tick or untick to make an exception for this person only; everyone else with the role is unchanged.
+              To change a whole role, use Roles &amp; Permissions.
+            </p>
+            {permTarget.role === "System Admin" ? (
+              <p className="mt-3 rounded-xl border border-slate-800/70 bg-slate-950/40 p-3 text-sm text-slate-300">A System Admin always has full access, so there is nothing to change here.</p>
+            ) : (
+              <div className="mt-3 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+                {permissionRows(roleCapsOf(permTarget.role), permDraft).map(({ group, rows }) => (
+                  <div key={group}>
+                    <div className="text-xs font-bold uppercase tracking-wide text-slate-400">{group}</div>
+                    <div className="mt-1 space-y-1">
+                      {rows.map((row) => (
+                        <label key={row.id} className="flex items-start gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-slate-800/40">
+                          <input type="checkbox" className="mt-1" checked={row.on} onChange={(e) => setPermDraft((current) => setCapability(row.id, e.target.checked, roleCapsOf(permTarget.role), current))} />
+                          <span className="min-w-0 flex-1 text-slate-100">{row.label}</span>
+                          {row.source === "allowed" && <span className="shrink-0 rounded-full bg-teal-500/20 px-2 py-0.5 text-[11px] font-semibold text-teal-200">added for them</span>}
+                          {row.source === "removed" && <span className="shrink-0 rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold text-amber-200">removed for them</span>}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {permError && <p className="mt-2 text-xs text-rose-300">{permError}</p>}
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+              <Button variant="outline" className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60" onClick={() => setPermDraft({ allow: [], deny: [] })} disabled={permBusy || permTarget.role === "System Admin" || !hasExceptions(permDraft)}>Back to the role's permissions</Button>
+              <div className="flex gap-2">
+                <Button variant="outline" className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60" onClick={() => setPermTarget(null)} disabled={permBusy}>Cancel</Button>
+                <Button className="rounded-full" onClick={savePermissions} disabled={permBusy || permTarget.role === "System Admin"}>{permBusy ? "Saving…" : "Save"}</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {orbScopeTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur p-4" role="dialog" aria-modal="true" aria-label="Orb topics">
           <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col rounded-2xl border border-slate-800/70 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
@@ -1580,7 +1655,7 @@ export default function AdminDashboard() {
                       className="rounded-full border border-slate-700/70 px-3 py-1 text-slate-200 hover:bg-slate-800/60"
                       onClick={() => {
                         setAddRoleError("");
-                        setNewRole({ name: preset.name, description: preset.description, permissions: [...preset.permissions], homeType: "" });
+                        setNewRole({ name: preset.name, description: preset.description, permissions: [...preset.permissions], homeType: preset.homeType || "" });
                       }}
                     >
                       {preset.name}

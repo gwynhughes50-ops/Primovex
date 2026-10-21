@@ -13,8 +13,8 @@
 const NONE = {};
 
 const TOOLS = [
-  { id: "emergency.readiness", capability: "inventory.read", phrase: true, description: "Readiness of emergency drugs and resuscitation equipment (crash trolley): missing or expired items and the last check.", params: { mode: { type: "string", enum: ["status", "reconcile"], description: "status = just report; reconcile = start a check." } } },
-  { id: "anaphylaxis.readiness", capability: "inventory.read", phrase: true, description: "Readiness of the anaphylaxis boxes: missing or expired items and the last check.", params: { mode: { type: "string", enum: ["status", "reconcile"] } } },
+  { id: "emergency.readiness", capability: "inventory.kits", phrase: true, description: "Readiness of emergency drugs and resuscitation equipment (crash trolley): missing or expired items and the last check.", params: { mode: { type: "string", enum: ["status", "reconcile"], description: "status = just report; reconcile = start a check." } } },
+  { id: "anaphylaxis.readiness", capability: "inventory.kits", phrase: true, description: "Readiness of the anaphylaxis boxes: missing or expired items and the last check.", params: { mode: { type: "string", enum: ["status", "reconcile"] } } },
   { id: "operations.summary", capability: "operations.read", phrase: true, description: "Overall practice readiness and today's top priorities across facilities, stock and cold chain.", params: NONE },
   { id: "operations.timeline", capability: "operations.read", description: "Recent operational events (cleaning, maintenance, stock movements, temperatures) as a timeline.", params: { sinceYesterday: { type: "boolean", description: "true = since yesterday, false = full history." } } },
   { id: "inventory.summary", capability: "inventory.read", phrase: true, description: "Overview of stock: how many items, how many low or out, how many expiring soon.", params: NONE },

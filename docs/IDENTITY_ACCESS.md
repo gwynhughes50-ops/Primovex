@@ -83,3 +83,24 @@ Firestore rules now include a capability-aware helper for new platform collectio
 ## Principle
 
 Permissions should describe what a person can do, not what their job title is. Different practices organise work differently, so MedTrak+ must allow local configuration without code changes.
+
+## Per-person exceptions and the emergency kits (October 2026)
+
+A person's permissions are their role's, with exceptions for that one person on top:
+
+```json
+{ "role": "Salaried GP", "permissionExceptions": { "allow": ["training.manage"], "deny": ["inventory.adjust"] } }
+```
+
+- `allow` adds something the role does not give; `deny` takes away something it does. An exception never narrows a System Admin.
+- Only a System Admin can write `permissionExceptions` (the person cannot change their own: `firestore.rules`, users update). The security rules, the Cloud Functions and the app all honour it: `permitted()` in `firestore.rules` and `storage.rules`, `applyExceptions()` in `functions/services/roleCapabilities.js`, `getCapabilitiesForProfile()` in `src/core/identity/capabilities.js`. The screen is Advanced Administration, Users, Permissions; the pure logic is `src/core/identity/permissionExceptions.js`.
+- Rules that name a role directly (for example the Caretaker checks and ClinFlow) are not affected by exceptions; those that check a permission are.
+
+Every original role except System Admin can be changed by an administrator (role_overrides), including User and ReadOnly.
+
+New permissions:
+
+- `inventory.kits`: the emergency drugs and anaphylaxis boxes (see them, and record their checks with `inventory.verify`). Every original role that could see inventory keeps it. Roles and role changes saved before it existed (no `capabilitiesVersion`, or below 2) keep seeing the kits while they have `inventory.read`, until they are next saved from Roles & Permissions, which writes `capabilitiesVersion: 2`. Leave it unticked for "stock only".
+- `governance.concernsInvolved`: Concerns appears for the person, showing only the cases they are named on (the security rules already limit what they can read), and they can add a statement or note to those.
+
+The Salaried GP preset (Roles & Permissions, Add Role, Start from) is stock use only, with their own training, timesheet and mileage, the significant events they report or are named in, and the concerns they are named in.

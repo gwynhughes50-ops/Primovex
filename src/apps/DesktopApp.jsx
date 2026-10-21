@@ -14,6 +14,7 @@ import WasteNotes from "@/pages/WasteNotes";
 import Timesheets from "@/pages/Timesheets";
 import Mileage from "@/pages/Mileage";
 import MyTimesheet from "@/pages/MyTimesheet";
+import MyTrainingPage from "@/pages/MyTrainingPage";
 import Compliance from "@/pages/Compliance";
 import Notifications from "@/pages/Notifications";
 import ReorderCentre from "@/pages/ReorderCentre";
@@ -87,6 +88,7 @@ export default function DesktopApp() {
         <Route path="inventory" element={<PermissionGate capability="inventory.read"><Inventory /></PermissionGate>} />
         <Route path="stocktake" element={<PermissionGate capability="stocktake.manage"><StockTake /></PermissionGate>} />
         <Route path="my-timesheet" element={<MyTimesheet />} />
+        <Route path="my-training" element={<MyTrainingPage />} />
         <Route path="mileage" element={<Mileage />} />
         <Route path="timesheets" element={<PermissionGate capability="timesheets.manage"><Timesheets /></PermissionGate>} />
         <Route path="waste" element={<PermissionGate anyOf={["waste.read", "waste.manage"]}><WasteNotes /></PermissionGate>} />
@@ -95,7 +97,7 @@ export default function DesktopApp() {
         <Route path="purchasing" element={<Purchasing />} />
         <Route path="suppliers" element={<SupplierDirectory />} />
         <Route path="practice-admin" element={<PermissionGate capability="practiceAdmin.read"><PracticeAdministration /></PermissionGate>} />
-        <Route path="governance/concerns" element={<PermissionGate capability="governance.read"><GovernanceConcerns /></PermissionGate>} />
+        <Route path="governance/concerns" element={<PermissionGate anyOf={["governance.read", "governance.concernsInvolved"]}><GovernanceConcerns /></PermissionGate>} />
         <Route path="governance/sars" element={<GovernanceSARs />} />
         <Route path="governance/significant-events" element={<GovernanceSignificantEvents />} />
         <Route path="alerts" element={<Alerts />} />

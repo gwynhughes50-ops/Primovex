@@ -30,4 +30,13 @@ t("Stock Controller can read, edit and delete stock, but holds no admin or purch
   }
 });
 
+t("Salaried GP sees stock only: no kits, no governance, no staff records, no purchasing, and nothing administrative", () => {
+  const p = ROLE_PRESETS.find((x) => x.name === "Salaried GP");
+  for (const id of ["inventory.read", "inventory.adjust", "dashboard.read", "mobile.access", "governance.concernsInvolved"]) assert.ok(p.permissions.includes(id), id);
+  for (const id of ["inventory.kits", "inventory.write", "inventory.verify", "inventory.delete", "governance.read", "governance.manageConcerns", "governance.seTeam", "training.manage", "training.manageClinical", "timesheets.manage", "purchasing.read", "admin.access", "temperature.read", "compliance.read"]) {
+    assert.ok(!p.permissions.includes(id), id);
+  }
+  assert.equal(p.homeType, "clinical");
+});
+
 console.log(`\n${n} passed`);

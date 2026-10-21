@@ -1,6 +1,6 @@
 const { FieldValue } = require("firebase-admin/firestore");
 const { HttpsError } = require("firebase-functions/v2/https");
-const { getEffectiveCapabilities, hasCapability } = require("./roleCapabilities");
+const { applyExceptions, getEffectiveCapabilities, hasCapability } = require("./roleCapabilities");
 
 // Tells the right people about a significant event. Clients can never write notifications, so the
 // app asks this server code; it builds the content from the real records and checks the caller is
@@ -54,7 +54,7 @@ async function findTeamUids({ db, capsForRole = (role) => getEffectiveCapabiliti
     const user = doc.data() || {};
     if (user.active === false || !user.role) continue;
     if (!cache.has(user.role)) cache.set(user.role, await capsForRole(user.role));
-    if (hasCapability(cache.get(user.role), "governance.seTeam")) uids.push(doc.id);
+    if (hasCapability(applyExceptions(cache.get(user.role), user), "governance.seTeam")) uids.push(doc.id);
   }
   return uids;
 }

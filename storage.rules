@@ -45,7 +45,7 @@ service firebase.storage {
           "stocktake.count", "stocktake.manage", "waste.read", "waste.manage",
           "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
           "dashboard.read", "operations.read", "operations.manage",
-          "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",
+          "inventory.read", "inventory.kits", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",
           "purchasing.read", "purchasing.write", "purchasing.approve",
           "suppliers.read", "suppliers.write",
           "governance.read", "governance.write", "governance.manageSars", "governance.manageComplaints",
@@ -62,7 +62,7 @@ service firebase.storage {
         role == "User" ? [
           "stocktake.count",
           "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
-          "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify",
+          "inventory.read", "inventory.kits", "inventory.write", "inventory.adjust", "inventory.verify",
           "purchasing.read", "suppliers.read", "connect.view",
           "temperature.read", "temperature.write",
           "compliance.read", "compliance.recordChecks",
@@ -71,21 +71,21 @@ service firebase.storage {
         role == "Nurse" ? [
           "stocktake.count",
           "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
-          "inventory.read", "inventory.write", "inventory.verify", "connect.view",
+          "inventory.read", "inventory.kits", "inventory.write", "inventory.verify", "connect.view",
           "temperature.read", "temperature.write", "temperature.resolveIncident",
           "compliance.read", "compliance.recordChecks",
           "mobile.access", "mobile.biometricUnlock"
         ] :
         role == "HCA" ? [
           "stocktake.count",
-          "dashboard.read", "operations.read", "inventory.read", "inventory.write", "inventory.verify",
+          "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "inventory.write", "inventory.verify",
           "connect.view", "temperature.read", "temperature.write",
           "mobile.access", "mobile.biometricUnlock"
         ] :
         role == "Reception" ? [
           "stocktake.count",
           "clinflow.read", "clinflow.capture", "clinflow.workflow",
-          "dashboard.read", "operations.read", "inventory.read", "purchasing.read",
+          "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "purchasing.read",
           "governance.read", "governance.write", "governance.manageConcerns", "governance.concernsTeam",
           "connect.view", "mobile.access"
         ] :
@@ -106,38 +106,50 @@ service firebase.storage {
           "dashboard.read", "governance.read", "governance.partnerAccess", "coshh.read", "mobile.access"
         ] :
         role == "ReadOnly" ? [
-          "clinflow.read", "dashboard.read", "operations.read", "inventory.read", "purchasing.read",
+          "clinflow.read", "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "purchasing.read",
           "suppliers.read", "governance.read", "connect.view", "temperature.read", "compliance.read",
           "reports.read"
         ] :
         [];
     }
 
+    function withLegacyKits(capabilities, version) {
+      return (version >= 2 || !("inventory.read" in capabilities) || "inventory.kits" in capabilities)
+        ? capabilities
+        : capabilities.concat(["inventory.kits"]);
+    }
+    function legacyKitsOf(roleDoc) {
+      return withLegacyKits(roleDoc.capabilities, roleDoc.get("capabilitiesVersion", 1));
+    }
     function customRoleCapabilities(role) {
       return firestore.exists(/databases/(default)/documents/roles/$(role))
-        ? firestore.get(/databases/(default)/documents/roles/$(role)).data.capabilities
+        ? legacyKitsOf(firestore.get(/databases/(default)/documents/roles/$(role)).data)
         : [];
     }
 
     function overridableRole(role) {
-      return role in ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner"];
+      return role in ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner", "User", "ReadOnly"];
     }
     function hasRoleOverride(role) {
       return overridableRole(role) && firestore.exists(/databases/(default)/documents/role_overrides/$(role));
     }
     function effectiveRoleCapabilities(role) {
       return isBuiltInRole(role)
-        ? (hasRoleOverride(role) ? firestore.get(/databases/(default)/documents/role_overrides/$(role)).data.capabilities : builtInRoleCapabilities(role))
+        ? (hasRoleOverride(role)
+            ? legacyKitsOf(firestore.get(/databases/(default)/documents/role_overrides/$(role)).data)
+            : builtInRoleCapabilities(role))
         : customRoleCapabilities(role);
     }
 
+    function permitted(capability, me) {
+      let caps = effectiveRoleCapabilities(me.role);
+      let exceptions = me.get("permissionExceptions", {});
+      return me.role == "System Admin"
+        || capability in exceptions.get("allow", [])
+        || ((capability in caps || "*" in caps) && !(capability in exceptions.get("deny", [])));
+    }
     function hasPermission(domain, action) {
-      return signedIn()
-        && (
-          isAdmin()
-          || (domain + "." + action) in effectiveRoleCapabilities(userRole())
-          || "*" in effectiveRoleCapabilities(userRole())
-        );
+      return signedIn() && permitted(domain + "." + action, firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data);
     }
 
     // Stock item photos, one folder per item: stock_photos/{itemId}/{fileName}.

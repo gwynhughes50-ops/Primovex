@@ -493,7 +493,7 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, isAdmi
           <p className="text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Case timeline</p>
           {!isPartner && (
             <div className="mt-2 flex gap-2">
-              <input value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Add a quick note" className="flex-1 rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2 text-sm" />
+              <input value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder={isTeam ? "Add a quick note" : "Add your statement or note"} className="flex-1 rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2 text-sm" />
               <button type="button" onClick={submitNote} className="rounded-xl bg-[var(--medtrak-accent)] px-3 py-2 text-sm font-semibold text-white">Add</button>
             </div>
           )}

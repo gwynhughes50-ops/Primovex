@@ -7,7 +7,7 @@ export const ROUTE_MANIFEST = [
   { path: "/inventory", label: "Inventory", section: "core", iconKey: "inventory", capability: "inventory.read", children: ["Stock", "Emergency Drugs", "Anaphylaxis Boxes"] },
   { path: "/stocktake", label: "Stock take", section: "core", iconKey: "stocktake", capability: "stocktake.manage" },
   { path: "/alerts", label: "Operations", section: "core", iconKey: "alerts", capability: "operations.read" },
-  { path: "/governance/concerns", label: "Concerns", section: "core", iconKey: "governance", capability: "governance.manageConcerns" },
+  { path: "/governance/concerns", label: "Concerns", section: "core", iconKey: "governance", capability: "governance.manageConcerns", anyOf: ["governance.manageConcerns", "governance.concernsInvolved"] },
   { path: "/governance/sars", label: "SARs", section: "core", iconKey: "sar", capability: "governance.manageSars" },
   // Anyone can report a significant event, so there is no permission to see this one.
   { path: "/governance/significant-events", label: "Significant events", section: "core", iconKey: "governance" },
@@ -18,6 +18,7 @@ export const ROUTE_MANIFEST = [
   { path: "/facilities", label: "Facilities", section: "operations", iconKey: "facilities", children: ["Overview", "Spaces", "Equipment"] },
   { path: "/training", label: "Staff training", section: "operations", iconKey: "training", capability: "training.manage", anyOf: ["training.manage", "training.manageClinical"] },
   { path: "/my-timesheet", label: "Timesheet", section: "operations", iconKey: "myTimesheet" },
+  { path: "/my-training", label: "My training", section: "operations", iconKey: "training" },
   { path: "/mileage", label: "Mileage", section: "operations", iconKey: "mileage" },
   { path: "/timesheets", label: "Timesheets", section: "operations", iconKey: "timesheets", capability: "timesheets.manage" },
   { path: "/waste", label: "Clinical waste", section: "operations", iconKey: "waste", capability: "waste.read", anyOf: ["waste.read", "waste.manage"] },

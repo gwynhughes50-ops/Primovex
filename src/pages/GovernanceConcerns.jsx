@@ -605,8 +605,8 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
       <SectionCard title="Case timeline" description="Chronological audit trail of key concern activity.">
         {!isPartner && (
           <div className="mb-4 flex gap-2">
-            <Input value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Add a quick note" />
-            <Button onClick={submitNote} className="rounded-full">Add note</Button>
+            <Input value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder={isTeam ? "Add a quick note" : "Add your statement or note about this case"} />
+            <Button onClick={submitNote} className="rounded-full">{isTeam ? "Add note" : "Add"}</Button>
           </div>
         )}
         <div className="space-y-2">

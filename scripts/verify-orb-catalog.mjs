@@ -16,9 +16,9 @@ const t = (name, fn) => { fn(); n++; console.log("ok  " + name); };
 const source = readFileSync(new URL("../src/ai/tools/readOnlyTools.js", import.meta.url), "utf8");
 const registered = new Map();
 for (const m of source.matchAll(/id: '([a-zA-Z.]+)', label: '[^']*', requiredCapability: '([a-z.A-Z]+)'/g)) registered.set(m[1], m[2]);
-// the two readiness lookups are registered through a helper that applies inventory.read
-registered.set("emergency.readiness", "inventory.read");
-registered.set("anaphylaxis.readiness", "inventory.read");
+// the two readiness lookups are registered through a helper that applies inventory.kits
+registered.set("emergency.readiness", "inventory.kits");
+registered.set("anaphylaxis.readiness", "inventory.kits");
 
 const NEVER_SENT = ["coldChain.checksToday", "briefing.daily", "app.navigate", "person.messageDraft", "reminder.draft", "stock.expiredDraft", "stock.countDraft", "stock.inDraft", "compliance.lastCheck", "compliance.waterTemps", "compliance.dueNow", "compliance.incidents", "pat.status", "security.lastLogin", "governance.sarOverview", "governance.concernsOverview", "governance.concernLookup", "governance.sarLookup", "governance.seLookup", "se.reportDraft", "knowledge.faqLookup"];
 

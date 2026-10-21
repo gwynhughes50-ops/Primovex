@@ -1455,8 +1455,8 @@ async function main() {
     await assertFails(getDoc(doc(hcaOvr, "waste_consignments", "cn-ovr")));
     await assertFails(getBytes(ref(hcaOvrStorage, "waste_notes/cn-pm/b.pdf")));
   });
-  await check("System Admin, User and ReadOnly cannot be given a change at all, and nothing malformed is accepted", async () => {
-    for (const name of ["System Admin", "User", "ReadOnly", "Made Up Role"]) await assertFails(setDoc(doc(admin, "role_overrides", name), { capabilities: ["waste.read"] }));
+  await check("System Admin cannot be given a change at all, and nothing malformed is accepted", async () => {
+    for (const name of ["System Admin", "Made Up Role"]) await assertFails(setDoc(doc(admin, "role_overrides", name), { capabilities: ["waste.read"] }));
     await assertFails(setDoc(doc(admin, "role_overrides", "Nurse"), { capabilities: "everything" }));
     await assertFails(setDoc(doc(admin, "role_overrides", "Nurse"), { capabilities: Array.from({ length: 200 }, (_, i) => "x." + i) }));
   });
@@ -1468,6 +1468,60 @@ async function main() {
     await assertFails(getDoc(doc(hcaOvr, "waste_consignments", "cn-ovr")));
     await assertFails(getBytes(ref(hcaOvrStorage, "waste_notes/cn-pm/b.pdf")));
   });
+
+  console.log("\n=== 11. Emergency kits are for people allowed to see them; one person's exceptions ===");
+  await seed(async (db) => {
+    await setDoc(doc(db, "roles", "Salaried GP"), { name: "Salaried GP", capabilities: ["inventory.read", "inventory.adjust", "dashboard.read"], capabilitiesVersion: 2, builtIn: false });
+    await setDoc(doc(db, "roles", "Old stock role"), { name: "Old stock role", capabilities: ["inventory.read"], builtIn: false });
+    await setDoc(doc(db, "users", "gp-uid"), { role: "Salaried GP", displayName: "GP" });
+    await setDoc(doc(db, "users", "gp2-uid"), { role: "Salaried GP", displayName: "GP Two", permissionExceptions: { allow: ["inventory.kits", "training.manage"] } });
+    await setDoc(doc(db, "users", "oldrole-uid"), { role: "Old stock role", displayName: "Old" });
+    await setDoc(doc(db, "users", "nurse-deny-uid"), { role: "Nurse", displayName: "Nurse X", permissionExceptions: { deny: ["inventory.kits", "inventory.verify"] } });
+    await setDoc(doc(db, "users", "admin-deny-uid"), { role: "System Admin", displayName: "Admin X", permissionExceptions: { deny: ["inventory.kits"] } });
+    await setDoc(doc(db, "stock_items", "stock-gp"), { name: "Gloves", quantity: 3 });
+  });
+  const gp = testEnv.authenticatedContext("gp-uid").firestore();
+  const gp2 = testEnv.authenticatedContext("gp2-uid").firestore();
+  const oldRole = testEnv.authenticatedContext("oldrole-uid").firestore();
+  const nurseDeny = testEnv.authenticatedContext("nurse-deny-uid").firestore();
+  const adminDeny = testEnv.authenticatedContext("admin-deny-uid").firestore();
+  for (const coll of ["emergency_assets", "anaphylaxis_boxes"]) {
+    await check(`[${coll}] A Salaried GP role without the kits permission CANNOT read the kit`, () => assertFails(getDoc(doc(gp, coll, "kit-1"))));
+    await check(`[${coll}] ...nor list the kits`, () => assertFails(getDocs(collection(gp, coll))));
+    await check(`[${coll}] ...nor read a kit's checks`, () => assertFails(getDoc(doc(gp, coll, "kit-1", "checks", "c-nurse"))));
+    await check(`[${coll}] A role saved before the permission existed (and with stock access) CAN still read the kit`, () => assertSucceeds(getDoc(doc(oldRole, coll, "kit-1"))));
+    await check(`[${coll}] A person given the kits permission as an exception CAN read the kit`, () => assertSucceeds(getDoc(doc(gp2, coll, "kit-1"))));
+    await check(`[${coll}] A Nurse with the kits permission switched off CANNOT read the kit`, () => assertFails(getDoc(doc(nurseDeny, coll, "kit-1"))));
+    await check(`[${coll}] ...and cannot record a check either (verify switched off)`, () => assertFails(setDoc(doc(nurseDeny, coll, "kit-1", "checks", "c-denied"), kitCheck("nurse-deny-uid"))));
+    await check(`[${coll}] An administrator's access is never narrowed by an exception`, () => assertSucceeds(getDoc(doc(adminDeny, coll, "kit-1"))));
+    await check(`[${coll}] Another Nurse (no exception) CAN still read the kit`, () => assertSucceeds(getDoc(doc(nurse, coll, "kit-1"))));
+  }
+  await check("A Salaried GP CAN still read stock", () => assertSucceeds(getDoc(doc(gp, "stock_items", "stock-gp"))));
+  await check("A person CANNOT give themselves an exception (own record)", () =>
+    assertFails(updateDoc(doc(gp, "users", "gp-uid"), { permissionExceptions: { allow: ["admin.manageUsers"] } })));
+  await check("A person CANNOT remove an exception someone put against them", () =>
+    assertFails(updateDoc(doc(nurseDeny, "users", "nurse-deny-uid"), { permissionExceptions: {} })));
+  await check("A person CAN still update their own harmless profile fields", () =>
+    assertSucceeds(updateDoc(doc(gp, "users", "gp-uid"), { displayName: "GP renamed" })));
+  await check("An administrator CAN set an exception on a person", () =>
+    assertSucceeds(updateDoc(doc(admin, "users", "gp-uid"), { permissionExceptions: { allow: ["inventory.kits"] } })));
+  await check("...and it takes effect: the GP now CAN read the kit", () => assertSucceeds(getDoc(doc(gp, "emergency_assets", "kit-1"))));
+  await check("A Practice Manager (not System Admin) CANNOT set an exception on someone", () =>
+    assertFails(updateDoc(doc(pm, "users", "gp2-uid"), { permissionExceptions: { allow: ["admin.manageUsers"] } })));
+  await check("An exception allowing a permission grants it where rules check it (training.manage on a GP)", () =>
+    assertSucceeds(setDoc(doc(gp2, "training_courses", "course-gp2"), { name: "Fire safety", months: 12 })));
+  await check("...but a Salaried GP without it CANNOT", () =>
+    assertFails(setDoc(doc(gp, "training_courses", "course-gp"), { name: "Fire safety", months: 12 })));
+  // User and ReadOnly can now be changed by an administrator, and only by one
+  await check("Admin CAN change the User role's permissions", () =>
+    assertSucceeds(setDoc(doc(admin, "role_overrides", "User"), { capabilities: ["dashboard.read"], capabilitiesVersion: 2 })));
+  await check("Practice Manager CANNOT change the User role's permissions", () =>
+    assertFails(setDoc(doc(pm, "role_overrides", "User"), { capabilities: ["admin.access"], capabilitiesVersion: 2 })));
+  await check("System Admin's role can never be overridden", () =>
+    assertFails(setDoc(doc(admin, "role_overrides", "System Admin"), { capabilities: [], capabilitiesVersion: 2 })));
+  await check("...and a User now with only the dashboard CANNOT read the kits", () => assertFails(getDoc(doc(user, "emergency_assets", "kit-1"))));
+  await check("Admin CAN restore the User role", () => assertSucceeds(deleteDoc(doc(admin, "role_overrides", "User"))));
+  await check("...and a User can see the kits again", () => assertSucceeds(getDoc(doc(user, "emergency_assets", "kit-1"))));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();

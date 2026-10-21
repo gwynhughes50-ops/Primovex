@@ -35,7 +35,7 @@ const EVERY_CAPABILITY = [...new Set(Object.values(BUILT_IN_ROLE_CAPABILITIES).f
 
 // What the Orb may use for this person: their role's permissions, limited to their Orb topics.
 async function getOrbCapabilities(db, profile = {}) {
-  const capabilities = await getEffectiveCapabilities(db, profile.role);
+  const capabilities = await getEffectiveCapabilities(db, profile.role, profile);
   return applyOrbScope(capabilities, profile.orbScope, EVERY_CAPABILITY);
 }
 

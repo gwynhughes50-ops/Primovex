@@ -121,6 +121,19 @@ export const CAPABILITIES = {
 // until the role is saved, and every permission can be changed first.
 export const ROLE_PRESETS = [
   {
+    name: "Salaried GP",
+    description: "Uses stock but not the emergency drugs or anaphylaxis boxes. Sees only their own training, timesheet and mileage, the significant events they report or are named in, and the concerns they are named in (where they can add a statement or note). Nothing else is switched on.",
+    homeType: "clinical",
+    permissions: [
+      "dashboard.read",
+      "inventory.read",
+      "inventory.adjust",
+      "governance.concernsInvolved",
+      "mobile.access",
+      "mobile.biometricUnlock",
+    ],
+  },
+  {
     name: "Stock Controller",
     description: "Looks after stock and may permanently delete stock items. Give this role only to the logins you trust with that.",
     permissions: [
@@ -148,6 +161,7 @@ export const CAPABILITY_CATALOG = [
   { id: "operations.manage", label: "Manage operational work", group: "Core" },
 
   { id: "inventory.read", label: "View inventory", group: "Inventory" },
+  { id: "inventory.kits", label: "Emergency drugs and anaphylaxis boxes: see them and record their checks (leave unticked for stock only)", group: "Inventory" },
   { id: "inventory.write", label: "Create/edit stock", group: "Inventory" },
   { id: "inventory.adjust", label: "Adjust stock levels", group: "Inventory" },
   { id: "inventory.verify", label: "Complete stock verification", group: "Inventory" },
@@ -165,6 +179,7 @@ export const CAPABILITY_CATALOG = [
   { id: "governance.manageSars", label: "Manage SARs", group: "Governance" },
   { id: "governance.manageComplaints", label: "Manage complaints", group: "Governance" },
   { id: "governance.manageConcerns", label: "Manage Listening to People concerns", group: "Governance" },
+  { id: "governance.concernsInvolved", label: "Concerns: see only the ones they are named in, and add a statement or note to them", group: "Governance" },
   { id: "governance.concernsTeam", label: "Concerns team — full access to every concern", group: "Governance" },
   { id: "governance.seTeam", label: "Significant events team — full access to every significant event", group: "Governance" },
   { id: "governance.partnerAccess", label: "Partner — read-only visibility across all governance records", group: "Governance" },
@@ -232,6 +247,7 @@ export const ROLE_TEMPLATES = {
     "operations.read",
     "operations.manage",
     "inventory.read",
+    "inventory.kits",
     "inventory.write",
     "inventory.adjust",
     "inventory.verify",
@@ -284,6 +300,7 @@ export const ROLE_TEMPLATES = {
     "dashboard.read",
     "operations.read",
     "inventory.read",
+    "inventory.kits",
     "inventory.write",
     "inventory.adjust",
     "inventory.verify",
@@ -304,6 +321,7 @@ export const ROLE_TEMPLATES = {
     "dashboard.read",
     "operations.read",
     "inventory.read",
+    "inventory.kits",
     "inventory.write",
     "inventory.verify",
     "connect.view",
@@ -320,6 +338,7 @@ export const ROLE_TEMPLATES = {
     "dashboard.read",
     "operations.read",
     "inventory.read",
+    "inventory.kits",
     "inventory.write",
     "inventory.verify",
     "connect.view",
@@ -336,6 +355,7 @@ export const ROLE_TEMPLATES = {
     "dashboard.read",
     "operations.read",
     "inventory.read",
+    "inventory.kits",
     "purchasing.read",
     "governance.read",
     "governance.write",
@@ -382,6 +402,7 @@ export const ROLE_TEMPLATES = {
     "dashboard.read",
     "operations.read",
     "inventory.read",
+    "inventory.kits",
     "purchasing.read",
     "suppliers.read",
     "governance.read",
@@ -446,16 +467,38 @@ function flattenProfilePermissions(profile) {
 // loaded live from Firestore (see AuthContext's "roles" subscription) — kept
 // as a plain argument rather than importing Firestore here so this stays a
 // framework-agnostic pure function.
-// The original roles an administrator may change the permissions of (the System Admin, User and ReadOnly roles are fixed). A change is kept
+// The original roles an administrator may change the permissions of (every original role except System Admin, whose access is never narrowed). A change is kept
 // in role_overrides/{role}; the same list is mirrored by hand in firestore.rules, storage.rules and functions/services/roleCapabilities.js.
-export const OVERRIDABLE_ROLES = ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner"];
+export const OVERRIDABLE_ROLES = ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner", "User", "ReadOnly"];
+
+// Roles and role changes saved before the emergency drugs and anaphylaxis boxes had a permission of their own (capabilitiesVersion
+// below 2) could see them if they could see inventory, so they keep doing so until the role is next saved. Mirrored by hand in
+// firestore.rules, storage.rules and functions/services/roleCapabilities.js.
+export const CAPABILITIES_VERSION = 2;
+export function withLegacyKits(capabilities, version) {
+  if (!Array.isArray(capabilities) || Number(version) >= CAPABILITIES_VERSION) return capabilities;
+  return capabilities.includes("inventory.read") && !capabilities.includes("inventory.kits") ? [...capabilities, "inventory.kits"] : capabilities;
+}
+
+// One person's exceptions to their role, set by an administrator and kept on their own record: things switched on that the role
+// does not give them (allow), and things switched off that it does (deny). Written only by an administrator (firestore.rules).
+export function permissionExceptionsOf(profile) {
+  const list = (value) => (Array.isArray(value) ? [...new Set(value.filter((x) => typeof x === "string" && x))] : []);
+  const exceptions = profile?.permissionExceptions;
+  return { allow: list(exceptions?.allow), deny: list(exceptions?.deny) };
+}
 
 export function getCapabilitiesForProfile(profile, customRoleCapabilities = {}, roleOverrides = {}) {
   const role = profile?.role || "ReadOnly";
-  const overridden = OVERRIDABLE_ROLES.includes(role) && Array.isArray(roleOverrides?.[role]?.capabilities) ? roleOverrides[role].capabilities : null;
+  const override = OVERRIDABLE_ROLES.includes(role) && Array.isArray(roleOverrides?.[role]?.capabilities) ? roleOverrides[role] : null;
+  const overridden = override ? withLegacyKits(override.capabilities, override.capabilitiesVersion) : null;
   const roleCapabilities = overridden || ROLE_TEMPLATES[role] || customRoleCapabilities[role] || ROLE_TEMPLATES.User || [];
   const profileCapabilities = flattenProfilePermissions(profile);
   const merged = new Set([...roleCapabilities, ...profileCapabilities]);
+  if (merged.has("*")) return Array.from(merged); // an administrator's access is never narrowed
+  const { allow, deny } = permissionExceptionsOf(profile);
+  allow.forEach((capability) => merged.add(capability));
+  deny.forEach((capability) => merged.delete(capability));
   return Array.from(merged);
 }
 

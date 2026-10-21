@@ -115,7 +115,7 @@ service cloud.firestore {
       allow update: if signedIn()
         && request.auth.uid == uid
         && request.resource.data.role == resource.data.role
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['orbScope']);
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['orbScope', 'permissionExceptions']);
 
       // admin can update/delete profiles
       allow update: if isAdmin();
@@ -266,7 +266,7 @@ match /practice_config/{docId} {
 // An administrator's change to an original role's permissions. Readable by everyone signed in (the app needs it to know what a role may do).
 match /role_overrides/{roleId} {
   allow get, list: if signedIn();
-  allow create, update: if isAdmin() && roleId in ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner"]
+  allow create, update: if isAdmin() && roleId in ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner", "User", "ReadOnly"]
     && request.resource.data.capabilities is list && request.resource.data.capabilities.size() <= 120;
   allow delete: if isAdmin();
 }
@@ -692,7 +692,7 @@ match /subject_access_requests/{requestId} {
           "stocktake.count", "stocktake.manage", "training.manage", "waste.read", "waste.manage", "timesheets.manage",
           "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
           "dashboard.read", "operations.read", "operations.manage",
-          "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",
+          "inventory.read", "inventory.kits", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",
           "purchasing.read", "purchasing.write", "purchasing.approve",
           "suppliers.read", "suppliers.write",
           "governance.read", "governance.write", "governance.manageSars", "governance.manageComplaints",
@@ -709,7 +709,7 @@ match /subject_access_requests/{requestId} {
         role == "User" ? [
           "stocktake.count",
           "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
-          "inventory.read", "inventory.write", "inventory.adjust", "inventory.verify",
+          "inventory.read", "inventory.kits", "inventory.write", "inventory.adjust", "inventory.verify",
           "purchasing.read", "suppliers.read", "connect.view",
           "temperature.read", "temperature.write",
           "compliance.read", "compliance.recordChecks",
@@ -718,21 +718,21 @@ match /subject_access_requests/{requestId} {
         role == "Nurse" ? [
           "stocktake.count",
           "clinflow.read", "clinflow.workflow", "dashboard.read", "operations.read",
-          "inventory.read", "inventory.write", "inventory.verify", "connect.view",
+          "inventory.read", "inventory.kits", "inventory.write", "inventory.verify", "connect.view",
           "temperature.read", "temperature.write", "temperature.resolveIncident",
           "compliance.read", "compliance.recordChecks",
           "mobile.access", "mobile.biometricUnlock"
         ] :
         role == "HCA" ? [
           "stocktake.count",
-          "dashboard.read", "operations.read", "inventory.read", "inventory.write", "inventory.verify",
+          "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "inventory.write", "inventory.verify",
           "connect.view", "temperature.read", "temperature.write",
           "mobile.access", "mobile.biometricUnlock"
         ] :
         role == "Reception" ? [
           "stocktake.count",
           "clinflow.read", "clinflow.capture", "clinflow.workflow",
-          "dashboard.read", "operations.read", "inventory.read", "purchasing.read",
+          "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "purchasing.read",
           "governance.read", "governance.write", "governance.manageConcerns", "governance.concernsTeam",
           "connect.view", "mobile.access"
         ] :
@@ -753,7 +753,7 @@ match /subject_access_requests/{requestId} {
           "dashboard.read", "governance.read", "governance.partnerAccess", "coshh.read", "mobile.access"
         ] :
         role == "ReadOnly" ? [
-          "clinflow.read", "dashboard.read", "operations.read", "inventory.read", "purchasing.read",
+          "clinflow.read", "dashboard.read", "operations.read", "inventory.read", "inventory.kits", "purchasing.read",
           "suppliers.read", "governance.read", "connect.view", "temperature.read", "compliance.read",
           "reports.read"
         ] :
@@ -770,33 +770,52 @@ match /subject_access_requests/{requestId} {
     // Admin-created roles (AdminDashboard's Add/Edit Role) are stored at
     // roles/{roleName} — the doc id is the role name itself — with a
     // `capabilities` array field.
+    // Roles (and role changes) saved before the emergency drugs and anaphylaxis boxes had their own permission, capabilitiesVersion
+    // below 2, could see them if they could see inventory, so they keep doing so until the role is next saved.
+    function withLegacyKits(capabilities, version) {
+      return (version >= 2 || !("inventory.read" in capabilities) || "inventory.kits" in capabilities)
+        ? capabilities
+        : capabilities.concat(["inventory.kits"]);
+    }
+    function legacyKitsOf(roleDoc) {
+      return withLegacyKits(roleDoc.capabilities, roleDoc.get("capabilitiesVersion", 1));
+    }
     function customRoleCapabilities(role) {
       return exists(/databases/$(database)/documents/roles/$(role))
-        ? get(/databases/$(database)/documents/roles/$(role)).data.capabilities
+        ? legacyKitsOf(get(/databases/$(database)/documents/roles/$(role)).data)
         : [];
     }
 
-    // An administrator can change the permissions of most original roles (never System Admin, User or ReadOnly). The change is kept in
+    // An administrator can change the permissions of every original role except System Admin (whose access is never narrowed). The change is kept in
     // role_overrides/{role}; the list of roles it may apply to is mirrored in src/core/identity/capabilities.js.
     function overridableRole(role) {
-      return role in ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner"];
+      return role in ["Practice Manager", "Nurse", "HCA", "Reception", "Caretaker", "Cleaner", "Partner", "User", "ReadOnly"];
     }
     function hasRoleOverride(role) {
       return overridableRole(role) && exists(/databases/$(database)/documents/role_overrides/$(role));
     }
     function effectiveRoleCapabilities(role) {
       return isBuiltInRole(role)
-        ? (hasRoleOverride(role) ? get(/databases/$(database)/documents/role_overrides/$(role)).data.capabilities : builtInRoleCapabilities(role))
+        ? (hasRoleOverride(role)
+            ? legacyKitsOf(get(/databases/$(database)/documents/role_overrides/$(role)).data)
+            : builtInRoleCapabilities(role))
         : customRoleCapabilities(role);
     }
 
+    // One person's exceptions to their role, set by an administrator on their own record (users/{uid}.permissionExceptions, which
+    // the person cannot change): things switched on that the role does not give them (allow) and things switched off that it
+    // does (deny). An administrator's access is never narrowed.
+    // The person's record is read once and passed on, and so is their role's list, to keep the number of documents a rule reads
+    // low (a rule may read at most ten).
+    function permitted(capability, me) {
+      let caps = effectiveRoleCapabilities(me.role);
+      let exceptions = me.get("permissionExceptions", {});
+      return me.role == "System Admin"
+        || capability in exceptions.get("allow", [])
+        || ((capability in caps || "*" in caps) && !(capability in exceptions.get("deny", [])));
+    }
     function hasPermission(domain, action) {
-      return signedIn()
-        && (
-          isAdmin()
-          || (domain + "." + action) in effectiveRoleCapabilities(userRole())
-          || "*" in effectiveRoleCapabilities(userRole())
-        );
+      return signedIn() && permitted(domain + "." + action, get(/databases/$(database)/documents/users/$(request.auth.uid)).data);
     }
 
     // -------------------------
@@ -1447,14 +1466,14 @@ match /subject_access_requests/{requestId} {
 // EMERGENCY DRUGS / EQUIPMENT (Monthly)
 // -------------------------
 match /emergency_assets/{assetId} {
-  allow get, list: if signedIn();
+  allow get, list: if signedIn() && (hasPermission("inventory", "kits") || isAdmin());
   // Setting up / editing / removing a kit needs inventory.delete (Practice
   // Manager and System Admin, or any custom role given it) - the same level as
   // archiving stock. Everyone with inventory.verify can still record checks.
   allow create, update, delete: if hasPermission("inventory", "delete") || isAdmin();
 
   match /checks/{checkId} {
-    allow get, list: if signedIn();
+    allow get, list: if signedIn() && (hasPermission("inventory", "kits") || isAdmin());
     // Recording a monthly check needs inventory.verify (what the app already
     // requires before showing Save), only as yourself, and with the server's
     // own timestamp so a check can't be back-dated or signed as someone else.
@@ -1470,14 +1489,14 @@ match /emergency_assets/{assetId} {
 // ANAPHYLAXIS EMERGENCY BOXES (Monthly)
 // -------------------------
 match /anaphylaxis_boxes/{boxId} {
-  allow get, list: if signedIn();
+  allow get, list: if signedIn() && (hasPermission("inventory", "kits") || isAdmin());
   // Setting up / editing / removing a kit needs inventory.delete (Practice
   // Manager and System Admin, or any custom role given it) - the same level as
   // archiving stock. Everyone with inventory.verify can still record checks.
   allow create, update, delete: if hasPermission("inventory", "delete") || isAdmin();
 
   match /checks/{checkId} {
-    allow get, list: if signedIn();
+    allow get, list: if signedIn() && (hasPermission("inventory", "kits") || isAdmin());
     // Recording a monthly check needs inventory.verify (what the app already
     // requires before showing Save), only as yourself, and with the server's
     // own timestamp so a check can't be back-dated or signed as someone else.

@@ -83,7 +83,8 @@ export function getRoleHome(role, capabilities = [], homeType = "") {
       actions: [
         { key: "orb-voice", label: "Take items by voice", helper: "Say what you took", Icon: Mic },
         { key: "stock", label: "Stock", helper: "Use or find an item", Icon: Package },
-        { key: "kits", label: "Kits and boxes", helper: "Check emergency and anaphylaxis", Icon: Stethoscope },
+        { key: "kits", label: "Kits and boxes", helper: "Check emergency and anaphylaxis", Icon: Stethoscope, capability: "inventory.kits" },
+        { key: "concerns", label: "Concerns", helper: "The ones you are named in", Icon: ShieldAlert, capability: "governance.concernsInvolved" },
         { key: "temperature", label: "Temperature", helper: "Review the readings", Icon: Thermometer },
         { key: "fridge-check", label: "Fridge check", helper: "Scan the tag on the fridge", Icon: Thermometer, capability: "temperature.write" },
         { key: "issue", label: "Report an issue", helper: "To the right person", Icon: Wrench },

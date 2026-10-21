@@ -54,7 +54,13 @@ t("the clinical home is about taking stock, kits and temperature, not management
   assert.equal(home.primary.key, "scan-stock");
   const keys = home.actions.map((a) => a.key);
   for (const k of ["orb-voice", "stock", "kits", "temperature", "fridge-check", "issue"]) assert.ok(keys.includes(k), k);
-  assert.ok(!keys.includes("sars") && !keys.includes("concerns"));
+  assert.ok(!keys.includes("sars"));
+  // the concerns tile is only for people given "concerns they are named in", and the kits tile only for people allowed the kits
+  const shown = visibleActions(home, ["inventory.read"]).map((x) => x.key);
+  assert.ok(!shown.includes("concerns") && !shown.includes("kits"));
+  const gp = visibleActions(home, ["inventory.read", "governance.concernsInvolved"]).map((x) => x.key);
+  assert.ok(gp.includes("concerns") && !gp.includes("kits"), "a salaried GP sees the concerns they are named in but not the kits");
+  assert.ok(visibleActions(home, ["inventory.read", "inventory.kits"]).some((x) => x.key === "kits"));
   assert.equal(home.attention, false);
 });
 
@@ -165,7 +171,7 @@ t("expired and running-out certificates are on the strip for the people who keep
 });
 
 t("a nurse manager gets the clinical home with the briefing and the attention strip, not the Practice Manager's office home", () => {
-  const caps = ["inventory.read", "inventory.write", "temperature.write", "stocktake.count"];
+  const caps = ["inventory.read", "inventory.write", "inventory.kits", "temperature.write", "stocktake.count"];
   const lead = getRoleHome("Nurse Manager", caps);
   assert.equal(lead.id, "clinical");
   assert.equal(lead.attention, true);

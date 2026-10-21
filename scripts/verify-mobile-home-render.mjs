@@ -24,7 +24,7 @@ t("the manager's home: slim Ask Orb, SARs and the other tiles, the attention str
 });
 
 t("a nurse sees the clinic tiles and no attention strip or management tiles", () => {
-  const html = home("Nurse", ["inventory.write"]);
+  const html = home("Nurse", ["inventory.write", "inventory.kits"]);
   for (const label of ["Scan stock", "Take items by voice", "Kits and boxes", "Temperature", "Report an issue", "Quick note", "Messages"]) assert.ok(html.includes(label), label);
   assert.ok(!html.includes("SARs") && !html.includes("Concerns") && !html.includes("Nothing urgent"));
 });
