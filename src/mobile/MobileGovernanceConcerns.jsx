@@ -57,6 +57,7 @@ function getInitialForm() {
     patientInitials: '',
     dateOfBirth: '',
     source: 'patient',
+    statementOnly: false,
     raisedByInitials: '',
     raisedByPhone: '',
     raisedByEmail: '',
@@ -100,6 +101,7 @@ function getFormFromConcern(concern) {
     patientInitials: concern.patientInitials || '',
     dateOfBirth: concern.dateOfBirth || '',
     source: concern.source || 'patient',
+    statementOnly: concern.statementOnly === true,
     raisedByInitials: concern.raisedByInitials || '',
     category: concern.category || 'communication',
     priority: concern.priority || CONCERN_PRIORITIES.low,
@@ -169,9 +171,15 @@ function NewConcernSheet({ actor, onClose, onCreated, users, concern }) {
             </label>
           </div>
           <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Source
-            <select value={form.source} onChange={(e) => update({ source: e.target.value })} className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case">
+            <select value={form.source} onChange={(e) => update({ source: e.target.value, ...(!isEdit && e.target.value === 'bcuhb' ? { statementOnly: true } : {}) })} className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case">
               {CONCERN_SOURCES.map((option) => <option key={option} value={option}>{friendly(option)}</option>)}
             </select>
+          </label>
+          <label className="flex items-start gap-3 rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-3 text-sm font-semibold">
+            <input type="checkbox" className="mt-1 h-4 w-4" checked={!!form.statementOnly} onChange={(e) => update({ statementOnly: e.target.checked })} />
+            <span>They only want a statement
+              <span className="block text-xs font-normal text-[var(--medtrak-muted)]">For example the Health Board asking for one. Once it has been sent the case can be closed, with no learning or Duty of Candour steps.</span>
+            </span>
           </label>
 
           <div className="space-y-2 rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-3">

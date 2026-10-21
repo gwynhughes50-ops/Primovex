@@ -352,8 +352,11 @@ export function governanceSection({ concerns, concernSteps, sars, events, now, a
     // how cases were closed: the checks made at closing, and whether anything went out before the outside parties agreed
     const closedNow = (concerns || []).filter((c) => !concernOpen(c) && within(toDate(c.closedAt), from, now));
     if (closedNow.length) {
-      const checked = closedNow.filter((c) => c.dutyOfCandourConsidered === true).length;
+      // a statement-only case has no investigation, so it has no Duty of Candour or learning checks to record
+      const checked = closedNow.filter((c) => c.dutyOfCandourConsidered === true || c.statementOnly === true).length;
+      const statements = closedNow.filter((c) => c.statementOnly === true).length;
       rows.push(["Cases closed (12 months) with every closing check recorded", `${checked} of ${closedNow.length}`],
+        ...(statements ? [["...of which only a statement was requested", String(statements)]] : []),
         ["...Duty of Candour triggered", String(closedNow.filter((c) => c.dutyOfCandourTriggered === true).length)],
         ["...final response sent before everyone involved had accepted it", String(closedNow.filter((c) => c.sentBeforeAccepted === true).length)]);
     }

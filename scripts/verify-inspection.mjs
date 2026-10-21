@@ -295,6 +295,9 @@ t("governance: how cases were closed, and which are waiting on an outside party 
   }, "governance");
   assert.equal(ROW(g, "Cases closed (12 months) with every closing check recorded"), "2 of 3");
   assert.equal(ROW(g, "...Duty of Candour triggered"), "1");
+  const withStatement = secF({ concerns: [closed({ dutyOfCandourConsidered: false, statementOnly: true }), closed({})] }, "governance");
+  assert.equal(ROW(withStatement, "Cases closed (12 months) with every closing check recorded"), "2 of 2", "a statement-only case has no Duty of Candour check to miss");
+  assert.equal(ROW(withStatement, "...of which only a statement was requested"), "1");
   assert.equal(ROW(g, "...final response sent before everyone involved had accepted it"), "1");
   assert.equal(ROW(g, "Welsh Risk Pool reports still being prepared"), "1");
   assert.equal(ROW(g, "Open cases waiting on a reply from an outside party"), "2", "the insurer (sent again) and GMPI are both with them");

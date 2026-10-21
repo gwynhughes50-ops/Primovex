@@ -94,6 +94,7 @@ function getInitialForm() {
     ownerName: "Unassigned",
     namedContactName: "",
     earlyResolutionSuitable: true,
+    statementOnly: false,
     dutyOfCandourConsidered: false,
     dutyOfCandourTriggered: false,
     clinicalReviewRequired: false,
@@ -157,6 +158,7 @@ function getFormFromConcern(concern) {
     ownerName: concern.ownerName || "Unassigned",
     namedContactName: concern.namedContactName || "",
     earlyResolutionSuitable: !!concern.earlyResolutionSuitable,
+    statementOnly: concern.statementOnly === true,
     dutyOfCandourConsidered: !!concern.dutyOfCandourConsidered,
     dutyOfCandourTriggered: !!concern.dutyOfCandourTriggered,
     clinicalReviewRequired: !!concern.clinicalReviewRequired,
@@ -229,10 +231,16 @@ function ConcernFormModal({ open, onClose, actor, onCreated, users, concern }) {
 
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-200">Source</label>
-            <select value={form.source} onChange={(e) => update({ source: e.target.value })} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-white">
+            <select value={form.source} onChange={(e) => update({ source: e.target.value, ...(!isEdit && e.target.value === "bcuhb" ? { statementOnly: true } : {}) })} className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-white">
               {CONCERN_SOURCES.map((option) => <option key={option} value={option}>{friendly(option)}</option>)}
             </select>
           </div>
+          <label className="flex items-start gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-3 text-sm font-semibold text-slate-200 lg:col-span-2">
+            <input type="checkbox" className="mt-1" checked={!!form.statementOnly} onChange={(e) => update({ statementOnly: e.target.checked })} />
+            <span>They only want a statement
+              <span className="block text-xs font-normal text-slate-400">For example the Health Board asking for one. Once the statement has been sent the case can be closed, with no learning or Duty of Candour steps.</span>
+            </span>
+          </label>
 
           <div className="space-y-2 rounded-2xl border border-cyan-400/20 bg-cyan-500/5 p-4 lg:col-span-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-cyan-200">Raised by{form.source === "patient" ? " (the patient)" : ""}: who to reply to</p>

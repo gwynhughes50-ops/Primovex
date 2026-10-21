@@ -142,6 +142,9 @@ export function updateChoices(concern = {}, steps = [], now = new Date()) {
     { key: "extend", group: "The case", label: "We need more time", hint: "Move the final response deadline" },
     { key: "owner", group: "The case", label: "Pass it to someone else", hint: "Change who deals with it" },
     { key: "share", group: "The case", label: "Share it with a colleague", hint: "So they can see it" },
+    isStatementOnly(concern)
+      ? { key: "statement_toggle", group: "The case", label: "It needs a full response, not just a statement", hint: "Switches the case back to the full process" }
+      : { key: "statement_toggle", group: "The case", label: "They only want a statement", hint: "Once it has been sent the case can be closed, with no learning or Duty of Candour steps" },
     { key: "note", group: "The case", label: "Add a note", hint: "Anything to remember" },
     { key: "stage", group: "The case", label: "Move it to the next stage", hint: "Acknowledged, investigation, response, learning…" },
   );
@@ -152,6 +155,13 @@ export function updateChoices(concern = {}, steps = [], now = new Date()) {
 // ---- closing a case ----
 
 export const CLOSE_STEPS = ["response", "learning", "lfe", "candour", "outcome", "check"];
+
+// Some cases only ask the practice for a statement (the Health Board asking for one, for example). Those are not investigated
+// and answered: once the statement has been sent the case can be closed, with no learning, Welsh Risk Pool or Duty of Candour
+// steps, and the outcome is "statement provided".
+export const STATEMENT_OUTCOME = "statement_provided";
+export const isStatementOnly = (concern) => concern?.statementOnly === true;
+export const closeStepsFor = (concern) => (isStatementOnly(concern) ? ["response", "check"] : CLOSE_STEPS);
 export const RESPONSE_HOW = [
   { key: "letter", label: "By letter" },
   { key: "email", label: "By email" },
@@ -179,11 +189,14 @@ export function closeStepProblems(step, { closing = {}, concern = {}, steps = []
   const problems = [];
   switch (step) {
     case "response": {
-      if (!DATE.test(String(closing.responseSentOn || ""))) problems.push("Give the date the final response was sent.");
-      else if (closing.responseSentOn > dayKey(now)) problems.push("That date is in the future. The final response has to have been sent.");
+      const what = isStatementOnly(concern) ? "statement" : "final response";
+      if (!DATE.test(String(closing.responseSentOn || ""))) problems.push(`Give the date the ${what} was sent.`);
+      else if (closing.responseSentOn > dayKey(now)) problems.push(`That date is in the future. The ${what} has to have been sent.`);
       if (!RESPONSE_HOW.some((h) => h.key === closing.responseHow)) problems.push("Say how it was sent.");
-      const { ready, blockers } = reviewStatus(concern, steps, now);
-      if (!ready && !text(closing.overrideReason, 300)) problems.push(`It went before everyone involved had accepted it (${blockers.join(" ")}). Say why it was sent.`);
+      if (!isStatementOnly(concern)) {
+        const { ready, blockers } = reviewStatus(concern, steps, now);
+        if (!ready && !text(closing.overrideReason, 300)) problems.push(`It went before everyone involved had accepted it (${blockers.join(" ")}). Say why it was sent.`);
+      }
       break;
     }
     case "learning":
@@ -209,13 +222,29 @@ export function closeStepProblems(step, { closing = {}, concern = {}, steps = []
 
 // every problem across the whole closing wizard, which is what stands between the case and being closed
 export function closeProblems(args) {
-  return CLOSE_STEPS.filter((s) => s !== "check").flatMap((s) => closeStepProblems(s, args));
+  return closeStepsFor(args?.concern).filter((s) => s !== "check").flatMap((s) => closeStepProblems(s, args));
 }
 
 // what closing the case writes (plain values; the service turns days into dates and writes them)
 export function buildClosePatch({ closing = {}, concern = {}, steps = [], learningCount = 0, now = new Date() } = {}) {
   const problems = closeProblems({ closing, concern, steps, learningCount, now });
   if (problems.length) throw new Error(problems[0]);
+  if (isStatementOnly(concern)) {
+    return {
+      outcome: STATEMENT_OUTCOME,
+      finalResponseSentOn: closing.responseSentOn,
+      finalResponseSentVia: closing.responseHow,
+      sentBeforeAccepted: false,
+      sentBeforeAcceptedReason: "",
+      learningRequired: false,
+      learningNote: "Only a statement was requested; there was no investigation.",
+      lfeReportStatus: "not_required",
+      dutyOfCandourConsidered: false,
+      dutyOfCandourTriggered: false,
+      dutyOfCandourNote: "",
+      statementOnly: true,
+    };
+  }
   const review = reviewStatus(concern, steps, now);
   return {
     outcome: closing.outcome,

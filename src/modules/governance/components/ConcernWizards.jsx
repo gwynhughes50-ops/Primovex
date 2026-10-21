@@ -16,13 +16,14 @@ import {
   friendly,
   markFinalResponseReady,
   recordListeningDiscussion,
+  setStatementOnly,
   subscribeCaseSteps,
   subscribeLearningActions,
   toDate,
   updateConcern,
 } from "@/modules/governance/services/concernService";
 import {
-  ASKED_BY, ASKED_FOR, CLOSE_STEPS, LEARNING, LFE_STATUSES, OUTCOMES, RESPONSE_HOW, SENT_WHAT, STEP_ACTIONS,
+  ASKED_BY, ASKED_FOR, LEARNING, closeStepsFor, isStatementOnly, LFE_STATUSES, OUTCOMES, RESPONSE_HOW, SENT_WHAT, STEP_ACTIONS,
   closeStepProblems, dayKey, orderedSteps, partyOf, reviewStatus, ukDay, updateChoices,
 } from "@/modules/governance/concernCase";
 
@@ -225,6 +226,10 @@ export function ConcernUpdateWizard({ concern, actor, users = [], onClose, initi
         if (!String(form.note || "").trim()) throw new Error("Write the note.");
         await addConcernQuickNote(concern.id, form.note.trim(), actor);
         setDone("Note added to the case.");
+      } else if (kind === "statement_toggle") {
+        const turnOn = !isStatementOnly(concern);
+        await setStatementOnly(concern.id, turnOn, actor);
+        setDone(turnOn ? "Recorded: they only want a statement. Once it has been sent, use Close this case." : "Recorded: this case needs a full response, so the usual closing steps apply.");
       } else if (kind === "stage") {
         if (!form.stage) throw new Error("Choose the stage.");
         if (form.stage === "acknowledged") await acknowledgeConcern(concern, actor);
@@ -379,6 +384,12 @@ export function ConcernUpdateWizard({ concern, actor, users = [], onClose, initi
 
       {kind === "note" && noteField("Your note", "Anything to remember about this case", true)}
 
+      {kind === "statement_toggle" && (
+        <p className="text-sm text-[var(--medtrak-muted)]">{isStatementOnly(concern)
+          ? "This case is marked as needing only a statement. Switch it back if they now want a full response."
+          : "Use this when they only want a statement, for example the Health Board. Once the statement has been sent the case can be closed without the learning, Welsh Risk Pool or Duty of Candour steps."}</p>
+      )}
+
       {kind === "stage" && (
         <>
           <p className="text-sm text-[var(--medtrak-muted)]">Now at: {friendly(concern.status)}. Closing the case has its own steps.</p>
@@ -387,7 +398,7 @@ export function ConcernUpdateWizard({ concern, actor, users = [], onClose, initi
       )}
 
       <Problems list={problems} />
-      <button type="button" onClick={save} disabled={busy} className={`${PRIMARY} mt-5`}>{busy ? "Saving…" : kind === "stage" ? "Move it" : "Record this"}</button>
+      <button type="button" onClick={save} disabled={busy} className={`${PRIMARY} mt-5`}>{busy ? "Saving…" : kind === "stage" ? "Move it" : kind === "statement_toggle" ? (isStatementOnly(concern) ? "Switch back to a full response" : "Mark as statement only") : "Record this"}</button>
     </Shell>
   );
 }
@@ -414,7 +425,9 @@ export function ConcernCloseWizard({ concern, actor, onClose, onClosed }) {
   const [problems, setProblems] = useState([]);
   const [busy, setBusy] = useState(false);
   const [finished, setFinished] = useState(false);
-  const step = CLOSE_STEPS[index];
+  const statementOnly = isStatementOnly(concern);
+  const closeSteps = closeStepsFor(concern);
+  const step = closeSteps[index];
   const learningCount = learningActions.length;
   const review = useMemo(() => reviewStatus(concern, steps), [concern, steps]);
   const ctx = { closing, concern, steps, learningCount };
@@ -423,7 +436,7 @@ export function ConcernCloseWizard({ concern, actor, onClose, onClosed }) {
   function next() {
     const found = closeStepProblems(step, ctx);
     setProblems(found);
-    if (!found.length) setIndex((i) => Math.min(CLOSE_STEPS.length - 1, i + 1));
+    if (!found.length) setIndex((i) => Math.min(closeSteps.length - 1, i + 1));
   }
   const back = () => { setProblems([]); setIndex((i) => Math.max(0, i - 1)); };
   const addLine = () => { const text = newLine.trim(); if (!text) return; set({ newLearning: [...(closing.newLearning || []), text] }); setNewLine(""); };
@@ -450,7 +463,10 @@ export function ConcernCloseWizard({ concern, actor, onClose, onClosed }) {
     );
   }
 
-  const summaryRows = [
+  const summaryRows = statementOnly ? [
+    ["Statement", `${ukDay(closing.responseSentOn)} · ${RESPONSE_HOW.find((h) => h.key === closing.responseHow)?.label || ""}`, 0],
+    ["Outcome", CONCERN_OUTCOME_LABELS.statement_provided, 0],
+  ] : [
     ["Final response", `${ukDay(closing.responseSentOn)} · ${RESPONSE_HOW.find((h) => h.key === closing.responseHow)?.label || ""}${review.ready ? "" : " (before everyone had accepted)"}`, 0],
     ["Learning", closing.learning === "yes" ? `${learningCount + (closing.newLearning || []).length} to follow up` : `None: ${closing.learningNote || ""}`, 1],
     ["Welsh Risk Pool report", LFE_STATUSES.find((s) => s.key === closing.lfe)?.label || "", 2],
@@ -459,11 +475,11 @@ export function ConcernCloseWizard({ concern, actor, onClose, onClosed }) {
   ];
 
   return (
-    <Shell title={CLOSE_TITLES[step]} eyebrow={`Close ${concern.reference || "this case"}`} progress={[index + 1, CLOSE_STEPS.length]} onClose={onClose} onBack={index > 0 ? back : undefined}>
+    <Shell title={statementOnly && step === "response" ? "Has the statement been sent?" : CLOSE_TITLES[step]} eyebrow={`Close ${concern.reference || "this case"}`} progress={[index + 1, closeSteps.length]} onClose={onClose} onBack={index > 0 ? back : undefined}>
       {step === "response" && (
         <>
-          <p className="text-sm text-[var(--medtrak-muted)]">A case is closed once the final response has gone.</p>
-          {!review.ready && (
+          <p className="text-sm text-[var(--medtrak-muted)]">{statementOnly ? "They only asked for a statement. The case is closed once it has gone." : "A case is closed once the final response has gone."}</p>
+          {!statementOnly && !review.ready && (
             <div className="mt-3 rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900">
               <p className="flex items-center gap-2 font-bold"><Clock className="h-4 w-4" aria-hidden="true" /> Not everyone involved has accepted it</p>
               <ul className="mt-1 list-disc pl-5">{review.blockers.map((b) => <li key={b}>{b}</li>)}</ul>
@@ -472,7 +488,7 @@ export function ConcernCloseWizard({ concern, actor, onClose, onClosed }) {
           <label className={`${LABEL} mt-4`}>Date it was sent<input type="date" max={today} value={closing.responseSentOn || ""} onChange={(e) => set({ responseSentOn: e.target.value })} className={INPUT} /></label>
           <p className={`${LABEL} mt-4`}>How was it sent?</p>
           <div className="mt-2 grid gap-2" role="radiogroup" aria-label="How it was sent">{RESPONSE_HOW.map((h) => <Tile key={h.key} selected={closing.responseHow === h.key} onClick={() => set({ responseHow: h.key })}>{h.label}</Tile>)}</div>
-          {!review.ready && <label className={`${LABEL} mt-4`}>Why was it sent before they accepted?<textarea rows={2} value={closing.overrideReason || ""} onChange={(e) => set({ overrideReason: e.target.value })} placeholder="e.g. the deadline was today and they agreed by phone" className={`${INPUT} py-3`} /></label>}
+          {!statementOnly && !review.ready && <label className={`${LABEL} mt-4`}>Why was it sent before they accepted?<textarea rows={2} value={closing.overrideReason || ""} onChange={(e) => set({ overrideReason: e.target.value })} placeholder="e.g. the deadline was today and they agreed by phone" className={`${INPUT} py-3`} /></label>}
         </>
       )}
 

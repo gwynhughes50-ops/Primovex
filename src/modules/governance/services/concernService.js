@@ -76,12 +76,13 @@ export const CONCERN_CATEGORIES = ["access", "communication", "clinical_care", "
 // Recorded once a case is closed — the finding, not the workflow status.
 // Needed so an annual return can answer "how many were upheld", which the
 // workflow status (received -> ... -> closed) alone cannot answer.
-export const CONCERN_OUTCOMES = ["upheld", "partially_upheld", "not_upheld", "no_case_to_answer"];
+export const CONCERN_OUTCOMES = ["upheld", "partially_upheld", "not_upheld", "no_case_to_answer", "statement_provided"];
 export const CONCERN_OUTCOME_LABELS = {
   upheld: "Upheld",
   partially_upheld: "Partially upheld",
   not_upheld: "Not upheld",
   no_case_to_answer: "No case to answer",
+  statement_provided: "Statement provided",
 };
 
 export function toDate(value) {
@@ -205,6 +206,8 @@ export function buildConcernPayload(form, actor = {}) {
     patientIdentifierType: identity.emisNumber ? "emis" : "initials_dob",
     ...identity,
     source: form.source || "patient",
+    // they only want a statement (the Health Board, say): once it has been sent the case can be closed
+    statementOnly: form.statementOnly === true,
     raisedByInitials: String(form.raisedByInitials || "").trim().toUpperCase(),
     raisedByContactMethod: "none",
     raisedByContactValue: "",
@@ -368,6 +371,7 @@ export async function updateConcernDetails(concernId, form, actor = {}) {
     patientIdentifierType: identity.emisNumber ? "emis" : "initials_dob",
     ...identity,
     source: form.source || "patient",
+    statementOnly: form.statementOnly === true,
     raisedByInitials: String(form.raisedByInitials || "").trim().toUpperCase(),
     raisedByContactMethod: "none",
     raisedByContactValue: "",
@@ -445,6 +449,18 @@ export async function recordListeningDiscussion(concern, actor = {}, completed =
     : { status: CONCERN_STATUSES.listening, listeningDiscussionOfferedAt: serverTimestamp() };
   await updateConcern(concern.id, patch, actor);
   await addConcernTimeline(concern.id, { type: "listening", title: completed ? "Listening discussion completed" : "Listening discussion offered", message: "Listening to People discussion step updated.", actor });
+}
+
+// They only want a statement (the Health Board, say): once it has been sent the case can be closed without the learning, Welsh
+// Risk Pool or Duty of Candour steps. Can be switched back if they come back wanting a full response.
+export async function setStatementOnly(concernId, statementOnly, actor = {}) {
+  await updateConcern(concernId, { statementOnly: statementOnly === true }, actor);
+  await addConcernTimeline(concernId, {
+    type: "statement_only",
+    title: statementOnly ? "Statement only" : "Full response needed",
+    message: statementOnly ? "They only want a statement. The case can be closed once it has been sent." : "The case needs a full response, so the usual closing steps apply.",
+    actor,
+  });
 }
 
 export async function closeConcern(concern, actor = {}, outcome) {
@@ -830,7 +846,7 @@ export async function closeConcernGuided({ concern, steps = [], closing = {}, le
   await addConcernCorrespondence(concern.id, {
     type: patch.finalResponseSentVia === "meeting" ? "meeting" : patch.finalResponseSentVia,
     occurredAt: patch.finalResponseSentOn,
-    notes: `Final response sent.${patch.sentBeforeAccepted ? ` Sent before everyone involved had accepted it: ${patch.sentBeforeAcceptedReason}` : ""}`,
+    notes: patch.statementOnly ? "Statement sent." : `Final response sent.${patch.sentBeforeAccepted ? ` Sent before everyone involved had accepted it: ${patch.sentBeforeAcceptedReason}` : ""}`,
   }, actor);
   await updateConcern(concern.id, {
     status: CONCERN_STATUSES.closed,
@@ -844,7 +860,7 @@ export async function closeConcernGuided({ concern, steps = [], closing = {}, le
     learningNote: patch.learningNote,
     lfeReportStatus: patch.lfeReportStatus,
     ...(patch.lfeReportStatus === "sent" && concern.lfeReportStatus !== "sent" ? { lfeReportSentAt: serverTimestamp() } : {}),
-    dutyOfCandourConsidered: true,
+    dutyOfCandourConsidered: !patch.statementOnly,
     dutyOfCandourTriggered: patch.dutyOfCandourTriggered,
     dutyOfCandourNote: patch.dutyOfCandourNote,
   }, actor);
@@ -853,7 +869,7 @@ export async function closeConcernGuided({ concern, steps = [], closing = {}, le
   await addConcernTimeline(concern.id, {
     type: "closed",
     title: "Case closed",
-    message: [
+    message: patch.statementOnly ? `Statement sent ${ukDay(patch.finalResponseSentOn)}. Only a statement was requested, so there was no investigation.` : [
       `Outcome: ${CONCERN_OUTCOME_LABELS[patch.outcome]}.`,
       `Final response sent ${ukDay(patch.finalResponseSentOn)}.`,
       patch.learningRequired ? "Learning recorded." : `No learning: ${patch.learningNote}`,

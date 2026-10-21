@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  CLOSE_STEPS, PARTIES, buildClosePatch, buildStep, closeProblems, closeStepProblems, involvedParties, orderedSteps, partyState, reviewStatus, sentCount, ukDay, updateChoices,
+  CLOSE_STEPS, PARTIES, buildClosePatch, buildStep, closeProblems, closeStepProblems, closeStepsFor, involvedParties, isStatementOnly, orderedSteps, partyState, reviewStatus, sentCount, ukDay, updateChoices,
 } from "../src/modules/governance/concernCase.js";
 
 let n = 0;
@@ -143,6 +143,38 @@ t("a case cannot be closed with anything missing, and what closing writes is com
   assert.deepEqual([early.sentBeforeAccepted, early.sentBeforeAcceptedReason], [true, "Agreed by phone"]);
   const none = buildClosePatch({ ...args, closing: { ...good, learning: "none", learningNote: "One-off", candourTriggered: true, candourNote: "Told by phone", lfe: "sent" } });
   assert.deepEqual([none.learningRequired, none.learningNote, none.dutyOfCandourTriggered, none.dutyOfCandourNote, none.lfeReportStatus], [false, "One-off", true, "Told by phone", "sent"]);
+});
+
+t("a case where they only want a statement closes once the statement has been sent, with no learning, Welsh Risk Pool or Duty of Candour steps", () => {
+  const concern = { statementOnly: true };
+  assert.equal(isStatementOnly(concern), true);
+  assert.equal(isStatementOnly({}), false);
+  assert.equal(isStatementOnly({ statementOnly: "yes" }), false, "only a real true counts");
+  assert.deepEqual(closeStepsFor(concern), ["response", "check"]);
+  assert.deepEqual(closeStepsFor({}), CLOSE_STEPS);
+  assert.deepEqual(closeStepsFor(null), CLOSE_STEPS);
+  const args = { closing: { responseSentOn: "2026-10-19", responseHow: "email" }, concern, steps: [], learningCount: 0, now: NOW };
+  assert.deepEqual(closeProblems(args), [], "a date and how it went is all that is needed");
+  assert.match(closeProblems({ ...args, closing: {} }).join(" "), /statement was sent/);
+  assert.equal(closeProblems({ ...args, closing: {} }).length, 2);
+  assert.match(closeProblems({ ...args, closing: { responseSentOn: "2026-10-25", responseHow: "email" } })[0], /statement has to have been sent/);
+  // outside parties do not hold a statement up
+  assert.deepEqual(closeProblems({ ...args, concern: { statementOnly: true, mddusRequired: true }, steps: [step("indemnity", "sent", "2026-10-10")] }), []);
+  assert.deepEqual(buildClosePatch(args), {
+    outcome: "statement_provided", finalResponseSentOn: "2026-10-19", finalResponseSentVia: "email", sentBeforeAccepted: false, sentBeforeAcceptedReason: "",
+    learningRequired: false, learningNote: "Only a statement was requested; there was no investigation.", lfeReportStatus: "not_required",
+    dutyOfCandourConsidered: false, dutyOfCandourTriggered: false, dutyOfCandourNote: "", statementOnly: true,
+  });
+  assert.throws(() => buildClosePatch({ ...args, closing: {} }), /statement was sent/);
+  // the same date and how-sent on a full case still ask for everything
+  assert.ok(closeProblems({ ...args, concern: {} }).length > 0);
+});
+
+t("the update wizard offers the switch to a statement-only case, and the switch back", () => {
+  const on = updateChoices({}, []).find((c) => c.key === "statement_toggle");
+  assert.match(on.label, /only want a statement/);
+  const off = updateChoices({ statementOnly: true }, []).find((c) => c.key === "statement_toggle");
+  assert.match(off.label, /full response/);
 });
 
 t("there are three parties, named in plain words", () => {
