@@ -106,7 +106,7 @@ t("real questions in ordinary wording find the right article", () => {
 
 t("questions that aren't about how to do something are left alone", () => {
   // phrased like a how-to, but nothing we have help for
-  ["how do I bake a cake", "how do I get to the car park", "how do I know if the fridge is ok", "how do I fix the photocopier", "how do I book annual leave", "how can I reach the practice by bus"].forEach((q) => {
+  ["how do I bake a cake", "how do I get to the car park", "how do I know if the fridge is ok", "how do I fix the photocopier", "how do I book a holiday cottage", "how can I reach the practice by bus"].forEach((q) => {
     assert.equal(findHelp(q).match, null, `"${q}" should not find a how-to`);
     assert.deepEqual(findHelp(q).alternatives, [], `"${q}" should not offer choices`);
   });

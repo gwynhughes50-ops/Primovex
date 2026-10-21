@@ -918,10 +918,24 @@ match /subject_access_requests/{requestId} {
     //   anyone              reads their own, once their record is linked to their account (uid)
     // Only people who manage timesheets can write: nobody changes their own pattern or leave figures.
     match /timesheet_staff/{staffId} {
-      allow get, list: if signedIn() && (isAdmin() || hasPermission("timesheets", "manage") || (resource.data.uid is string && resource.data.uid == request.auth.uid));
+      // a line manager also reads the records of the people who name them (their team's annual leave)
+      allow get, list: if signedIn() && (isAdmin() || hasPermission("timesheets", "manage") || (resource.data.uid is string && resource.data.uid == request.auth.uid)
+        || (resource.data.managerUid is string && resource.data.managerUid == request.auth.uid));
       allow create, update: if signedIn() && (isAdmin() || hasPermission("timesheets", "manage"))
         && request.resource.data.name is string && request.resource.data.name.size() > 0;
       allow delete: if signedIn() && (isAdmin() || hasPermission("timesheets", "manage"));
+    }
+
+    // ANNUAL LEAVE: the practice's choices for one leave year ("2026-27"): its own closure days, and the bank holidays doctors do not work.
+    // Everyone can read them (anyone's own entitlement needs them); only whoever manages timesheets can change them.
+    match /leave_years/{yearKey} {
+      allow get, list: if signedIn();
+      allow create, update: if signedIn() && (isAdmin() || hasPermission("timesheets", "manage"))
+        && yearKey.matches("^[0-9]{4}-[0-9]{2}$")
+        && request.resource.data.keys().hasOnly(["practiceDays", "gpBankHolidays", "gpMaxSessions", "updatedAt", "updatedByName"])
+        && request.resource.data.practiceDays is list && request.resource.data.practiceDays.size() <= 20
+        && request.resource.data.gpBankHolidays is number && request.resource.data.gpMaxSessions is number;
+      allow delete: if false;
     }
 
     // TIMESHEETS PER PAY PERIOD (src/modules/timesheets). Everyone has one for each pay period, worked out from their working pattern.

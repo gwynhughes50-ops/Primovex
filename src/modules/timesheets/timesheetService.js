@@ -4,6 +4,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import { demoTimesheetStaff } from "@/data/demoTimesheets";
+import { cleanLeaveFields } from "@/modules/leave/leaveEntitlement";
 
 // The staff register for timesheets in Firestore (rules: firestore.rules, "TIMESHEETS"). It is staff employment data:
 //   timesheets.manage   reads and writes everyone's
@@ -39,6 +40,8 @@ export async function saveStaff(person, patch, actor = {}) {
   if (isSafeSyntheticMode()) throw new Error("Demo mode can't save changes.");
   const data = {};
   for (const key of OWN) if (key in patch) data[key] = key === "uid" || key === "managerId" || key === "managerUid" ? clean(patch[key]) || null : key === "name" || key === "notes" ? clean(patch[key]) : patch[key];
+  // leave group, service date, sessions and carry-over are cleaned before they are written
+  Object.assign(data, cleanLeaveFields(Object.fromEntries(Object.entries(patch).filter(([key]) => ["leaveGroup", "serviceFrom", "startedOn", "leftOn", "leaveSessions", "leaveAdjust"].includes(key)))));
   data.updatedAt = serverTimestamp();
   data.updatedByName = actor.displayName || actor.email || "";
   await setDoc(doc(db, STAFF, person.id), data, { merge: true });

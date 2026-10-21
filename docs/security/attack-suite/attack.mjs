@@ -1291,6 +1291,41 @@ async function main() {
     await assertSucceeds(deleteDoc(doc(tsAdmin, "timesheet_staff", "ts-new")));
   });
 
+  console.log("\n=== 26b. Annual leave: a line manager's team, and the yearly settings (leave_years) ===");
+  await seed(async (db) => {
+    await setDoc(doc(db, "timesheet_staff", "ts-lm-team"), { name: "Team Member", uid: "cleaner-uid", managerUid: "reception-uid", leaveGroup: "admin", patterns: [], active: true });
+  });
+  await check("A line manager reads the records that name them (their team's leave), but not anyone else's or the whole list", async () => {
+    await assertSucceeds(getDoc(doc(reception, "timesheet_staff", "ts-lm-team")));
+    await assertSucceeds(getDocs(query(collection(reception, "timesheet_staff"), where("managerUid", "==", "reception-uid"))));
+    await assertFails(getDoc(doc(reception, "timesheet_staff", "ts-nurse")));
+    await assertFails(getDocs(collection(reception, "timesheet_staff")));
+    await assertFails(getDocs(query(collection(reception, "timesheet_staff"), where("managerUid", "==", "someone-else"))));
+  });
+  await check("A line manager cannot change a team member's leave set-up, and a colleague cannot read it", async () => {
+    await assertFails(updateDoc(doc(reception, "timesheet_staff", "ts-lm-team"), { leaveGroup: "clinical", leaveAdjust: { "2026-27": { carryOver: 500 } } }));
+    await assertFails(getDoc(doc(nurse, "timesheet_staff", "ts-lm-team")));
+    await assertSucceeds(updateDoc(doc(tsAdmin, "timesheet_staff", "ts-lm-team"), { leaveGroup: "clinical", serviceFrom: "2015-01-01" }));
+  });
+  await check("The yearly leave settings are readable by any signed-in person and changed only by whoever manages timesheets", async () => {
+    const good = { practiceDays: [{ date: "2026-12-24", name: "Christmas Eve" }], gpBankHolidays: 6, gpMaxSessions: 8 };
+    await assertSucceeds(setDoc(doc(tsAdmin, "leave_years", "2026-27"), { ...good, updatedByName: "TS Admin" }));
+    await assertSucceeds(setDoc(doc(pm, "leave_years", "2027-28"), good));
+    await assertSucceeds(getDoc(doc(nurse, "leave_years", "2026-27")));
+    await assertFails(getDoc(doc(anon, "leave_years", "2026-27")));
+    await assertFails(setDoc(doc(nurse, "leave_years", "2026-27"), good));
+    await assertFails(setDoc(doc(reception, "leave_years", "2028-29"), good));
+  });
+  await check("A yearly settings record must be well formed, and none can be deleted", async () => {
+    const good = { practiceDays: [], gpBankHolidays: 6, gpMaxSessions: 8 };
+    await assertFails(setDoc(doc(tsAdmin, "leave_years", "next-year"), good));
+    await assertFails(setDoc(doc(tsAdmin, "leave_years", "2029-30"), { ...good, sneaky: true }));
+    await assertFails(setDoc(doc(tsAdmin, "leave_years", "2029-30"), { ...good, gpBankHolidays: "six" }));
+    await assertFails(setDoc(doc(tsAdmin, "leave_years", "2029-30"), { ...good, practiceDays: Array.from({ length: 21 }, () => ({ date: "2029-12-24", name: "x" })) }));
+    await assertFails(deleteDoc(doc(tsAdmin, "leave_years", "2026-27")));
+    await assertFails(deleteDoc(doc(admin, "leave_years", "2026-27")));
+  });
+
   console.log("\n=== 27. Mileage claims (mileage_claims, mileage_places, mileage_routes, mileage_settings) ===");
   await seed(async (db) => {
     // the nurse is claiming; her line manager is reception (uid reception-uid); the cleaner has no line manager set

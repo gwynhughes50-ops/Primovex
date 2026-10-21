@@ -8,6 +8,15 @@ const fiveDays = (d) => ({ mon: d, tue: d, wed: d, thu: d, fri: d, sat: off, sun
 
 const leave = (entitlement, taken, upcoming, remaining) => ({ unit: "hours", yearFrom: "2026-04-01", yearTo: "2027-03-31", entitlement, taken, upcoming, awaiting: 0, remaining, carriedOver: 0, asAt: "2026-10-16" });
 
+// made-up leave groups and start dates, so the Annual leave page has something to show
+const DEMO_LEAVE = {
+  "demo-t1": { leaveGroup: "management", serviceFrom: "2002-04-01" },
+  "demo-t2": { leaveGroup: "admin", serviceFrom: "2017-01-03" },
+  "demo-t3": { leaveGroup: "admin", serviceFrom: "2014-10-06" },
+  "demo-t4": { leaveGroup: "admin", serviceFrom: "2021-11-01" },
+  "demo-t5": { leaveGroup: "clinical", serviceFrom: "2021-01-22" },
+};
+
 export function demoTimesheetStaff() {
   return [
     { id: "demo-t1", name: "Pat Manager", jobTitle: "Practice Manager", teams: ["Management"], contractType: "Full-Time", payrollNo: "101", startDate: "2002-04-01", active: true, uid: null, managerId: null, leave: leave(367.5, 245, 37.5, 85),
@@ -20,5 +29,5 @@ export function demoTimesheetStaff() {
       patterns: [{ from: "2020-01-06", mode: "fixed", weeks: [{ mon: { blocks: blocks(["07:30", "10:30"], ["13:00", "17:30"]), breakMin: 0 }, tue: day("08:00", "18:00", 30), wed: day("08:00", "18:00", 30), thu: day("08:00", "18:00", 30), fri: off, sat: off, sun: off }] }] },
     { id: "demo-t5", name: "Zoe Zero", jobTitle: "Bank Healthcare Assistant", teams: ["Clinicians"], contractType: "Zero Hours", payrollNo: "105", startDate: "2021-01-22", active: true, uid: null, managerId: "demo-t1", leave: leave(0, 0, 0, 0),
       patterns: [{ from: "2021-01-22", mode: "zero-hours", weeks: [] }] },
-  ];
+  ].map((p) => ({ ...p, ...(DEMO_LEAVE[p.id] || {}) }));
 }
