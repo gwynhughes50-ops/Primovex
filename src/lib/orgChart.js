@@ -238,32 +238,66 @@ export function treeHtml(users, allUsers = users) {
 // document is printed portrait or landscape - whichever lets the chart stay larger.
 export const PAPER = { A4: { width: 794, height: 1123 }, A3: { width: 1123, height: 1587 } };
 
-const fitScript = (paper) => `<script>
+// How big a chart will come out, estimated from its shape, only to choose portrait or landscape before the page is made. The
+// page orientation is written into the stylesheet and not changed afterwards, because the print dialog of the desktop app does not
+// reliably follow a page size changed by a script once the page has loaded; the exact scaling is then measured against that
+// orientation. The numbers follow the boxes in PRINT_CSS (a card is 150 wide, a level of the tree is about 44 high).
+const CARD_W = 162; // a card with its side padding
+const levelGap = 44;
+const cardH = (hasOthers) => (hasOthers ? 58 : 36);
+
+export function estimateChartSize(users, allUsers = users) {
+  const { byId, childrenOf, roots } = buildTree(users);
+  const othersOf = (user, parentId) => managersOf(user, byId).filter((id) => id !== parentId).length > 0;
+  const sizeOf = (user, parentId, ancestors) => {
+    const own = { w: CARD_W, h: cardH(othersOf(user, parentId)) };
+    const kids = (childrenOf.get(user.id) || []).filter((k) => !ancestors.has(k.id));
+    if (!kids.length) return own;
+    const next = new Set(ancestors).add(user.id);
+    if (isLeafGroup(kids, childrenOf)) return { w: Math.max(own.w, CARD_W), h: own.h + 12 + kids.reduce((sum, k) => sum + cardH(othersOf(k, user.id)) - 3 + 6, 0) };
+    const { leaves, branches, stacked } = splitKids(kids, childrenOf);
+    const parts = stacked
+      ? [...branches.map((k) => sizeOf(k, user.id, next)), { w: CARD_W + 15, h: 15 + leaves.reduce((sum, k) => sum + cardH(othersOf(k, user.id)) + 5, 0) }]
+      : kids.map((k) => sizeOf(k, user.id, next));
+    return { w: Math.max(own.w, parts.reduce((sum, part) => sum + part.w, 0)), h: own.h + levelGap + Math.max(...parts.map((part) => part.h)) };
+  };
+  const parts = roots.map((r) => sizeOf(r, null, new Set()));
+  return { w: Math.max(CARD_W, parts.reduce((sum, part) => sum + part.w, 0)), h: Math.max(40, ...parts.map((part) => part.h)) };
+}
+
+// the page area a chart can use once the margins and the heading are taken off, and how much of it to fill (a little is kept
+// back so the right and bottom edges are never touching the edge of the sheet)
+const PAGE_MARGIN = 76;
+const HEADING = 90;
+export const FILL = 0.96;
+const usable = (paper, orient) => (orient === "portrait"
+  ? { w: paper.width - PAGE_MARGIN, h: paper.height - PAGE_MARGIN - HEADING }
+  : { w: paper.height - PAGE_MARGIN, h: paper.width - PAGE_MARGIN - HEADING });
+
+// portrait or landscape: whichever keeps the smallest chart in the document larger
+export function chooseOrientation(sizes = [], paperName = "A4") {
+  const paper = PAPER[paperName] || PAPER.A4;
+  const worst = (orient) => {
+    const u = usable(paper, orient);
+    return Math.min(1, ...sizes.map((size) => Math.min(1, (FILL * u.w) / size.w, (FILL * u.h) / size.h)));
+  };
+  return worst("portrait") > worst("landscape") ? "portrait" : "landscape";
+}
+
+const fitScript = (paper, orient) => `<script>
 (function () {
-  var PW = ${paper.width}, PH = ${paper.height}, MARGIN = 76, HEADING = 90;
-  var fits = [].slice.call(document.querySelectorAll(".fit"));
-  if (!fits.length) return;
-  var sizes = fits.map(function (el) { return { w: el.offsetWidth, h: el.offsetHeight }; });
-  function usable(o) { return o === "portrait" ? { w: PW - MARGIN, h: PH - MARGIN - HEADING } : { w: PH - MARGIN, h: PW - MARGIN - HEADING }; }
-  function worst(o) {
-    var u = usable(o);
-    return Math.min.apply(null, sizes.map(function (s) { return Math.min(1, u.w / s.w, u.h / s.h); }));
-  }
-  var orient = worst("portrait") > worst("landscape") ? "portrait" : "landscape";
-  var u = usable(orient);
-  fits.forEach(function (el, i) {
-    var s = Math.min(1, u.w / sizes[i].w, u.h / sizes[i].h);
+  var W = ${usable(paper, orient).w}, H = ${usable(paper, orient).h}, FILL = ${FILL};
+  [].slice.call(document.querySelectorAll(".fit")).forEach(function (el) {
+    var s = Math.min(1, FILL * W / el.offsetWidth, FILL * H / el.offsetHeight);
     if (s < 1) el.style.zoom = String(s);
   });
-  var style = document.createElement("style");
-  style.textContent = "@page { size: ${paper.name} " + orient + "; margin: 10mm; }";
-  document.head.appendChild(style);
 })();
 </script>`;
 
-function documentHtml({ title, body, paper = "A4" }) {
+function documentHtml({ title, body, paper = "A4", orient = "landscape" }) {
   const size = PAPER[paper] ? paper : "A4";
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PRINT_CSS.replace("PAPER", size)}</style></head><body>${body}${fitScript({ ...PAPER[size], name: size })}</body></html>`;
+  const direction = orient === "portrait" ? "portrait" : "landscape";
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PRINT_CSS.replace("PAPER landscape", `${size} ${direction}`)}</style></head><body>${body}${fitScript(PAPER[size], direction)}</body></html>`;
 }
 
 const when = (now) => now.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -282,19 +316,21 @@ export function chartPrintHtml({ users, department = "", practiceName = "Practic
   return documentHtml({
     title: heading,
     paper,
+    orient: chooseOrientation([estimateChartSize(shown, users)], paper),
     body: pageHtml({ heading, meta: `${people(shown.length)} - printed ${when(now)}`, note, body: treeHtml(shown, users) }),
   });
 }
 
 // One page per department, each its own chart.
 export function departmentPagesPrintHtml({ users, departments = [], practiceName = "Practice", now = new Date(), paper = "A4" }) {
-  const pages = departmentSummary(users, departments)
-    .filter((d) => d.count > 0)
+  const withPeople = departmentSummary(users, departments).filter((d) => d.count > 0);
+  const orient = chooseOrientation(withPeople.map((d) => estimateChartSize(usersInDepartment(users, d.name), users)), paper);
+  const pages = withPeople
     .map((d) => {
       const members = usersInDepartment(users, d.name);
       return pageHtml({ heading: `${practiceName} - ${d.name}`, meta: `${people(members.length)} - printed ${when(now)}`, body: treeHtml(members, users) });
     });
-  return documentHtml({ title: `${practiceName} - departments`, paper, body: pages.join("") || "<p>No staff to print.</p>" });
+  return documentHtml({ title: `${practiceName} - departments`, paper, orient, body: pages.join("") || "<p>No staff to print.</p>" });
 }
 
 // A plain staff list grouped by department: who, role, who they report to.

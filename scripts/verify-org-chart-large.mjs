@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import {
   NO_DEPARTMENT, splitKids, allWithReports, buildTree, chartPrintHtml, collectDescendants, defaultExpanded, departmentPagesPrintHtml,
-  departmentSummary, descendantCount, isLeafGroup, escapeHtml, managersOf, outsideManagers, searchPath, staffListPrintHtml, treeHtml, usersInDepartment,
+  chooseOrientation, departmentSummary, descendantCount, estimateChartSize, isLeafGroup, escapeHtml, managersOf, outsideManagers, searchPath, staffListPrintHtml, treeHtml, usersInDepartment,
 } from "../src/lib/orgChart.js";
 
 let n = 0;
@@ -122,13 +122,13 @@ t("the whole-practice print includes everyone and warns that a big chart is shru
   assert.ok(html.includes("scaled to fit one page"));
   assert.ok(html.includes("5 October 2026"));
   assert.ok(html.includes("Receptionist 20"));
-  // the page is set to the chosen paper, portrait or landscape by whichever keeps the chart larger
-  assert.ok(html.includes("@page { size: A4 landscape; margin: 10mm; }")); // fallback in the stylesheet
-  assert.ok(html.includes('"@page { size: A4 " + orient'));
-  assert.ok(html.includes("PW = 794, PH = 1123"));
+  // the page size and orientation are written into the stylesheet and never changed by the script
+  assert.ok(/@page { size: A4 (landscape|portrait); margin: 10mm; }/.test(html));
+  assert.ok(!html.includes("orient"), "no script changes the orientation after the page has loaded");
+  assert.ok(html.includes("W = ") && html.includes("FILL = 0.96"));
   const a3 = chartPrintHtml({ users: staff, practiceName: "Test Surgery", paper: "A3" });
-  assert.ok(a3.includes('"@page { size: A3 " + orient') && a3.includes("PW = 1123, PH = 1587"));
-  assert.ok(chartPrintHtml({ users: staff, paper: "Tabloid" }).includes('"@page { size: A4 " + orient')); // unknown paper falls back to A4
+  assert.ok(/@page { size: A3 (landscape|portrait); margin: 10mm; }/.test(a3));
+  assert.ok(/@page { size: A4 (landscape|portrait); margin: 10mm; }/.test(chartPrintHtml({ users: staff, paper: "Tabloid" }))); // unknown paper falls back to A4
 });
 
 t("a single department prints alone, with no shrink warning, and says who the branch lead reports to", () => {
@@ -188,10 +188,31 @@ t("people with no reports beside managers are stacked; a lone manager's team is 
   assert.equal(splitKids([{ id: "a" }, { id: "b" }], new Map()).stacked, false);
 });
 
+t("portrait or landscape is chosen from the shape of the chart, and the scaling uses that same page", () => {
+  // a broad practice: a partner over twelve team leads, each with a couple of people
+  const wide = [{ id: "p", displayName: "Partner", reportsTo: [] }, ...Array.from({ length: 12 }, (_, i) => ({ id: `l${i}`, displayName: `Lead ${i}`, reportsTo: ["p"] })), ...Array.from({ length: 24 }, (_, i) => ({ id: `w${i}`, displayName: `Worker ${i}`, reportsTo: [`l${i % 12}`] }))];
+  const tall = [{ id: "p", displayName: "Partner", reportsTo: [] }, { id: "m", displayName: "Manager", reportsTo: ["p"] }, ...Array.from({ length: 45 }, (_, i) => ({ id: `s${i}`, displayName: `Staff ${i}`, reportsTo: ["m"] }))];
+  const wideSize = estimateChartSize(wide);
+  const tallSize = estimateChartSize(tall);
+  assert.ok(wideSize.w > wideSize.h, "a broad practice is wider than tall");
+  assert.ok(tallSize.h > tallSize.w * 5, "one long team hung in a column is tall and narrow");
+  assert.equal(chooseOrientation([wideSize]), "landscape");
+  assert.equal(chooseOrientation([tallSize]), "portrait");
+  assert.equal(chooseOrientation([tallSize], "A3"), "portrait");
+  assert.equal(chooseOrientation([]), "landscape", "nothing to draw: the default");
+  // the same sheet is used for every page of a document: the worst page decides
+  assert.equal(chooseOrientation([wideSize, tallSize]), chooseOrientation([tallSize, wideSize]));
+  assert.ok(chartPrintHtml({ users: tall, practiceName: "Tall" }).includes("@page { size: A4 portrait; margin: 10mm; }"));
+  assert.ok(chartPrintHtml({ users: wide, practiceName: "Wide" }).includes("@page { size: A4 landscape; margin: 10mm; }"));
+  // a document of several pages has the one orientation
+  const pages = departmentPagesPrintHtml({ users: staff, departments: configured, practiceName: "Test Surgery" });
+  assert.equal((pages.match(/@page { size: A4 (landscape|portrait)/g) || []).length, 1);
+});
+
 t("a chart is centred on the page, and each page is fitted separately", () => {
   const html = departmentPagesPrintHtml({ users: staff, departments: configured, practiceName: "Test Surgery" });
   assert.ok(html.includes(".fit { display: table; margin: 0 auto; }"));
-  assert.ok(html.includes("fits.forEach"));
+  assert.ok(html.includes("forEach(function (el)"));
 });
 
 console.log(`\n${n} passed`);
