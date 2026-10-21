@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { checkForDesktopUpdate, installDesktopUpdate, isDesktopApp } from "@/release/updateService";
+import { checkForDesktopUpdate, failureText, installDesktopUpdate, isDesktopApp } from "@/release/updateService";
 
 // "A new version of Primovex is ready": a box in the middle of the screen, shown in the installed Windows app when a newer signed release has been published. It checks
 // shortly after the app opens and every few hours while it stays open. Nothing is forced: the person presses Update now at a good
@@ -52,7 +52,8 @@ export default function DesktopUpdateBanner() {
     } catch (error) {
       busy.current = false;
       setPhase("error");
-      setMessage(error?.message || "The update could not be installed. Try again in a moment.");
+      const why = failureText(error);
+      setMessage(`The update could not be installed${why ? ` (${why})` : ""}. Try again in a moment.`);
     }
   };
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { withRetries } from "../src/release/updateService.js";
+import { failureText, withRetries } from "../src/release/updateService.js";
 import { UPDATE_BASE_URL, UPDATE_PLATFORM, buildLatestJson, compareVersions, installerName } from "../src/release/updateManifest.js";
 
 let n = 0;
@@ -78,6 +78,11 @@ t("only one Primovex runs at a time: a second launch shows the first, and the pl
   assert.match(lib, /withRetries\(\(\) => check\(/, "the check retries");
   assert.match(lib, /withRetries\(async \(\) => \{[\s\S]*downloadAndInstall/, "the download retries");
   assert.match(readFileSync(new URL("../src/components/system/DesktopUpdateBanner.jsx", import.meta.url), "utf8"), /AFTER_FAILURE_MS/, "and a failed check looks again soon, not hours later");
+  assert.equal(failureText(new Error("error sending request")), "error sending request");
+  assert.equal(failureText("tls handshake eof"), "tls handshake eof", "the updater often rejects with plain text");
+  assert.equal(failureText(undefined), "");
+  assert.ok(failureText("x".repeat(500)).length <= 160);
+  assert.match(lib, /tries: 10/, "the download tries up to ten times");
   n += 1; console.log("ok  a dropped connection is retried, for the check and the download, and a failed check is repeated soon");
 }
 

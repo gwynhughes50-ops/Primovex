@@ -23,6 +23,9 @@ export async function getInstalledVersion() {
 
 // Some connections drop the secure handshake now and then (one practice PC fails two attempts in three), so a check or a download is
 // tried again a few times, a little apart, before it is reported as failed. `wait` is replaceable so tests need not sleep.
+// what went wrong, in words: the updater rejects with plain text as often as with an Error
+export const failureText = (error) => String(error?.message || (typeof error === "string" ? error : "") || "").replace(/\s+/g, " ").trim().slice(0, 160);
+
 export async function withRetries(task, { tries = 5, delayMs = 2000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
   let failure;
   for (let attempt = 1; attempt <= tries; attempt += 1) {
@@ -51,7 +54,7 @@ export async function checkForDesktopUpdate() {
 
 export async function installDesktopUpdate(update, onProgress = () => {}) {
   if (!update) throw new Error("No update is ready to install.");
-  // a dropped connection part-way starts the download again, a few times, before giving up
+  // a dropped connection part-way starts the download again, up to ten times, before giving up
   await withRetries(async () => {
     let downloaded = 0;
     let total = 0;
@@ -60,7 +63,7 @@ export async function installDesktopUpdate(update, onProgress = () => {}) {
       if (event.event === "Progress") downloaded += Number(event.data?.chunkLength || 0);
       onProgress({ phase: event.event, downloaded, total });
     });
-  }, { tries: 4, delayMs: 3000 });
+  }, { tries: 10, delayMs: 1000 });
   const { relaunch } = await import("@tauri-apps/plugin-process");
   await relaunch();
 }
