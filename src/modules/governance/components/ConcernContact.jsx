@@ -163,7 +163,6 @@ function Tile({ selected, onClick, children }) {
 // review...) is filled in on the case when the owner reviews it. Used on the desktop and the phone.
 export function QuickConcernSheet({ actor, users = [], onClose, onCreated }) {
   const [form, setForm] = useState(() => quickConcernSeed());
-  const [useInitials, setUseInitials] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState([]);
@@ -200,10 +199,6 @@ export function QuickConcernSheet({ actor, users = [], onClose, onCreated }) {
     const person = users.find((x) => x.id === uid);
     update({ ownerUid: uid, ownerName: uid ? (person?.displayName || person?.email || "Unassigned") : "Unassigned" });
   }
-  function switchIdentifier() {
-    setUseInitials((v) => !v);
-    update(useInitials ? { patientInitials: "", dateOfBirth: "" } : { emisNumber: "" });
-  }
 
   async function submit(event) {
     event.preventDefault();
@@ -226,7 +221,7 @@ export function QuickConcernSheet({ actor, users = [], onClose, onCreated }) {
   const summaryRows = [
     ["Raised by", [sourceLabel(form.source), raiserIsPatient ? "" : form.raisedByInitials].filter(Boolean).join(" — "), "who"],
     ["Reply by", [form.raisedByPhone, form.raisedByEmail].filter(Boolean).join(" · ") || "No contact details", "reply"],
-    ["Patient", form.emisNumber ? `EMIS ${form.emisNumber}` : `${form.patientInitials}, born ${longDate(form.dateOfBirth)}`, "patient"],
+    ["Patient", [form.emisNumber ? `EMIS ${form.emisNumber}` : "", form.patientInitials, form.dateOfBirth ? `born ${longDate(form.dateOfBirth)}` : ""].filter(Boolean).join(" · "), "patient"],
     ["Type", friendly(form.category), "about"],
     ["Received", longDate(form.receivedAt), "about"],
     ["About", form.summary, "about"],
@@ -262,17 +257,14 @@ export function QuickConcernSheet({ actor, users = [], onClose, onCreated }) {
 
           {step === "patient" && (
             <>
-              {!useInitials ? (
-                <label className={LABEL}>EMIS number
-                  <input value={form.emisNumber} onChange={(e) => update({ emisNumber: e.target.value })} placeholder="e.g. 123456" className={INPUT} autoComplete="off" inputMode="numeric" />
-                </label>
-              ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className={LABEL}>Patient's initials<input value={form.patientInitials} onChange={(e) => update({ patientInitials: e.target.value.toUpperCase() })} placeholder="A.B." className={INPUT} autoComplete="off" /></label>
-                  <label className={LABEL}>Date of birth<input type="date" value={form.dateOfBirth} onChange={(e) => update({ dateOfBirth: e.target.value })} className={INPUT} /></label>
-                </div>
-              )}
-              <button type="button" onClick={switchIdentifier} className="text-sm font-semibold text-[var(--medtrak-accent)] underline">{useInitials ? "Use the EMIS number instead" : "No EMIS number? Use their initials and date of birth"}</button>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className={LABEL}>Patient's initials<input value={form.patientInitials} onChange={(e) => update({ patientInitials: e.target.value.toUpperCase() })} placeholder="e.g. AB" className={INPUT} autoComplete="off" maxLength={8} /></label>
+                <label className={LABEL}>Date of birth<input type="date" value={form.dateOfBirth} onChange={(e) => update({ dateOfBirth: e.target.value })} max={new Date().toISOString().slice(0, 10)} className={INPUT} /></label>
+              </div>
+              <label className={LABEL}>EMIS number, if you have it
+                <input value={form.emisNumber} onChange={(e) => update({ emisNumber: e.target.value })} placeholder="e.g. 123456" className={INPUT} autoComplete="off" inputMode="numeric" />
+              </label>
+              <p className="text-sm text-[var(--medtrak-muted)]">Initials and date of birth, never the name.</p>
             </>
           )}
 

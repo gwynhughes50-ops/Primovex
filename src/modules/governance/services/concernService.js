@@ -18,6 +18,7 @@ import {
 
 import { db } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
+import { identityFields, identityProblems } from "@/modules/governance/patientIdentity";
 import { recordAudit } from "@/modules/audit/recordAudit";
 import { concernEvent } from "@/modules/audit/auditEvents";
 import { cleanContact, contactFromForm, hasContact, legacyContact } from "@/modules/governance/concernContact";
@@ -197,15 +198,12 @@ export function buildConcernPayload(form, actor = {}) {
   const acknowledgementDue = form.acknowledgementDueAt ? new Date(form.acknowledgementDueAt) : addWorkingDays(received, 5);
   const earlyResolutionDue = form.earlyResolutionDueAt ? new Date(form.earlyResolutionDueAt) : addWorkingDays(acknowledgementDue, 10);
   const finalResponseDue = form.finalResponseDueAt ? new Date(form.finalResponseDueAt) : addDays(received, 30);
-  const emisNumber = String(form.emisNumber || "").trim();
-  const initials = String(form.patientInitials || "").trim().toUpperCase();
+  const identity = identityFields(form);
 
   return {
     reference: form.reference || createConcernReference(new Date()),
-    patientIdentifierType: emisNumber ? "emis" : "initials_dob",
-    emisNumber,
-    patientInitials: initials,
-    dateOfBirth: form.dateOfBirth || "",
+    patientIdentifierType: identity.emisNumber ? "emis" : "initials_dob",
+    ...identity,
     source: form.source || "patient",
     raisedByInitials: String(form.raisedByInitials || "").trim().toUpperCase(),
     raisedByContactMethod: "none",
@@ -246,11 +244,7 @@ export function buildConcernPayload(form, actor = {}) {
 
 export function validateConcernForm(form) {
   const errors = [];
-  if (!String(form.emisNumber || "").trim()) {
-    if (!String(form.patientInitials || "").trim() || !form.dateOfBirth) {
-      errors.push("Use an EMIS number, or initials plus date of birth if the EMIS number is unavailable.");
-    }
-  }
+  errors.push(...identityProblems(form));
   if (!String(form.summary || "").trim()) errors.push("Add a short anonymised summary.");
   return errors;
 }
@@ -368,13 +362,11 @@ export async function getConcernContact(concernId) {
 }
 
 export async function updateConcernDetails(concernId, form, actor = {}) {
-  const emisNumber = String(form.emisNumber || "").trim();
+  const identity = identityFields(form);
   await updateConcern(concernId, {
     reference: form.reference,
-    patientIdentifierType: emisNumber ? "emis" : "initials_dob",
-    emisNumber,
-    patientInitials: String(form.patientInitials || "").trim().toUpperCase(),
-    dateOfBirth: form.dateOfBirth || "",
+    patientIdentifierType: identity.emisNumber ? "emis" : "initials_dob",
+    ...identity,
     source: form.source || "patient",
     raisedByInitials: String(form.raisedByInitials || "").trim().toUpperCase(),
     raisedByContactMethod: "none",

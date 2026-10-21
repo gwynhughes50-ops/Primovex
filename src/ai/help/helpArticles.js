@@ -299,7 +299,7 @@ export const HELP_ARTICLES = [
     where: "desktop",
     steps: [
       "Go to SARs in the left menu and press \"New SAR\".",
-      "Fill in the date received, the request type and the patient's EMIS number (the system never stores the patient's name).",
+      "Fill in the date received, the request type and who the patient is: their EMIS number, initials and date of birth (the system never stores the patient's name).",
       "Choose who it's assigned to, and the manager for escalation, from the list of colleagues.",
       "Save. Primovex works out the due date and reminds the person it's assigned to as the deadline approaches.",
     ],
@@ -316,7 +316,7 @@ export const HELP_ARTICLES = [
     where: "desktop",
     steps: [
       "Go to Concerns in the left menu (or the Concerns page on the phone) and press \"New concern\". It asks one thing at a time.",
-      "Who raised it, and how they would like to be replied to. Then who it is about: use the patient's EMIS number or initials and date of birth, never their name. Then what it is about and, if you have people to choose from, who deals with it.",
+      "Who raised it, and how they would like to be replied to. Then who it is about: the patient's initials and date of birth, plus their EMIS number if you have it, never their name. Then what it is about and, if you have people to choose from, who deals with it.",
       "Check the summary and save. Keep the Primovex reference number with the paper file.",
     ],
     open: { label: "Open Concerns", route: "/governance/concerns" },

@@ -33,12 +33,13 @@ t("the quick capture needs the patient's identifier, what it is about, and initi
   const seed = quickConcernSeed(new Date(2026, 9, 12));
   assert.equal(seed.receivedAt, "2026-10-12");
   assert.equal(seed.source, "patient");
-  assert.equal(validateQuickConcern(seed).length, 2, "identifier and summary");
-  const ok = { ...seed, emisNumber: "123456", summary: "Waited a long time on the phone" };
+  assert.equal(validateQuickConcern(seed).length, 3, "initials, date of birth and summary");
+  const ok = { ...seed, patientInitials: "AB", dateOfBirth: "1980-01-01", summary: "Waited a long time on the phone" };
   assert.deepEqual(validateQuickConcern(ok), []);
   assert.match(validateQuickConcern({ ...ok, source: "relative" })[0], /initials of the person raising/);
   assert.deepEqual(validateQuickConcern({ ...ok, source: "relative", raisedByInitials: "J.S." }), []);
-  assert.deepEqual(validateQuickConcern({ ...seed, patientInitials: "AB", dateOfBirth: "1980-01-01", summary: "x" }), [], "initials and date of birth instead of EMIS");
+  assert.deepEqual(validateQuickConcern({ ...ok, emisNumber: "123456" }), [], "an EMIS number as well is fine");
+  assert.match(validateQuickConcern({ ...seed, emisNumber: "123456", summary: "x" }).join(" "), /initials/, "an EMIS number alone is no longer enough");
   assert.match(validateQuickConcern({ ...ok, raisedByEmail: "nope" }).join(" "), /does not look right/);
 });
 
@@ -58,8 +59,9 @@ t("each wizard step asks only for what it needs, in words", () => {
   assert.deepEqual(validateConcernStep("who", { ...seed, source: "relative", raisedByInitials: "J.S." }), []);
   assert.deepEqual(validateConcernStep("reply", seed), [], "no contact details is allowed");
   assert.match(validateConcernStep("reply", { ...seed, raisedByEmail: "nope" })[0], /does not look right/);
-  assert.match(validateConcernStep("patient", seed)[0], /EMIS number/);
-  assert.deepEqual(validateConcernStep("patient", { ...seed, emisNumber: "123" }), []);
+  assert.match(validateConcernStep("patient", seed)[0], /initials/);
+  assert.equal(validateConcernStep("patient", { ...seed, emisNumber: "123" }).length, 2, "an EMIS number alone still needs initials and date of birth");
+  assert.match(validateConcernStep("patient", { ...seed, patientInitials: "AB", dateOfBirth: "2999-01-01" })[0], /not a real date|future/);
   assert.deepEqual(validateConcernStep("patient", { ...seed, patientInitials: "AB", dateOfBirth: "1980-01-01" }), []);
   assert.match(validateConcernStep("about", seed)[0], /what it is about/);
   assert.match(validateConcernStep("about", { ...seed, summary: "x", receivedAt: "" })[0], /date it was received/);
@@ -69,8 +71,8 @@ t("each wizard step asks only for what it needs, in words", () => {
 
 t("the last step checks everything, and the steps together say the same as the single check", () => {
   const seed = quickConcernSeed(new Date(2026, 9, 12));
-  assert.equal(validateConcernStep("check", seed).length, 2);
-  const ok = { ...seed, emisNumber: "1", summary: "Waited" };
+  assert.equal(validateConcernStep("check", seed).length, 3);
+  const ok = { ...seed, patientInitials: "AB", dateOfBirth: "1980-01-01", summary: "Waited" };
   assert.deepEqual(validateConcernStep("check", ok), []);
   for (const step of ["who", "reply", "patient", "about", "owner"]) assert.deepEqual(validateConcernStep(step, ok), []);
   assert.equal(replyIsEmpty(seed), true);

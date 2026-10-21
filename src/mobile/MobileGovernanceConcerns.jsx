@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ConcernContactCard, ConcernContactFields, QuickConcernSheet, useLoadedContact } from '@/modules/governance/components/ConcernContact';
 import { useNavigate } from 'react-router-dom';
+import { identityLabel } from '@/modules/governance/patientIdentity';
 import { ChevronLeft, Plus, ShieldAlert, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { subscribeUsers } from '@/services/adminUserService';
@@ -157,10 +158,10 @@ function NewConcernSheet({ actor, onClose, onCreated, users, concern }) {
 
         <div className="mt-4 space-y-3 pb-4">
           <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">EMIS number
-            <input value={form.emisNumber} onChange={(e) => update({ emisNumber: e.target.value })} placeholder="Preferred identifier" className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case" />
+            <input value={form.emisNumber} onChange={(e) => update({ emisNumber: e.target.value })} placeholder="If known" className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case" />
           </label>
           <div className="grid grid-cols-2 gap-2">
-            <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Initials if no EMIS
+            <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Patient initials
               <input value={form.patientInitials} onChange={(e) => update({ patientInitials: e.target.value.toUpperCase() })} placeholder="A.B." className="mt-1 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-normal normal-case" />
             </label>
             <label className="block space-y-1 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">DOB if no EMIS
@@ -318,7 +319,7 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, isAdmi
           <div>
             <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--medtrak-accent)]">{concern.reference}</p>
             <h2 className="mt-1 text-xl font-bold">{friendly(concern.status)}</h2>
-            <p className="mt-1 text-xs text-[var(--medtrak-muted)]">{concern.emisNumber ? `EMIS ${concern.emisNumber}` : `${concern.patientInitials || 'Initials?'} · DOB ${concern.dateOfBirth || '?'}`}</p>
+            <p className="mt-1 text-xs text-[var(--medtrak-muted)]">{identityLabel(concern, { withDob: true })}</p>
             <div className="mt-2"><ConcernContactCard concern={concern} canSee={isTeam || (!!concern.ownerUid && concern.ownerUid === actor?.uid)} /></div>
             {concern.mddusRequired && <p className="mt-0.5 text-xs text-[var(--medtrak-muted)]">GMPI/solicitor: {concern.gmpiReference || 'Not yet recorded'}</p>}
           </div>
@@ -611,7 +612,7 @@ export default function MobileGovernanceConcerns() {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-bold">{concern.reference}</p>
-                  <p className="mt-0.5 text-xs text-[var(--medtrak-muted)]">{concern.emisNumber ? `EMIS ${concern.emisNumber}` : `${concern.patientInitials || 'Initials?'} · DOB ${concern.dateOfBirth || '?'}`}</p>
+                  <p className="mt-0.5 text-xs text-[var(--medtrak-muted)]">{identityLabel(concern)}</p>
                 </div>
                 <span className="shrink-0 rounded-full border border-[var(--medtrak-border)] px-2 py-0.5 text-[10px] font-bold uppercase">{String(concern.priority || 'low')}</span>
               </div>

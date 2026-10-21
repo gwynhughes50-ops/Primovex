@@ -7,6 +7,7 @@ import SectionCard from "@/components/common/SectionCard";
 import StatusBadge from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { identityLabel, identityProblems } from "@/modules/governance/patientIdentity";
 import { db } from "@/lib/firebase";
 import { listStaffDirectory } from "@/services/staffDirectoryService";
 import { useAuth } from "@/contexts/AuthContext";
@@ -74,6 +75,8 @@ function getInitialForm(year) {
   return {
     reference: createSarReference(today),
     emisNumber: "",
+    patientInitials: "",
+    dateOfBirth: "",
     receivedDate: formatDateInput(received),
     dueDate: formatDateInput(calculateDueDate(received)),
     requestedBy: "patient",
@@ -100,6 +103,8 @@ function getFormFromSar(sar) {
     ...getInitialForm(),
     reference: sar.reference || "",
     emisNumber: sar.emisNumber || "",
+    patientInitials: sar.patientInitials || "",
+    dateOfBirth: sar.dateOfBirth || "",
     receivedDate: formatDateInput(toDate(sar.receivedDate)),
     dueDate: formatDateInput(toDate(sar.dueDate)),
     ...normaliseRequestedBy(sar),
@@ -217,8 +222,10 @@ function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, act
   };
 
   const submit = async () => {
-    if (!form.emisNumber.trim()) {
-      alert("EMIS number is required. We are deliberately not storing patient names or DOBs.");
+    // initials and date of birth are asked for on every new SAR; an older SAR that never had them can still be edited without
+    const problems = identityProblems(form, { emisRequired: true, needed: !isEdit || Boolean(sar.patientInitials || sar.dateOfBirth) });
+    if (problems.length) {
+      alert(`${problems[0]} The patient's name is deliberately not stored.`);
       return;
     }
 
@@ -265,8 +272,20 @@ function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, act
 
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-slate-200">EMIS Number</label>
-            <Input value={form.emisNumber} onChange={(e) => update({ emisNumber: e.target.value })} placeholder="EMIS number only" />
+            <Input value={form.emisNumber} onChange={(e) => update({ emisNumber: e.target.value })} placeholder="EMIS number" />
           </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-3">
+              <label className="block text-sm font-semibold text-slate-200">Patient initials</label>
+              <Input value={form.patientInitials} onChange={(e) => update({ patientInitials: e.target.value.toUpperCase() })} placeholder="e.g. AB" maxLength={8} autoComplete="off" />
+            </div>
+            <div className="space-y-3">
+              <label className="block text-sm font-semibold text-slate-200">Date of birth</label>
+              <Input type="date" value={form.dateOfBirth} onChange={(e) => update({ dateOfBirth: e.target.value })} max={new Date().toISOString().slice(0, 10)} />
+            </div>
+          </div>
+          <p className="-mt-1 text-xs text-slate-500">Initials and date of birth, never the name. {isEdit && !sar.patientInitials && !sar.dateOfBirth ? "This SAR was logged before they were asked for; add them when you can." : ""}</p>
 
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-slate-200">Date Received</label>
@@ -492,7 +511,7 @@ function SarDetailPanel({ sar, actor, isTeam, canDelete, onEdit, onDelete, onClo
               {sar.urgent && <StatusBadge status="critical">Urgent</StatusBadge>}
             </div>
             <h2 className="mt-3 text-2xl font-black text-white">{sar.reference}</h2>
-            <p className="mt-1 text-sm text-slate-400">EMIS: {sar.emisNumber} · {sar.requestTypeLabel || getRequestTypeLabel(sar.requestType)}</p>
+            <p className="mt-1 text-sm text-slate-400">{identityLabel(sar, { withDob: true })} · {sar.requestTypeLabel || getRequestTypeLabel(sar.requestType)}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {isTeam && (
@@ -717,7 +736,7 @@ export default function GovernanceSARs() {
       if (filter === "overdue" && !(days !== null && days < 0 && !completed)) return false;
       if (filter === "due_week" && !(days !== null && days >= 0 && days <= 7 && !completed)) return false;
       if (!term) return true;
-      return [sar.reference, sar.emisNumber, sar.requestTypeLabel, requestedBySearchText(sar), sar.assignedToName, sar.informationRequired, sar.solicitorReference]
+      return [sar.reference, sar.emisNumber, sar.patientInitials, sar.requestTypeLabel, requestedBySearchText(sar), sar.assignedToName, sar.informationRequired, sar.solicitorReference]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term));
     });
@@ -821,7 +840,7 @@ export default function GovernanceSARs() {
               <thead className="text-xs uppercase tracking-wide text-slate-500">
                 <tr className="border-b border-slate-800">
                   <th className="py-3 pr-3">Reference</th>
-                  <th className="py-3 pr-3">EMIS</th>
+                  <th className="py-3 pr-3">Patient</th>
                   <th className="py-3 pr-3">Requested by</th>
                   <th className="py-3 pr-3">Type</th>
                   <th className="py-3 pr-3">Assigned</th>
@@ -837,7 +856,7 @@ export default function GovernanceSARs() {
                   return (
                     <tr key={sar.id} className="border-b border-slate-900 text-slate-200 hover:bg-[color-mix(in_srgb,var(--medtrak-accent)_9%,transparent)]">
                       <td className="py-3 pr-3 font-bold text-white">{sar.reference}</td>
-                      <td className="py-3 pr-3">{sar.emisNumber}</td>
+                      <td className="py-3 pr-3">{identityLabel(sar)}</td>
                       <td className="py-3 pr-3">
                         {(() => {
                           // Just the name (or Patient / Parent / ...), one line, cut off with an ellipsis if long; the full text shows on hover.

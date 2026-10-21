@@ -7,6 +7,7 @@ import SectionCard from "@/components/common/SectionCard";
 import StatusBadge from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { identityLabel } from "@/modules/governance/patientIdentity";
 import { Icons } from "@/config/medtrakIcons";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeUsers } from "@/services/adminUserService";
@@ -220,9 +221,9 @@ function ConcernFormModal({ open, onClose, actor, onCreated, users, concern }) {
 
         <div className="mt-5 grid gap-4 lg:grid-cols-3">
           <div className="space-y-2"><label className="text-sm font-semibold text-slate-200">Reference</label><Input value={form.reference} onChange={(e) => update({ reference: e.target.value })} /></div>
-          <div className="space-y-2"><label className="text-sm font-semibold text-slate-200">EMIS Number</label><Input value={form.emisNumber} onChange={(e) => update({ emisNumber: e.target.value })} placeholder="Preferred identifier" /></div>
-          <div className="space-y-2"><label className="text-sm font-semibold text-slate-200">Initials if no EMIS</label><Input value={form.patientInitials} onChange={(e) => update({ patientInitials: e.target.value.toUpperCase() })} placeholder="e.g. A.B." /></div>
-          <div className="space-y-2"><label className="text-sm font-semibold text-slate-200">DOB if no EMIS</label><Input type="date" value={form.dateOfBirth} onChange={(e) => update({ dateOfBirth: e.target.value })} /></div>
+          <div className="space-y-2"><label className="text-sm font-semibold text-slate-200">EMIS Number</label><Input value={form.emisNumber} onChange={(e) => update({ emisNumber: e.target.value })} placeholder="If known" /></div>
+          <div className="space-y-2"><label className="text-sm font-semibold text-slate-200">Patient initials</label><Input value={form.patientInitials} onChange={(e) => update({ patientInitials: e.target.value.toUpperCase() })} placeholder="e.g. A.B." /></div>
+          <div className="space-y-2"><label className="text-sm font-semibold text-slate-200">Date of birth</label><Input type="date" value={form.dateOfBirth} onChange={(e) => update({ dateOfBirth: e.target.value })} /></div>
           <div className="space-y-2"><label className="text-sm font-semibold text-slate-200">Date received</label><Input type="date" value={form.receivedAt} onChange={(e) => update({ receivedAt: e.target.value })} /></div>
           <div className="space-y-2"><label className="text-sm font-semibold text-slate-200">External reference</label><Input value={form.externalReference} onChange={(e) => update({ externalReference: e.target.value })} placeholder="Llais / GMPI / BCUHB / MDDUS" /></div>
 
@@ -417,7 +418,7 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
               {concern.outcome && <StatusBadge status="neutral">{CONCERN_OUTCOME_LABELS[concern.outcome] || friendly(concern.outcome)}</StatusBadge>}
             </div>
             <p className="text-sm text-slate-300">{concern.summary}</p>
-            <p className="text-xs text-slate-500">Identifier: {concern.emisNumber ? `EMIS ${concern.emisNumber}` : `${concern.patientInitials || "Initials missing"} | DOB ${concern.dateOfBirth || "missing"}`}</p>
+            <p className="text-xs text-slate-500">Patient: {identityLabel(concern, { withDob: true })}</p>
             <ConcernContactCard concern={concern} canSee={isTeam || (!!concern.ownerUid && concern.ownerUid === actor?.uid)} />
             {concern.mddusRequired && <p className="text-xs text-slate-500">GMPI / solicitor: {concern.gmpiReference || "Not yet recorded"}</p>}
             {isTeam ? (
@@ -746,7 +747,7 @@ export default function GovernanceConcerns() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <p className="font-bold text-slate-100">{concern.reference}</p>
-                        <p className="mt-1 text-xs text-slate-500">{concern.emisNumber ? `EMIS ${concern.emisNumber}` : `${concern.patientInitials || "Initials?"} | DOB ${concern.dateOfBirth || "?"}`}</p>
+                        <p className="mt-1 text-xs text-slate-500">{identityLabel(concern)}</p>
                       </div>
                       <StatusBadge status={getPriorityBadge(concern.priority)}>{String(concern.priority || "low").toUpperCase()}</StatusBadge>
                     </div>

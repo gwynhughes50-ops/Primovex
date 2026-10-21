@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { ChevronLeft, FileText, Plus, X } from 'lucide-react';
 import { db } from '@/lib/firebase';
+import { identityLabel, identityProblems } from '@/modules/governance/patientIdentity';
 import { useAuth } from '@/contexts/AuthContext';
 import { listStaffDirectory } from '@/services/staffDirectoryService';
 import {
@@ -54,7 +55,7 @@ function metricsOf(rows) {
 function getInitialForm() {
   const today = new Date();
   return {
-    reference: createSarReference(today), emisNumber: '', receivedDate: formatDateInput(today), dueDate: formatDateInput(calculateDueDate(today)),
+    reference: createSarReference(today), emisNumber: '', patientInitials: '', dateOfBirth: '', receivedDate: formatDateInput(today), dueDate: formatDateInput(calculateDueDate(today)),
     requestedBy: 'patient', requestedByOther: '', receivedVia: 'email', solicitorReference: '', requestType: 'summary', requestOptions: [],
     informationRequired: '', consentToEmail: false, urgent: false, deliveryMethod: 'email', emailAddress: '',
     assignedToUid: '', assignedToName: 'Unassigned', managerUid: '', managerName: '', notes: '',
@@ -64,7 +65,7 @@ function getInitialForm() {
 function formFromSar(sar) {
   return {
     ...getInitialForm(),
-    reference: sar.reference || '', emisNumber: sar.emisNumber || '',
+    reference: sar.reference || '', emisNumber: sar.emisNumber || '', patientInitials: sar.patientInitials || '', dateOfBirth: sar.dateOfBirth || '',
     receivedDate: formatDateInput(toDate(sar.receivedDate)), dueDate: formatDateInput(toDate(sar.dueDate)),
     ...normaliseRequestedBy(sar), receivedVia: sar.receivedVia || 'email', solicitorReference: sar.solicitorReference || '',
     requestType: sar.requestType || 'summary', requestOptions: sar.requestOptions || [], informationRequired: sar.informationRequired || '',
@@ -89,7 +90,9 @@ function SarFormSheet({ sar, actor, staff, onClose }) {
   };
 
   async function submit() {
-    if (!form.emisNumber.trim()) { setError('EMIS number is required. Patient names and dates of birth are deliberately not stored.'); return; }
+    // initials and date of birth are asked for on every new SAR; an older SAR that never had them can still be edited without
+    const problems = identityProblems(form, { emisRequired: true, needed: !isEdit || Boolean(sar.patientInitials || sar.dateOfBirth) });
+    if (problems.length) { setError(`${problems[0]} The patient's name is deliberately not stored.`); return; }
     if (form.requestedBy === 'company' && !form.requestedByOther.trim()) { setError('Enter the company name.'); return; }
     try {
       setBusy(true);
@@ -121,6 +124,14 @@ function SarFormSheet({ sar, actor, staff, onClose }) {
           <label className={LABEL}>EMIS number
             <input value={form.emisNumber} onChange={(e) => update({ emisNumber: e.target.value })} inputMode="numeric" className={FIELD} />
           </label>
+          <div className="grid grid-cols-2 gap-2">
+            <label className={LABEL}>Patient initials
+              <input value={form.patientInitials} onChange={(e) => update({ patientInitials: e.target.value.toUpperCase() })} placeholder="e.g. AB" maxLength={8} autoComplete="off" className={FIELD} />
+            </label>
+            <label className={LABEL}>Date of birth
+              <input type="date" value={form.dateOfBirth} onChange={(e) => update({ dateOfBirth: e.target.value })} max={new Date().toISOString().slice(0, 10)} className={FIELD} />
+            </label>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <label className={LABEL}>Received
               <input type="date" value={form.receivedDate} onChange={(e) => setReceived(e.target.value)} className={FIELD} />
@@ -206,7 +217,7 @@ function SarDetailSheet({ sar, actor, isTeam, onClose, onEdit }) {
           <div>
             <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--medtrak-accent)]">Subject access request</p>
             <h2 className="mt-1 text-xl font-bold">{sar.reference}</h2>
-            <p className="mt-1 text-sm text-[var(--medtrak-muted)]">EMIS {sar.emisNumber || '?'} · {SAR_REQUEST_TYPES.find((t) => t.key === sar.requestType)?.label || sar.requestTypeLabel || 'Request'}</p>
+            <p className="mt-1 text-sm text-[var(--medtrak-muted)]">{identityLabel(sar, { withDob: true })} · {SAR_REQUEST_TYPES.find((t) => t.key === sar.requestType)?.label || sar.requestTypeLabel || 'Request'}</p>
           </div>
           <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-2xl border border-[var(--medtrak-border)]" aria-label="Close"><X className="h-5 w-5" /></button>
         </div>
@@ -306,7 +317,7 @@ export default function MobileGovernanceSARs() {
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return rows.filter((r) => {
-      if (term && ![r.reference, r.emisNumber, r.assignedToName, getRequestedByDisplay(r)].some((v) => String(v || '').toLowerCase().includes(term))) return false;
+      if (term && ![r.reference, r.emisNumber, r.patientInitials, r.assignedToName, getRequestedByDisplay(r)].some((v) => String(v || '').toLowerCase().includes(term))) return false;
       if (filter === 'all') return true;
       if (filter === 'completed') return !isOpen(r);
       if (!isOpen(r)) return false;
@@ -370,7 +381,7 @@ export default function MobileGovernanceSARs() {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-bold">{sar.reference}</p>
-                  <p className="mt-0.5 text-xs text-[var(--medtrak-muted)]">EMIS {sar.emisNumber || '?'} · {getRequestedByDisplay(sar)}</p>
+                  <p className="mt-0.5 text-xs text-[var(--medtrak-muted)]">{identityLabel(sar)} · {getRequestedByDisplay(sar)}</p>
                 </div>
                 {sar.urgent && <span className="shrink-0 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-600">Urgent</span>}
               </div>

@@ -1,6 +1,7 @@
 import { collection, getDocs, limit, orderBy, query, where } from "firebase/firestore";
 
 import { db } from "@/lib/firebase";
+import { identityLabel } from "@/modules/governance/patientIdentity";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import {
   CONCERN_MEETINGS_COLLECTION,
@@ -46,7 +47,7 @@ function section(title, body) {
 
 export function buildConcernSummaryHtml({ concern = {}, meetings = null, timeline = null, printedBy = "", printedAt = new Date() } = {}) {
   const stage = CONCERN_STAGES.find((item) => item.key === concern.status)?.label || friendly(concern.status);
-  const identifier = concern.emisNumber ? `EMIS ${concern.emisNumber}` : `${concern.patientInitials || "Initials missing"} | DOB ${concern.dateOfBirth || "missing"}`;
+  const identifier = identityLabel(concern, { withDob: true });
   const raisedBy = [friendly(concern.source || "patient"), concern.raisedByInitials].filter(Boolean).join(" — ");
 
   const caseTable = `<table>

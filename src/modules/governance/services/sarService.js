@@ -18,6 +18,7 @@ import {
 import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase";
 import { writeAuditEvent } from "@/core/identity/auditService";
+import { identityFields } from "@/modules/governance/patientIdentity";
 
 export const SAR_COLLECTION = "governance_sars";
 export const SAR_ACTIVITY_COLLECTION = "governance_sar_activity";
@@ -213,7 +214,7 @@ export function buildSarFields(form) {
   const dueDate = form.dueDate ? new Date(form.dueDate) : calculateDueDate(receivedDate);
 
   return {
-    emisNumber: String(form.emisNumber || "").trim(),
+    ...identityFields(form),
     receivedDate: Timestamp.fromDate(receivedDate),
     dueDate: Timestamp.fromDate(dueDate),
     requestedBy: form.requestedBy || "patient",
@@ -359,6 +360,8 @@ export async function deleteSarYearFolder(year) {
 // Labels for the fields whose change is worth naming in the activity log.
 const SAR_EDIT_LABELS = [
   ["emisNumber", "EMIS number"],
+  ["patientInitials", "patient initials"],
+  ["dateOfBirth", "date of birth"],
   ["requestedBy", "requested by"],
   ["requestedByOther", "company name"],
   ["receivedVia", "received via"],

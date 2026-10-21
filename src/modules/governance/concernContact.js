@@ -71,10 +71,7 @@ export function validateQuickConcern(form = {}) {
   const raiserIsPatient = (form.source || "patient") === "patient";
   const raiserInitials = String(form.raisedByInitials || "").replace(/[^A-Za-z]/g, "");
   if (!raiserIsPatient && raiserInitials.length < 1) errors.push("Add the initials of the person raising it.");
-  if (!String(form.emisNumber || "").trim()) {
-    const patientInitials = String(form.patientInitials || "").trim();
-    if (!patientInitials || !form.dateOfBirth) errors.push("Give the patient's EMIS number, or their initials and date of birth.");
-  }
+  errors.push(...identityProblems(form));
   if (!String(form.summary || "").trim()) errors.push("Say briefly what it is about, without the patient's name.");
   errors.push(...validateContact({ phone: form.raisedByPhone, email: form.raisedByEmail, preferred: form.raisedByPreferred }));
   return errors;
@@ -86,6 +83,8 @@ export const contactFromForm = (form = {}) => cleanContact({ phone: form.raisedB
 // ---- the step-by-step "log a concern" ----------------------------------------------------------------------------------------
 // One question per screen. Each step knows what it needs before the person can move on, in words for them. The same rules,
 // put together, are validateQuickConcern above, so the last screen can still check everything.
+
+import { identityProblems } from "./patientIdentity.js";
 
 export const CONCERN_WIZARD_STEPS = ["who", "reply", "patient", "about", "owner", "check"];
 
@@ -100,11 +99,8 @@ export function validateConcernStep(step, form = {}) {
       return !raiserIsPatient && raiserInitials.length < 1 ? ["Add the initials of the person raising it."] : [];
     case "reply":
       return validateContact({ phone: form.raisedByPhone, email: form.raisedByEmail, preferred: form.raisedByPreferred });
-    case "patient": {
-      if (String(form.emisNumber || "").trim()) return [];
-      const initials = String(form.patientInitials || "").trim();
-      return !initials || !form.dateOfBirth ? ["Give the patient's EMIS number, or their initials and date of birth."] : [];
-    }
+    case "patient":
+      return identityProblems(form);
     case "about": {
       const errors = [];
       if (!form.category) errors.push("Choose the type of concern.");
