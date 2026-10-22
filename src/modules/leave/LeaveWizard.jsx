@@ -289,7 +289,8 @@ export default function LeaveWizard({ people = [], person: given = null, year, s
               ) : (
                 <div className="rounded-xl border border-teal-300/30 bg-teal-500/10 p-4">
                   <p className="text-3xl font-black text-slate-50">{fix(result.total)} <span className="text-base font-semibold">{result.unit}</span></p>
-                  {result.unit === "hours" && <p className="text-sm text-slate-300">{fix(result.total / 7.5)} days of 7.5 hours</p>}
+                  {result.unit === "hours" && <p className="text-sm text-slate-300">{fix(result.total / 7.5)} days of 7.5 hours · with the bank holidays</p>}
+                  <p className="mt-1 text-sm text-slate-100">Without the bank holidays: <b>{fix(result.totalWithout)} {result.unit}</b>{result.unit === "hours" ? ` (${fix(result.totalWithout / 7.5)} days)` : ""}</p>
                   <p className="mt-1 text-sm text-slate-300">{groupOf(draft.leaveGroup, settings)?.label.split(" (")[0]} · {period.label.toLowerCase()}{result.carryOver > 0 ? ` · includes ${fix(result.carryOver)} carried over` : ""}</p>
                   {result.warnings.length > 0 && <ul className="mt-2 list-disc pl-5 text-xs text-slate-300">{result.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
                 </div>

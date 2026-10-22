@@ -183,7 +183,7 @@ t("the table for payroll lists every person with their figure and whether Bright
   const lines = csv.split("\r\n");
   assert.equal(lines[0], "Annual leave 2026-27");
   assert.match(lines[1], /^Name,Job title,Group/);
-  assert.equal(lines[2], '"Test, Person",Nurse,Clinical,hours,292.5,75,367.5,0,367.5,367.5,yes');
+  assert.equal(lines[2], '"Test, Person",Nurse,Clinical,hours,292.5,75,367.5,0,367.5,292.5,367.5,yes');
   assert.match(lines[3], /^No Group,,,hours/);
 });
 
@@ -390,6 +390,26 @@ t("the earliest working pattern applies from the start of their employment, beca
   assert.equal(starter.segments[0].weeklyHours, 37.5);
   // a zero-hours pattern is still zero hours however far back it is taken
   assert.equal(calculateEntitlement({ ...recorded, patterns: [{ from: "2026-10-21", mode: "zero-hours", weeks: [] }] }, Y).ready, false);
+});
+
+t("every figure comes with and without the bank holidays, carry-over included in both", () => {
+  const person = { leaveGroup: "admin", serviceFrom: "2010-01-01", patterns: full(), leaveAdjust: { "2026-27": { carryOver: 10 } } };
+  const r = calculateEntitlement(person, Y);
+  assert.deepEqual([r.total, r.totalWithout, r.annualRounded, r.rounded], [330 + 10, 255 + 10, 255, 330]);
+  // a part-year figure is rounded up to the half hour before the bank holidays are taken out as well
+  const starter = calculateEntitlement({ leaveGroup: "clinical", startDate: "2026-10-01", patterns: full() }, Y);
+  assert.equal(starter.annualRounded, Math.ceil(starter.annual * 2) / 2);
+  assert.equal(starter.totalWithout, starter.annualRounded);
+  // a doctor's days: the bank holidays are the sessions-share on top
+  const doc = calculateEntitlement({ leaveGroup: "doctor", leaveSessions: 8, leaveAdjust: { "2026-27": { fixedDays: 32, carryOver: 1 } } }, Y, { gpMaxSessions: 8 });
+  assert.deepEqual([doc.total, doc.totalWithout], [32 + 10 + 1, 32 + 1]);
+  // the figure BrightHR holds agrees if it matches either way of counting
+  const check = (entitlement) => compareWithBrightHr({ ...person, leave: { yearFrom: "2026-04-01", unit: "hours", entitlement } }, Y, r).same;
+  assert.deepEqual([check(340), check(265), check(330), check(255), check(300)], [true, true, true, true, false]);
+  // the table for payroll carries both totals
+  const csv = leaveCsv([{ person: { name: "A", ...person }, result: r, check: { known: false } }], Y).split("\r\n");
+  assert.match(csv[1], /Total with bank holidays,Total without bank holidays/);
+  assert.match(csv[2], /,340,265,/);
 });
 
 console.log(`\n${n} passed`);

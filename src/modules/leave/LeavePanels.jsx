@@ -46,7 +46,8 @@ function Figure({ s, result }) {
   return (
     <>
       <p className={`text-3xl font-black ${s.strong}`}>{fix(result.total)} <span className="text-base font-semibold">{result.unit === "days" ? "days" : "hours"}</span></p>
-      {result.unit === "hours" && <p className={s.muted}>{daysOf(result.total)} days of 7.5 hours</p>}
+      {result.unit === "hours" && <p className={s.muted}>{daysOf(result.total)} days of 7.5 hours · with the bank holidays</p>}
+      <p className={`mt-1 ${s.body}`}>Without the bank holidays: <b>{fix(result.totalWithout)} {result.unit === "days" ? "days" : "hours"}</b>{result.unit === "hours" ? ` (${daysOf(result.totalWithout)} days)` : ""}</p>
       {result.carryOver > 0 && <p className={s.muted}>{amount(result.rounded, result.unit)} for the year plus {amount(result.carryOver, result.unit)} carried over</p>}
       {result.warnings.length > 0 && <ul className={`mt-1 list-disc pl-5 ${s.muted}`}>{result.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
     </>
@@ -110,6 +111,7 @@ export function LeaveList({ people, year, settings, skin = "desktop", onEdit, sh
   const s = SKINS[skin];
   const rows = useLeaveResults(people, year, settings);
   const [search, setSearch] = useState("");
+  const [withBh, setWithBh] = useState(true); // the Total column counts the bank holidays, or leaves them out
   const shown = rows.filter(({ person }) => person.active !== false && (!search.trim() || `${person.name} ${person.jobTitle || ""}`.toLowerCase().includes(search.trim().toLowerCase())));
   const missing = rows.filter(({ person, result }) => person.active !== false && !result.ready).length;
 
@@ -130,7 +132,7 @@ export function LeaveList({ people, year, settings, skin = "desktop", onEdit, sh
             <p className="font-bold">{person.name}</p>
             <p className={`text-sm ${s.muted}`}>{[groupOf(person.leaveGroup, settings)?.label, person.jobTitle].filter(Boolean).join(" · ")}</p>
             {!employmentPeriod(person, year).full && <p className={`text-sm ${s.muted}`}>{employmentPeriod(person, year).label}</p>}
-            <p className="mt-1">{result.ready ? <b>{amount(result.total, result.unit)}</b> : <span className={s.muted}>{result.warnings[0]}</span>}</p>
+            <p className="mt-1">{result.ready ? <><b>{amount(result.total, result.unit)}</b><span className={`block text-xs ${s.muted}`}>{amount(result.totalWithout, result.unit)} without the bank holidays</span></> : <span className={s.muted}>{result.warnings[0]}</span>}</p>
           </div>
         ))}
       </div>
@@ -141,13 +143,14 @@ export function LeaveList({ people, year, settings, skin = "desktop", onEdit, sh
       <div className="flex flex-wrap items-end gap-3">
         {title && <p className={`text-sm ${s.muted}`}>{title}</p>}
         <label className={s.label}>Find a person<input className={s.field} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name or job" /></label>
+        <label className="flex min-h-10 items-center gap-2 text-sm text-slate-200"><input type="checkbox" checked={withBh} onChange={(e) => setWithBh(e.target.checked)} /> Total includes bank holidays</label>
         <button type="button" className={s.btn} onClick={download}><Download className="h-4 w-4" aria-hidden="true" /> Download for payroll (CSV)</button>
         {missing > 0 && <span className="text-sm text-amber-200">{missing} {missing === 1 ? "person needs" : "people need"} something filling in</span>}
       </div>
       <div className="overflow-x-auto rounded-2xl border border-white/10">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-400">
-            <tr><th className="px-3 py-2">Person</th><th className="px-3 py-2">Group</th><th className="px-3 py-2">Period</th><th className="px-3 py-2">Leave</th><th className="px-3 py-2">Bank holidays</th><th className="px-3 py-2">Carried over</th><th className="px-3 py-2">Total</th>{showCheck && <th className="px-3 py-2">BrightHR</th>}{onEdit && <th className="px-3 py-2" />}</tr>
+            <tr><th className="px-3 py-2">Person</th><th className="px-3 py-2">Group</th><th className="px-3 py-2">Period</th><th className="px-3 py-2">Leave</th><th className="px-3 py-2">Bank holidays</th><th className="px-3 py-2">Carried over</th><th className="px-3 py-2">{withBh ? "Total with bank holidays" : "Total without bank holidays"}</th>{showCheck && <th className="px-3 py-2">BrightHR</th>}{onEdit && <th className="px-3 py-2" />}</tr>
           </thead>
           <tbody>
             {shown.map(({ person, result, check }) => (
@@ -160,7 +163,7 @@ export function LeaveList({ people, year, settings, skin = "desktop", onEdit, sh
                     <td className="whitespace-nowrap px-3 py-2 text-slate-200">{fix(result.annual)}{result.unit === "days" ? " days" : ""}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-slate-200">{fix(result.bankHolidayAmount)}{result.unit === "days" ? " days" : ""}</td>
                     <td className="whitespace-nowrap px-3 py-2 text-slate-200">{result.carryOver ? fix(result.carryOver) : ""}</td>
-                    <td className="whitespace-nowrap px-3 py-2 font-semibold text-slate-50">{fix(result.total)}{result.unit === "days" ? " days" : ""}{result.unit === "hours" && <span className="block text-xs font-normal text-slate-400">{daysOf(result.total)} days</span>}</td>
+                    <td className="whitespace-nowrap px-3 py-2 font-semibold text-slate-50">{fix(withBh ? result.total : result.totalWithout)}{result.unit === "days" ? " days" : ""}{result.unit === "hours" && <span className="block text-xs font-normal text-slate-400">{daysOf(withBh ? result.total : result.totalWithout)} days</span>}</td>
                   </>
                 ) : <td colSpan={4} className="px-3 py-2 text-amber-200">{result.warnings[0]}</td>}
                 {showCheck && <td className="whitespace-nowrap px-3 py-2">{!check.known ? <span className="text-slate-500">Not imported</span> : check.same === null ? <span className="text-slate-400">{fix(check.figure)} {check.unit}</span> : check.same ? <span className="text-emerald-300">{fix(check.figure)} agrees</span> : <span className="text-rose-300">{fix(check.figure)} ({check.difference > 0 ? "+" : ""}{fix(check.difference)} here)</span>}</td>}

@@ -159,7 +159,7 @@ export function calculateEntitlement(person, year, settings = {}) {
     const yearDays = Math.max(0, fixed + extraDays);
     const leaveDays = period.full ? yearDays : roundUpHalf((yearDays * months) / 12);
     const total = leaveDays + bhDays;
-    return { ...base, ready: warnings.length === 0, fixedDays: fixed, fullYearDays: yearDays, monthsOfService: months, bankHolidayDays: bhDays, bankHolidaysCounted: counted, holidays, annual: leaveDays, bankHolidayAmount: bhDays, exact: total, rounded: total, total: total + carryOver };
+    return { ...base, ready: warnings.length === 0, fixedDays: fixed, fullYearDays: yearDays, monthsOfService: months, bankHolidayDays: bhDays, bankHolidaysCounted: counted, holidays, annual: leaveDays, annualRounded: leaveDays, totalWithout: leaveDays + carryOver, bankHolidayAmount: bhDays, exact: total, rounded: total, total: total + carryOver };
   }
 
   // the part of the year they were employed
@@ -204,7 +204,7 @@ export function calculateEntitlement(person, year, settings = {}) {
 
   const exact = annual + bankHolidayAmount;
   const rounded = roundUpHalf(exact);
-  return { ...base, ready: warnings.filter((w) => !/Not employed/.test(w)).length === 0, segments, notes, annual: two(annual), bankHolidayAmount: two(bankHolidayAmount), exact: two(exact), rounded, total: rounded + carryOver };
+  return { ...base, ready: warnings.filter((w) => !/Not employed/.test(w)).length === 0, segments, notes, annual: two(annual), annualRounded: roundUpHalf(annual), totalWithout: roundUpHalf(annual) + carryOver, bankHolidayAmount: two(bankHolidayAmount), exact: two(exact), rounded, total: rounded + carryOver };
 }
 
 // BrightHR's own figure for the same year, if the last report it was imported from covers it, and whether it agrees
@@ -214,7 +214,8 @@ export function compareWithBrightHr(person, year, result) {
   const unitOk = (leave.unit || "hours") === result.unit;
   if (!unitOk) return { known: true, figure: leave.entitlement, unit: leave.unit, same: null };
   const figure = Number(leave.entitlement) || 0;
-  const same = Math.abs(figure - result.total) < 0.01 || Math.abs(figure - result.rounded) < 0.01;
+  // BrightHR may hold the entitlement with the bank holidays in or out, so a match with either figure agrees
+  const same = [result.total, result.rounded, result.totalWithout, result.annualRounded].some((v) => Math.abs(figure - v) < 0.01);
   return { known: true, figure, unit: leave.unit || "hours", same, difference: two(result.total - figure) };
 }
 
@@ -261,9 +262,9 @@ export function cleanYearSettings(input = {}) {
 
 const csvCell = (v) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 export function leaveCsv(rows, year, settings = {}) {
-  const head = ["Name", "Job title", "Group", "Unit", "Annual leave", "Bank holidays", "Rounded entitlement", "Carried over", "Total", "BrightHR figure", "Agrees with BrightHR"];
+  const head = ["Name", "Job title", "Group", "Unit", "Annual leave", "Bank holidays", "Rounded entitlement", "Carried over", "Total with bank holidays", "Total without bank holidays", "BrightHR figure", "Agrees with BrightHR"];
   const lines = rows.map(({ person, result, check }) => [
-    person.name, person.jobTitle || "", groupOf(person.leaveGroup, settings)?.label || "", result.unit || "", result.annual ?? "", result.bankHolidayAmount ?? "", result.rounded ?? "", result.carryOver ?? "", result.ready === false ? "" : result.total ?? "",
+    person.name, person.jobTitle || "", groupOf(person.leaveGroup, settings)?.label || "", result.unit || "", result.annual ?? "", result.bankHolidayAmount ?? "", result.rounded ?? "", result.carryOver ?? "", result.ready === false ? "" : result.total ?? "", result.ready === false ? "" : result.totalWithout ?? "",
     check?.known ? check.figure : "", check?.known ? (check.same === null ? "different unit" : check.same ? "yes" : "no") : "",
   ]);
   return [`Annual leave ${year.key}`, head, ...lines].map((l) => (Array.isArray(l) ? l.map(csvCell).join(",") : csvCell(l))).join("\r\n");
