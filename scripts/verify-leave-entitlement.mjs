@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  LEAVE_GROUPS, bankHolidaysBetween, groupOf, groupsFor, calculateEntitlement, employmentPeriod, cleanLeaveFields, cleanYearSettings, compareWithBrightHr, gpBankHolidayDays, leaveCsv, leaveYear, leaveYearFor, parseLeaveYearKey, serviceTier,
+  LEAVE_GROUPS, wholeMonthsEmployed, bankHolidaysBetween, groupOf, groupsFor, calculateEntitlement, employmentPeriod, cleanLeaveFields, cleanYearSettings, compareWithBrightHr, gpBankHolidayDays, leaveCsv, leaveYear, leaveYearFor, parseLeaveYearKey, serviceTier,
 } from "../src/modules/leave/leaveEntitlement.js";
 
 let n = 0;
@@ -302,6 +302,28 @@ t("the groups and extra days are cleaned before they are saved", () => {
   assert.deepEqual(cleanLeaveFields({ leaveGroup: "custom-Bad Name" }), { leaveGroup: "" });
   assert.deepEqual(cleanLeaveFields({ leaveAdjust: { "2026-27": { extraDays: "-3", extraReason: "x".repeat(100) } } }).leaveAdjust["2026-27"].extraDays, -3);
   assert.equal(cleanLeaveFields({ leaveAdjust: { "2026-27": { extraReason: "x".repeat(100) } } }).leaveAdjust["2026-27"].extraReason.length, 60);
+});
+
+t("a doctor who starts or leaves part-way gets 1/12th of the year's leave for each whole month of service", () => {
+  const settings = { gpMaxSessions: 8 };
+  const doc = (extra) => calculateEntitlement({ leaveGroup: "doctor", leaveSessions: 8, leaveAdjust: { "2026-27": { fixedDays: 32 } }, ...extra }, Y, settings);
+  assert.deepEqual([wholeMonthsEmployed(employmentPeriod({}, Y), Y), wholeMonthsEmployed(employmentPeriod({ startDate: "2026-07-01" }, Y), Y), wholeMonthsEmployed(employmentPeriod({ startDate: "2026-07-15" }, Y), Y)], [12, 9, 8]);
+  assert.equal(wholeMonthsEmployed(employmentPeriod({ leftOn: "2026-09-30" }, Y), Y), 6, "leaving on the last day of September: April to September");
+  assert.equal(wholeMonthsEmployed(employmentPeriod({ leftOn: "2026-09-29" }, Y), Y), 5);
+  assert.equal(wholeMonthsEmployed(employmentPeriod({ startDate: "2027-06-01" }, Y), Y), 0);
+  const whole = doc({});
+  assert.deepEqual([whole.monthsOfService, whole.annual, whole.bankHolidayDays], [12, 32, 10]);
+  const july = doc({ startDate: "2026-07-01" });
+  assert.deepEqual([july.monthsOfService, july.annual], [9, 24], "9/12 of 32 days");
+  assert.equal(july.bankHolidayDays, 6, "and only the bank holidays after they start: 6 of 8 sessions-worth");
+  assert.equal(doc({ startDate: "2026-07-15" }).annual, 21.5, "8/12 of 32 = 21.33, up to the half day");
+  assert.equal(doc({ leftOn: "2026-09-30" }).annual, 16);
+  // extra days are part of the year's days before it is shared out by months
+  const withExtra = calculateEntitlement({ leaveGroup: "doctor", leaveSessions: 8, startDate: "2026-10-01", leaveAdjust: { "2026-27": { fixedDays: 32, extraDays: 4 } } }, Y, settings);
+  assert.equal(withExtra.annual, 18, "(32 + 4) x 6/12");
+  // everyone else keeps exact days, not months
+  const nurse = calculateEntitlement({ leaveGroup: "admin", serviceFrom: "2010-01-01", startDate: "2026-07-15", patterns: full() }, Y);
+  near(nurse.annual, 255 * 260 / 365);
 });
 
 console.log(`\n${n} passed`);

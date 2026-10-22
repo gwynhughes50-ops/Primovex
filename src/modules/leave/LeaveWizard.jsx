@@ -179,7 +179,7 @@ export default function LeaveWizard({ people = [], person: given = null, year, s
             <div className="grid gap-3 sm:grid-cols-2">
               <label className={LABEL}>Their leave for {year.key}, in days<input type="number" min="0" step="0.5" className={FIELD} value={form.fixedDays} onChange={(e) => set({ fixedDays: e.target.value })} /></label>
               <label className={LABEL}>Sessions a week they work<input type="number" min="0" step="1" className={FIELD} value={form.sessions} onChange={(e) => set({ sessions: e.target.value })} /></label>
-              <p className="text-xs text-slate-500 sm:col-span-2">Doctors do not work bank holidays either, so every bank holiday counts, shared by the sessions they work (their sessions ÷ the most sessions in a week, up to the half day).</p>
+              <p className="text-xs text-slate-500 sm:col-span-2">Type the leave for a whole year. Someone who starts or leaves part-way through gets 1/12th for each whole month of service. Doctors do not work bank holidays either, so every bank holiday counts, shared by the sessions they work (their sessions ÷ the most sessions in a week, up to the half day).</p>
             </div>
           )}
 

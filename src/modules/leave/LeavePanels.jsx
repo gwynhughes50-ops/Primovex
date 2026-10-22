@@ -59,6 +59,7 @@ export function Workings({ s, result }) {
     return (
       <dl className={`mt-2 space-y-1 text-sm ${s.body}`}>
         <div className="flex justify-between gap-3"><dt>Leave for the year</dt><dd>{fix(result.fixedDays)} days</dd></div>
+        {result.monthsOfService < 12 && <div className="flex justify-between gap-3"><dt>1/12th for each whole month of service ({result.monthsOfService} of 12)</dt><dd>{fix(result.annual)} days</dd></div>}
         {result.extraDays !== 0 && <div className="flex justify-between gap-3"><dt>{result.extraDays > 0 ? "Extra days" : "Fewer days"}{result.extraReason ? ` (${result.extraReason})` : ""}</dt><dd>{result.extraDays > 0 ? "+" : ""}{fix(result.extraDays)} days</dd></div>}
         <div className="flex justify-between gap-3"><dt>{fix(result.bankHolidaysCounted)} bank holidays, by sessions worked</dt><dd>{fix(result.bankHolidayDays)} days</dd></div>
       </dl>

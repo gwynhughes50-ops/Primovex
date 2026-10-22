@@ -102,6 +102,19 @@ export function employmentPeriod(person, year) {
   return { from, to, days, full: !startsLate && !endsEarly, none: false, label };
 }
 
+// The whole months of a leave year someone is employed for the entire month. A salaried GP's contract gives 1/12th of the year's leave
+// for each month of service, so a start on 1 July is 9 months (July to March) and a start on 15 July is 8 (August to March).
+export function wholeMonthsEmployed(period, year) {
+  if (!period || period.none) return 0;
+  let months = 0;
+  for (let i = 0; i < 12; i += 1) {
+    const first = new Date(year.startYear, 3 + i, 1);
+    const last = new Date(year.startYear, 3 + i + 1, 0);
+    if (period.from <= dateKey(first) && period.to >= dateKey(last)) months += 1;
+  }
+  return months;
+}
+
 // What a person is entitled to in a leave year.
 //   person:   { name, leaveGroup, serviceFrom, startedOn, startDate, leftOn, patterns, leaveSessions, leaveAdjust: { "2026-27": { carryOver, fixedDays } } }
 //   year:     leaveYear(...)
@@ -129,8 +142,12 @@ export function calculateEntitlement(person, year, settings = {}) {
     const bhDays = gpBankHolidayDays({ bankHolidays: counted, sessions: person.leaveSessions, maxSessions: settings.gpMaxSessions || 8 });
     if (!fixed) warnings.push("Type in their leave in days for this year.");
     if (!(Number(person.leaveSessions) > 0)) warnings.push("Set how many sessions a week they work.");
-    const total = Math.max(0, fixed + extraDays) + bhDays;
-    return { ...base, ready: warnings.length === 0, fixedDays: fixed, bankHolidayDays: bhDays, bankHolidaysCounted: counted, holidays, annual: fixed, bankHolidayAmount: bhDays, exact: total, rounded: total, total: total + carryOver };
+    // the days typed in are for a whole year; someone who starts or leaves part-way gets 1/12th for each whole month of service
+    const months = period.full ? 12 : wholeMonthsEmployed(period, year);
+    const yearDays = Math.max(0, fixed + extraDays);
+    const leaveDays = period.full ? yearDays : roundUpHalf((yearDays * months) / 12);
+    const total = leaveDays + bhDays;
+    return { ...base, ready: warnings.length === 0, fixedDays: fixed, fullYearDays: yearDays, monthsOfService: months, bankHolidayDays: bhDays, bankHolidaysCounted: counted, holidays, annual: leaveDays, bankHolidayAmount: bhDays, exact: total, rounded: total, total: total + carryOver };
   }
 
   // the part of the year they were employed
