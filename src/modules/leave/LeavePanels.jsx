@@ -68,7 +68,9 @@ export function Workings({ s, result }) {
   return (
     <div className={`mt-2 space-y-2 text-sm ${s.body}`}>
       {result.extraDays !== 0 && <p>{result.extraDays > 0 ? "Extra days" : "Fewer days"} for them this year{result.extraReason ? ` (${result.extraReason})` : ""}: <b>{result.extraDays > 0 ? "+" : ""}{fix(result.extraDays)} days</b>, shared out by their hours and the days they are here, and included below.</p>}
-      {result.contractDays && <p>Days from their own contract: <b>{result.contractDays.map((d) => fix(d)).join(" / ")}</b> (basic, after 1, 5 and 10 years) instead of the group's.</p>}
+      {result.contractDays && (result.contractDays.every((d) => d === result.contractDays[0])
+        ? <p>Their contract gives <b>{fix(result.contractDays[0])} days</b> whatever their service, instead of the group's.</p>
+        : <p>Days from their own contract: <b>{result.contractDays.map((d) => fix(d)).join(" / ")}</b> (basic, after 1, 5 and 10 years) instead of the group's.</p>)}
       {result.segments.map((seg) => (
         <div key={seg.from} className={`${s.line} pt-2`}>
           <p className={`font-semibold ${s.strong}`}>{uk(seg.from)} to {uk(seg.to)} <span className={`font-normal ${s.muted}`}>({seg.days} days)</span></p>

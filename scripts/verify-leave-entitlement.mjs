@@ -359,4 +359,17 @@ t("a person's own contract days at the four levels replace their group's, kept o
   assert.deepEqual(cleanLeaveFields({ leaveDays: [500, 1, 1, 1] }), { leaveDays: [] }, "nothing over 100 days");
 });
 
+t("one number of days whatever the service (38 days plus the bank holidays) is the same at every level", () => {
+  const flat = [38, 38, 38, 38];
+  for (const serviceFrom of ["2026-04-01", "2024-01-01", "2020-01-01", "2010-01-01"]) {
+    const r = calculateEntitlement({ leaveGroup: "management", leaveDays: flat, serviceFrom, patterns: full() }, Y);
+    assert.equal(r.rounded, 38 * 7.5 + 75, `38 days plus ten bank holidays at service from ${serviceFrom}`);
+  }
+  // and it does not split the year as they pass an anniversary: there is only one rate
+  const crossing = calculateEntitlement({ leaveGroup: "management", leaveDays: flat, serviceFrom: "2025-10-01", patterns: full() }, Y);
+  assert.deepEqual(crossing.segments.map((s) => s.fullTimeHours), [285, 285]);
+  near(crossing.annual, 285);
+  assert.deepEqual(cleanLeaveFields({ leaveDays: [38, 38, 38, 38] }), { leaveDays: [38, 38, 38, 38] });
+});
+
 console.log(`\n${n} passed`);
