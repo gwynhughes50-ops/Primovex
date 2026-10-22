@@ -389,14 +389,16 @@ export default function MobileGovernanceSARs() {
           <p className="rounded-xl border border-dashed border-[var(--medtrak-border)] p-6 text-center text-sm text-[var(--medtrak-muted)]">No matching SARs.</p>
         ) : filtered.map((sar) => {
           const tone = getSarDeadlineTone(sar);
+          // an urgent request still being dealt with stands out: a red edge and tint
+          const urgent = sar.urgent === true && ![SAR_STATUSES.completed, SAR_STATUSES.archived].includes(sar.status);
           return (
-            <button key={sar.id} type="button" onClick={() => setSelectedId(sar.id)} className="w-full rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-3.5 text-left">
+            <button key={sar.id} type="button" onClick={() => setSelectedId(sar.id)} className={`w-full rounded-2xl border p-3.5 text-left ${urgent ? "border-rose-500 border-l-8 bg-rose-500/10" : "border-[var(--medtrak-border)] bg-[var(--medtrak-panel)]"}`}>
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-bold">{sar.reference}</p>
                   <p className="mt-0.5 text-xs text-[var(--medtrak-muted)]">{identityLabel(sar)} · {getRequestedByDisplay(sar)}</p>
                 </div>
-                {sar.urgent && <span className="shrink-0 rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-600">Urgent</span>}
+                {urgent && <span className="shrink-0 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-white">Urgent</span>}
               </div>
               <p className="mt-1.5 text-sm text-[var(--medtrak-muted)]">{sar.assignedToName || 'Unassigned'}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">

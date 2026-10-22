@@ -862,9 +862,11 @@ export default function GovernanceSARs() {
               <tbody>
                 {filtered.map((sar) => {
                   const tone = getSarDeadlineTone(sar);
+                  // an urgent request that is still being dealt with stands out: a red bar, a tint and a badge
+                  const urgent = sar.urgent === true && ![SAR_STATUSES.completed, SAR_STATUSES.archived].includes(sar.status);
                   return (
-                    <tr key={sar.id} className="border-b border-slate-900 text-slate-200 hover:bg-[color-mix(in_srgb,var(--medtrak-accent)_9%,transparent)]">
-                      <td className="py-3 pr-3 font-bold text-white">{sar.reference}</td>
+                    <tr key={sar.id} className={`border-b border-slate-900 text-slate-200 ${urgent ? "bg-rose-500/10 shadow-[inset_4px_0_0_0_rgb(244,63,94)] hover:bg-rose-500/15" : "hover:bg-[color-mix(in_srgb,var(--medtrak-accent)_9%,transparent)]"}`}>
+                      <td className="py-3 pr-3 pl-3 font-bold text-white">{sar.reference}{urgent && <span className="ml-2 rounded-full bg-rose-600 px-2 py-0.5 align-middle text-[10px] font-black uppercase tracking-wide text-white">Urgent</span>}</td>
                       <td className="py-3 pr-3">{identityLabel(sar)}</td>
                       <td className="py-3 pr-3">
                         {(() => {
