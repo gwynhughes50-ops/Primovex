@@ -4,6 +4,7 @@ import PrimovexLogo from "@/components/brand/PrimovexLogo";
 import { Button } from "@/components/ui/button";
 import { getVisibleRouteManifest, SIDEBAR_SECTIONS } from "@/config/routeManifest";
 import { getIcon } from "@/config/medtrakIcons";
+import DesktopUpdateLink from "@/components/navigation/DesktopUpdateLink";
 
 function SidebarLink({ item, collapsed }) {
   const Icon = getIcon(item.iconKey || "helpCircle");
@@ -52,6 +53,7 @@ export default function DesktopSidebar({ collapsed, onToggle, isAdmin, capabilit
 
       <div className="border-t border-[var(--medtrak-border)] p-3">
         {!collapsed && <div className="mb-3 rounded-xl bg-[var(--medtrak-bg)] p-3"><p className="truncate text-sm font-bold">{displayName || "Signed in"}</p><p className="truncate text-xs text-[var(--medtrak-muted)]">{isAdmin ? "System Admin" : role || "User"}</p></div>}
+        <DesktopUpdateLink collapsed={collapsed} />
         <Button variant="ghost" onClick={onSignOut} className={`w-full gap-2 rounded-xl ${collapsed ? "px-0" : "justify-start"}`} title="Sign out"><LogOut className="h-4 w-4" />{!collapsed && "Sign out"}</Button>
       </div>
     </aside>

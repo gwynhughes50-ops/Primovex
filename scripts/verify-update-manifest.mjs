@@ -63,6 +63,17 @@ t("only one Primovex runs at a time: a second launch shows the first, and the pl
   assert.ok(cargo.indexOf("tauri-plugin-single-instance") > cargo.indexOf("cfg(any(target_os = \"macos\", windows, target_os = \"linux\"))"), "a desktop-only dependency");
 });
 
+t("everyone can check for updates in the desktop app, not only people who can open the Security Centre", () => {
+  const sidebar = read("src/components/navigation/DesktopSidebar.jsx");
+  assert.match(sidebar, /<DesktopUpdateLink collapsed=\{collapsed\} \/>/, "in the sidebar footer, for every user");
+  const link = read("src/components/navigation/DesktopUpdateLink.jsx");
+  assert.match(link, /isDesktopApp\(\)/, "only in the installed Windows app");
+  assert.ok(!/can\(|capabilit|isAdmin|useAuth/.test(link), "no permission is needed to see it");
+  assert.match(link, /<ReleaseUpdateCard autoCheck \/>/, "it checks as soon as it opens");
+  assert.match(read("src/release/ReleaseUpdateCard.jsx"), /if \(autoCheck\) check\(\)/);
+  assert.match(read("src/release/ReleaseUpdateCard.jsx"), /autoCheck = false/, "the card in the Security Centre and on the phone still waits to be pressed");
+});
+
 // a connection that drops now and then must not stop an update being found or downloaded
 {
   const waits = [];

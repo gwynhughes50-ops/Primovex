@@ -7,7 +7,7 @@ import {
   installDesktopUpdate,
 } from "./updateService";
 
-export default function ReleaseUpdateCard() {
+export default function ReleaseUpdateCard({ autoCheck = false }) {
   const [version, setVersion] = useState("…");
   const channel = getReleaseChannel();
   const [state, setState] = useState({ status: "idle", message: "" });
@@ -25,6 +25,10 @@ export default function ReleaseUpdateCard() {
       setState({ status: "error", message: error?.message || "Update check failed." });
     }
   };
+
+  // opened from the sidebar's "Check for updates": look straight away, so the person does not have to press anything
+  useEffect(() => { if (autoCheck) check(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const install = async () => {
     try {
