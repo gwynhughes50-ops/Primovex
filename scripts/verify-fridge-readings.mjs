@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describeReading, fridgeStatuses, historyStartKey, newestFirst, readingTime, summarise } from "../src/mobile/fridgeReadings.js";
+import { LIST_FIRST, LIST_MAX, LIST_MORE, dayStrip, describeReading, fridgeStatuses, historyStartKey, newestFirst, readingTime, summarise } from "../src/mobile/fridgeReadings.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
@@ -73,6 +73,31 @@ t("a reading is described in plain values", () => {
 t("the history starts a fortnight back", () => {
   assert.equal(historyStartKey(TUE_PM), "2026-10-06");
   assert.equal(historyStartKey(TUE_PM, 30), "2026-09-20");
+});
+
+t("the last two weeks fit in one row of cells: in range, out of range, nothing read, and weekends are not misses", () => {
+  const day = (offset, hour = 9) => new Date(2026, 9, 20 - offset, hour, 0);
+  const history = [
+    log("f1", day(0)), log("f1", day(0, 15)),                    // Tue 20: two readings, in range
+    log("f1", day(1), { outOfRange: true }),                     // Mon 19: out of range
+    log("f1", day(2)), log("f1", day(2, 15), { outOfRange: true }), // Sun 18: one of two out
+    log("f1", day(4)),                                           // Fri 16: in range
+  ];
+  const strip = dayStrip(history, TUE_PM);
+  assert.equal(strip.length, 14);
+  assert.deepEqual([strip[0].key, strip[13].key], ["2026-10-07", "2026-10-20"], "today is the last cell, thirteen days back the first");
+  const by = Object.fromEntries(strip.map((c) => [c.key, c]));
+  assert.deepEqual([by["2026-10-20"].state, by["2026-10-20"].count], ["ok", 2]);
+  assert.equal(by["2026-10-19"].state, "out");
+  assert.equal(by["2026-10-18"].state, "out", "one out-of-range reading makes the day red even when another was fine");
+  assert.equal(by["2026-10-17"].state, "weekend", "Saturday with nothing read");
+  assert.equal(by["2026-10-16"].state, "ok");
+  assert.equal(by["2026-10-15"].state, "none", "a weekday with nothing read is a miss");
+  assert.equal(by["2026-10-20"].letter, "T");
+  assert.equal(dayStrip([], TUE_PM).every((c) => c.state === "none" || c.state === "weekend"), true);
+  // a reading with no date key still lands on its day, and the list never grows without bound
+  assert.equal(dayStrip([{ unitId: "f1", measured_at: stamp(TUE_AM) }], TUE_PM)[13].state, "ok");
+  assert.ok(LIST_FIRST < LIST_MORE * 2 && LIST_MAX >= 30 && LIST_MAX <= 100, "a short first list, more on request, a firm ceiling");
 });
 
 console.log(`\n${n} passed`);

@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { collection, limit, onSnapshot, query, where } from "firebase/firestore";
+import { collection, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Clock, ScanLine, Thermometer } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import { normaliseUnit } from "./fridgeCheck";
-import { HISTORY_DAYS, describeReading, fridgeStatuses, historyStartKey, summarise } from "./fridgeReadings";
+import { HISTORY_DAYS, LIST_FIRST, LIST_MAX, LIST_MORE, dayStrip, describeReading, fridgeStatuses, historyStartKey, summarise } from "./fridgeReadings";
 
 // Reading back the fridge checks: for each fridge, today's reading and who took it, and the last two weeks. The checks
 // themselves are made by scanning the fridge's tag (that is how Primovex knows the person was at the fridge), so nothing
@@ -21,11 +21,29 @@ const STATE = {
   waiting: { label: "Not checked yet", tone: "border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] text-[var(--medtrak-muted)]", Icon: Clock },
 };
 
-function HistoryRows({ logs }) {
-  if (!logs.length) return <p className="mt-2 text-sm text-[var(--medtrak-muted)]">No readings in the last {HISTORY_DAYS} days.</p>;
+// the last days at a glance: green every reading in range, red one was out, grey nothing read (a weekend is not a miss)
+const CELL = { ok: "bg-emerald-500 text-white", out: "bg-rose-600 text-white", none: "border border-amber-500/60 bg-amber-500/10 text-amber-800", weekend: "bg-[var(--medtrak-bg)] text-[var(--medtrak-muted)]" };
+const CELL_WORDS = { ok: "all in range", out: "out of range", none: "no reading", weekend: "weekend, no reading" };
+function DayStrip({ history, now }) {
+  const cells = dayStrip(history, now);
   return (
+    <div className="mt-2" role="img" aria-label={`The last ${HISTORY_DAYS} days: ${cells.filter((c) => c.state === "ok").length} days all in range, ${cells.filter((c) => c.state === "out").length} out of range, ${cells.filter((c) => c.state === "none").length} with no reading`}>
+      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(0, 1fr))` }}>
+        {cells.map((c) => <span key={c.key} title={`${c.key}: ${CELL_WORDS[c.state]}${c.count ? `, ${c.count} reading${c.count === 1 ? "" : "s"}` : ""}`} className={`grid h-7 place-items-center rounded-md text-[10px] font-bold ${CELL[c.state]}`}>{c.day}</span>)}
+      </div>
+      <p className="mt-1 text-[11px] text-[var(--medtrak-muted)]">Green: all in range · Red: out of range · Amber: no reading · Grey: weekend</p>
+    </div>
+  );
+}
+
+function HistoryRows({ logs }) {
+  const [shown, setShown] = useState(LIST_FIRST);
+  if (!logs.length) return <p className="mt-2 text-sm text-[var(--medtrak-muted)]">No readings in the last {HISTORY_DAYS} days.</p>;
+  const capped = logs.slice(0, LIST_MAX);
+  return (
+    <>
     <ul className="mt-2 divide-y divide-[var(--medtrak-border)] rounded-xl border border-[var(--medtrak-border)]">
-      {logs.slice(0, 30).map((log, index) => {
+      {capped.slice(0, shown).map((log, index) => {
         const r = describeReading(log);
         return (
           <li key={log.id || index} className="px-3 py-2 text-sm">
@@ -41,10 +59,13 @@ function HistoryRows({ logs }) {
         );
       })}
     </ul>
+    {shown < capped.length && <button type="button" onClick={() => setShown((n) => n + LIST_MORE)} className="mt-2 w-full rounded-xl border border-[var(--medtrak-border)] px-3 py-2 text-sm font-semibold">Show {Math.min(LIST_MORE, capped.length - shown)} more ({capped.length - shown} not shown)</button>}
+    <p className="mt-2 text-xs text-[var(--medtrak-muted)]">{logs.length > LIST_MAX ? `The newest ${LIST_MAX} of ${logs.length} readings. ` : ""}Older readings are on the desktop, in the Temperature log: choose a date range.</p>
+    </>
   );
 }
 
-function FridgeCard({ status }) {
+function FridgeCard({ status, now }) {
   const [open, setOpen] = useState(false);
   const { unit, newest, last, state, incidentOpen, history, today } = status;
   const { label, tone, Icon } = STATE[state];
@@ -83,6 +104,7 @@ function FridgeCard({ status }) {
         <span>Last {HISTORY_DAYS} days ({history.length})</span>
         {open ? <ChevronUp className="h-4 w-4" aria-hidden="true" /> : <ChevronDown className="h-4 w-4" aria-hidden="true" />}
       </button>
+      <DayStrip history={history} now={now} />
       {open && <HistoryRows logs={history} />}
     </section>
   );
@@ -101,7 +123,7 @@ export default function MobileFridgeReadings() {
     const fail = () => setError("Could not load the fridge readings. Check your connection and try again.");
     const stops = [
       onSnapshot(collection(db, "temperature_units"), (snap) => setUnits(snap.docs.map((d) => normaliseUnit(d.id, d.data()))), fail),
-      onSnapshot(query(collection(db, "temperature_logs"), where("dateKey", ">=", historyStartKey(now)), limit(1000)), (snap) => setLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), fail),
+      onSnapshot(query(collection(db, "temperature_logs"), where("dateKey", ">=", historyStartKey(now)), orderBy("dateKey", "desc"), limit(1000)), (snap) => setLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), fail),
       onSnapshot(query(collection(db, "temperature_incidents"), where("status", "==", "open"), limit(50)), (snap) => setIncidents(snap.docs.map((d) => d.data())), () => setIncidents([])),
     ];
     return () => stops.forEach((stop) => stop());
@@ -132,7 +154,9 @@ export default function MobileFridgeReadings() {
 
       {!loading && !error && !synthetic && statuses.length === 0 && <p className="rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-4 text-sm text-[var(--medtrak-muted)]">No fridges or freezers are set up yet. The Practice Manager adds them on the Temperature page.</p>}
 
-      {statuses.map((status) => <FridgeCard key={status.unit.id} status={status} />)}
+      {logs && logs.length >= 1000 && <p className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-3 text-xs font-semibold text-amber-900">There are a lot of readings, so only the newest 1000 are shown here. The Temperature log on the desktop has them all, by date range.</p>}
+
+      {statuses.map((status) => <FridgeCard key={status.unit.id} status={status} now={now} />)}
 
       <p className="flex items-start gap-2 text-xs text-[var(--medtrak-muted)]"><ScanLine className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" /> To record a check, scan the fridge's tag (NFC or QR). That is how Primovex knows you are at the fridge.</p>
     </div>

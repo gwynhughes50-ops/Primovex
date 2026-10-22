@@ -51,3 +51,29 @@ export function describeReading(log) {
   const number = (value) => (Number.isFinite(Number(value)) && value !== null && value !== "" ? Number(value) : null);
   return { temp: number(log?.temp), min: number(log?.minTemp), max: number(log?.maxTemp), out: log?.outOfRange === true, by: log?.recordedBy || "", when, slot: log?.slot || "", reset: log?.resetDone === true };
 }
+
+// The recent days at a glance, one cell for each of the last `days` days (today last), so a long list is never needed to spot a gap:
+//   state "ok" every reading that day was in range, "out" at least one was not, "none" nothing was read
+//   a day with nothing on a Saturday or Sunday is "weekend", not a miss
+export function dayStrip(history = [], now = new Date(), days = HISTORY_DAYS) {
+  const byDay = new Map();
+  for (const log of history) {
+    const when = readingTime(log);
+    const key = log?.dateKey || (when ? dateKeyOf(when) : "");
+    if (key) byDay.set(key, [...(byDay.get(key) || []), log]);
+  }
+  return Array.from({ length: days }, (_, i) => {
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1 - i));
+    const key = dateKeyOf(date);
+    const readings = byDay.get(key) || [];
+    const weekend = date.getDay() === 0 || date.getDay() === 6;
+    const state = readings.some((r) => r.outOfRange === true) ? "out" : readings.length ? "ok" : weekend ? "weekend" : "none";
+    return { key, letter: "SMTWTFS"[date.getDay()], day: date.getDate(), state, count: readings.length };
+  });
+}
+
+// how many readings a card lists to begin with, how many more each press adds, and the most it will ever list: older readings are
+// looked up on the desktop's Temperature log by date range
+export const LIST_FIRST = 7;
+export const LIST_MORE = 10;
+export const LIST_MAX = 60;
