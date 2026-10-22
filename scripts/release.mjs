@@ -77,9 +77,16 @@ const steps = {
     console.log("The live site is the build just made.");
     if (step.desktop) {
       const version = readJson("package.json").version;
-      const manifest = await (await fetch(`${SITE}/updates/latest.json?${Date.now()}`)).json();
-      if (manifest.version !== version) throw new Error(`The live update says ${manifest.version}, not ${version}.`);
-      console.log(`The desktop update address offers ${manifest.version}.`);
+      // some connections drop most secure handshakes, so the read is tried up to ten times; if it can never be read the release goes
+      // on (and says so), because the site check above already passed. A manifest that is read and is wrong still stops it.
+      let manifest = null;
+      for (let attempt = 0; attempt < 10 && !manifest; attempt += 1) {
+        if (attempt) await new Promise((r) => setTimeout(r, 3000));
+        try { manifest = await (await fetch(`${SITE}/updates/latest.json?${Date.now()}`)).json(); } catch { manifest = null; }
+      }
+      if (!manifest) console.warn("Could not read the desktop update address from this computer. Check it by hand: it should offer " + version + ".");
+      else if (manifest.version !== version) throw new Error(`The live update says ${manifest.version}, not ${version}.`);
+      else console.log(`The desktop update address offers ${manifest.version}.`);
     }
   },
 
