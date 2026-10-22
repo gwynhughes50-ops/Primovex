@@ -10,6 +10,7 @@ import PrimovexHero from "@/components/common/PrimovexHero";
 import { ASSURANCE_PROFILES, CLINICAL_GOVERNANCE_REQUIREMENTS, getAssuranceProfile, getClinicalGovernanceReadiness } from "@/governance/clinicalDataGate";
 import AuditLedgerPanel from "@/components/security/AuditLedgerPanel";
 import UsageReportPanel from "@/components/security/UsageReportPanel";
+import AppVersionsPanel from "@/components/security/AppVersionsPanel";
 import MfaSetup from "@/components/security/MfaSetup";
 import { GOVERNANCE_DOCUMENTS, findGovernanceDocument } from "@/config/governanceDocuments";
 import { FileText, Download, ExternalLink } from "lucide-react";
@@ -84,6 +85,7 @@ export default function SecurityCentre() {
   const canManageSecurity = can?.("admin.manageSettings") || can?.("admin.manageUsers");
   const [auditOpen, setAuditOpen] = useState(false);
   const [usageOpen, setUsageOpen] = useState(false);
+  const [versionsOpen, setVersionsOpen] = useState(false);
 
   const exportReadiness = () => {
     const payload = {
@@ -124,6 +126,7 @@ export default function SecurityCentre() {
 
       {auditOpen && <AuditLedgerPanel onClose={() => setAuditOpen(false)} />}
       {usageOpen && <UsageReportPanel onClose={() => setUsageOpen(false)} />}
+      {versionsOpen && <AppVersionsPanel onClose={() => setVersionsOpen(false)} />}
 
       <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
         <h2 className="text-lg font-semibold text-white">Your sign-in security</h2>
@@ -215,6 +218,7 @@ export default function SecurityCentre() {
               <Button onClick={exportReadiness} className="rounded-full bg-gradient-to-r from-teal-400 to-emerald-300 text-slate-950">Export dual-framework evidence</Button>
               <Button variant="ghost" onClick={() => setAuditOpen(true)} className="rounded-full border border-slate-700/70 text-slate-100">View audit events</Button>
               {(isAdmin || can?.("audit.read")) && <Button variant="ghost" onClick={() => setUsageOpen(true)} className="rounded-full border border-slate-700/70 text-slate-100">Sign-in &amp; activity report</Button>}
+              {(isAdmin || can?.("audit.read")) && <Button variant="ghost" onClick={() => setVersionsOpen(true)} className="rounded-full border border-slate-700/70 text-slate-100">Who is on which version</Button>}
               {canManageSecurity && <Button variant="ghost" onClick={() => navigate("/setup")} className="rounded-full border border-slate-700/70 text-slate-100">Reopen setup</Button>}
             </div>
           </CardContent>
