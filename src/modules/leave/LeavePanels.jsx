@@ -1,13 +1,12 @@
 import { useMemo, useState } from "react";
-import { Download, Plus, Trash2, X } from "lucide-react";
-import { LEAVE_GROUPS, calculateEntitlement, compareWithBrightHr, employmentPeriod, groupOf, leaveCsv } from "@/modules/leave/leaveEntitlement";
+import { Download, Plus, Trash2 } from "lucide-react";
+import { calculateEntitlement, compareWithBrightHr, employmentPeriod, groupOf, leaveCsv } from "@/modules/leave/leaveEntitlement";
 import { saveLeaveYearSettings } from "@/modules/leave/leaveService";
-import { saveStaff } from "@/modules/timesheets/timesheetService";
 
 // The screens for annual leave, used on the desktop (Annual leave page) and the phone (Me tab). `skin` picks the look.
 //   LeaveSummary    one person's entitlement for the year, with how it was worked out
 //   LeaveList       a table (desktop) or cards (phone) of several people, for a manager or the practice manager
-//   LeaveEditDialog whoever manages timesheets sets a person's group, service date, carry-over (desktop)
+//   (setting a person up, and "work out leave", are the step-by-step LeaveWizard)
 //   LeaveSettings   the practice's choices for the year: closure days and the doctors' bank holidays (desktop)
 
 const SKINS = {
@@ -55,7 +54,7 @@ function Figure({ s, result }) {
 }
 
 // how it was worked out
-function Workings({ s, result }) {
+export function Workings({ s, result }) {
   if (result.unit === "days") {
     return (
       <dl className={`mt-2 space-y-1 text-sm ${s.body}`}>
@@ -164,63 +163,6 @@ export function LeaveList({ people, year, settings, skin = "desktop", onEdit, sh
           </tbody>
         </table>
         {!shown.length && <p className="p-4 text-sm text-slate-400">Nobody matches that.</p>}
-      </div>
-    </div>
-  );
-}
-
-export function LeaveEditDialog({ person, year, actor, onClose }) {
-  const s = SKINS.desktop;
-  const adjust = person.leaveAdjust?.[year.key] || {};
-  const [form, setForm] = useState({ leaveGroup: person.leaveGroup || "", serviceFrom: person.serviceFrom || "", startedOn: person.startedOn || "", leftOn: person.leftOn || "", leaveSessions: person.leaveSessions || "", carryOver: adjust.carryOver || "", fixedDays: adjust.fixedDays || "" });
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const set = (patch) => setForm((f) => ({ ...f, ...patch }));
-  const doctor = form.leaveGroup === "doctor";
-  async function save() {
-    setBusy(true); setError("");
-    try {
-      await saveStaff(person, {
-        leaveGroup: form.leaveGroup, serviceFrom: form.serviceFrom, startedOn: form.startedOn, leftOn: form.leftOn, leaveSessions: form.leaveSessions,
-        leaveAdjust: { ...(person.leaveAdjust || {}), [year.key]: { carryOver: form.carryOver, fixedDays: form.fixedDays } },
-      }, actor);
-      onClose();
-    } catch (failure) { setError(failure?.message || "That didn't save. Check you have permission."); setBusy(false); }
-  }
-  return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4" role="presentation">
-      <div role="dialog" aria-modal="true" aria-label="Annual leave set-up" className="max-h-[94vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl">
-        <div className="flex items-start justify-between gap-3">
-          <div><h2 className="text-lg font-semibold text-slate-50">Annual leave set-up</h2><p className="text-sm text-slate-400">{person.name}{person.jobTitle ? ` · ${person.jobTitle}` : ""}</p></div>
-          <button type="button" onClick={onClose} className="rounded-full p-2 text-slate-400 hover:bg-white/10" aria-label="Close"><X className="h-4 w-4" /></button>
-        </div>
-        <label className={`${s.label} mt-4`}>Leave group
-          <select className={s.field} value={form.leaveGroup} onChange={(e) => set({ leaveGroup: e.target.value })}><option value="">Choose…</option>{LEAVE_GROUPS.map((g) => <option key={g.key} value={g.key}>{g.label}</option>)}</select>
-        </label>
-        {!doctor && (
-          <label className={`${s.label} mt-3`}>Counting length of service from
-            <input type="date" className={s.field} value={form.serviceFrom} onChange={(e) => set({ serviceFrom: e.target.value })} />
-            <span className="mt-1 block text-xs font-normal normal-case text-slate-500">Leave blank to use their start date from BrightHR{person.startDate ? ` (${uk(person.startDate)})` : ""}. Use an earlier date if previous NHS service counts.</span>
-          </label>
-        )}
-        <label className={`${s.label} mt-3`}>Started on, if part-way through the leave year
-          <input type="date" className={s.field} value={form.startedOn} onChange={(e) => set({ startedOn: e.target.value })} />
-          <span className="mt-1 block text-xs font-normal normal-case text-slate-500">Leave blank to use the start date from BrightHR{person.startDate ? ` (${uk(person.startDate)})` : ""}. Anyone who started before {uk(year.from)} gets the full year.</span>
-        </label>
-        <label className={`${s.label} mt-3`}>Last day of employment, if they are leaving
-          <input type="date" className={s.field} value={form.leftOn} onChange={(e) => set({ leftOn: e.target.value })} />
-        </label>
-        {doctor ? (
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <label className={s.label}>Their leave for {year.key}, in days<input type="number" min="0" step="0.5" className={s.field} value={form.fixedDays} onChange={(e) => set({ fixedDays: e.target.value })} /></label>
-            <label className={s.label}>Sessions a week they work<input type="number" min="0" step="1" className={s.field} value={form.leaveSessions} onChange={(e) => set({ leaveSessions: e.target.value })} /></label>
-          </div>
-        ) : null}
-        <label className={`${s.label} mt-3`}>Carried over into {year.key}, in {doctor ? "days" : "hours"}
-          <input type="number" min="0" step="0.5" className={s.field} value={form.carryOver} onChange={(e) => set({ carryOver: e.target.value })} />
-        </label>
-        {error && <p className="mt-3 text-sm text-rose-300" role="alert">{error}</p>}
-        <div className="mt-4 flex justify-end gap-2"><button type="button" className={s.btn} onClick={onClose}>Cancel</button><button type="button" className={s.primary} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save"}</button></div>
       </div>
     </div>
   );

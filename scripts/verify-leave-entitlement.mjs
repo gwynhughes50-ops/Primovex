@@ -225,4 +225,16 @@ t("a typed-in start date is kept in the staff record fields", () => {
   assert.deepEqual(cleanLeaveFields({ startedOn: "soon" }), { startedOn: "" });
 });
 
+t("hours typed in (a new starter who is not on the list yet) are used instead of a working pattern", () => {
+  const typed = calculateEntitlement({ leaveGroup: "admin", serviceFrom: "2026-04-01", weeklyHours: 30, patterns: [] }, Y);
+  assert.equal(typed.ready, true, "no pattern is needed when the hours are typed");
+  near(typed.annual, 157.5 * 30 / 37.5); near(typed.bankHolidayAmount, 10 * 6);
+  assert.equal(typed.segments[0].weeklyHours, 30);
+  // they win over the pattern and ignore its changes
+  const over = calculateEntitlement({ leaveGroup: "admin", serviceFrom: "2010-01-01", weeklyHours: 18.75, patterns: [pattern("2020-01-01", FIVE), pattern("2026-10-01", ["mon"])] }, Y);
+  assert.equal(over.segments.length, 1);
+  near(over.annual, 255 * 0.5);
+  assert.deepEqual(cleanLeaveFields({ weeklyHours: 30 }), {}, "and are never written to a staff record");
+});
+
 console.log(`\n${n} passed`);

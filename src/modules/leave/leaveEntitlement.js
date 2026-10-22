@@ -119,11 +119,13 @@ export function calculateEntitlement(person, year, settings = {}) {
 
   const serviceFrom = person.serviceFrom || person.startedOn || person.startDate || "";
   if (!serviceFrom) warnings.push("No start date, so they are counted as new (the basic leave).");
-  if (!(person.patterns || []).length) warnings.push("No working pattern is set, so their hours are unknown.");
+  // hours typed in (the wizard's "what would it be" for someone without a pattern) are used instead of the working pattern
+  const typedHours = Number(person.weeklyHours) > 0 ? Number(person.weeklyHours) : 0;
+  if (!typedHours && !(person.patterns || []).length) warnings.push("No working pattern is set, so their hours are unknown.");
 
   // where the year splits: a new working pattern, or an anniversary that moves them up a level
   const cuts = new Set();
-  for (const p of person.patterns || []) if (p.from > employedFrom && p.from <= employedTo) cuts.add(p.from);
+  if (!typedHours) for (const p of person.patterns || []) if (p.from > employedFrom && p.from <= employedTo) cuts.add(p.from);
   if (serviceFrom) for (const t of SERVICE_TIERS) if (t.years) { const d = addYears(serviceFrom, t.years); if (d > employedFrom && d <= employedTo) cuts.add(d); }
   const starts = [employedFrom, ...[...cuts].sort()];
 
@@ -131,8 +133,8 @@ export function calculateEntitlement(person, year, settings = {}) {
   let bankHolidayAmount = 0;
   const segments = starts.map((from, i) => {
     const to = i + 1 < starts.length ? addDays(starts[i + 1], -1) : employedTo;
-    const pattern = patternOn(person.patterns, from);
-    const weeklyHours = pattern ? averageWeekHours(pattern) : 0;
+    const pattern = typedHours ? null : patternOn(person.patterns, from);
+    const weeklyHours = typedHours || (pattern ? averageWeekHours(pattern) : 0);
     if (pattern?.mode === "zero-hours" && !warnings.some((w) => /zero hours/i.test(w))) warnings.push("Zero hours: their leave builds up with the hours they work, so it is not worked out here.");
     const tier = serviceTier(serviceFrom, from);
     const days = daysIn(from, to);

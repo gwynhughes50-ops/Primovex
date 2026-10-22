@@ -1230,7 +1230,7 @@ export const HELP_ARTICLES = [
       "Open Annual leave (on the phone, the Me tab then Annual leave). It shows your entitlement for the leave year, which runs 1 April to 31 March.",
       "Press \"Show how it was worked out\": your group (Clinical, Admin or Management), your length of service, your hours a week and the bank holidays in the year. If your hours or service level changed during the year, each part is shown.",
       "If you started part-way through the year or are leaving before the end, you only get the days you are employed. GPs and doctors are counted in days.",
-      "Line managers also see My team. The practice manager sees Everyone: press \"Set up\" to choose a person's group, service date, start or leaving date and carry-over, and download the table for payroll. It is checked against the figure BrightHR holds.",
+      "Line managers also see My team. The practice manager sees Everyone: press \"Set up\" on a row (or \"Work out someone's leave\" for a new starter who is not on the list) and answer one question at a time: group, service, hours, whether they are here all year, carry-over. The figure and how it was worked out come at the end, and can be saved to their record. There is also a table to download for payroll. It is checked against the figure BrightHR holds.",
     ],
     tip: "Booking leave, and what you have taken and what is left, stay in BrightHR. If your figure looks wrong, tell the practice manager: it usually means a start date or your working pattern needs correcting.",
     open: { label: "Open Annual leave", route: "/annual-leave" },

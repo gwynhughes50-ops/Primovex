@@ -3,7 +3,8 @@ import { CalendarDays } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { leaveYear, leaveYearFor } from "@/modules/leave/leaveEntitlement";
 import { useLeaveStaff, useLeaveYearSettings } from "@/modules/leave/leaveService";
-import { LeaveEditDialog, LeaveList, LeaveSettings, LeaveSummary } from "@/modules/leave/LeavePanels";
+import { LeaveList, LeaveSettings, LeaveSummary } from "@/modules/leave/LeavePanels";
+import LeaveWizard from "@/modules/leave/LeaveWizard";
 import { dateKey } from "@/modules/timesheets/workPattern";
 
 // Annual leave (Operations > Annual leave): each person's yearly entitlement worked out from their leave group, length of service
@@ -22,7 +23,7 @@ export default function AnnualLeave() {
   const year = useMemo(() => leaveYear(startYear), [startYear]);
   const settings = useLeaveYearSettings(year.key);
   const [tab, setTab] = useState("");
-  const [editing, setEditing] = useState(null);
+  const [editing, setEditing] = useState(null); // a person to set up, or "calculator" for the open wizard
 
   const tabs = [
     ...(data.mine ? [["mine", "My leave"]] : []),
@@ -54,11 +55,19 @@ export default function AnnualLeave() {
           </div>
           {active === "mine" && <div className="max-w-xl"><LeaveSummary person={data.mine} year={year} settings={settings} /></div>}
           {active === "team" && <LeaveList people={data.team} year={year} settings={settings} title="The people who name you as their line manager." />}
-          {active === "all" && <LeaveList people={data.staff} year={year} settings={settings} showCheck onEdit={setEditing} />}
+          {active === "all" && (
+            <>
+              <div className="flex flex-wrap items-center gap-3">
+                <button type="button" onClick={() => setEditing("calculator")} className="inline-flex items-center rounded-lg bg-teal-500/90 px-4 py-2 text-sm font-semibold text-slate-950">Work out someone's leave</button>
+                <span className="text-sm text-slate-400">Step by step, for anyone on the list or a new starter. Press "Set up" on a row to set a person up.</span>
+              </div>
+              <LeaveList people={data.staff} year={year} settings={settings} showCheck onEdit={setEditing} />
+            </>
+          )}
           {active === "settings" && <LeaveSettings key={year.key + JSON.stringify(settings)} year={year} settings={settings} actor={actor} />}
         </>
       )}
-      {editing && <LeaveEditDialog person={editing} year={year} actor={actor} onClose={() => setEditing(null)} />}
+      {editing && <LeaveWizard key={editing.id || "calculator"} person={editing === "calculator" ? null : editing} people={data.staff} year={year} settings={settings} actor={actor} onClose={() => setEditing(null)} />}
     </div>
   );
 }
