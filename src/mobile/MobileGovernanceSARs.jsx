@@ -234,7 +234,20 @@ function SarDetailSheet({ sar, actor, isTeam, onClose, onEdit }) {
           <div><dt className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Requested by</dt><dd>{getRequestedByDisplay(sar)}</dd></div>
           <div><dt className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Assigned to</dt><dd>{sar.assignedToName || 'Unassigned'}</dd></div>
         </dl>
-        {sar.informationRequired && <p className="mt-2 text-sm text-[var(--medtrak-muted)]">{sar.informationRequired}</p>}
+        <div className="mt-3 space-y-2 text-sm">
+          <div>
+            <p className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Information requested</p>
+            <p>{SAR_REQUEST_TYPES.find((t) => t.key === sar.requestType)?.label || sar.requestTypeLabel || 'Request'}</p>
+            {(sar.requestOptions || []).length > 0 && <div className="mt-1 flex flex-wrap gap-1.5">{(sar.requestOptions || []).map((option) => <span key={option} className="rounded-full border border-[var(--medtrak-border)] px-2.5 py-0.5 text-xs">{option}</span>)}</div>}
+          </div>
+          {sar.informationRequired && <div><p className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Additional details</p><p className="whitespace-pre-wrap">{sar.informationRequired}</p></div>}
+          {sar.notes && <div><p className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Internal notes</p><p className="whitespace-pre-wrap">{sar.notes}</p></div>}
+          <div>
+            <p className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Delivery</p>
+            <p>{friendly(sar.deliveryMethod || 'email')}{sar.consentToEmail ? ' · consent to email recorded' : ''}{sar.emailAddress ? ` · ${sar.emailAddress}` : ''}</p>
+          </div>
+          {sar.solicitorReference && <div><p className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Solicitor reference</p><p>{sar.solicitorReference}</p></div>}
+        </div>
 
         {isTeam && (
           <div className="mt-4 space-y-3 pb-4">

@@ -538,16 +538,25 @@ function SarDetailPanel({ sar, actor, isTeam, canDelete, onEdit, onDelete, onClo
               <div><span className="text-slate-500">Solicitor ref</span><div className="font-semibold text-white">{sar.solicitorReference || "—"}</div></div>
               <div><span className="text-slate-500">Assigned to</span><div className="font-semibold text-white">{sar.assignedToName || "Unassigned"}</div></div>
               <div><span className="text-slate-500">Manager</span><div className="font-semibold text-white">{sar.managerName || "Not set"}</div></div>
+              <div><span className="text-slate-500">Delivery</span><div className="font-semibold text-white">{friendly(sar.deliveryMethod || "email")}{sar.consentToEmail ? " · consent to email recorded" : ""}</div></div>
+              {sar.emailAddress && <div><span className="text-slate-500">Email address</span><div className="font-semibold text-white">{sar.emailAddress}</div></div>}
             </div>
 
-            {(sar.requestOptions || []).length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {(sar.requestOptions || []).map((option) => <span key={option} className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs text-slate-200">{option}</span>)}
-              </div>
-            )}
+            <div className="mt-4">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Information requested: {sar.requestTypeLabel || getRequestTypeLabel(sar.requestType)}</span>
+              {(sar.requestOptions || []).length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(sar.requestOptions || []).map((option) => <span key={option} className="rounded-full border border-slate-700 bg-slate-950 px-3 py-1 text-xs text-slate-200">{option}</span>)}
+                </div>
+              )}
+            </div>
 
-            {sar.informationRequired && <p className="mt-4 rounded-xl border border-slate-800 bg-slate-950 p-3 text-sm text-slate-300">{sar.informationRequired}</p>}
-            {sar.notes && <p className="mt-3 rounded-xl border border-slate-800 bg-slate-950 p-3 text-sm text-slate-400">Notes: {sar.notes}</p>}
+            {sar.informationRequired && (
+              <div className="mt-4"><span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Additional details</span><p className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-800 bg-slate-950 p-3 text-sm text-slate-300">{sar.informationRequired}</p></div>
+            )}
+            {sar.notes && (
+              <div className="mt-3"><span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Internal notes</span><p className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-800 bg-slate-950 p-3 text-sm text-slate-400">{sar.notes}</p></div>
+            )}
           </SectionCard>
 
           <SectionCard title="Workflow">
