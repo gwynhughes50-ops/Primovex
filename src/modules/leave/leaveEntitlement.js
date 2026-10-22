@@ -172,9 +172,15 @@ export function calculateEntitlement(person, year, settings = {}) {
   const typedHours = Number(person.weeklyHours) > 0 ? Number(person.weeklyHours) : 0;
   if (!typedHours && !(person.patterns || []).length) warnings.push("No working pattern is set, so their hours are unknown.");
 
+  // A working pattern's start date is when it was recorded in Primovex, not necessarily when those hours began, so the earliest one is
+  // taken to apply from the start of their employment: only the patterns after it change their hours part-way through the year.
+  const patterns = [...(person.patterns || [])].filter((p) => p?.from).sort((a, b) => a.from.localeCompare(b.from));
+  const notes = [];
+  if (!typedHours && patterns[0] && patterns[0].from > employedFrom) notes.push(`Their working pattern is recorded from ${patterns[0].from.split("-").reverse().join("/")}; before that their hours are taken to be the same.`);
+
   // where the year splits: a new working pattern, or an anniversary that moves them up a level
   const cuts = new Set();
-  if (!typedHours) for (const p of person.patterns || []) if (p.from > employedFrom && p.from <= employedTo) cuts.add(p.from);
+  if (!typedHours) for (const p of patterns.slice(1)) if (p.from > employedFrom && p.from <= employedTo) cuts.add(p.from);
   if (serviceFrom) for (const t of SERVICE_TIERS) if (t.years) { const d = addYears(serviceFrom, t.years); if (d > employedFrom && d <= employedTo) cuts.add(d); }
   const starts = [employedFrom, ...[...cuts].sort()];
 
@@ -182,7 +188,7 @@ export function calculateEntitlement(person, year, settings = {}) {
   let bankHolidayAmount = 0;
   const segments = starts.map((from, i) => {
     const to = i + 1 < starts.length ? addDays(starts[i + 1], -1) : employedTo;
-    const pattern = typedHours ? null : patternOn(person.patterns, from);
+    const pattern = typedHours ? null : patternOn(patterns, from) || patterns[0] || null;
     const weeklyHours = typedHours || (pattern ? averageWeekHours(pattern) : 0);
     if (pattern?.mode === "zero-hours" && !warnings.some((w) => /zero hours/i.test(w))) warnings.push("Zero hours: their leave builds up with the hours they work, so it is not worked out here.");
     const tier = serviceTier(serviceFrom, from);
@@ -198,7 +204,7 @@ export function calculateEntitlement(person, year, settings = {}) {
 
   const exact = annual + bankHolidayAmount;
   const rounded = roundUpHalf(exact);
-  return { ...base, ready: warnings.filter((w) => !/Not employed/.test(w)).length === 0, segments, annual: two(annual), bankHolidayAmount: two(bankHolidayAmount), exact: two(exact), rounded, total: rounded + carryOver };
+  return { ...base, ready: warnings.filter((w) => !/Not employed/.test(w)).length === 0, segments, notes, annual: two(annual), bankHolidayAmount: two(bankHolidayAmount), exact: two(exact), rounded, total: rounded + carryOver };
 }
 
 // BrightHR's own figure for the same year, if the last report it was imported from covers it, and whether it agrees

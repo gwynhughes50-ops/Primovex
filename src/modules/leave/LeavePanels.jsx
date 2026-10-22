@@ -79,6 +79,7 @@ export function Workings({ s, result }) {
           {seg.holidays.length > 0 && <p className={s.muted}>{seg.holidays.map((h) => `${uk(h.date).slice(0, 5)} ${h.name}`).join(", ")}</p>}
         </div>
       ))}
+      {(result.notes || []).map((n) => <p key={n} className={s.muted}>{n}</p>)}
       <p className={`${s.line} pt-2`}>Total {fix(result.exact)}, rounded up to the half hour: <b>{fix(result.rounded)}</b></p>
     </div>
   );

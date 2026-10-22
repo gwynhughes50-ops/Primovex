@@ -372,4 +372,24 @@ t("one number of days whatever the service (38 days plus the bank holidays) is t
   assert.deepEqual(cleanLeaveFields({ leaveDays: [38, 38, 38, 38] }), { leaveDays: [38, 38, 38, 38] });
 });
 
+t("the earliest working pattern applies from the start of their employment, because its date is only when it was recorded", () => {
+  // the case that read 164 hours: a full-timer whose pattern was recorded on 21 October
+  const recorded = { leaveGroup: "management", serviceFrom: "2010-01-01", patterns: [pattern("2026-10-21", FIVE)] };
+  const r = calculateEntitlement(recorded, Y);
+  assert.equal(r.segments.length, 1, "no split at the date it was recorded");
+  assert.equal(r.segments[0].weeklyHours, 37.5);
+  assert.equal(r.rounded, 285 + 75, "38 days plus ten bank holidays, not 164");
+  assert.match(r.notes[0], /recorded from 21\/10\/2026; before that their hours are taken to be the same/);
+  assert.deepEqual(calculateEntitlement({ ...recorded, patterns: [pattern("2020-01-01", FIVE)] }, Y).notes, [], "no note when the pattern covers the whole year");
+  // a later change of hours still splits the year
+  const changed = calculateEntitlement({ ...recorded, patterns: [pattern("2026-10-21", FIVE), pattern("2027-01-01", ["mon", "tue", "wed"])] }, Y);
+  assert.deepEqual(changed.segments.map((s) => [s.from, s.to, s.weeklyHours]), [["2026-04-01", "2026-12-31", 37.5], ["2027-01-01", "2027-03-31", 22.5]]);
+  // someone who started after the pattern was recorded is not affected
+  const starter = calculateEntitlement({ leaveGroup: "admin", startDate: "2026-11-01", patterns: [pattern("2026-10-21", FIVE)] }, Y);
+  assert.deepEqual(starter.notes, []);
+  assert.equal(starter.segments[0].weeklyHours, 37.5);
+  // a zero-hours pattern is still zero hours however far back it is taken
+  assert.equal(calculateEntitlement({ ...recorded, patterns: [{ from: "2026-10-21", mode: "zero-hours", weeks: [] }] }, Y).ready, false);
+});
+
 console.log(`\n${n} passed`);
