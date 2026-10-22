@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  LEAVE_GROUPS, bankHolidaysBetween, calculateEntitlement, employmentPeriod, cleanLeaveFields, cleanYearSettings, compareWithBrightHr, gpBankHolidayDays, leaveCsv, leaveYear, leaveYearFor, parseLeaveYearKey, serviceTier,
+  LEAVE_GROUPS, bankHolidaysBetween, groupOf, groupsFor, calculateEntitlement, employmentPeriod, cleanLeaveFields, cleanYearSettings, compareWithBrightHr, gpBankHolidayDays, leaveCsv, leaveYear, leaveYearFor, parseLeaveYearKey, serviceTier,
 } from "../src/modules/leave/leaveEntitlement.js";
 
 let n = 0;
@@ -169,10 +169,10 @@ t("each person's figure is checked against what BrightHR holds, for the same yea
 t("what is written to a staff record is cleaned, so a form can never write something odd", () => {
   assert.deepEqual(cleanLeaveFields({ leaveGroup: "nonsense", serviceFrom: "tomorrow", leftOn: "2026-13-45", leaveSessions: -3, hacked: true }), { leaveGroup: "", serviceFrom: "", leftOn: "", leaveSessions: 0 });
   assert.deepEqual(cleanLeaveFields({ leaveGroup: "clinical", serviceFrom: "2010-05-01", leftOn: "" }), { leaveGroup: "clinical", serviceFrom: "2010-05-01", leftOn: "" });
-  assert.deepEqual(cleanLeaveFields({ leaveAdjust: { "2026-27": { carryOver: "28", fixedDays: "x" }, bad: { carryOver: 1 } } }), { leaveAdjust: { "2026-27": { carryOver: 28, fixedDays: 0 } } });
+  assert.deepEqual(cleanLeaveFields({ leaveAdjust: { "2026-27": { carryOver: "28", fixedDays: "x" }, bad: { carryOver: 1 } } }), { leaveAdjust: { "2026-27": { carryOver: 28, fixedDays: 0, extraDays: 0, extraReason: "" } } });
   assert.deepEqual(cleanLeaveFields({}), {}, "only what was sent");
   const s = cleanYearSettings({ practiceDays: [{ date: "2026-12-24", name: "  Christmas Eve " }, { date: "bad" }, null], gpBankHolidays: "6" });
-  assert.deepEqual(s, { practiceDays: [{ date: "2026-12-24", name: "Christmas Eve" }], gpBankHolidays: 6, gpMaxSessions: 8 });
+  assert.deepEqual(s, { practiceDays: [{ date: "2026-12-24", name: "Christmas Eve" }], gpBankHolidays: 6, gpMaxSessions: 8, groups: [] });
   assert.equal(cleanYearSettings({}).gpBankHolidays, 0);
 });
 
@@ -235,6 +235,73 @@ t("hours typed in (a new starter who is not on the list yet) are used instead of
   assert.equal(over.segments.length, 1);
   near(over.annual, 255 * 0.5);
   assert.deepEqual(cleanLeaveFields({ weeklyHours: 30 }), {}, "and are never written to a staff record");
+});
+
+t("the practice can change the days each group gets, and add groups of its own (a nursing group of 28, 34 and 38 days)", () => {
+  const nursing = { key: "custom-nursing", label: "Nursing", days: [28, 28, 34, 38] };
+  const settings = { groups: [nursing, { key: "admin", label: "Admin", days: [22, 25, 30, 35] }] };
+  // standard groups keep their days unless changed; added ones come after them
+  assert.deepEqual(groupsFor({}).map((g) => g.key), ["clinical", "admin", "management", "doctor"]);
+  assert.deepEqual(groupsFor(settings).map((g) => g.key), ["clinical", "admin", "management", "doctor", "custom-nursing"]);
+  assert.deepEqual(groupOf("clinical", settings).days, [31, 34, 35, 39], "untouched");
+  assert.deepEqual(groupOf("admin", settings).days, [22, 25, 30, 35], "changed");
+  assert.equal(groupOf("custom-nursing", settings).custom, true);
+  assert.equal(groupOf("custom-nursing", {}), null, "a group that is not in the year's settings is not known");
+  // a full-time nurse with 10 years' service: 38 days + 10 bank holidays (the policy's 33 + 5 IPR + bank holidays)
+  const nurse = { leaveGroup: "custom-nursing", serviceFrom: "2010-01-01", patterns: full() };
+  const r = calculateEntitlement(nurse, Y, settings);
+  assert.equal(r.ready, true);
+  near(r.annual, 38 * 7.5); near(r.bankHolidayAmount, 75); assert.equal(r.rounded, 285 + 75);
+  assert.equal(r.groupLabel, "Nursing");
+  // the days at each level apply as people move up: 28 under five years, 34 from five, 38 from ten
+  assert.equal(calculateEntitlement({ ...nurse, serviceFrom: "2026-04-01" }, Y, settings).rounded, 28 * 7.5 + 75);
+  assert.equal(calculateEntitlement({ ...nurse, serviceFrom: "2020-01-01" }, Y, settings).rounded, 34 * 7.5 + 75);
+  // an unknown group asks for one rather than guessing
+  assert.equal(calculateEntitlement({ ...nurse, leaveGroup: "custom-gone" }, Y, settings).ready, false);
+});
+
+t("a person can be given extra days (or fewer) for the year with a reason, shared out like the rest of their leave", () => {
+  const base = { leaveGroup: "clinical", serviceFrom: "2010-01-01", patterns: full() };
+  const withExtra = (extra, p = base) => calculateEntitlement({ ...p, leaveAdjust: { "2026-27": { extraDays: extra, extraReason: "  IPR days " } } }, Y);
+  const plain = calculateEntitlement(base, Y);
+  const plus = withExtra(5);
+  near(plus.annual - plain.annual, 5 * 7.5);
+  assert.deepEqual([plus.extraDays, plus.extraReason], [5, "IPR days"]);
+  assert.equal(plus.segments[0].fullTimeHours, 292.5 + 37.5);
+  near(withExtra(-2).annual - plain.annual, -15);
+  // part-time people get their share: 3 days a week, 5 extra days -> 5 x 7.5 x 0.6
+  const partTime = { ...base, patterns: [pattern("2020-01-01", ["mon", "tue", "wed"])] };
+  near(withExtra(5, partTime).annual - calculateEntitlement(partTime, Y).annual, 5 * 7.5 * 0.6);
+  // and only for the part of the year they are here
+  const starter = { ...base, startDate: "2026-10-01" };
+  near(withExtra(5, starter).annual - calculateEntitlement(starter, Y).annual, 5 * 7.5 * 182 / 365);
+  // never below nothing, whatever is typed
+  assert.equal(calculateEntitlement({ ...base, leaveAdjust: { "2026-27": { extraDays: -500 } } }, Y).extraDays, -60);
+  assert.ok(calculateEntitlement({ ...base, leaveAdjust: { "2026-27": { extraDays: -60 } } }, Y).annual >= 0);
+  // a doctor's extra days are added to the days typed in
+  const doc = calculateEntitlement({ leaveGroup: "doctor", leaveSessions: 8, leaveAdjust: { "2026-27": { fixedDays: 30, extraDays: 2 } } }, Y, { gpMaxSessions: 8 });
+  assert.deepEqual([doc.rounded, doc.bankHolidayDays], [32 + 10, 10]);
+});
+
+t("the groups and extra days are cleaned before they are saved", () => {
+  const s = cleanYearSettings({ groups: [
+    { key: "custom-nursing", label: "  Nursing  ", days: ["28", 34, 38, "38.5"] },
+    { key: "clinical", label: "", days: [30, 32, 34, 36] },
+    { key: "doctor", label: "x", days: [1, 2, 3, 4] },
+    { key: "custom-nursing", label: "again", days: [1, 2, 3, 4] },
+    { key: "Evil Group!", label: "x", days: [1, 2, 3, 4] },
+    { key: "admin", label: "Admin", days: [1, 2, 3] },
+    { key: "management", label: "M", days: [999, -4, "x", 20] },
+  ] });
+  assert.deepEqual(s.groups.map((g) => g.key), ["custom-nursing", "clinical", "management"], "no doctor, no repeats, nothing odd, four numbers each");
+  assert.deepEqual(s.groups[0], { key: "custom-nursing", label: "Nursing", days: [28, 34, 38, 38.5] });
+  assert.equal(s.groups[1].label, "Clinical", "a blank name falls back to the standard one");
+  assert.deepEqual(s.groups[2].days, [100, 0, 0, 20], "kept within 0 to 100");
+  assert.equal(cleanYearSettings({ groups: Array.from({ length: 30 }, (_, i) => ({ key: `custom-g${i}`, label: "g", days: [1, 2, 3, 4] })) }).groups.length, 12);
+  assert.deepEqual(cleanLeaveFields({ leaveGroup: "custom-nursing" }), { leaveGroup: "custom-nursing" });
+  assert.deepEqual(cleanLeaveFields({ leaveGroup: "custom-Bad Name" }), { leaveGroup: "" });
+  assert.deepEqual(cleanLeaveFields({ leaveAdjust: { "2026-27": { extraDays: "-3", extraReason: "x".repeat(100) } } }).leaveAdjust["2026-27"].extraDays, -3);
+  assert.equal(cleanLeaveFields({ leaveAdjust: { "2026-27": { extraReason: "x".repeat(100) } } }).leaveAdjust["2026-27"].extraReason.length, 60);
 });
 
 console.log(`\n${n} passed`);

@@ -1316,6 +1316,15 @@ async function main() {
     await assertFails(setDoc(doc(nurse, "leave_years", "2026-27"), good));
     await assertFails(setDoc(doc(reception, "leave_years", "2028-29"), good));
   });
+  await check("The leave groups and their days are part of the yearly settings: set by whoever manages timesheets, a list of at most twelve", async () => {
+    const base = { practiceDays: [], gpBankHolidays: 0, gpMaxSessions: 8 };
+    const groups = [{ key: "custom-nursing", label: "Nursing", days: [28, 28, 34, 38] }];
+    await assertSucceeds(setDoc(doc(tsAdmin, "leave_years", "2030-31"), { ...base, groups }));
+    await assertFails(setDoc(doc(nurse, "leave_years", "2030-31"), { ...base, groups }));
+    await assertFails(setDoc(doc(tsAdmin, "leave_years", "2031-32"), { ...base, groups: "not a list" }));
+    await assertFails(setDoc(doc(tsAdmin, "leave_years", "2031-32"), { ...base, groups: Array.from({ length: 13 }, () => groups[0]) }));
+    await assertSucceeds(getDoc(doc(nurse, "leave_years", "2030-31")));
+  });
   await check("A yearly settings record must be well formed, and none can be deleted", async () => {
     const good = { practiceDays: [], gpBankHolidays: 6, gpMaxSessions: 8 };
     await assertFails(setDoc(doc(tsAdmin, "leave_years", "next-year"), good));

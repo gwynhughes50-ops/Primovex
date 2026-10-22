@@ -54,6 +54,14 @@ export function useLeaveYearSettings(yearKey) {
   return settings;
 }
 
+// The year's settings, with last year's groups standing in until this year has its own (so a group the practice added carries on into
+// the new year without anyone having to retype it). Saving this year's settings makes them its own.
+export function useEffectiveLeaveSettings(year) {
+  const mine = useLeaveYearSettings(year.key);
+  const last = useLeaveYearSettings(`${year.startYear - 1}-${String(year.startYear % 100).padStart(2, "0")}`);
+  return useMemo(() => (mine.groups.length || !last.groups.length ? mine : { ...mine, groups: last.groups, groupsFromLastYear: true }), [mine, last]);
+}
+
 export async function saveLeaveYearSettings(yearKey, input, actor = {}) {
   if (isSafeSyntheticMode()) throw new Error("Demo mode can't save changes.");
   const data = cleanYearSettings(input);

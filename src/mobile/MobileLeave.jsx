@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { leaveYearFor } from "@/modules/leave/leaveEntitlement";
-import { useLeaveStaff, useLeaveYearSettings } from "@/modules/leave/leaveService";
+import { useEffectiveLeaveSettings, useLeaveStaff } from "@/modules/leave/leaveService";
 import { LeaveList, LeaveSummary } from "@/modules/leave/LeavePanels";
 import { dateKey } from "@/modules/timesheets/workPattern";
 
@@ -10,7 +10,7 @@ import { dateKey } from "@/modules/timesheets/workPattern";
 export default function MobileLeave() {
   const year = leaveYearFor(dateKey(new Date()));
   const data = useLeaveStaff();
-  const settings = useLeaveYearSettings(year.key);
+  const settings = useEffectiveLeaveSettings(year);
   const [tab, setTab] = useState("mine");
   if (!data.ready) return <p className="text-sm text-[var(--medtrak-muted)]">Opening…</p>;
   if (!data.mine && !data.team.length) return <p className="text-sm text-[var(--medtrak-muted)]">{data.error || "Your leave isn't set up yet. Ask the practice manager to link your account in Timesheets."}</p>;

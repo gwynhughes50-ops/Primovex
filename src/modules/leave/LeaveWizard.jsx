@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, X } from "lucide-react";
-import { LEAVE_GROUPS, calculateEntitlement, employmentPeriod, groupOf } from "@/modules/leave/leaveEntitlement";
+import { calculateEntitlement, employmentPeriod, groupOf, groupsFor } from "@/modules/leave/leaveEntitlement";
 import { Workings } from "@/modules/leave/LeavePanels";
 import { saveStaff } from "@/modules/timesheets/timesheetService";
 import { averageWeekHours, patternOn, dateKey } from "@/modules/timesheets/workPattern";
@@ -43,6 +43,7 @@ function answersFrom(person, year) {
     hoursChoice: hoursFromPattern(person) ? "pattern" : "", weeklyHours: "",
     span: !person ? "" : starts && leaves ? "both" : starts ? "starts" : leaves ? "leaves" : "whole",
     startedOn: starts ? period.from : "", leftOn: leaves ? period.to : "", carryOver: adjust.carryOver || "",
+    extraDays: adjust.extraDays || "", extraReason: adjust.extraReason || "",
   };
 }
 
@@ -74,6 +75,7 @@ export default function LeaveWizard({ people = [], person: given = null, year, s
     doctor ? "doctor" : "service",
     ...(doctor ? [] : ["hours"]),
     "period",
+    "extra",
     "carry",
     "result",
   ];
@@ -89,14 +91,15 @@ export default function LeaveWizard({ people = [], person: given = null, year, s
       // "the whole year" overrides a start date from BrightHR that falls inside the year
       startDate: spanChoice === "whole" && person?.startDate > year.from ? "" : (person?.startDate || ""),
       leftOn: spanChoice === "leaves" || spanChoice === "both" ? form.leftOn : "",
-      leaveAdjust: { [year.key]: { carryOver: Number(form.carryOver) || 0, fixedDays: Number(form.fixedDays) || 0 } },
+      leaveAdjust: { [year.key]: { carryOver: Number(form.carryOver) || 0, fixedDays: Number(form.fixedDays) || 0, extraDays: Number(form.extraDays) || 0, extraReason: form.extraReason || "" } },
     };
   }, [person, form, newStarter, patternHours, doctor, spanChoice, year.key]);
   const result = useMemo(() => (step === "result" ? calculateEntitlement(draft, year, settings) : null), [step, draft, year, settings]);
 
   function check() {
     if (step === "who" && !personId) return "Choose who it is for, or choose someone new.";
-    if (step === "group" && !groupOf(form.leaveGroup)) return "Choose their leave group.";
+    if (step === "group" && !groupOf(form.leaveGroup, settings)) return "Choose their leave group.";
+    if (step === "extra" && Number(form.extraDays) && !String(form.extraReason || "").trim()) return "Say why they have extra (or fewer) days, so it is clear later.";
     if (step === "doctor") {
       if (!(Number(form.fixedDays) > 0)) return `Type their leave for ${year.key}, in days.`;
       if (!(Number(form.sessions) > 0)) return "Type how many sessions a week they work.";
@@ -121,13 +124,13 @@ export default function LeaveWizard({ people = [], person: given = null, year, s
     try {
       await saveStaff(person, {
         leaveGroup: form.leaveGroup, serviceFrom: doctor ? person.serviceFrom || "" : form.serviceFrom, startedOn: draft.startedOn, leftOn: draft.leftOn, leaveSessions: form.sessions,
-        leaveAdjust: { ...(person.leaveAdjust || {}), [year.key]: { carryOver: form.carryOver, fixedDays: form.fixedDays } },
+        leaveAdjust: { ...(person.leaveAdjust || {}), [year.key]: { carryOver: form.carryOver, fixedDays: form.fixedDays, extraDays: form.extraDays, extraReason: form.extraReason } },
       }, actor);
       setSaved(true);
     } catch (failure) { setProblem(failure?.message || "That didn't save. Check you have permission."); } finally { setBusy(false); }
   }
 
-  const title = { who: "Who is it for?", group: "Which leave group?", service: "When does their NHS service start?", doctor: "Their leave and sessions", hours: "How many hours a week do they work?", period: `Are they here for all of ${year.key}?`, carry: "Any leave carried over?", result: "Their annual leave" }[step];
+  const title = { who: "Who is it for?", group: "Which leave group?", service: "When does their NHS service start?", doctor: "Their leave and sessions", hours: "How many hours a week do they work?", period: `Are they here for all of ${year.key}?`, extra: "Extra days for them?", carry: "Any leave carried over?", result: "Their annual leave" }[step];
   const period = result ? employmentPeriod(draft, year) : null;
 
   return (
@@ -159,7 +162,7 @@ export default function LeaveWizard({ people = [], person: given = null, year, s
 
           {step === "group" && (
             <div className="space-y-2" role="radiogroup" aria-label="Leave group">
-              {LEAVE_GROUPS.map((g) => <Tile key={g.key} selected={form.leaveGroup === g.key} onClick={() => set({ leaveGroup: g.key })} title={g.label} note={g.hours ? `${g.hours[0] / 7.5} days basic, up to ${g.hours[3] / 7.5} days after 10 years (full-time)` : "Leave typed in per person, in days"} />)}
+              {groupsFor(settings).map((g) => <Tile key={g.key} selected={form.leaveGroup === g.key} onClick={() => set({ leaveGroup: g.key })} title={g.label} note={g.hours ? `${g.days[0]} days basic, up to ${g.days[3]} days after 10 years (full-time)${g.changed || g.custom ? " · set in Settings" : ""}` : "Leave typed in per person, in days"} />)}
             </div>
           )}
 
@@ -210,6 +213,20 @@ export default function LeaveWizard({ people = [], person: given = null, year, s
             </>
           )}
 
+          {step === "extra" && (
+            <>
+              <p className="text-sm text-slate-400">For a person whose days are different from their group's: add days (for example 3 IPR days) or take some off (a minus). Leave at 0 if they get just what their group gets. It is shared out by their hours and the part of the year they are here, like the rest of their leave.</p>
+              <label className={`${LABEL} mt-3`}>Extra days for {year.key} (use a minus for fewer)
+                <input type="number" min="-60" max="60" step="0.5" className={FIELD} value={form.extraDays} onChange={(e) => set({ extraDays: e.target.value })} placeholder="0" />
+              </label>
+              {Number(form.extraDays) !== 0 && form.extraDays !== "" && (
+                <label className={`${LABEL} mt-3`}>Why?
+                  <input className={FIELD} maxLength={60} value={form.extraReason} onChange={(e) => set({ extraReason: e.target.value })} placeholder="e.g. IPR days, agreed with their manager" />
+                </label>
+              )}
+            </>
+          )}
+
           {step === "carry" && (
             <label className={LABEL}>Carried over into {year.key}, in {doctor ? "days" : "hours"} (leave blank if none)
               <input type="number" min="0" step="0.5" className={FIELD} value={form.carryOver} onChange={(e) => set({ carryOver: e.target.value })} />
@@ -225,7 +242,7 @@ export default function LeaveWizard({ people = [], person: given = null, year, s
                 <div className="rounded-xl border border-teal-300/30 bg-teal-500/10 p-4">
                   <p className="text-3xl font-black text-slate-50">{fix(result.total)} <span className="text-base font-semibold">{result.unit}</span></p>
                   {result.unit === "hours" && <p className="text-sm text-slate-300">{fix(result.total / 7.5)} days of 7.5 hours</p>}
-                  <p className="mt-1 text-sm text-slate-300">{groupOf(draft.leaveGroup)?.label.split(" (")[0]} · {period.label.toLowerCase()}{result.carryOver > 0 ? ` · includes ${fix(result.carryOver)} carried over` : ""}</p>
+                  <p className="mt-1 text-sm text-slate-300">{groupOf(draft.leaveGroup, settings)?.label.split(" (")[0]} · {period.label.toLowerCase()}{result.carryOver > 0 ? ` · includes ${fix(result.carryOver)} carried over` : ""}</p>
                   {result.warnings.length > 0 && <ul className="mt-2 list-disc pl-5 text-xs text-slate-300">{result.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
                 </div>
               )}

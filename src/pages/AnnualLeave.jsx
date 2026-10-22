@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { leaveYear, leaveYearFor } from "@/modules/leave/leaveEntitlement";
-import { useLeaveStaff, useLeaveYearSettings } from "@/modules/leave/leaveService";
+import { useEffectiveLeaveSettings, useLeaveStaff } from "@/modules/leave/leaveService";
 import { LeaveList, LeaveSettings, LeaveSummary } from "@/modules/leave/LeavePanels";
 import LeaveWizard from "@/modules/leave/LeaveWizard";
 import { dateKey } from "@/modules/timesheets/workPattern";
@@ -21,7 +21,7 @@ export default function AnnualLeave() {
   const current = leaveYearFor(dateKey(new Date()));
   const [startYear, setStartYear] = useState(current.startYear);
   const year = useMemo(() => leaveYear(startYear), [startYear]);
-  const settings = useLeaveYearSettings(year.key);
+  const settings = useEffectiveLeaveSettings(year);
   const [tab, setTab] = useState("");
   const [editing, setEditing] = useState(null); // a person to set up, or "calculator" for the open wizard
 

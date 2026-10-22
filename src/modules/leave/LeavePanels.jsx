@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Download, Plus, Trash2 } from "lucide-react";
-import { calculateEntitlement, compareWithBrightHr, employmentPeriod, groupOf, leaveCsv } from "@/modules/leave/leaveEntitlement";
+import { calculateEntitlement, compareWithBrightHr, employmentPeriod, groupOf, groupsFor, leaveCsv } from "@/modules/leave/leaveEntitlement";
 import { saveLeaveYearSettings } from "@/modules/leave/leaveService";
 
 // The screens for annual leave, used on the desktop (Annual leave page) and the phone (Me tab). `skin` picks the look.
@@ -59,12 +59,14 @@ export function Workings({ s, result }) {
     return (
       <dl className={`mt-2 space-y-1 text-sm ${s.body}`}>
         <div className="flex justify-between gap-3"><dt>Leave for the year</dt><dd>{fix(result.fixedDays)} days</dd></div>
+        {result.extraDays !== 0 && <div className="flex justify-between gap-3"><dt>{result.extraDays > 0 ? "Extra days" : "Fewer days"}{result.extraReason ? ` (${result.extraReason})` : ""}</dt><dd>{result.extraDays > 0 ? "+" : ""}{fix(result.extraDays)} days</dd></div>}
         <div className="flex justify-between gap-3"><dt>{fix(result.bankHolidaysCounted)} bank holidays, by sessions worked</dt><dd>{fix(result.bankHolidayDays)} days</dd></div>
       </dl>
     );
   }
   return (
     <div className={`mt-2 space-y-2 text-sm ${s.body}`}>
+      {result.extraDays !== 0 && <p>{result.extraDays > 0 ? "Extra days" : "Fewer days"} for them this year{result.extraReason ? ` (${result.extraReason})` : ""}: <b>{result.extraDays > 0 ? "+" : ""}{fix(result.extraDays)} days</b>, shared out by their hours and the days they are here, and included below.</p>}
       {result.segments.map((seg) => (
         <div key={seg.from} className={`${s.line} pt-2`}>
           <p className={`font-semibold ${s.strong}`}>{uk(seg.from)} to {uk(seg.to)} <span className={`font-normal ${s.muted}`}>({seg.days} days)</span></p>
@@ -85,7 +87,7 @@ export function LeaveSummary({ person, year, settings, skin = "desktop" }) {
   return (
     <div className={s.card}>
       <p className={`text-xs font-semibold uppercase tracking-wide ${s.muted}`}>Annual leave {year.key}</p>
-      <p className={`text-sm ${s.muted}`}>{[groupOf(person.leaveGroup)?.label, person.jobTitle].filter(Boolean).join(" · ")}</p>
+      <p className={`text-sm ${s.muted}`}>{[groupOf(person.leaveGroup, settings)?.label, person.jobTitle].filter(Boolean).join(" · ")}</p>
       {!employmentPeriod(person, year).full && <p className={`text-sm ${s.muted}`}>Part of the year: {employmentPeriod(person, year).label.toLowerCase()} ({employmentPeriod(person, year).days} days)</p>}
       <div className="mt-1"><Figure s={s} result={result} /></div>
       {result.ready && (
@@ -107,7 +109,7 @@ export function LeaveList({ people, year, settings, skin = "desktop", onEdit, sh
   const missing = rows.filter(({ person, result }) => person.active !== false && !result.ready).length;
 
   function download() {
-    const blob = new Blob([`﻿${leaveCsv(shown, year)}`], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([`﻿${leaveCsv(shown, year, settings)}`], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url; link.download = `annual-leave-${year.key}.csv`; link.click();
@@ -121,7 +123,7 @@ export function LeaveList({ people, year, settings, skin = "desktop", onEdit, sh
         {shown.map(({ person, result }) => (
           <div key={person.id} className={s.card}>
             <p className="font-bold">{person.name}</p>
-            <p className={`text-sm ${s.muted}`}>{[groupOf(person.leaveGroup)?.label, person.jobTitle].filter(Boolean).join(" · ")}</p>
+            <p className={`text-sm ${s.muted}`}>{[groupOf(person.leaveGroup, settings)?.label, person.jobTitle].filter(Boolean).join(" · ")}</p>
             {!employmentPeriod(person, year).full && <p className={`text-sm ${s.muted}`}>{employmentPeriod(person, year).label}</p>}
             <p className="mt-1">{result.ready ? <b>{amount(result.total, result.unit)}</b> : <span className={s.muted}>{result.warnings[0]}</span>}</p>
           </div>
@@ -146,7 +148,7 @@ export function LeaveList({ people, year, settings, skin = "desktop", onEdit, sh
             {shown.map(({ person, result, check }) => (
               <tr key={person.id} className="border-t border-white/5 align-top">
                 <td className="px-3 py-2"><span className="font-semibold text-slate-100">{person.name}</span><span className="block text-xs text-slate-400">{person.jobTitle || ""}</span></td>
-                <td className="px-3 py-2 text-slate-200">{groupOf(person.leaveGroup)?.label.split(" (")[0] || <span className="text-amber-200">Not set</span>}</td>
+                <td className="px-3 py-2 text-slate-200">{groupOf(person.leaveGroup, settings)?.label.split(" (")[0] || <span className="text-amber-200">Not set</span>}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-slate-300">{employmentPeriod(person, year).label}</td>
                 {result.ready ? (
                   <>
@@ -170,16 +172,51 @@ export function LeaveList({ people, year, settings, skin = "desktop", onEdit, sh
 
 export function LeaveSettings({ year, settings, actor }) {
   const s = SKINS.desktop;
-  const [form, setForm] = useState({ practiceDays: settings.practiceDays, gpBankHolidays: settings.gpBankHolidays || "", gpMaxSessions: settings.gpMaxSessions || 8 });
+  const [form, setForm] = useState({
+    practiceDays: settings.practiceDays, gpBankHolidays: settings.gpBankHolidays || "", gpMaxSessions: settings.gpMaxSessions || 8,
+    groups: groupsFor(settings).filter((g) => g.key !== "doctor").map((g) => ({ key: g.key, label: g.label, days: g.days, custom: Boolean(g.custom) })),
+  });
+  const setGroup = (key, patch) => setForm((f) => ({ ...f, groups: f.groups.map((g) => (g.key === key ? { ...g, ...patch } : g)) }));
+  const setGroupDays = (key, index, value) => setForm((f) => ({ ...f, groups: f.groups.map((g) => (g.key === key ? { ...g, days: g.days.map((d, i) => (i === index ? value : d)) } : g)) }));
+  const addGroup = () => setForm((f) => {
+    let n = f.groups.filter((g) => g.custom).length + 1;
+    while (f.groups.some((g) => g.key === `custom-group-${n}`)) n += 1;
+    return { ...f, groups: [...f.groups, { key: `custom-group-${n}`, label: "", days: [0, 0, 0, 0], custom: true }] };
+  });
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const setDay = (i, patch) => setForm((f) => ({ ...f, practiceDays: f.practiceDays.map((d, j) => (j === i ? { ...d, ...patch } : d)) }));
   async function save() {
     setBusy(true); setMessage("");
-    try { await saveLeaveYearSettings(year.key, form, actor); setMessage("Saved."); } catch (failure) { setMessage(failure?.message || "That didn't save."); } finally { setBusy(false); }
+    try {
+      if (form.groups.some((g) => g.custom && !String(g.label).trim())) throw new Error("Give each group you added a name.");
+      await saveLeaveYearSettings(year.key, { ...form, groups: form.groups.map((g) => ({ key: g.key, label: g.label, days: g.days.map((d) => Number(d) || 0) })) }, actor);
+      setMessage("Saved. Everyone's leave for this year is worked out from these days.");
+    } catch (failure) { setMessage(failure?.message || "That didn't save."); } finally { setBusy(false); }
   }
   return (
-    <div className={`${s.card} max-w-2xl space-y-4`}>
+    <div className={`${s.card} max-w-3xl space-y-4`}>
+      <div>
+        <p className="font-semibold text-slate-100">Leave groups and their days, {year.key}</p>
+        <p className="text-sm text-slate-400">Days of annual leave a full-time person (37.5 hours a week) gets at each length of service, before bank holidays. Change a group's days, or add a group of your own (for example nursing staff, with their IPR days included). A person can also be given extra days of their own when you set them up.</p>
+        <div className="mt-2 overflow-x-auto rounded-xl border border-white/10">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-400"><tr><th className="px-3 py-2">Group</th><th className="px-3 py-2">Basic</th><th className="px-3 py-2">After 1 year</th><th className="px-3 py-2">After 5 years</th><th className="px-3 py-2">After 10 years</th><th className="px-3 py-2" /></tr></thead>
+            <tbody>
+              {form.groups.map((g) => (
+                <tr key={g.key} className="border-t border-white/5">
+                  <td className="px-3 py-1.5"><input className={`${s.field} !mt-0 !w-44`} value={g.label} onChange={(e) => setGroup(g.key, { label: e.target.value })} placeholder="Group name" aria-label="Group name" /></td>
+                  {g.days.map((d, i) => <td key={i} className="px-3 py-1.5"><input type="number" min="0" max="100" step="0.5" className={`${s.field} !mt-0 !w-20`} value={d} onChange={(e) => setGroupDays(g.key, i, e.target.value)} aria-label={`${g.label || "Group"} days ${["basic", "after 1 year", "after 5 years", "after 10 years"][i]}`} /></td>)}
+                  <td className="px-3 py-1.5 text-right">{g.custom && <button type="button" className={s.btn} onClick={() => setForm((f) => ({ ...f, groups: f.groups.filter((x) => x.key !== g.key) }))} aria-label={`Remove ${g.label || "this group"}`}><Trash2 className="h-4 w-4" /></button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <button type="button" className={`${s.btn} mt-2`} onClick={addGroup} disabled={form.groups.length >= 11}><Plus className="h-4 w-4" /> Add a group</button>
+        {settings.groupsFromLastYear && <p className="mt-1 text-xs text-amber-200">These are last year's groups, used until you press Save for {year.key}.</p>}
+        <p className="mt-1 text-xs text-slate-500">GPs and doctors are not in this table: their days are typed in for each person.</p>
+      </div>
       <div>
         <p className="font-semibold text-slate-100">Days the practice closes, {year.key}</p>
         <p className="text-sm text-slate-400">Counted like a bank holiday in everyone's entitlement. Bank holidays themselves are worked out from the calendar.</p>
