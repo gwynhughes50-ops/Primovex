@@ -7,8 +7,9 @@ import { GROUPS, LIGHT, STATUS, STATUS_LABEL, buildMatrix, dateKey, dueOf, filte
 import { likelyLiveSheet, parseTrainingSheets, planImport, suggestAccountLinks } from "@/modules/training/trainingImport";
 import { readWorkbook } from "@/modules/training/readWorkbook";
 import { matrixHtml } from "@/modules/training/trainingPrint";
+import { planMerge, possibleDuplicates } from "@/modules/training/mergePeople";
 import { Link } from "react-router-dom";
-import { applyImportPlan, deletePerson, newCourseId, newPersonId, saveCourse, savePerson, saveRecord, trainingReadOnly, useTrainingData } from "@/modules/training/trainingService";
+import { applyImportPlan, deletePerson, mergePeople, newCourseId, newPersonId, saveCourse, savePerson, saveRecord, trainingReadOnly, useTrainingData } from "@/modules/training/trainingService";
 
 // Staff training (Operations > Staff training): everyone's courses in one matrix with a traffic light for each, who is due or
 // overdue, the people and courses behind it, and a way to bring in the practice's existing spreadsheet. The Practice Manager and
@@ -156,6 +157,50 @@ function MatrixTab({ data, actor, canManageAll, readOnly = false }) {
   );
 }
 
+// Join two entries for the same person (Nicola and Nicky): choose the one to keep, see what will happen, then do it.
+function MergeDialog({ people, records, first, second, onClose, onDone }) {
+  const [keepId, setKeepId] = useState(first?.id || "");
+  const [otherId, setOtherId] = useState(second?.id || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const keep = people.find((p) => p.id === keepId) || null;
+  const other = people.find((p) => p.id === otherId) || null;
+  const plan = useMemo(() => { try { return keep && other ? planMerge(keep, other, records) : null; } catch { return null; } }, [keep, other, records]);
+  async function run() {
+    setBusy(true); setError("");
+    try { await mergePeople(keep, other, records); onDone(`${other.name} was joined into ${keep.name}.`); } catch (problem) { setError(problem?.message || "That didn't save."); setBusy(false); }
+  }
+  const select = (value, onChange, label) => (
+    <label className={LABEL}>{label}
+      <select className={FIELD} value={value} onChange={(e) => onChange(e.target.value)}><option value="">Choose…</option>{people.map((p) => <option key={p.id} value={p.id}>{p.name}{p.jobRole ? ` (${p.jobRole})` : ""}{p.active === false ? " – left" : ""}</option>)}</select>
+    </label>
+  );
+  return (
+    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/60 p-4" role="presentation">
+      <div role="dialog" aria-modal="true" aria-label="Join two entries for the same person" className="max-h-[94vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-slate-900 p-5 shadow-2xl">
+        <h2 className="text-lg font-semibold text-slate-50">Same person twice?</h2>
+        <p className="mt-1 text-sm text-slate-400">Joining keeps one entry and takes the later date for each course from the two of them.</p>
+        <div className="mt-3 space-y-3">
+          {select(keepId, setKeepId, "Keep this one (its name, team and account)")}
+          {select(otherId, setOtherId, "Join this one into it, then remove it")}
+        </div>
+        {keep && other && keep.id === other.id && <p className="mt-3 text-sm text-amber-200">Choose two different people.</p>}
+        {plan && (
+          <ul className="mt-3 list-disc space-y-0.5 rounded-xl border border-white/10 bg-slate-950/60 p-3 pl-7 text-sm text-slate-200">
+            <li>{plan.counts.taken} {plan.counts.taken === 1 ? "date is" : "dates are"} later on {other.name}, so {plan.counts.taken === 1 ? "it moves" : "they move"} to {keep.name}.</li>
+            <li>{plan.counts.onlyOther} {plan.counts.onlyOther === 1 ? "course is" : "courses are"} only on {other.name}, so {plan.counts.onlyOther === 1 ? "it moves" : "they move"} across.</li>
+            <li>{plan.counts.kept + plan.counts.same} {plan.counts.kept + plan.counts.same === 1 ? "date stays" : "dates stay"} as {keep.name} has {plan.counts.kept + plan.counts.same === 1 ? "it" : "them"}.</li>
+            <li>{other.name} is removed, and the name is remembered so importing the spreadsheet again does not bring it back.</li>
+            {!keep.uid && other.uid && <li>{keep.name} takes over {other.name}'s Primovex account link.</li>}
+          </ul>
+        )}
+        {error && <p className="mt-3 text-sm text-rose-300" role="alert">{error}</p>}
+        <div className="mt-4 flex justify-end gap-2"><button type="button" className={BTN} onClick={onClose}>Cancel</button><button type="button" className={PRIMARY} disabled={busy || !plan} onClick={run}>{busy ? "Joining…" : "Join them"}</button></div>
+      </div>
+    </div>
+  );
+}
+
 function PeopleTab({ data, canManageAll }) {
   const { people, records } = data;
   const [staff, setStaff] = useState([]);
@@ -165,6 +210,8 @@ function PeopleTab({ data, canManageAll }) {
   const [adding, setAdding] = useState({ name: "", jobRole: "", group: canManageAll ? "admin" : "clinical" });
   const [showLeft, setShowLeft] = useState(false);
   const [removing, setRemoving] = useState("");
+  const [merging, setMerging] = useState(null); // { first, second } while the merge dialog is open
+  const duplicates = useMemo(() => possibleDuplicates(people.filter((p) => p.active !== false)).slice(0, 6), [people]);
   useEffect(() => { listStaffDirectory().then(setStaff).catch(() => setStaffError("The list of accounts could not be loaded, so people can't be linked just now.")); }, []);
   const suggestions = useMemo(() => suggestAccountLinks(people, staff), [people, staff]);
   const roles = useMemo(() => [...new Set(people.map((p) => p.jobRole).filter(Boolean))].sort(), [people]);
@@ -200,6 +247,19 @@ function PeopleTab({ data, canManageAll }) {
           <button type="button" className={PRIMARY} disabled={busyId === "all"} onClick={linkAll}>{busyId === "all" ? "Linking…" : "Link them"}</button>
         </div>
       )}
+      {duplicates.length > 0 && (
+        <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+          <p className="font-semibold">These may be the same person twice</p>
+          <ul className="mt-1 space-y-1">
+            {duplicates.map(({ a, b, why }) => (
+              <li key={`${a.id}-${b.id}`} className="flex flex-wrap items-center justify-between gap-2">
+                <span>{a.name} and {b.name} <span className="text-amber-200/70">({why})</span></span>
+                <button type="button" className={BTN} onClick={() => setMerging({ first: a, second: b })}>Join them…</button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {staffError && <p className="text-sm text-amber-200">{staffError}</p>}
       {message && <p className="text-sm text-slate-200" role="status">{message}</p>}
       <form onSubmit={add} className="grid gap-2 rounded-xl border border-white/10 bg-slate-900/60 p-3 sm:grid-cols-5">
@@ -229,13 +289,14 @@ function PeopleTab({ data, canManageAll }) {
                 <td className="whitespace-nowrap px-3 py-1.5 text-right">
                   {removing === p.id
                     ? <><span className="mr-2 text-xs text-slate-300">Remove {p.name} and all their dates?</span><button type="button" className={BTN} disabled={busyId === p.id} onClick={() => remove(p)}>Yes, remove</button> <button type="button" className={BTN} onClick={() => setRemoving("")}>No</button></>
-                    : <button type="button" className="text-xs font-semibold text-slate-400 underline hover:text-rose-300" onClick={() => setRemoving(p.id)} aria-label={`Remove ${p.name}`}>Remove</button>}
+                    : <><button type="button" className="mr-3 text-xs font-semibold text-slate-400 underline hover:text-slate-200" onClick={() => setMerging({ first: p, second: null })} aria-label={`${p.name} is the same person as another entry`}>Same as…</button><button type="button" className="text-xs font-semibold text-slate-400 underline hover:text-rose-300" onClick={() => setRemoving(p.id)} aria-label={`Remove ${p.name}`}>Remove</button></>}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {merging && <MergeDialog people={people} records={records} first={merging.first} second={merging.second} onClose={() => setMerging(null)} onDone={(text) => { setMerging(null); setMessage(text); }} />}
     </div>
   );
 }

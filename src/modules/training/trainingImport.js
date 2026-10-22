@@ -12,6 +12,7 @@
 // Cells that are not a sensible date ("Frb 29", 730) are not imported and are listed so a person can check them.
 
 import { addMonths, fromExcelSerial } from "./training.js";
+import { nameIndex, nameKey } from "./mergePeople.js";
 
 const norm = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
 const keyOf = (text) => norm(text).toLowerCase().replace(/[^a-z0-9]+/g, "");
@@ -194,7 +195,17 @@ export function parseTrainingSheets(sheets) {
 //   courses and people already on file keep their own settings (a renamed course, a corrected group, a linked account);
 //   a record is written when it is new, or its date is later than the one on file; "not required" and "away" marks are never replaced.
 //   existing: { courses, people, records } as they are in the database now
-export function planImport(parsed, existing = {}) {
+export function planImport(parsedIn, existing = {}) {
+  // A spreadsheet name that is one a person is known by (the other name left after two people were joined, or a nickname recorded
+  // for them) belongs to that person, not to a new one.
+  const byName = nameIndex(existing.people || []);
+  const idFor = (p) => (byName.get(nameKey(p.name)) || {}).id || p.id;
+  const idMap = new Map(parsedIn.people.map((p) => [p.id, idFor(p)]));
+  const parsed = {
+    ...parsedIn,
+    people: [...new Map(parsedIn.people.map((p) => [idMap.get(p.id), { ...p, id: idMap.get(p.id) }])).values()],
+    records: parsedIn.records.map((r) => ({ ...r, personId: idMap.get(r.personId) || r.personId })),
+  };
   const haveCourse = new Set((existing.courses || []).map((c) => c.id));
   const havePerson = new Map((existing.people || []).map((p) => [p.id, p]));
   const haveRecord = new Map((existing.records || []).map((r) => [`${r.personId}_${r.courseId}`, r]));

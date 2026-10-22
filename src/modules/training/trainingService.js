@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import { demoTraining } from "@/data/demoTraining";
 import { recordKey } from "./training";
+import { planMerge } from "./mergePeople";
 
 // The staff training matrix in Firestore (rules: firestore.rules, "STAFF TRAINING MATRIX"). What a person can read is decided by
 // the rules; this reads the right slice so the query is allowed:
@@ -102,6 +103,22 @@ export async function deletePerson(person, records = []) {
   for (const record of records.filter((r) => r.personId === person.id)) batch.delete(doc(db, RECORDS, record.id));
   batch.delete(doc(db, PEOPLE, person.id));
   await batch.commit();
+}
+
+// Join two entries for the same person (see mergePeople.js): the kept one gets the later date for each course, remembers the other
+// name, and the other is removed. One batch, so it either all happens or none of it does.
+export async function mergePeople(keep, other, records = []) {
+  if (isSafeSyntheticMode()) throw new Error("Demo mode can't save changes.");
+  const plan = planMerge(keep, other, records);
+  const batch = writeBatch(db);
+  const stamp = { updatedByName: "Merged", updatedAt: serverTimestamp() };
+  for (const w of plan.writes) batch.set(doc(db, RECORDS, recordKey(w.personId, w.courseId)), { ...w, ...stamp });
+  if (plan.relink) for (const r of records.filter((x) => x.personId === keep.id)) batch.update(doc(db, RECORDS, r.id), { ownerUid: plan.relink.ownerUid });
+  for (const id of plan.deletes) batch.delete(doc(db, RECORDS, id));
+  batch.set(doc(db, PEOPLE, keep.id), { name: clean(plan.person.name), jobRole: clean(plan.person.jobRole), group: plan.person.group || "admin", uid: plan.person.uid || null, active: plan.person.active !== false, aliases: plan.person.aliases }, { merge: true });
+  batch.delete(doc(db, PEOPLE, plan.deletePersonId));
+  await batch.commit();
+  return plan.counts;
 }
 
 export const newPersonId = (name) => `p-${clean(name).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || Date.now()}`;
