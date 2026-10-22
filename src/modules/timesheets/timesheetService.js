@@ -41,7 +41,7 @@ export async function saveStaff(person, patch, actor = {}) {
   const data = {};
   for (const key of OWN) if (key in patch) data[key] = key === "uid" || key === "managerId" || key === "managerUid" ? clean(patch[key]) || null : key === "name" || key === "notes" ? clean(patch[key]) : patch[key];
   // leave group, service date, sessions and carry-over are cleaned before they are written
-  Object.assign(data, cleanLeaveFields(Object.fromEntries(Object.entries(patch).filter(([key]) => ["leaveGroup", "serviceFrom", "startedOn", "leftOn", "leaveSessions", "leaveAdjust"].includes(key)))));
+  Object.assign(data, cleanLeaveFields(Object.fromEntries(Object.entries(patch).filter(([key]) => ["leaveGroup", "leaveDays", "serviceFrom", "startedOn", "leftOn", "leaveSessions", "leaveAdjust"].includes(key)))));
   data.updatedAt = serverTimestamp();
   data.updatedByName = actor.displayName || actor.email || "";
   await setDoc(doc(db, STAFF, person.id), data, { merge: true });

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Download, Plus, Trash2 } from "lucide-react";
-import { calculateEntitlement, compareWithBrightHr, employmentPeriod, groupOf, groupsFor, leaveCsv } from "@/modules/leave/leaveEntitlement";
+import { calculateEntitlement, compareWithBrightHr, employmentPeriod, groupOf, groupsFor, leaveCsv, ownDaysOf } from "@/modules/leave/leaveEntitlement";
 import { saveLeaveYearSettings } from "@/modules/leave/leaveService";
 
 // The screens for annual leave, used on the desktop (Annual leave page) and the phone (Me tab). `skin` picks the look.
@@ -68,6 +68,7 @@ export function Workings({ s, result }) {
   return (
     <div className={`mt-2 space-y-2 text-sm ${s.body}`}>
       {result.extraDays !== 0 && <p>{result.extraDays > 0 ? "Extra days" : "Fewer days"} for them this year{result.extraReason ? ` (${result.extraReason})` : ""}: <b>{result.extraDays > 0 ? "+" : ""}{fix(result.extraDays)} days</b>, shared out by their hours and the days they are here, and included below.</p>}
+      {result.contractDays && <p>Days from their own contract: <b>{result.contractDays.map((d) => fix(d)).join(" / ")}</b> (basic, after 1, 5 and 10 years) instead of the group's.</p>}
       {result.segments.map((seg) => (
         <div key={seg.from} className={`${s.line} pt-2`}>
           <p className={`font-semibold ${s.strong}`}>{uk(seg.from)} to {uk(seg.to)} <span className={`font-normal ${s.muted}`}>({seg.days} days)</span></p>
@@ -149,7 +150,7 @@ export function LeaveList({ people, year, settings, skin = "desktop", onEdit, sh
             {shown.map(({ person, result, check }) => (
               <tr key={person.id} className="border-t border-white/5 align-top">
                 <td className="px-3 py-2"><span className="font-semibold text-slate-100">{person.name}</span><span className="block text-xs text-slate-400">{person.jobTitle || ""}</span></td>
-                <td className="px-3 py-2 text-slate-200">{groupOf(person.leaveGroup, settings)?.label.split(" (")[0] || <span className="text-amber-200">Not set</span>}</td>
+                <td className="px-3 py-2 text-slate-200">{groupOf(person.leaveGroup, settings)?.label.split(" (")[0] || (ownDaysOf(person) ? "Own contract" : <span className="text-amber-200">Not set</span>)}{ownDaysOf(person) && groupOf(person.leaveGroup, settings) ? <span className="block text-xs text-slate-400">own days</span> : null}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-slate-300">{employmentPeriod(person, year).label}</td>
                 {result.ready ? (
                   <>

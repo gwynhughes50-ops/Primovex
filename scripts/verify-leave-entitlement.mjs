@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  LEAVE_GROUPS, wholeMonthsEmployed, bankHolidaysBetween, groupOf, groupsFor, calculateEntitlement, employmentPeriod, cleanLeaveFields, cleanYearSettings, compareWithBrightHr, gpBankHolidayDays, leaveCsv, leaveYear, leaveYearFor, parseLeaveYearKey, serviceTier,
+  LEAVE_GROUPS, ownDaysOf, wholeMonthsEmployed, bankHolidaysBetween, groupOf, groupsFor, calculateEntitlement, employmentPeriod, cleanLeaveFields, cleanYearSettings, compareWithBrightHr, gpBankHolidayDays, leaveCsv, leaveYear, leaveYearFor, parseLeaveYearKey, serviceTier,
 } from "../src/modules/leave/leaveEntitlement.js";
 
 let n = 0;
@@ -324,6 +324,39 @@ t("a doctor who starts or leaves part-way gets 1/12th of the year's leave for ea
   // everyone else keeps exact days, not months
   const nurse = calculateEntitlement({ leaveGroup: "admin", serviceFrom: "2010-01-01", startDate: "2026-07-15", patterns: full() }, Y);
   near(nurse.annual, 255 * 260 / 365);
+});
+
+t("a person's own contract days at the four levels replace their group's, kept on their record, and apply as they move up", () => {
+  const own = [31, 34, 35, 39];
+  const base = { leaveGroup: "admin", patterns: full() };
+  // the contract's 31 / 34 / 35 / 39 (plus bank holidays), whatever group they are filed under
+  assert.deepEqual(ownDaysOf({ leaveDays: own }), own);
+  assert.equal(ownDaysOf({ leaveDays: [0, 0, 0, 0] }), null, "all zeros is no contract days");
+  assert.equal(ownDaysOf({ leaveDays: [31, 34, 35] }), null, "four numbers are needed");
+  assert.equal(ownDaysOf({ leaveDays: [31, "x", 35, 39] }), null);
+  assert.equal(ownDaysOf({}), null);
+  const at = (serviceFrom, extra = {}) => calculateEntitlement({ ...base, leaveDays: own, serviceFrom, ...extra }, Y);
+  assert.equal(at("2026-04-01").rounded, 31 * 7.5 + 75, "under a year: 31 days plus the bank holidays");
+  assert.equal(at("2024-01-01").rounded, 34 * 7.5 + 75, "one to five years: 34");
+  assert.equal(at("2020-01-01").rounded, 35 * 7.5 + 75, "five to ten: 35");
+  assert.equal(at("2010-01-01").rounded, 39 * 7.5 + 75, "ten or more: 39");
+  assert.deepEqual(at("2010-01-01").contractDays, own);
+  assert.equal(calculateEntitlement({ ...base, serviceFrom: "2010-01-01" }, Y).contractDays, null, "no contract days, no note");
+  // without them the group's days apply, so a person with no group but their own days still works
+  assert.equal(calculateEntitlement({ leaveDays: own, serviceFrom: "2010-01-01", patterns: full() }, Y).ready, true);
+  assert.equal(calculateEntitlement({ leaveDays: own, serviceFrom: "2010-01-01", patterns: full() }, Y).groupLabel, "Own contract days");
+  assert.equal(calculateEntitlement({ serviceFrom: "2010-01-01", patterns: full() }, Y).ready, false);
+  // part-time and extra days still apply on top
+  near(at("2010-01-01", { patterns: [pattern("2020-01-01", ["mon", "tue", "wed"])] }).annual, 39 * 7.5 * 0.6);
+  near(at("2010-01-01", { leaveAdjust: { "2026-27": { extraDays: 2, extraReason: "IPR" } } }).annual, 41 * 7.5);
+  // a doctor keeps typed-in days: contract days do not apply to them
+  const doc = calculateEntitlement({ leaveGroup: "doctor", leaveSessions: 8, leaveDays: own, leaveAdjust: { "2026-27": { fixedDays: 32 } } }, Y, { gpMaxSessions: 8 });
+  assert.equal(doc.annual, 32);
+  // what is written to the record
+  assert.deepEqual(cleanLeaveFields({ leaveDays: ["31", 34, 35, "39.5"] }), { leaveDays: [31, 34, 35, 39.5] });
+  assert.deepEqual(cleanLeaveFields({ leaveDays: [31, 34, 35] }), { leaveDays: [] }, "an incomplete set clears it");
+  assert.deepEqual(cleanLeaveFields({ leaveDays: [] }), { leaveDays: [] }, "and an empty one removes it");
+  assert.deepEqual(cleanLeaveFields({ leaveDays: [500, 1, 1, 1] }), { leaveDays: [] }, "nothing over 100 days");
 });
 
 console.log(`\n${n} passed`);

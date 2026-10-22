@@ -41,6 +41,15 @@ export function groupsFor(settings = {}) {
 }
 export const groupOf = (key, settings) => groupsFor(settings).find((g) => g.key === key) || null;
 
+// A person's own contract can give different days from any group: four numbers (basic, 1, 5, 10 years), kept on their record and used
+// instead of their group's. Returns the four numbers, or null when they have none.
+export function ownDaysOf(person) {
+  const days = person?.leaveDays;
+  if (!Array.isArray(days) || days.length !== 4) return null;
+  const numbers = days.map((d) => Number(d));
+  return numbers.every((d) => Number.isFinite(d) && d >= 0 && d <= 100) && numbers.some((d) => d > 0) ? numbers : null;
+}
+
 const DAY_MS = 86400000;
 const keyDays = (key) => Math.round(Date.UTC(...ymd(key)) / DAY_MS);
 function ymd(key) { const [y, m, d] = String(key).split("-").map(Number); return [y, m - 1, d]; }
@@ -120,14 +129,17 @@ export function wholeMonthsEmployed(period, year) {
 //   year:     leaveYear(...)
 //   settings: { practiceDays: [{ date, name }], gpBankHolidays, gpMaxSessions }   (the practice's choices for that year)
 export function calculateEntitlement(person, year, settings = {}) {
-  const group = groupOf(person?.leaveGroup, settings);
+  const ownDays = ownDaysOf(person);
+  let group = groupOf(person?.leaveGroup, settings);
+  // their own contract days replace the group's (a group is then only a label)
+  if (ownDays && group?.key !== "doctor") group = { ...(group || { key: "own", label: "Own contract days" }), hours: ownDays.map((d) => d * DAY_HOURS), days: ownDays, own: true };
   const adjust = person?.leaveAdjust?.[year.key] || {};
   // extra (or fewer) days just for this person this year, e.g. IPR days: shared out by hours and days worked like the rest of the leave
   const extraDays = Math.max(-60, Math.min(60, Number(adjust.extraDays) || 0));
   const extraReason = String(adjust.extraReason || "").trim().slice(0, 60);
   const carryOver = Math.max(0, Number(adjust.carryOver) || 0);
   const warnings = [];
-  const base = { year, group: group?.key || "", groupLabel: group?.label || "", unit: group?.key === "doctor" ? "days" : "hours", segments: [], carryOver, warnings, extraDays, extraReason };
+  const base = { year, group: group?.key || "", groupLabel: group?.label || "", unit: group?.key === "doctor" ? "days" : "hours", segments: [], carryOver, warnings, extraDays, extraReason, contractDays: group?.own ? ownDays : null };
 
   if (!group) return { ...base, ready: false, warnings: ["Choose which leave group they are in (Clinical, Admin, Management or Doctor)."] };
 
@@ -213,6 +225,7 @@ const GROUP_KEY = /^(clinical|admin|management|doctor|custom-[a-z0-9-]{1,30})$/;
 // What is written to a staff record. Anything unrecognised is dropped, so a form can never write something odd.
 export function cleanLeaveFields(input = {}) {
   const out = {};
+  if ("leaveDays" in input) out.leaveDays = ownDaysOf({ leaveDays: input.leaveDays }) ? input.leaveDays.map((d) => Math.round(Number(d) * 100) / 100) : [];
   if ("leaveGroup" in input) out.leaveGroup = GROUP_KEY.test(String(input.leaveGroup || "")) ? input.leaveGroup : "";
   if ("serviceFrom" in input) out.serviceFrom = isKey(input.serviceFrom) ? input.serviceFrom : "";
   if ("startedOn" in input) out.startedOn = isKey(input.startedOn) ? input.startedOn : "";
