@@ -7,6 +7,7 @@ const ACTIONS = {
   "draft>submitted": "submitted",
   "declined>submitted": "resubmitted after a decline",
   "returned>submitted": "resubmitted after payroll returned it",
+  "submitted>draft": "taken back by the person to change",
   "submitted>approved": "signed off by the line manager",
   "submitted>declined": "declined by the line manager",
   "approved>sent": "sent to payroll",

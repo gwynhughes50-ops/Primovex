@@ -28,7 +28,7 @@ export const STATE_LABEL = {
 };
 // who may move a timesheet from one state to another (the rules enforce the same table)
 export const TRANSITIONS = {
-  staff: [["draft", "submitted"], ["declined", "submitted"], ["returned", "submitted"], ["draft", "draft"], ["declined", "declined"], ["returned", "returned"]],
+  staff: [["draft", "submitted"], ["declined", "submitted"], ["returned", "submitted"], ["draft", "draft"], ["declined", "declined"], ["returned", "returned"], ["submitted", "draft"]],
   manager: [["submitted", "approved"], ["submitted", "declined"]],
   payroll: [["approved", "sent"], ["approved", "returned"]],
 };

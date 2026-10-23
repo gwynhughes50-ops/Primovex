@@ -1536,6 +1536,25 @@ async function main() {
     await assertSucceeds(dispatch(payroll, "p28_ts-m-cleaner", "returned", "payroll-uid", "Payroll number is wrong"));
     await assertSucceeds(updateDoc(doc(cleaner, "timesheets", "p28_ts-m-cleaner"), { state: "submitted", submissions: 2, lastActorUid: "cleaner-uid", lastActorName: "C" }));
   });
+  await check("A person can take a sent timesheet back to change it while it waits for the manager, and only the state moves; nobody else can, and not after sign-off", async () => {
+    const back = (who, extra = {}) => updateDoc(doc(who, "timesheets", "p28b_ts-m-nurse"), { state: "draft", lastActorUid: "nurse-uid", lastActorName: "N", updatedAt: serverTimestamp(), ...extra });
+    const again = { state: "submitted", declaration: { confirmedAt: "2026-10-08T09:00:00Z" }, submissions: 2, lastActorUid: "nurse-uid", lastActorName: "N", updatedAt: serverTimestamp() };
+    await assertSucceeds(setDoc(doc(nurse, "timesheets", "p28b_ts-m-nurse"), sheet({ periodId: "p28b" })));
+    await assertFails(back(reception));                                  // the line manager cannot take it back for them
+    await assertFails(back(cleaner));
+    await assertFails(back(tsAdmin));
+    await assertFails(back(nurse, { lastActorUid: "reception-uid" }));   // and the trail must name the real person
+    await assertFails(back(nurse, { lines: [{ date: "2026-09-10", code: "B", hours: 9, comment: "" }], totals: { B: 9 } }));   // nothing but the state changes: what was sent is kept as it was
+    await assertFails(back(nurse, { managerUid: "nurse-uid" }));
+    await assertSucceeds(back(nurse));
+    await assertSucceeds(updateDoc(doc(nurse, "timesheets", "p28b_ts-m-nurse"), again));   // changed and sent again
+    await assertSucceeds(back(nurse));                                    // can be taken back again while it still waits
+    await assertSucceeds(updateDoc(doc(nurse, "timesheets", "p28b_ts-m-nurse"), again));
+    await assertSucceeds(decide(reception, "p28b_ts-m-nurse", "approved", "reception-uid"));
+    await assertFails(back(nurse));                                       // too late once it is signed off
+    await assertSucceeds(dispatch(payroll, "p28b_ts-m-nurse", "sent", "payroll-uid"));
+    await assertFails(back(nurse));                                       // or sent to payroll
+  });
   await check("Nobody can delete a timesheet, an administrator included", async () => {
     for (const who of [nurse, reception, pm, tsAdmin, payroll, admin]) await assertFails(deleteDoc(doc(who, "timesheets", "p28_ts-m-nurse")));
   });

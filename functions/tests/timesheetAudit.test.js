@@ -56,3 +56,13 @@ test("text kept in the trail is trimmed so it can't grow without limit", () => {
   assert.equal(entry.reason.length, 300);
   assert.equal(entry.staffName.length, 100);
 });
+
+test("a person taking a sent timesheet back to change it is recorded as such, and the lines are not touched", () => {
+  const lines = [{ date: "2026-09-12", code: "B", hours: 1, comment: "" }];
+  const entry = buildAuditEntry(at("submitted", { kind: "changes", lines }), at("draft", { kind: "changes", lines, lastActorName: "Ann Example" }));
+  assert.equal(entry.action, "taken back by the person to change");
+  assert.equal(entry.fromState, "submitted");
+  assert.equal(entry.toState, "draft");
+  assert.deepEqual(entry.lines, lines, "what was sent is kept in the trail as it was");
+  assert.equal(entry.actorName, "Ann Example");
+});

@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMyStaffRecord, useClaims, usePlaces } from "@/modules/mileage/mileageService";
+import { printHtmlDocument } from "@/lib/printHtmlDocument";
+import { auditHtml, historySteps, stateWords } from "./timesheetAudit";
 import { periodTotals } from "@/modules/mileage/mileage";
 import { CODES, STATE, STATE_LABEL, codeLabel, declarationText, describeLines, dueStatus, expectedFor, lineProblem, needsStaff, payrollCsv, periodLabel, periodProblem, submitProblem, suggestPeriod, summary } from "./timesheet";
 import { dateKey, hoursLabel, parseKey } from "./workPattern";
 import { useTimesheetStaff } from "./timesheetService";
-import { decideTimesheet, dispatchTimesheet, savePeriod, sendTimesheet, useCurrentPeriod, useHistory, usePeriods, useSheets } from "./timesheetFlowService";
+import { decideTimesheet, dispatchTimesheet, savePeriod, sendTimesheet, takeBackTimesheet, useCurrentPeriod, useHistory, usePeriods, useSheets } from "./timesheetFlowService";
 
 // The screens for pay-period timesheets, used on the desktop (My timesheet page) and the phone (Me tab). `skin` picks the look.
 //   MyTimesheetPanel   the person: "no changes" in one tap, or record what was different
@@ -51,15 +53,33 @@ function PeriodPicker({ s, periods, value, onChange }) {
 }
 
 // the steps a timesheet has been through, from the server's trail
-function History({ s, sheet, role }) {
+const CHANGE_WORD = { added: "Added", removed: "Removed", changed: "Changed" };
+const whenText = (ms) => (ms ? new Date(ms).toLocaleString("en-GB", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "");
+
+function History({ s, sheet, role, period = null }) {
+  const { user, displayName } = useAuth();
   const [open, setOpen] = useState(false);
   const history = useHistory(sheet, role, open);
+  const steps = useMemo(() => historySteps(history.list || []), [history.list]);
+  const print = () => printHtmlDocument(auditHtml({ sheet, period, steps, stateLabel: stateWords(sheet.state), printedBy: displayName || user?.email || "" }));
   return (
     <div className="mt-2">
-      <button type="button" className={`text-sm font-semibold underline ${s.muted}`} onClick={() => setOpen(!open)}>{open ? "Hide the history" : "Show the history"}</button>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="button" className={`text-sm font-semibold underline ${s.muted}`} onClick={() => setOpen(!open)}>{open ? "Hide the history" : "Show the history"}</button>
+        {open && steps.length > 0 && <button type="button" className={s.btn} onClick={print}>Print the audit</button>}
+      </div>
       {open && (history.list === null ? <p className={`mt-1 text-sm ${s.muted}`}>Opening…</p> : !history.list.length ? <p className={`mt-1 text-sm ${s.muted}`}>{history.error || "Nothing is recorded yet (it can take a moment to appear)."}</p> : (
-        <ol className="mt-1 space-y-1 text-sm">
-          {history.list.map((h) => <li key={h.id} className={s.body}><span className={s.muted}>{stamp(h.at)}</span> {h.actorName ? `${h.actorName}: ` : ""}{h.action}{h.reason ? ` (“${h.reason}”)` : ""}{h.reference ? ` (reference ${h.reference})` : ""}</li>)}
+        <ol className="mt-2 space-y-2 text-sm">
+          {steps.map((h) => (
+            <li key={h.id} className={`${s.note} space-y-0.5`}>
+              <p className={s.body}><b className={s.strong}>{h.action.charAt(0).toUpperCase() + h.action.slice(1)}</b>{h.who ? ` by ${h.who}` : ""} <span className={s.muted}>· {whenText(h.atMs)}</span></p>
+              {h.reason && <p className={s.body}>Reason: “{h.reason}”</p>}
+              {h.reference && <p className={s.body}>Reference: {h.reference}</p>}
+              {h.kindNote && <p className={s.body}>{h.kindNote}</p>}
+              {h.changes.map((c, i) => <p key={i} className={s.body}><b>{CHANGE_WORD[c.type]}:</b> {c.text}{c.type === "changed" ? <span className={s.muted}> (was {c.from.replace(/^[^:]*: /, "")})</span> : null}</p>)}
+              {h.totals && <p className={`text-xs ${s.muted}`}>After this step: {h.totals}</p>}
+            </li>
+          ))}
         </ol>
       ))}
     </div>
@@ -115,7 +135,25 @@ export function MyTimesheetPanel({ skin = "desktop" }) {
       setMessage(asDraft ? "Saved. It has not been sent yet." : "Sent to your line manager. Thank you.");
     } catch (failure) { setError(failure?.message || "That didn't send. Check you have permission."); } finally { setBusy(false); }
   }
-  const addLine = () => { setLines([...lines, { ...draft, hours: Number(draft.hours) }]); setDraft({ date: "", code: draft.code, hours: "", comment: "" }); };
+  // a line being changed is lifted out of the list into the boxes below; "Update this line" puts it back, "Leave it as it was" restores it
+  const [editing, setEditing] = useState(null); // { index, line }
+  const addLine = () => {
+    const line = { ...draft, hours: Number(draft.hours) };
+    setLines(editing ? [...lines.slice(0, editing.index), line, ...lines.slice(editing.index)] : [...lines, line]);
+    setEditing(null); setDraft({ date: "", code: draft.code, hours: "", comment: "" });
+  };
+  const editLine = (i) => {
+    const line = lines[i];
+    if (editing) setLines((list) => [...list.slice(0, editing.index), editing.line, ...list.slice(editing.index)]);
+    setEditing({ index: Math.min(i, lines.length - 1), line });
+    setDraft({ date: line.date, code: line.code, hours: String(line.hours), comment: line.comment || "" });
+    setLines(lines.filter((_, j) => j !== i));
+  };
+  const cancelEdit = () => { if (editing) setLines([...lines.slice(0, editing.index), editing.line, ...lines.slice(editing.index)]); setEditing(null); setDraft({ date: "", code: draft.code, hours: "", comment: "" }); };
+  async function takeBack() {
+    setBusy(true); setError(""); setMessage("");
+    try { await takeBackTimesheet(existing, { actor, uid: user.uid }); setMessage("Taken back. You can change it now, then send it again."); } catch (failure) { setError(failure?.message || "That could not be done. Try again."); } finally { setBusy(false); }
+  }
 
   return (
     <div className="space-y-3">
@@ -129,8 +167,15 @@ export function MyTimesheetPanel({ skin = "desktop" }) {
         <div className={s.card}>
           <div className="flex flex-wrap items-center justify-between gap-2"><p className={`font-semibold ${s.strong}`}>{existing.kind === "no-change" ? "You said your hours were as normal." : "You recorded changes."}</p><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${s.chip[existing.state]}`}>{SHORT_STATE[existing.state]}</span></div>
           <p className={`mt-1 text-sm ${s.muted}`}>{STATE_LABEL[existing.state]}.</p>
-          {existing.lines?.length > 0 && <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm">{lineList(s, existing.lines)}</ul>}
-          <History s={s} sheet={existing} role="staff" />
+          {existing.lines?.length > 0 && <><p className={`mt-2 text-xs font-bold uppercase tracking-wide ${s.muted}`}>What you sent</p><ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">{lineList(s, existing.lines)}</ul></>}
+          {existing.state === STATE.submitted && (
+            <div className={`${s.note} mt-3`}>
+              <p className="text-sm">Spotted a mistake, or want to add or remove a day? You can take it back, change it and send it again, as long as your line manager has not signed it off.</p>
+              {error && <p className={`mt-1 text-sm font-semibold ${s.bad}`} role="alert">{error}</p>}
+              <button type="button" className={`${s.btn} mt-2`} disabled={busy} onClick={takeBack}>{busy ? "Taking it back…" : "Take it back to change it"}</button>
+            </div>
+          )}
+          <History s={s} sheet={existing} role="staff" period={period} />
         </div>
       ) : (
         <>
@@ -142,7 +187,19 @@ export function MyTimesheetPanel({ skin = "desktop" }) {
           {mode === "changes" && (
             <div className={`${s.card} space-y-2`}>
               <p className={`font-semibold ${s.strong}`}>What was different?</p>
-              {lines.length > 0 && <ul className="space-y-1">{lines.map((l, i) => <li key={i} className="flex items-start justify-between gap-2 text-sm"><span>{dayLabel(l.date)}: {codeLabel(l.code)}, {l.hours}h{l.comment ? ` (${l.comment})` : ""}</span><button type="button" className={`font-semibold underline ${s.muted}`} onClick={() => setLines(lines.filter((_, j) => j !== i))}>Remove</button></li>)}</ul>}
+              {lines.length > 0 && (
+                <div className="space-y-2">
+                  <p className={`text-xs font-bold uppercase tracking-wide ${s.muted}`}>Added so far ({lines.length}): not sent yet</p>
+                  <ul className="space-y-1.5">{lines.map((l, i) => (
+                    <li key={i} className={`${s.note} flex flex-wrap items-center justify-between gap-2 text-sm`}>
+                      <span><b className={s.strong}>{dayLabel(l.date)}</b> · {codeLabel(l.code)} · <b className={s.strong}>{l.hours}h</b>{l.comment ? ` · ${l.comment}` : ""}</span>
+                      <span className="flex gap-2"><button type="button" className={s.btn} onClick={() => editLine(i)}>Edit</button><button type="button" className={s.btn} onClick={() => setLines(lines.filter((_, j) => j !== i))}>Remove</button></span>
+                    </li>
+                  ))}</ul>
+                  <p className={`text-xs ${s.muted}`}>Nothing has gone to your line manager yet. When you have finished, press "Send to my line manager" below, or "Save, send later" to keep it for now.</p>
+                </div>
+              )}
+              {editing && <p className={s.warn}>You are changing a line: {dayLabel(editing.line.date)}, {codeLabel(editing.line.code)}, {editing.line.hours}h. Change it below, then press "Update this line".</p>}
               <div className="grid gap-2 sm:grid-cols-4">
                 <label className={s.label}>Day<select className={s.field} value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })}><option value="">Choose a day</option>{days.map((d) => <option key={d} value={d}>{dayLabel(d)}</option>)}</select></label>
                 <label className={s.label}>What<select className={s.field} value={draft.code} onChange={(e) => setDraft({ ...draft, code: e.target.value })}>{CODES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}</select></label>
@@ -150,7 +207,7 @@ export function MyTimesheetPanel({ skin = "desktop" }) {
                 <label className={s.label}>Comment{draft.code === "F" ? " (needed)" : ""}<input className={s.field} value={draft.comment} maxLength={200} onChange={(e) => setDraft({ ...draft, comment: e.target.value })} /></label>
               </div>
               {lineIssue && <p className={`text-sm ${s.muted}`}>{lineIssue}</p>}
-              <button type="button" className={s.btn} disabled={!draft.date || Boolean(lineIssue)} onClick={addLine}>Add this</button>
+              <span className="flex flex-wrap gap-2"><button type="button" className={s.btn} disabled={!draft.date || Boolean(lineIssue)} onClick={addLine}>{editing ? "Update this line" : "Add this"}</button>{editing && <button type="button" className={s.btn} onClick={cancelEdit}>Leave it as it was</button>}</span>
               <p className={`text-xs ${s.muted}`}>Leave, sickness and time in lieu are still booked in BrightHR: list them here so payroll has them.</p>
             </div>
           )}
@@ -167,7 +224,7 @@ export function MyTimesheetPanel({ skin = "desktop" }) {
               </div>
             </div>
           )}
-          {existing && <History s={s} sheet={existing} role="staff" />}
+          {existing && <History s={s} sheet={existing} role="staff" period={period} />}
         </>
       )}
     </div>
@@ -228,7 +285,7 @@ export function SignOffPanel({ skin = "desktop", canManage = false }) {
               {declining === t.id ? <DeclineBox s={s} reason={reason} setReason={setReason} busy={busy === t.id} onConfirm={() => decline(t)} onCancel={() => setDeclining("")} /> : (
                 <div className={skin === "phone" ? "mt-2 grid grid-cols-2 gap-2" : "mt-2 flex gap-2"}><button type="button" className={s.primary} disabled={Boolean(busy)} onClick={() => approve(t)}>Sign off</button><button type="button" className={s.btn} disabled={Boolean(busy)} onClick={() => { setDeclining(t.id); setReason(""); }}>Decline…</button></div>
               )}
-              <History s={s} sheet={t} role="manager" />
+              <History s={s} sheet={t} role="manager" period={period} />
             </div>
           ))}
         </>
@@ -302,7 +359,7 @@ export function PayrollPanel({ skin = "desktop", canSend }) {
                 <td className="px-3 py-2 text-right">{canSend && t.state === STATE.approved && (returning === t.id
                   ? <DeclineBox s={s} reason={reason} setReason={setReason} busy={busy === t.id} onConfirm={() => giveBack(t)} onCancel={() => setReturning("")} />
                   : <button type="button" className={s.btn} onClick={() => { setReturning(t.id); setReason(""); }}>Return…</button>)}
-                  <History s={s} sheet={t} role="payroll" /></td>
+                  <History s={s} sheet={t} role="payroll" period={period} /></td>
               </tr>
             ))}</tbody>
           </table>

@@ -977,6 +977,13 @@ match /subject_access_requests/{requestId} {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["state", "kind", "expected", "lines", "totals", "declaration", "submissions", "submittedAt", "note", "lastActorUid", "lastActorName", "updatedAt"])
         && request.resource.data.lines is list && request.resource.data.lines.size() <= 120
         && (request.resource.data.state == "draft" || request.resource.data.declaration.confirmedAt is string);
+      // the person takes a sent one back to change it, while it is still waiting for the line manager: only the state changes, so what was
+      // sent is kept as it was, and the server trail records that it was taken back
+      allow update: if signedIn() && resource.data.uid == request.auth.uid
+        && resource.data.state == "submitted"
+        && request.resource.data.state == "draft"
+        && request.resource.data.lastActorUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["state", "lastActorUid", "lastActorName", "updatedAt"]);
       // the line manager signs off or declines (a decline needs a reason); with no manager set, whoever manages timesheets does. Nobody decides their own.
       allow update: if signedIn() && resource.data.uid != request.auth.uid
         && resource.data.state == "submitted"

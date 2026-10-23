@@ -91,6 +91,13 @@ export async function sendTimesheet({ period, me, uid, actor, existing = null, k
   return id;
 }
 
+// Takes a sent timesheet back to a draft so it can be changed and sent again. Only while it is still waiting for the line manager.
+export async function takeBackTimesheet(sheet, { actor, uid }) {
+  if (isSafeSyntheticMode()) throw new Error("Demo mode can't save changes.");
+  if (sheet?.state !== STATE.submitted) throw new Error("It can only be taken back while it is waiting for your line manager.");
+  await updateDoc(doc(db, SHEETS, sheet.id), { state: STATE.draft, lastActorUid: uid, lastActorName: who(actor), updatedAt: serverTimestamp() });
+}
+
 // ---- the line manager ------------------------------------------------------------------------------------------------------
 
 export async function decideTimesheet(sheet, outcome, { reason = "", actor, uid }) {
