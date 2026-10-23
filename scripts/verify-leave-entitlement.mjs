@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   LEAVE_GROUPS, ownDaysOf, wholeMonthsEmployed, bankHolidaysBetween, groupOf, groupsFor, calculateEntitlement, employmentPeriod, cleanLeaveFields, cleanYearSettings, compareWithBrightHr, gpBankHolidayDays, leaveCsv, leaveYear, leaveYearFor, parseLeaveYearKey, serviceTier,
 } from "../src/modules/leave/leaveEntitlement.js";
@@ -410,6 +411,20 @@ t("every figure comes with and without the bank holidays, carry-over included in
   const csv = leaveCsv([{ person: { name: "A", ...person }, result: r, check: { known: false } }], Y).split("\r\n");
   assert.match(csv[1], /Total with bank holidays,Total without bank holidays/);
   assert.match(csv[2], /,340,265,/);
+});
+
+t("the wizard can save a person's set-up even when the figure cannot be worked out yet, and warns before closing unsaved", () => {
+  const src = readFileSync(new URL("../src/modules/leave/LeaveWizard.jsx", import.meta.url), "utf8");
+  assert.match(src, /\{known && !saved && <button type="button" className=\{PRIMARY\} disabled=\{busy\} onClick=\{save\}>/, "Save is offered whether or not the figure is ready");
+  assert.ok(!/known && result\?\.ready && !saved/.test(src), "and no longer only when it is");
+  assert.match(src, /const unsaved = known && step === "result" && !saved;/);
+  assert.match(src, /onClick=\{requestClose\}/, "the X and Done both ask first when there is something unsaved");
+  assert.match(src, /Close without saving/);
+  assert.match(src, /if \(await save\(\)\) onClose\(\);/, "Save and close only closes when the save worked");
+  // a person with no working pattern really is "not ready", which is the case that used to leave no Save button
+  const noPattern = calculateEntitlement({ leaveGroup: "admin", serviceFrom: "2010-01-01", patterns: [] }, Y);
+  assert.equal(noPattern.ready, false);
+  assert.match(noPattern.warnings.join(" "), /working pattern/);
 });
 
 console.log(`\n${n} passed`);

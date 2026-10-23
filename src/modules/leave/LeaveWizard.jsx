@@ -139,8 +139,16 @@ export default function LeaveWizard({ people = [], person: given = null, year, s
         leaveAdjust: { ...(person.leaveAdjust || {}), [year.key]: { carryOver: form.carryOver, fixedDays: form.fixedDays, extraDays: form.extraDays, extraReason: form.extraReason } },
       }, actor);
       setSaved(true);
-    } catch (failure) { setProblem(failure?.message || "That didn't save. Check you have permission."); } finally { setBusy(false); }
+      return true;
+    } catch (failure) { setProblem(failure?.message || "That didn't save. Check you have permission."); return false; } finally { setBusy(false); }
   }
+
+  // Answers that have not been saved to a person's record are lost on closing, so closing from the last page asks first. (The answers
+  // can be saved even when the figure cannot be worked out yet, for example when the person has no working pattern.)
+  const [askClose, setAskClose] = useState(false);
+  const unsaved = known && step === "result" && !saved;
+  const requestClose = () => { if (unsaved) setAskClose(true); else onClose(); };
+  async function saveAndClose() { if (await save()) onClose(); else setAskClose(false); }
 
   const title = { who: "Who is it for?", group: "Which leave group?", days: "Their days at each level", service: "When does their NHS service start?", doctor: "Their leave and sessions", hours: "How many hours a week do they work?", period: `Are they here for all of ${year.key}?`, extra: "Extra days for them?", carry: "Any leave carried over?", result: "Their annual leave" }[step];
   const period = result ? employmentPeriod(draft, year) : null;
@@ -154,7 +162,7 @@ export default function LeaveWizard({ people = [], person: given = null, year, s
             <h2 className="mt-1 text-lg font-semibold text-slate-50">{title}</h2>
             {person && !newStarter && <p className="text-sm text-slate-400">{person.name}{person.jobTitle ? ` · ${person.jobTitle}` : ""}</p>}
           </div>
-          <button type="button" onClick={onClose} className="rounded-full p-2 text-slate-400 hover:bg-white/10" aria-label="Close"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={requestClose} className="rounded-full p-2 text-slate-400 hover:bg-white/10" aria-label="Close"><X className="h-4 w-4" /></button>
         </div>
         <div className="mt-2 h-1.5 rounded-full bg-white/10" aria-hidden="true"><div className="h-1.5 rounded-full bg-teal-400" style={{ width: `${((stepIndex + 1) / steps.length) * 100}%` }} /></div>
 
@@ -296,18 +304,30 @@ export default function LeaveWizard({ people = [], person: given = null, year, s
                 </div>
               )}
               {result.ready && <details className="rounded-xl border border-white/10 p-3"><summary className="cursor-pointer text-sm font-semibold text-slate-200">How it was worked out</summary><Workings s={{ body: "text-slate-200", strong: "text-slate-100", muted: "text-slate-400", line: "border-t border-white/5" }} result={result} /></details>}
-              {saved && <p className="text-sm text-emerald-300" role="status">Saved to their record.</p>}
+              {!result.ready && known && !saved && <p className="text-sm text-slate-300">The figure can't be worked out yet, but what you have chosen can still be saved to their record. The warning above tells you what is missing.</p>}
+              {saved && <p className="text-sm text-emerald-300" role="status">Saved to their record.{!result.ready ? " The figure will appear once what is missing above has been put right." : ""}</p>}
             </div>
           )}
         </div>
 
         {problem && <p className="mt-3 text-sm text-rose-300" role="alert">{problem}</p>}
+        {askClose && (
+          <div className="mt-3 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-100" role="alertdialog" aria-label="Not saved yet">
+            <p className="font-semibold">This has not been saved to {person?.name ? `${person.name}'s` : "their"} record yet.</p>
+            <p className="mt-1">Nothing changes on their record until you save it.</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button type="button" className={PRIMARY} disabled={busy} onClick={saveAndClose}>{busy ? "Saving…" : "Save and close"}</button>
+              <button type="button" className={BTN} onClick={onClose}>Close without saving</button>
+              <button type="button" className={BTN} onClick={() => setAskClose(false)}>Go back</button>
+            </div>
+          </div>
+        )}
         <div className="mt-5 flex items-center justify-between gap-2">
           <button type="button" className={BTN} onClick={stepIndex === 0 ? onClose : back}>{stepIndex === 0 ? "Cancel" : <><ChevronLeft className="h-4 w-4" aria-hidden="true" /> Back</>}</button>
           {step !== "result" ? <button type="button" className={PRIMARY} onClick={next}>Next</button> : (
             <span className="flex gap-2">
-              {known && result?.ready && !saved && <button type="button" className={PRIMARY} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save to their record"}</button>}
-              <button type="button" className={saved || !known ? PRIMARY : BTN} onClick={onClose}>Done</button>
+              {known && !saved && <button type="button" className={PRIMARY} disabled={busy} onClick={save}>{busy ? "Saving…" : "Save to their record"}</button>}
+              <button type="button" className={saved || !known ? PRIMARY : BTN} onClick={requestClose}>Done</button>
             </span>
           )}
         </div>
