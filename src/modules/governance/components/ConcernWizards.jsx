@@ -262,9 +262,11 @@ export function ConcernUpdateWizard({ concern, actor, users = [], onClose, initi
         setDone(turnOn ? "Recorded: they only want a statement. Once it has been sent, use Close this case." : "Recorded: this case needs a full response, so the usual closing steps apply.");
       } else if (kind === "stage") {
         if (!form.stage) throw new Error("Choose the stage.");
-        if (form.stage === "acknowledged") await acknowledgeConcern(concern, actor);
-        else if (form.stage === "listening_offered") await recordListeningDiscussion(concern, actor, false);
-        else if (form.stage === "listening_done") await recordListeningDiscussion(concern, actor, true);
+        const dated = ["acknowledged", "listening_offered", "listening_done"].includes(form.stage);
+        if (dated) { const bad = requireDate(); if (bad) throw new Error(bad); }
+        if (form.stage === "acknowledged") await acknowledgeConcern(concern, actor, form.date);
+        else if (form.stage === "listening_offered") await recordListeningDiscussion(concern, actor, false, form.date);
+        else if (form.stage === "listening_done") await recordListeningDiscussion(concern, actor, true, form.date);
         else await updateConcern(concern.id, { status: form.stage }, actor);
         setDone(`Recorded: moved to ${STAGE_MOVES.find((s) => s.key === form.stage).label.toLowerCase()}.`);
       }
@@ -429,6 +431,12 @@ export function ConcernUpdateWizard({ concern, actor, users = [], onClose, initi
         <>
           <p className="text-sm text-[var(--medtrak-muted)]">Now at: {friendly(concern.status)}. Closing the case has its own steps.</p>
           <div className="mt-3 grid gap-2" role="radiogroup" aria-label="The stage">{STAGE_MOVES.map((s) => <Tile key={s.key} selected={form.stage === s.key} onClick={() => set({ stage: s.key })} note={s.note}>{s.label}</Tile>)}</div>
+          {["acknowledged", "listening_offered", "listening_done"].includes(form.stage) && (
+            <>
+              {dateField("What day was it?")}
+              <p className="mt-1 text-xs text-[var(--medtrak-muted)]">Use the day it really happened, even if that was a while ago. The case stays at the stage it has reached.</p>
+            </>
+          )}
         </>
       )}
 

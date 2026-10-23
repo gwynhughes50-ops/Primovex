@@ -2,6 +2,7 @@ import { collection, getDocs, limit, orderBy, query, where } from "firebase/fire
 
 import { db } from "@/lib/firebase";
 import { identityLabel } from "@/modules/governance/patientIdentity";
+import { historyRows, keyDates } from "@/modules/governance/concernHistory";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import {
   CONCERN_MEETINGS_COLLECTION,
@@ -65,12 +66,7 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
   </table>`;
 
   const datesTable = `<table>
-    ${row("Received", day(concern.receivedAt))}
-    ${row("Acknowledgement due", day(concern.acknowledgementDueAt))}
-    ${row("Early resolution due", day(concern.earlyResolutionDueAt))}
-    ${row("Final response due", day(concern.finalResponseDueAt))}
-    ${row("Listening discussion offered", day(concern.listeningDiscussionOfferedAt))}
-    ${row("Listening discussion completed", day(concern.listeningDiscussionCompletedAt))}
+    ${keyDates(concern, timeline).map((d) => row(d.label, d.text)).join("")}
   </table>`;
 
   const summaryBlock = `<p class="prose">${esc(concern.summary || "No summary recorded.")}</p>${
@@ -108,11 +104,11 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
 
   let timelineBlock;
   if (timeline === null) {
-    timelineBlock = `<p class="muted">Recent activity could not be loaded for this print.</p>`;
+    timelineBlock = `<p class="muted">The history could not be loaded for this print.</p>`;
   } else if (timeline.length === 0) {
-    timelineBlock = `<p class="muted">No activity recorded.</p>`;
+    timelineBlock = `<p class="muted">Nothing is recorded in the history yet.</p>`;
   } else {
-    timelineBlock = `<table class="timeline">${timeline.map((event) => `<tr><th>${esc(day(event.createdAt))}</th><td><strong>${esc(event.title)}</strong>${event.message ? ` — ${esc(event.message)}` : ""}</td></tr>`).join("")}</table>`;
+    timelineBlock = `<table class="history"><thead><tr><th>When</th><th>Who</th><th>What happened</th></tr></thead><tbody>${historyRows(timeline).map((event) => `<tr><td class="when">${esc(event.when)}</td><td class="who">${esc(event.who)}</td><td><strong>${esc(event.title)}</strong>${event.message ? ` &mdash; ${esc(event.message)}` : ""}</td></tr>`).join("")}</tbody></table>`;
   }
 
   return `<!doctype html>
@@ -130,7 +126,12 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
   th { width: 34%; text-align: left; font-weight: 600; color: #475569; padding: 2.5px 8px 2.5px 0; vertical-align: top; }
   td { padding: 2.5px 0; vertical-align: top; }
   .cols th { width: 50%; }
-  .timeline th { width: 16%; font-weight: 500; }
+  .history { margin-top: 3px; }
+  .history th { width: auto; padding: 3px 6px; border-bottom: 1px solid #94a3b8; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+  .history td { padding: 3px 6px; border-bottom: 1px solid #e2e8f0; }
+  .history td.when { width: 14%; white-space: nowrap; color: #475569; }
+  .history td.who { width: 18%; font-weight: 600; }
+  .history tr { page-break-inside: avoid; }
   .prose { margin: 3px 0 6px; white-space: pre-wrap; }
   .label { margin: 6px 0 0; font-size: 10px; color: #475569; text-transform: uppercase; letter-spacing: .04em; }
   .muted { color: #64748b; margin: 3px 0; }
@@ -138,6 +139,7 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
   .meeting p { margin: 1px 0; }
   .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
   section { page-break-inside: avoid; }
+  section.long { page-break-inside: auto; }
   footer { margin-top: 14px; padding-top: 5px; border-top: 1px solid #cbd5e1; font-size: 10px; color: #64748b; }
 </style></head>
 <body>
@@ -150,19 +152,19 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
   </div>
   ${section("Summary", summaryBlock)}
   ${section("Face-to-face meetings", meetingsBlock)}
-  ${section("Recent activity", timelineBlock)}
+  ${section("History of the case: who did what, and when", timelineBlock).replace("<section>", '<section class="long">')}
   <footer>Printed ${esc(printedAt.toLocaleString("en-GB"))}${printedBy ? ` by ${esc(printedBy)}` : ""} from Primovex. This is a summary — the full case record is in Primovex.</footer>
 </body></html>`;
 }
 
-// Meetings and the last few timeline entries, fetched on demand so a summary
+// Meetings and the whole history, fetched on demand so a summary
 // can be printed straight from the register without opening the case first.
 // Either can fail independently (returns null) without stopping the print.
 export async function fetchConcernPrintData(concernId) {
   if (isSafeSyntheticMode() || !concernId) return { meetings: [], timeline: [] };
   const [meetings, timeline] = await Promise.allSettled([
     getDocs(query(collection(db, CONCERN_MEETINGS_COLLECTION), where("concernId", "==", concernId))),
-    getDocs(query(collection(db, CONCERN_TIMELINE_COLLECTION), where("concernId", "==", concernId), orderBy("createdAt", "desc"), limit(6))),
+    getDocs(query(collection(db, CONCERN_TIMELINE_COLLECTION), where("concernId", "==", concernId), orderBy("createdAt", "desc"), limit(500))),
   ]);
   const toRows = (result) => (result.status === "fulfilled" ? result.value.docs.map((d) => ({ id: d.id, ...d.data() })) : null);
   const meetingRows = toRows(meetings);

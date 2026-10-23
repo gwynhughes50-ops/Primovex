@@ -423,9 +423,21 @@ export async function extendConcernDeadline(concernId, dueDateBefore, newDueDate
   });
 }
 
-export async function acknowledgeConcern(concern, actor = {}) {
-  await updateConcern(concern.id, { status: CONCERN_STATUSES.acknowledged, acknowledgedAt: serverTimestamp() }, actor);
-  await addConcernTimeline(concern.id, { type: "acknowledged", title: "Acknowledgement recorded", message: "Acknowledgement sent/recorded within the case timeline.", actor });
+// A step recorded for a day that has passed ("2026-10-22") is stored as that day; with no day it is stored as now.
+const stampFor = (day) => (/^\d{4}-\d{2}-\d{2}$/.test(String(day || "")) ? Timestamp.fromDate(new Date(`${day}T12:00:00`)) : serverTimestamp());
+const ukOf = (day) => String(day).split("-").reverse().join("/");
+// Recording a step that has already happened must never move a case back: it keeps the stage it has reached if that is further on.
+export function stageAfter(current, target) {
+  const order = CONCERN_STAGES.map((s) => s.key);
+  if (current === "archived") return null;
+  const at = order.indexOf(current);
+  return at >= order.indexOf(target) ? null : target;
+}
+
+export async function acknowledgeConcern(concern, actor = {}, day = "") {
+  const stage = stageAfter(concern.status, CONCERN_STATUSES.acknowledged);
+  await updateConcern(concern.id, { ...(stage ? { status: stage } : {}), acknowledgedAt: stampFor(day) }, actor);
+  await addConcernTimeline(concern.id, { type: "acknowledged", title: "Acknowledgement recorded", message: day ? `Acknowledged on ${ukOf(day)}.` : "Acknowledgement sent/recorded within the case timeline.", actor });
 }
 
 export const LFE_REPORT_STATUSES = ["not_required", "in_progress", "sent"];
@@ -443,12 +455,14 @@ export async function updateLfeReportStatus(concernId, status, actor = {}) {
   await addConcernTimeline(concernId, { type: "lfe_report", title: `Learning from Events report ${label}`, message: "", actor });
 }
 
-export async function recordListeningDiscussion(concern, actor = {}, completed = true) {
+export async function recordListeningDiscussion(concern, actor = {}, completed = true, day = "") {
+  const stage = stageAfter(concern.status, CONCERN_STATUSES.listening);
+  const at = stampFor(day);
   const patch = completed
-    ? { status: CONCERN_STATUSES.listening, listeningDiscussionCompletedAt: serverTimestamp(), listeningDiscussionOfferedAt: concern.listeningDiscussionOfferedAt || serverTimestamp() }
-    : { status: CONCERN_STATUSES.listening, listeningDiscussionOfferedAt: serverTimestamp() };
-  await updateConcern(concern.id, patch, actor);
-  await addConcernTimeline(concern.id, { type: "listening", title: completed ? "Listening discussion completed" : "Listening discussion offered", message: "Listening to People discussion step updated.", actor });
+    ? { listeningDiscussionCompletedAt: at, listeningDiscussionOfferedAt: concern.listeningDiscussionOfferedAt || at }
+    : { listeningDiscussionOfferedAt: at };
+  await updateConcern(concern.id, { ...(stage ? { status: stage } : {}), ...patch }, actor);
+  await addConcernTimeline(concern.id, { type: "listening", title: completed ? "Listening discussion completed" : "Listening discussion offered", message: day ? `Recorded for ${ukOf(day)}.` : "Listening to People discussion step updated.", actor });
 }
 
 // They only want a statement (the Health Board, say): once it has been sent the case can be closed without the learning, Welsh
