@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import { listActiveSites } from "@/lib/checklistsFirestore";
 import { demoMileage } from "@/data/demoMileage";
-import { DEFAULT_RATES, STATUS, placeOptions } from "./mileage";
+import { DEFAULT_RATES, STATUS, placeOptions, withRateChange, withoutRateChange } from "./mileage";
 import { STAFF } from "@/modules/timesheets/timesheetService";
 
 // Mileage claims in Firestore (rules: firestore.rules, "MILEAGE CLAIMS"):
@@ -99,6 +99,16 @@ export async function withdrawClaim(claim) {
 export async function decideClaim(claim, status, note, actor) {
   if (isSafeSyntheticMode()) throw new Error("Demo mode can't save changes.");
   await updateDoc(doc(db, CLAIMS, claim.id), { status, decidedByName: stampOf(actor), decidedAt: serverTimestamp(), decisionNote: text(note), updatedAt: serverTimestamp() });
+}
+
+// the rates: add a change that starts on a date (or replace one for the same date), or take out one that has not started yet
+export async function saveRateChange(change, current) {
+  if (isSafeSyntheticMode()) throw new Error("Demo mode can't save changes.");
+  await setDoc(doc(db, SETTINGS, "rates"), withRateChange(current, change), { merge: true });
+}
+export async function removeRateChange(from, current) {
+  if (isSafeSyntheticMode()) throw new Error("Demo mode can't save changes.");
+  await setDoc(doc(db, SETTINGS, "rates"), withoutRateChange(current, from), { merge: true });
 }
 
 // setting up places, routes and rates (whoever manages timesheets)

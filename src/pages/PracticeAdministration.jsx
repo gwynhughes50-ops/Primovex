@@ -11,6 +11,7 @@ import AccessDenied from "@/components/security/AccessDenied";
 import PlatformModeControls from "@/components/platform/PlatformModeControls";
 import SpaceBuilder from "@/modules/sense/components/SpaceBuilder";
 import OrgChart from "@/components/admin/OrgChart";
+import MileageRatesPanel from "@/modules/mileage/MileageRatesPanel";
 import { loadSenseState, saveSenseState } from "@/modules/sense/services/senseStore";
 import { getPlatformModeConfig, getStoredPlatformMode } from "@/config/platformMode";
 import { subscribeUsers, updateUserDepartment, updateUserOrgHighlight, updateUserReportsTo } from "@/services/adminUserService";
@@ -35,6 +36,7 @@ const tabs = [
   { key: "spaces", label: "Spaces", icon: Icons.practice },
   { key: "departments", label: "Departments", icon: Icons.departments },
   { key: "pulse", label: "Pulse", icon: Icons.pulse },
+  { key: "mileage", label: "Mileage", icon: Icons.sites },
   ...(featureOn("clinflow") ? [{ key: "modules", label: "Modules", icon: Icons.settings }] : []), // its only switch is for a feature that is off
   { key: "platform", label: "Platform Mode", icon: Icons.settings },
 ];
@@ -739,6 +741,8 @@ export default function PracticeAdministration() {
             </Card>
           )}
 
+
+          {activeTab === "mileage" && <MileageRatesPanel canEdit={isAdmin || can("timesheets.manage")} />}
 
           {activeTab === "modules" && (
             <Card className="rounded-2xl mt-card border p-4 mt-text-primary">

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { DEFAULT_RATES, MAX_ONE_WAY_MILES, PURPOSES, VISIT_PLACE, claimProblem, claimsCsv, money, pence, periodTotals, placeOptions, priceClaims, routeMiles, taxYearOf, totalMiles } from "../src/modules/mileage/mileage.js";
+import { readFileSync } from "node:fs";
+import { DEFAULT_RATES, MAX_ONE_WAY_MILES, PURPOSES, VISIT_PLACE, claimProblem, claimsCsv, cleanRateChange, describeTiers, money, pence, periodTotals, placeOptions, priceClaims, rateChanges, rateProblem, ratesOn, routeMiles, taxYearOf, totalMiles, withRateChange, withoutRateChange } from "../src/modules/mileage/mileage.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
@@ -95,6 +96,75 @@ t("the payroll file has one row per approved claim, with the amount worked out, 
   assert.equal(lines.length, 2);
   assert.equal(lines[0], "Date,Name,From,To,Return trip,Total miles,Vehicle,Reason,Amount (GBP),Tax year");
   assert.equal(lines[1], '2026-09-01,Ann Example,Surgery,"The ""Branch"", Rhyl",No,10,Car or van,Meeting or training,4.50,2026-27');
+});
+
+const withChange = (from, carFirst, extra = {}) => cleanRateChange({ from, carFirst, carAfter: "", carThreshold: "", motorcycle: "30", bicycle: "25", ...extra });
+
+t("rates change from a date: a journey is priced at the rate on the day it was made", () => {
+  const rates = withRateChange(DEFAULT_RATES, withChange("2026-11-01", "50"));
+  assert.equal(ratesOn(rates, "2026-10-31").car.tiers[0].pence, 45, "before the change: the standing rate");
+  assert.deepEqual(ratesOn(rates, "2026-11-01").car.tiers, [{ pence: 50 }], "from the day itself: the new rate");
+  assert.equal(ratesOn(rates, "2026-11-01").motorcycle.tiers[0].pence, 30);
+  assert.deepEqual(ratesOn(DEFAULT_RATES, "2026-10-31"), DEFAULT_RATES, "no changes: the HMRC rates");
+  assert.deepEqual(ratesOn(undefined, "2026-10-31"), DEFAULT_RATES, "nothing saved yet: the HMRC rates");
+  const later = withRateChange(rates, withChange("2027-04-06", "55"));
+  assert.equal(ratesOn(later, "2027-01-01").car.tiers[0].pence, 50);
+  assert.equal(ratesOn(later, "2027-04-06").car.tiers[0].pence, 55);
+  const claims = [claim("old", "2026-10-30", 10), claim("new", "2026-11-02", 10)];
+  const priced = priceClaims(claims, rates);
+  assert.equal(priced.get("old").pence, 450, "a claim made before the change keeps its rate");
+  assert.equal(priced.get("new").pence, 500);
+  assert.equal(priceClaims(claims, DEFAULT_RATES).get("new").pence, 450, "and without the change it would still be the old rate");
+});
+
+t("a change with a second car rate keeps the 10,000-mile tax-year tier", () => {
+  const change = cleanRateChange({ from: "2026-11-01", carFirst: "50", carAfter: "30", carThreshold: "9000", motorcycle: "24", bicycle: "20" });
+  assert.deepEqual(change.car.tiers, [{ upTo: 9000, pence: 50 }, { pence: 30 }]);
+  const rates = withRateChange(DEFAULT_RATES, change);
+  const priced = priceClaims([claim("a", "2026-11-02", 9500)], rates);
+  assert.equal(priced.get("a").pence, 9000 * 50 + 500 * 30);
+  assert.equal(describeTiers(change.car.tiers), "50p for the first 9,000 miles in the tax year, then 30p");
+  assert.equal(describeTiers([{ pence: 24 }]), "24p a mile");
+});
+
+t("a proposed change is checked and explained in words", () => {
+  const ok = { from: "2026-11-01", carFirst: "45", carAfter: "25", carThreshold: "10000", motorcycle: "24", bicycle: "20" };
+  const check = (over) => rateProblem({ ...ok, ...over }, { today: "2026-10-23" });
+  assert.equal(check({}), "");
+  assert.equal(check({ from: "2026-10-23" }), "", "starting today is allowed");
+  assert.match(check({ from: "" }), /Choose the date/);
+  assert.match(check({ from: "2026-10-22" }), /today or later/);
+  assert.match(check({ carFirst: "" }), /car or van rate/);
+  assert.match(check({ motorcycle: "0" }), /motorcycle rate/);
+  assert.match(check({ bicycle: "abc" }), /bicycle rate/);
+  assert.match(check({ carFirst: "450" }), /more than 200p/);
+  assert.match(check({ carAfter: "-5" }), /after the threshold/);
+  assert.match(check({ carThreshold: "0" }), /how many miles/);
+  assert.equal(check({ carAfter: "", carThreshold: "" }), "", "no second rate: the threshold is not needed");
+  assert.deepEqual(cleanRateChange({ ...ok, carFirst: "45.55" }).car.tiers[0], { upTo: 10000, pence: 45.6 }, "to a tenth of a penny");
+});
+
+t("changes are listed in date order, one per date, and only a planned one can be taken out", () => {
+  let rates = withRateChange(DEFAULT_RATES, withChange("2027-04-06", "55"));
+  rates = withRateChange(rates, withChange("2026-11-01", "50"));
+  assert.deepEqual(rateChanges(rates).map((c) => c.from), ["2026-11-01", "2027-04-06"]);
+  rates = withRateChange(rates, withChange("2026-11-01", "52"));
+  assert.equal(rateChanges(rates).length, 2, "a second change for the same date replaces the first");
+  assert.equal(rateChanges(rates)[0].car.tiers[0].pence, 52);
+  assert.deepEqual(rateChanges(withoutRateChange(rates, "2027-04-06", "2026-10-23")).map((c) => c.from), ["2026-11-01"]);
+  assert.throws(() => withoutRateChange(rates, "2026-11-01", "2026-11-05"), /already started/);
+  assert.deepEqual(rateChanges(undefined), []);
+  assert.equal(withRateChange(DEFAULT_RATES, withChange("2026-11-01", "50")).car.tiers.length, 2, "the standing rates are kept alongside");
+});
+
+t("the screens carry it: a Mileage tab in Practice Administration, and claims price by the journey date", () => {
+  const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+  assert.match(read("src/pages/PracticeAdministration.jsx"), /key: "mileage", label: "Mileage"/);
+  assert.match(read("src/pages/PracticeAdministration.jsx"), /<MileageRatesPanel canEdit=\{isAdmin \|\| can\("timesheets\.manage"\)\}/);
+  assert.match(read("src/modules/mileage/ClaimForm.jsx"), /pence\(ratesOn\(rates, form\.date\)/);
+  assert.match(read("src/modules/mileage/MileageRatesPanel.jsx"), /Only the System Admin or whoever manages timesheets can change the rates/);
+  const rules = read("firestore.rules");
+  assert.match(rules, /match \/mileage_settings\/\{[a-zA-Z]+\}\s*\{[^}]*allow create, update, delete: if mileageManages\(\)/, "only the people who manage timesheets can write the rates");
 });
 
 console.log(`\n${n} passed`);

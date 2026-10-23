@@ -15,6 +15,63 @@ export const DEFAULT_RATES = {
   bicycle: { tiers: [{ pence: 20 }] },
 };
 
+// ---- the rates, and changing them -------------------------------------------------------------------------------------------
+// The rates the practice pays, as saved: the standing rates (car, motorcycle, bicycle: the HMRC ones until someone sets them) plus
+// `changes`, each taking effect on a date:   { from: "2026-10-01", car: { tiers }, motorcycle: { tiers }, bicycle: { tiers } }
+// A journey is priced at the rate in force on the DAY OF THE JOURNEY, so changing the rate later never re-prices claims already made.
+export const MAX_PENCE = 200;
+export const MAX_TIER_MILES = 100000;
+
+export function ratesOn(rates, day) {
+  const standing = { car: rates?.car || DEFAULT_RATES.car, motorcycle: rates?.motorcycle || DEFAULT_RATES.motorcycle, bicycle: rates?.bicycle || DEFAULT_RATES.bicycle };
+  const changes = (Array.isArray(rates?.changes) ? rates.changes : []).filter((c) => c?.from && day && c.from <= day).sort((a, b) => a.from.localeCompare(b.from));
+  for (const change of changes) for (const v of VEHICLES) if (change[v.key]?.tiers?.length) standing[v.key] = change[v.key];
+  return standing;
+}
+
+// the changes in date order, each with the rates that apply from then (oldest first)
+export const rateChanges = (rates) => (Array.isArray(rates?.changes) ? [...rates.changes].filter((c) => c?.from).sort((a, b) => a.from.localeCompare(b.from)) : []);
+
+const onePence = (value) => { const n = Number(value); return Number.isFinite(n) ? Math.round(n * 10) / 10 : NaN; };
+
+// What is wrong with a proposed change of rates, in words ("" when it is fine). `input`: { from, carFirst, carAfter, carThreshold, motorcycle, bicycle } as typed.
+export function rateProblem(input, { today = dateKey(new Date()), existing = [] } = {}) {
+  if (!parseKey(input.from)) return "Choose the date the new rates start from.";
+  if (input.from < today) return "The new rates can start today or later. Claims already made keep the rate that applied on their date.";
+  const needed = [["carFirst", "the car or van rate"], ["motorcycle", "the motorcycle rate"], ["bicycle", "the bicycle rate"]];
+  for (const [key, label] of needed) { const p = onePence(input[key]); if (!(p > 0)) return `Enter ${label} in pence a mile.`; if (p > MAX_PENCE) return `${label[0].toUpperCase()}${label.slice(1)} cannot be more than ${MAX_PENCE}p a mile.`; }
+  if (String(input.carAfter ?? "").trim() !== "") { const after = onePence(input.carAfter); if (!(after > 0) || after > MAX_PENCE) return "Enter the car or van rate after the threshold in pence a mile, or leave it blank for the same rate throughout."; }
+  if (String(input.carAfter ?? "").trim() !== "") { const t = Math.round(Number(input.carThreshold)); if (!(t >= 1 && t <= MAX_TIER_MILES)) return `Enter how many miles in a tax year are paid at the first rate (up to ${MAX_TIER_MILES}).`; }
+  return "";
+}
+
+// the saved form of a proposed change
+export function cleanRateChange(input) {
+  const first = onePence(input.carFirst);
+  const hasAfter = String(input.carAfter ?? "").trim() !== "";
+  return {
+    from: input.from,
+    car: { tiers: hasAfter ? [{ upTo: Math.round(Number(input.carThreshold)), pence: first }, { pence: onePence(input.carAfter) }] : [{ pence: first }] },
+    motorcycle: { tiers: [{ pence: onePence(input.motorcycle) }] },
+    bicycle: { tiers: [{ pence: onePence(input.bicycle) }] },
+  };
+}
+
+// the saved rates with this change added (one change per start date: a second for the same date replaces the first)
+export const withRateChange = (rates, change) => ({ ...(rates || {}), changes: [...rateChanges(rates).filter((c) => c.from !== change.from), change].sort((a, b) => a.from.localeCompare(b.from)) });
+// the saved rates with a planned change taken out (a change that has started has been used by claims, so it stays)
+export function withoutRateChange(rates, from, today = dateKey(new Date())) {
+  if (from <= today) throw new Error("A change that has already started has been used by claims, so it cannot be removed.");
+  return { ...(rates || {}), changes: rateChanges(rates).filter((c) => c.from !== from) };
+}
+
+// "45p for the first 10,000 miles a year, then 25p" / "24p"
+export function describeTiers(tiers = []) {
+  const p = (n) => `${Math.round(n * 10) / 10}p`;
+  if (tiers.length > 1 && tiers[0].upTo !== undefined) return `${p(tiers[0].pence)} for the first ${tiers[0].upTo.toLocaleString("en-GB")} miles in the tax year, then ${p(tiers[1].pence)}`;
+  return `${p(tiers[0]?.pence ?? 0)} a mile`;
+}
+
 // Why a journey was made: chosen from a list so nobody types a patient's details into a claim
 export const PURPOSES = ["Home visit", "Meeting or training", "Collecting or delivering supplies", "Bank, post or pharmacy", "Other work journey"];
 
@@ -81,7 +138,7 @@ export function priceClaims(claims, rates = DEFAULT_RATES, statuses = [STATUS.ap
     let before = 0;
     for (const { c, year } of list) {
       const miles = totalMiles(c);
-      out.set(c.id, { miles, pence: pence(rates, c.vehicle, before, miles), taxYear: year.label });
+      out.set(c.id, { miles, pence: pence(ratesOn(rates, c.date), c.vehicle, before, miles), taxYear: year.label });
       before += miles;
     }
   }

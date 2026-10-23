@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { PURPOSES, VEHICLES, claimProblem, dateKey, money, pence, routeMiles, totalMiles, VISIT_PLACE } from "./mileage";
+import { PURPOSES, VEHICLES, claimProblem, dateKey, money, pence, ratesOn, routeMiles, totalMiles, VISIT_PLACE } from "./mileage";
 
 // One journey: when, from where to where, there and back or not, the miles, the vehicle and why. Used on the desktop and the phone.
 // Places are chosen from a list (never typed) so no patient's address ends up in a claim; the miles fill in for a known route.
@@ -40,7 +40,7 @@ export default function ClaimForm({ skin = "desktop", options, routes, rates, in
 
   const problem = claimProblem(form);
   const total = totalMiles({ miles: form.miles, returnTrip: form.returnTrip });
-  const estimate = Number(form.miles) > 0 ? pence(rates, form.vehicle, milesBefore(form.vehicle, form.date), total) : 0;
+  const estimate = Number(form.miles) > 0 ? pence(ratesOn(rates, form.date), form.vehicle, milesBefore(form.vehicle, form.date), total) : 0;
   async function save() {
     setBusy(true); setError("");
     try { await onSubmit(form); try { localStorage.setItem(LAST_VEHICLE, form.vehicle); } catch { /* not remembered */ } } catch (failure) { setError(failure?.message || "That didn't save."); setBusy(false); }
