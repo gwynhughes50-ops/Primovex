@@ -10,6 +10,7 @@ import {
   subscribeDeveloperIssues,
   updateDeveloperIssue,
 } from '@/developer/developerIssueService';
+import StaffReportsPanel from '@/developer/StaffReportsPanel';
 import { developerAccessAllowed } from '@/developer/developerAccess';
 import { getSpaceRegistryDiagnostics } from '@/modules/sense/services/sharedSpaceRegistry';
 import { getRouteAuditRows } from '@/config/routeManifest';
@@ -64,6 +65,8 @@ export default function DeveloperCentre() {
         <div className="flex flex-wrap gap-2"><button onClick={() => navigate('/developer-mobile-preview')} className="inline-flex items-center gap-2 rounded-xl border border-[var(--medtrak-accent)] px-4 py-2 font-semibold text-[var(--medtrak-accent)]"><Smartphone className="h-4 w-4"/>Launch mobile preview</button><button onClick={refresh} className="inline-flex items-center gap-2 rounded-xl border border-[var(--medtrak-border)] px-4 py-2 font-semibold"><RefreshCw className="h-4 w-4"/>Refresh</button><button onClick={() => downloadDeveloperBundle(issues)} className="inline-flex items-center gap-2 rounded-xl bg-[var(--medtrak-accent)] px-4 py-2 font-semibold text-white"><Download className="h-4 w-4"/>Export bundle</button></div>
       </div>
     </section>
+
+    <StaffReportsPanel />
 
     <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <MetricCard icon={openIssues.length ? Bug : CheckCircle2} label="Open issues" value={openIssues.length} detail={`${issues.length} total recorded`} />

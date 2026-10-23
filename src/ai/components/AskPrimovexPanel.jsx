@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Bot, CheckCircle2, ExternalLink, Meh, Mic, MicOff, RotateCcw, ShieldCheck, TriangleAlert, X, XCircle } from 'lucide-react';
+import { ArrowRight, Bot, CheckCircle2, ExternalLink, Meh, MessageSquarePlus, Mic, MicOff, RotateCcw, ShieldCheck, TriangleAlert, X, XCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import usePrimovexAI from '../hooks/usePrimovexAI';
 import PulseOrbFace from '@/components/pulse/PulseOrbFace';
+import ReportIssueDialog from './ReportIssueDialog';
+import { looksLikeReportRequest, reportPrefill } from '@/modules/feedback/issueReport';
 import { isIosHomeScreenApp } from '@/lib/platformInfo';
 import { startRecording } from '@/lib/audioRecorder';
 import { transcribeSpeech } from '@/lib/speechToText';
@@ -97,6 +99,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
   const { isOpen, close, status, messages, ask, addUserMessage, clearConversation, resolveClarification, recordFeedback, confirmProposal, cancelProposal } = usePrimovexAI();
   const orbStatus = useOrbStatus();
   const [prompt, setPrompt] = useState('');
+  const [report, setReport] = useState(null); // { text } while the "tell the developer" form is open
   const [voiceState, setVoiceState] = useState(VOICE_STATES.SLEEPING);
   const [voiceSupported, setVoiceSupported] = useState(true);
   const [voiceError, setVoiceError] = useState('');
@@ -238,6 +241,8 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     const last = [...list].reverse().find((item) => item.role === 'assistant');
     const waiting = last?.proposal?.status === 'proposed' ? last : null;
     const options = Array.isArray(last?.followUps) ? last.followUps : [];
+    // someone saying they want to report a problem, or describing one: open the form rather than guessing an answer
+    if (!waiting && looksLikeReportRequest(text)) { addUserMessage(text); setReport({ text: reportPrefill(text) }); return 'done'; }
     const heard = interpretSpoken(text, { options, hasProposal: Boolean(waiting) });
     if (heard.type === 'end') return 'end';
     if (heard.type === 'empty') return 'done';
@@ -444,6 +449,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
           </div>
         </div>
         <div className="flex gap-1">
+          <button type="button" onClick={() => setReport({ text: '' })} className="primovex-ai-icon-button rounded-full p-2" title="Tell the developer a problem or an idea" aria-label="Tell the developer a problem or an idea"><MessageSquarePlus className="h-4 w-4" /></button>
           <button type="button" onClick={clearConversation} className="primovex-ai-icon-button rounded-full p-2" title="Clear conversation"><RotateCcw className="h-4 w-4" /></button>
           <button type="button" onClick={() => { sleepOrb(); close(); }} className="primovex-ai-icon-button rounded-full p-2" title="Close Orb"><X className="h-5 w-5" /></button>
         </div>
@@ -494,6 +500,9 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
                   {suggestion}<ArrowRight className="h-4 w-4" />
                 </button>
               ))}
+              <button type="button" onClick={() => setReport({ text: '' })} className="primovex-ai-suggestion flex items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-semibold">
+                Report a problem or share an idea<MessageSquarePlus className="h-4 w-4" />
+              </button>
             </div>
           </div>
         ) : (
@@ -578,6 +587,8 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
         </div>
         <p className="primovex-ai-muted mt-2 flex items-start gap-1.5 text-[11px] leading-4"><ShieldCheck className="mt-px h-3.5 w-3.5 shrink-0" /><span><strong>Please do not add any patient names to the Orb.</strong> Use EMIS numbers only.</span></p>
       </form>
+
+      {report && <ReportIssueDialog initialText={report.text} onClose={() => setReport(null)} />}
 
       <style>{`
         .primovex-ai-panel { color:var(--medtrak-text); background:color-mix(in srgb,var(--medtrak-panel) 97%,transparent); border:1px solid var(--medtrak-border); }

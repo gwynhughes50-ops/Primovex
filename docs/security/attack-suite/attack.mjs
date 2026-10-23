@@ -1335,6 +1335,49 @@ async function main() {
     await assertFails(deleteDoc(doc(admin, "leave_years", "2026-27")));
   });
 
+  console.log("\n=== 26c. Problems and ideas from staff (issue_reports) ===");
+  const report = (uid, extra = {}) => ({ ticket: "FB-2026-ABC123", kind: "problem", message: "The save button on the SAR form does nothing", doing: "", route: "/governance/sars", appVersion: "0.15.63", platform: "windows", role: "Reception", reporterUid: uid, reporterName: "Someone", status: "new", createdAt: serverTimestamp(), ...extra });
+  await seed(async (db) => {
+    await setDoc(doc(db, "issue_reports", "r-nurse"), { ...report("nurse-uid"), createdAt: new Date() });
+    await setDoc(doc(db, "issue_reports", "r-reception"), { ...report("reception-uid"), createdAt: new Date() });
+  });
+  await check("Anyone signed in can send a report, only as themselves, as new, with a sensible message", async () => {
+    await assertSucceeds(setDoc(doc(nurse, "issue_reports", "ok-1"), report("nurse-uid")));
+    await assertSucceeds(setDoc(doc(reception, "issue_reports", "ok-2"), report("reception-uid", { kind: "idea" })));
+    await assertFails(setDoc(doc(nurse, "issue_reports", "bad-1"), report("reception-uid")));
+    await assertFails(setDoc(doc(nurse, "issue_reports", "bad-2"), report("nurse-uid", { status: "fixed" })));
+    await assertFails(setDoc(doc(nurse, "issue_reports", "bad-3"), report("nurse-uid", { message: "too short" })));
+    await assertFails(setDoc(doc(nurse, "issue_reports", "bad-4"), report("nurse-uid", { message: "x".repeat(1001) })));
+    await assertFails(setDoc(doc(nurse, "issue_reports", "bad-5"), report("nurse-uid", { kind: "rant" })));
+    await assertFails(setDoc(doc(nurse, "issue_reports", "bad-6"), report("nurse-uid", { reply: "I already answered myself" })));
+    await assertFails(setDoc(doc(nurse, "issue_reports", "bad-7"), report("nurse-uid", { createdAt: new Date("2020-01-01") })));
+    await assertFails(setDoc(doc(anon, "issue_reports", "bad-8"), report("nurse-uid")));
+  });
+  await check("A person reads only their own reports; the administrator reads all; nobody else", async () => {
+    await assertSucceeds(getDoc(doc(nurse, "issue_reports", "r-nurse")));
+    await assertSucceeds(getDocs(query(collection(nurse, "issue_reports"), where("reporterUid", "==", "nurse-uid"))));
+    await assertFails(getDoc(doc(nurse, "issue_reports", "r-reception")));
+    await assertFails(getDocs(collection(nurse, "issue_reports")));
+    await assertFails(getDocs(query(collection(nurse, "issue_reports"), where("reporterUid", "==", "reception-uid"))));
+    await assertSucceeds(getDocs(collection(admin, "issue_reports")));
+    await assertFails(getDoc(doc(pm, "issue_reports", "r-nurse")));
+    await assertFails(getDoc(doc(anon, "issue_reports", "r-nurse")));
+  });
+  await check("Only the administrator answers a report, and only its status and reply: nobody edits what was said or whose it was", async () => {
+    await assertSucceeds(updateDoc(doc(admin, "issue_reports", "r-nurse"), { status: "fixed", reply: "Fixed in the next update", fixedIn: "0.15.64", updatedAt: serverTimestamp(), updatedByName: "Admin" }));
+    await assertFails(updateDoc(doc(admin, "issue_reports", "r-nurse"), { status: "nonsense" }));
+    await assertFails(updateDoc(doc(admin, "issue_reports", "r-nurse"), { message: "changed what they said" }));
+    await assertFails(updateDoc(doc(admin, "issue_reports", "r-nurse"), { reporterUid: "someone-else" }));
+    await assertFails(updateDoc(doc(admin, "issue_reports", "r-nurse"), { reply: "x".repeat(301) }));
+    await assertFails(updateDoc(doc(nurse, "issue_reports", "r-nurse"), { status: "fixed" }));
+    await assertFails(updateDoc(doc(pm, "issue_reports", "r-nurse"), { status: "seen" }));
+  });
+  await check("Only the administrator can delete a report", async () => {
+    await assertFails(deleteDoc(doc(nurse, "issue_reports", "r-nurse")));
+    await assertFails(deleteDoc(doc(pm, "issue_reports", "r-reception")));
+    await assertSucceeds(deleteDoc(doc(admin, "issue_reports", "r-reception")));
+  });
+
   console.log("\n=== 27. Mileage claims (mileage_claims, mileage_places, mileage_routes, mileage_settings) ===");
   await seed(async (db) => {
     // the nurse is claiming; her line manager is reception (uid reception-uid); the cleaner has no line manager set

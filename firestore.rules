@@ -1172,6 +1172,27 @@ match /subject_access_requests/{requestId} {
       allow delete: if isAdmin();
     }
 
+    // PROBLEMS AND IDEAS from staff, sent through the Orb (src/modules/feedback). Private: the person who sent one reads their own, the
+    // System Admin reads them all and moves them on (seen, planned, done) with a short reply. Nobody else can read or change one, and a
+    // report can only be created as yourself, new, with a message of a sensible size.
+    match /issue_reports/{reportId} {
+      allow get, list: if signedIn() && (resource.data.reporterUid == request.auth.uid || isAdmin());
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(["ticket", "kind", "message", "doing", "route", "appVersion", "platform", "role", "reporterUid", "reporterName", "status", "createdAt"])
+        && request.resource.data.reporterUid == request.auth.uid
+        && request.resource.data.status == "new"
+        && request.resource.data.kind in ["problem", "look", "idea"]
+        && request.resource.data.message is string && request.resource.data.message.size() >= 10 && request.resource.data.message.size() <= 1000
+        && request.resource.data.doing is string && request.resource.data.doing.size() <= 400
+        && request.resource.data.ticket is string && request.resource.data.ticket.size() <= 20
+        && request.resource.data.createdAt == request.time;
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "reply", "fixedIn", "updatedAt", "updatedByName"])
+        && request.resource.data.status in ["new", "seen", "planned", "fixed", "wont"]
+        && (!("reply" in request.resource.data) || (request.resource.data.reply is string && request.resource.data.reply.size() <= 300));
+      allow delete: if isAdmin();
+    }
+
     // Quick Notes. "private" notes are only visible to their author; "practice"
     // notes are visible to every signed-in user. A note can only ever be
     // authored as yourself, and only you (or an admin) can complete/delete it.

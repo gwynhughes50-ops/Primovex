@@ -39,6 +39,7 @@ const { getOrbCapabilities } = require("./services/orbScope");
 const { notifySignificantEvent } = require("./services/significantEventNotify");
 const { runStockReview } = require("./services/stockReviewService");
 const { buildAuditEntry } = require("./services/timesheetAuditService");
+const { notifyIssueReport } = require("./services/issueReportNotify");
 const { runTimesheetReminders, statusNotice, deliver: deliverNotices } = require("./services/timesheetReminderService");
 
 initializeApp();
@@ -910,6 +911,18 @@ exports.pushOnNotification = onDocumentCreated({ document: "users/{uid}/notifica
   } catch (error) {
     // an alert that could not be sent must never stop the notification itself
     console.error("pushOnNotification failed", error?.message);
+  }
+});
+
+// A member of staff sent a problem or an idea through the Orb: tell the System Admin (see services/issueReportNotify.js).
+exports.notifyIssueReport = onDocumentCreated({ document: "issue_reports/{reportId}", region: "europe-west2" }, async (event) => {
+  const snapshot = event.data;
+  if (!snapshot) return;
+  try {
+    await notifyIssueReport({ db, FieldValue, reportId: event.params.reportId, report: snapshot.data() });
+  } catch (error) {
+    // the report itself is already saved: a notice that could not be sent must not lose it
+    console.error("notifyIssueReport failed", error?.message);
   }
 });
 

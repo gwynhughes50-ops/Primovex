@@ -1254,6 +1254,23 @@ export const HELP_ARTICLES = [
     open: { label: "Open Annual leave", route: "/annual-leave" },
     related: ["send-timesheet"],
   },
+  {
+    id: "report-a-problem-or-idea",
+    title: "Tell the developer about a problem or an idea",
+    topic: "The Orb",
+    asks: ["how do i report a problem with primovex", "how do i tell the developer about a bug", "how do i suggest an improvement", "something is not working who do i tell", "how do i send an idea for primovex", "where can i see what happened to my report"],
+    keywords: ["report", "problem", "bug", "issue", "idea", "suggest", "suggestion", "developer", "feedback", "broken", "improvement"],
+    where: "both",
+    steps: [
+      "Open the Orb. Press the speech-bubble button at the top, or \"Report a problem or share an idea\" under the suggestions. Or just say or type \"report a problem\", or what is wrong, such as \"the SAR page is broken\".",
+      "Choose what sort it is: something isn't working, something looks wrong or is confusing, or an idea. Then say what happened or what would help, and what you were trying to do.",
+      "Press \"Send to the developer\". Primovex adds the page you were on, the version and your device for you. The developer is told straight away.",
+      "Under \"My reports\" in the same box you can see each thing you sent: Sent, Seen, Planned, Done (with the version) or Not doing, and any reply.",
+    ],
+    tip: "Please do not put patient names, numbers or dates of birth in. Primovex stops a message that has a long number or a full date in it. Only you and the developer can see what you send.",
+    open: { label: "Open the Orb", route: "/dashboard" },
+    related: [],
+  },
   // ---- mileage ----------------------------------------------------------------------------------------------
   {
     id: "claim-mileage",
