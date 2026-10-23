@@ -466,11 +466,22 @@ html:not(.medtrak-light) .medtrak-temperature-card * {
       position: relative;
       overflow: hidden;
       background:
-        radial-gradient(circle at 82% 18%, color-mix(in srgb, var(--mt-accent-2) 30%, transparent), transparent 23rem),
-        linear-gradient(135deg, color-mix(in srgb, var(--mt-accent) 82%, #001b35 18%), color-mix(in srgb, var(--mt-accent) 54%, #06182d 46%)) !important;
+        radial-gradient(circle at 82% 18%, color-mix(in srgb, var(--mt-accent-2) 38%, transparent), transparent 23rem),
+        linear-gradient(135deg, var(--mt-accent), color-mix(in srgb, var(--mt-accent) 72%, var(--mt-accent-2) 28%)) !important;
       border-color: color-mix(in srgb, var(--mt-accent-2) 35%, transparent) !important;
       color: #ffffff !important;
     }
+
+    /* Everything written on a hero is white, whatever the page's own text colour rules say (they turned it dark on light themes). */
+    html[data-medtrak-theme] .mt-hero h1,
+    html[data-medtrak-theme] .mt-hero h2,
+    html[data-medtrak-theme] .mt-hero p,
+    html[data-medtrak-theme] .mt-hero span,
+    html[data-medtrak-theme] .mt-hero div,
+    html[data-medtrak-theme] .mt-hero svg {
+      color: #ffffff !important;
+    }
+    html[data-medtrak-theme] .mt-hero p { color: rgba(255,255,255,0.92) !important; }
 
     html[data-medtrak-theme] .mt-hero::after {
       content: "";
@@ -488,7 +499,7 @@ html:not(.medtrak-light) .medtrak-temperature-card * {
     }
 
     html[data-medtrak-theme] .mt-hero-aside {
-      background: rgba(2, 15, 32, 0.28) !important;
+      background: rgba(255, 255, 255, 0.14) !important;
       border-color: rgba(255,255,255,0.20) !important;
       color: #ffffff !important;
       backdrop-filter: blur(14px);
@@ -509,7 +520,7 @@ html:not(.medtrak-light) .medtrak-temperature-card * {
     html[data-medtrak-theme="aurora"] .mt-hero {
       background:
         radial-gradient(circle at 82% 18%, rgba(124,58,237,0.28), transparent 23rem),
-        linear-gradient(135deg, #123b88, #111827) !important;
+        linear-gradient(135deg, #2563eb, #4338ca) !important;
     }
 
     html[data-medtrak-theme="high-contrast"] .mt-hero {
@@ -639,8 +650,13 @@ html:not(.medtrak-light) .medtrak-temperature-card * {
       box-shadow: none;
     }
 
+    html[data-medtrak-theme="aurora"],
+    html[data-medtrak-theme="nhs-blue"],
+    html[data-medtrak-theme="midnight-purple"],
+    html[data-medtrak-theme="clinical-green"] { --mt-on-accent: #ffffff; }
+
     html[data-medtrak-theme] [data-mt-button="default"] {
-      background: linear-gradient(135deg, var(--mt-accent), var(--mt-accent-2)) !important;
+      background: linear-gradient(135deg, var(--mt-accent), color-mix(in srgb, var(--mt-accent) 70%, var(--mt-accent-2) 30%)) !important;
       color: var(--mt-on-accent) !important;
       border-color: color-mix(in srgb, var(--mt-accent) 55%, transparent) !important;
       box-shadow: 0 10px 28px color-mix(in srgb, var(--mt-accent) 20%, transparent) !important;
@@ -703,6 +719,12 @@ html:not(.medtrak-light) .medtrak-temperature-card * {
     html.medtrak-light .text-white:not([data-preserve-colour]),
     html.medtrak-light .text-black:not([data-preserve-colour]) {
       color: var(--mt-text-primary) !important;
+    }
+
+    /* White text on a button or badge filled with the theme's blue stays white (the rule above turned it dark navy on the blue). */
+    html.medtrak-light [class*="bg-[color:var(--medtrak-accent)]"].text-white,
+    html.medtrak-light [class*="bg-[color:var(--medtrak-accent)]"].text-white * {
+      color: #ffffff !important;
     }
 
     html.medtrak-light .font-black { font-weight: 800 !important; }
