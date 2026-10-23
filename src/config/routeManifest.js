@@ -18,10 +18,10 @@ export const ROUTE_MANIFEST = [
   { path: "/suppliers", label: "Suppliers", section: "operations", iconKey: "suppliers", capability: "suppliers.read" },
   { path: "/facilities", label: "Facilities", section: "operations", iconKey: "facilities", children: ["Overview", "Spaces", "Equipment"] },
   { path: "/training", label: "Staff training", section: "operations", iconKey: "training", capability: "training.manage", anyOf: ["training.manage", "training.manageClinical", "training.view"] },
-  { path: "/my-timesheet", label: "Timesheet", section: "operations", iconKey: "myTimesheet" },
-  { path: "/annual-leave", label: "Annual leave", section: "operations", iconKey: "annualLeave" },
-  { path: "/my-training", label: "My training", section: "operations", iconKey: "training" },
-  { path: "/mileage", label: "Mileage", section: "operations", iconKey: "mileage" },
+  { path: "/my-timesheet", label: "Timesheet", section: "mywork", iconKey: "myTimesheet" },
+  { path: "/annual-leave", label: "Annual leave", section: "mywork", iconKey: "annualLeave" },
+  { path: "/my-training", label: "My training", section: "mywork", iconKey: "training" },
+  { path: "/mileage", label: "Mileage", section: "mywork", iconKey: "mileage" },
   { path: "/timesheets", label: "Timesheets", section: "operations", iconKey: "timesheets", capability: "timesheets.manage" },
   { path: "/waste", label: "Clinical waste", section: "operations", iconKey: "waste", capability: "waste.read", anyOf: ["waste.read", "waste.manage"] },
   { path: "/compliance", label: "Compliance", section: "operations", iconKey: "compliance", capability: "compliance.read", anyOf: ["compliance.read", "coshh.read"], children: ["Overview", "Checks history", "Cleaning", "Maintenance", "Assets and tags", "PAT Testing", "Certificates", "COSHH"] },
@@ -46,6 +46,7 @@ export const ROUTE_MANIFEST = [
 ];
 
 export const SIDEBAR_SECTIONS = [
+  { key: "mywork", label: "My work" },
   { key: "core", label: "Core" },
   { key: "operations", label: "Operations" },
   { key: "intelligence", label: "Intelligence" },

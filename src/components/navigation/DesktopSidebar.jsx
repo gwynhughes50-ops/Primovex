@@ -1,10 +1,12 @@
-import { NavLink } from "react-router-dom";
-import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import { ChevronDown, ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 import PrimovexLogo from "@/components/brand/PrimovexLogo";
 import { Button } from "@/components/ui/button";
 import { getVisibleRouteManifest, SIDEBAR_SECTIONS } from "@/config/routeManifest";
 import { getIcon } from "@/config/medtrakIcons";
 import DesktopUpdateLink from "@/components/navigation/DesktopUpdateLink";
+import { groupOfPath, isOpen, loadStored, opened, saveStored, toggled } from "@/config/sidebarGroups";
 
 function SidebarLink({ item, collapsed }) {
   const Icon = getIcon(item.iconKey || "helpCircle");
@@ -25,6 +27,13 @@ export default function DesktopSidebar({ collapsed, onToggle, isAdmin, capabilit
   const standardSections = SIDEBAR_SECTIONS.map((section) => ({ ...section, items: routes.filter((item) => item.section === section.key) })).filter((section) => section.items.length);
   const developerItems = routes.filter((item) => item.section === "developer");
 
+  // each group can be folded; what was opened or folded is remembered on this device, and the group holding the page you are on opens when you arrive
+  const { pathname } = useLocation();
+  const [stored, setStored] = useState(loadStored);
+  const here = useMemo(() => groupOfPath(pathname, standardSections), [pathname, routes.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (here) setStored((current) => { const next = opened(current, here); if (next !== current) saveStored(next); return next; }); }, [here]);
+  const toggle = (key) => setStored((current) => { const next = toggled(current, key); saveStored(next); return next; });
+
   return (
     <aside className={`relative sticky top-0 flex h-screen shrink-0 flex-col border-r border-[var(--medtrak-border)] bg-[var(--medtrak-panel)]/95 backdrop-blur transition-[width] duration-200 ${collapsed ? "w-[76px]" : "w-[292px]"}`}>
       <div className={`flex h-24 items-center border-b border-[var(--medtrak-border)] ${collapsed ? "justify-center px-3" : "px-5 pr-8"}`}>
@@ -37,12 +46,21 @@ export default function DesktopSidebar({ collapsed, onToggle, isAdmin, capabilit
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
-        {standardSections.map((section) => (
-          <section key={section.key} className="mb-5">
-            {!collapsed && <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--medtrak-muted)]">{section.label}</p>}
-            <div className="space-y-1">{section.items.map((item) => <SidebarLink key={`${section.key}-${item.path}`} item={item} collapsed={collapsed} />)}</div>
-          </section>
-        ))}
+        {standardSections.map((section) => {
+          const open = collapsed || isOpen(stored, section.key);
+          return (
+            <section key={section.key} className="mb-3">
+              {!collapsed && (
+                <button type="button" onClick={() => toggle(section.key)} aria-expanded={open} aria-controls={`sidebar-group-${section.key}`}
+                  className="mb-1 flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--medtrak-muted)] hover:bg-[var(--medtrak-accent)]/10 hover:text-[var(--medtrak-text)]">
+                  <span>{section.label}{!open && <span className="ml-2 font-semibold normal-case tracking-normal">{section.items.length}</span>}</span>
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "" : "-rotate-90"}`} aria-hidden="true" />
+                </button>
+              )}
+              {open && <div id={`sidebar-group-${section.key}`} className="space-y-1">{section.items.map((item) => <SidebarLink key={`${section.key}-${item.path}`} item={item} collapsed={collapsed} />)}</div>}
+            </section>
+          );
+        })}
         {!!developerItems.length && (
           <section className="border-t border-[var(--medtrak-border)] pt-4">
             {!collapsed && <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--medtrak-muted)]">Developer</p>}
