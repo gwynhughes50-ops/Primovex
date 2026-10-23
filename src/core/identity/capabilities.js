@@ -451,7 +451,7 @@ ROLE_PRESETS.push(
   },
   {
     name: "Nurse and HCA",
-    description: "Uses, checks and counts stock, checks the emergency drugs and anaphylaxis boxes, records fridge temperatures, can look at COSHH, and sees the concerns they are named in. No compliance, ClinFlow or management screens. A clinical lead is given the clinical team's training as an exception.",
+    description: "Uses, checks and counts stock, checks the emergency drugs and anaphylaxis boxes, records fridge temperatures, can look at COSHH, and sees the concerns they are named in. No compliance or management screens. A clinical lead is given the clinical team's training as an exception.",
     homeType: "clinical",
     appliesTo: ["Nurse", "HCA"],
     permissions: [

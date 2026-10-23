@@ -1,10 +1,11 @@
 import { hasCapability } from "../../core/identity/capabilities";
+import { featureOn } from "../../config/featureFlags.js";
 
 // "Go to purchase orders" / "show me the alerts" / "open the reorder centre": the Orb takes the person
 // there. Only ever opens a screen (never changes anything), and only one they are allowed into. On the
 // phone the app is a set of tabs plus a few pages; screens that only exist on the desktop say so.
 
-export const DESTINATIONS = [
+const ALL_DESTINATIONS = [
   { id: "dashboard", label: "the Dashboard", path: "/dashboard", mobile: { tab: "home" }, phrases: ["dashboard", "home", "home page", "home screen", "main page", "start page", "my dashboard"] },
   { id: "inventory", label: "Inventory", path: "/inventory", mobile: { tab: "stock" }, capability: "inventory.read", phrases: ["inventory", "stock", "stock list", "stock page"] },
   { id: "emergency", label: "Emergency drugs", path: "/inventory?tab=emergency", mobile: { tab: "stock" }, capability: "inventory.read", phrases: ["emergency drugs", "emergency kit", "emergency kits", "resus trolley", "crash trolley", "emergency equipment"] },
@@ -29,12 +30,14 @@ export const DESTINATIONS = [
   { id: "inspection", label: "the inspection pack", path: "/inspection", mobile: null, capability: "reports.inspection", phrases: ["inspection pack", "inspection report", "inspection evidence", "inspection summary"] },
   { id: "inspection-heiw", label: "the HEIW visit pack", path: "/inspection?visit=heiw", mobile: null, capability: "reports.inspection", phrases: ["heiw pack", "heiw report", "heiw visit pack", "heiw visit report", "heiw inspection pack"] },
   { id: "inspection-hs", label: "the Health and Safety visit pack", path: "/inspection?visit=hs", mobile: null, capability: "reports.inspection", phrases: ["health and safety pack", "health and safety report", "health and safety visit pack"] },
-  { id: "clinflow", label: "ClinFlow", path: "/clinflow", mobile: null, capability: "clinflow.read", phrases: ["clinflow", "clin flow"] },
+  { id: "clinflow", label: "ClinFlow", feature: "clinflow", path: "/clinflow", mobile: null, capability: "clinflow.read", phrases: ["clinflow", "clin flow"] },
   { id: "security", label: "the Security Centre", path: "/security-centre", mobile: null, capability: "security.read", phrases: ["security centre", "security center", "sign in records", "usage report", "audit log", "audit trail", "audit ledger", "the audit trail"] },
   { id: "practice-admin", label: "Practice Admin", path: "/practice-admin", mobile: null, capability: "practiceAdmin.read", phrases: ["practice admin", "practice administration", "practice settings"] },
   { id: "admin", label: "Advanced Administration", path: "/admin", mobile: null, capability: "admin.access", phrases: ["admin", "administration", "advanced admin", "advanced administration", "user management"] },
   { id: "help", label: "Help", path: "/help", mobile: null, phrases: ["help", "help page", "user guide", "the guide"] },
 ];
+// a page of a switched-off feature (ClinFlow) is not offered, so the Orb will not take anyone there
+export const DESTINATIONS = ALL_DESTINATIONS.filter((d) => !d.feature || featureOn(d.feature));
 
 const VERB = /^(?:(?:please|orb|ok|okay)[,\s]+)*(?:(?:can|could|would|will) you\s+)?(?:(?:please)\s+)?(?:go to|go over to|go into|take me to|take me into|bring me to|navigate to|open up|open|show me|show|switch to|jump to|pull up|bring up|load|launch|head to)\s+/i;
 const FILLER = /\b(?:the|my|our|page|screen|tab|section|area|module|please|now|for me|up)\b/g;

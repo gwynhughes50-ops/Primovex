@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { featureOn } from "@/config/featureFlags";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -135,7 +136,7 @@ export default function SecurityCentre() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-4">
-        <Metric label="ClinFlow clinical data" value="Locked" note="Synthetic workflows only" status="green" />
+        {featureOn("clinflow") && <Metric label="ClinFlow clinical data" value="Locked" note="Synthetic workflows only" status="green" />}
         <Metric label="NHS Wales checklist" value={`${walesReadiness.documented}/${walesReadiness.total} documented`} note={`${walesReadiness.approved} formally approved`} status={walesReadiness.approved > 0 ? "amber" : "rose"} />
         <Metric label="NHS England checklist" value={`${englandReadiness.documented}/${englandReadiness.total} documented`} note={`${englandReadiness.approved} formally approved`} status={englandReadiness.approved > 0 ? "amber" : "rose"} />
         <Metric label="DPIA" value="Draft" note="DPO sign-off outstanding" status="amber" />
@@ -146,10 +147,10 @@ export default function SecurityCentre() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">Dual NHS assurance checklist</p>
-              <h2 className="mt-2 text-xl font-semibold">ClinFlow is locked; the rest of Primovex is live under interim governance</h2>
+              <h2 className="mt-2 text-xl font-semibold">{featureOn("clinflow") ? "ClinFlow is locked; the rest of Primovex is live under interim governance" : "Primovex is live under interim governance"}</h2>
               <p className="mt-2 max-w-4xl text-sm leading-6 text-amber-50/80">{clinicalReadiness.statement} Wales is the primary deployment baseline; England controls are retained as a compatibility and good-practice overlay. This screen does not claim certification or legal approval — items below marked "Draft available" have paperwork in progress, not sign-off.</p>
             </div>
-            <span className="rounded-full border border-amber-300/30 bg-slate-950/30 px-3 py-1 text-xs font-bold text-amber-100">CLINFLOW: BLOCKED BY DESIGN</span>
+            {featureOn("clinflow") && <span className="rounded-full border border-amber-300/30 bg-slate-950/30 px-3 py-1 text-xs font-bold text-amber-100">CLINFLOW: BLOCKED BY DESIGN</span>}
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
             {clinicalReadiness.blockers.filter((item) => item.jurisdictions.length === 2).map((item) => <ChecklistItem key={item.id} title={item.label} detail={`Shared UK evidence owner: ${item.owner}`} status={item.documentStatus === "not_started" ? "amber" : "green"} document={item.document} />)}

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { featureOn } from "@/config/featureFlags";
 import {
   Card,
   CardHeader,
@@ -29,7 +30,7 @@ const ROLE_HINTS = {
   User: "Can view and edit stock for assigned sites.",
   Nurse: "Clinical mobile access — stock, temperature, compliance checks.",
   HCA: "Healthcare assistant mobile access.",
-  Reception: "Front-desk access — ClinFlow intake, governance concerns.",
+  Reception: featureOn("clinflow") ? "Front-desk access — ClinFlow intake, governance concerns." : "Front-desk access — governance concerns.",
   Caretaker: "Facilities access — spaces, compliance, temperature.",
   Cleaner: "The dedicated cleaning-only mobile screen — scan to start/finish, report issues.",
   Partner: "Read-only visibility across every governance record (concerns, SARs, complaints), no edit rights.",

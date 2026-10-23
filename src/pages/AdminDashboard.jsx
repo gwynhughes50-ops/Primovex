@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import { Routes, Route, NavLink, Navigate } from "react-router-dom";
+import { groupVisible } from "@/config/featureFlags";
 import useStockSummary from "@/hooks/useStockSummary";
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -117,7 +118,7 @@ const defaultRoles = Object.entries(ROLE_TEMPLATES).map(([name, permissions]) =>
 }));
 
 // Capability catalogue drives Role Builder and keeps permissions consistent.
-const PERMISSIONS = CAPABILITY_CATALOG;
+const PERMISSIONS = CAPABILITY_CATALOG.filter((item) => groupVisible(item.group));
 
 function makeId(prefix = "id") {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;

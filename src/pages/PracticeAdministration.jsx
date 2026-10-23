@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { featureOn } from "@/config/featureFlags";
 import { Icons } from "@/config/medtrakIcons";
 
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,7 @@ const tabs = [
   { key: "spaces", label: "Spaces", icon: Icons.practice },
   { key: "departments", label: "Departments", icon: Icons.departments },
   { key: "pulse", label: "Pulse", icon: Icons.pulse },
-  { key: "modules", label: "Modules", icon: Icons.settings },
+  ...(featureOn("clinflow") ? [{ key: "modules", label: "Modules", icon: Icons.settings }] : []), // its only switch is for a feature that is off
   { key: "platform", label: "Platform Mode", icon: Icons.settings },
 ];
 

@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import { featureOn } from "@/config/featureFlags";
 
 import Layout from "@/layout/Layout";
 import Dashboard from "@/pages/Dashboard";
@@ -113,7 +114,7 @@ export default function DesktopApp() {
         <Route path="admin/*" element={<PermissionGate capability="admin.access"><AdminDashboard /></PermissionGate>} />
         <Route path="reports" element={<PermissionGate capability="reports.read"><Reports /></PermissionGate>} />
         <Route path="inspection" element={<PermissionGate capability="reports.inspection"><InspectionPack /></PermissionGate>} />
-        <Route path="clinflow" element={<PermissionGate capability="clinflow.read"><ClinFlowWorkspace /></PermissionGate>} />
+        <Route path="clinflow" element={featureOn("clinflow") ? <PermissionGate capability="clinflow.read"><ClinFlowWorkspace /></PermissionGate> : <Navigate to="/dashboard" replace />} />
         <Route path="help" element={<Help />} />
         <Route path="developer-centre" element={<DeveloperCentre />} />
         <Route path="notifications" element={<Notifications />} />

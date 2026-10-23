@@ -130,7 +130,8 @@
     "test:leave-entitlement": "esbuild scripts/verify-leave-entitlement.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-leave-entitlement.bundle.mjs && node work/verify-leave-entitlement.bundle.mjs",
     "test:training-merge": "esbuild scripts/verify-training-merge.mjs --bundle --platform=node --format=esm --outfile=work/verify-training-merge.bundle.mjs && node work/verify-training-merge.bundle.mjs",
     "test:app-versions": "esbuild scripts/verify-app-versions.mjs --bundle --platform=node --format=esm --outfile=work/verify-app-versions.bundle.mjs && node work/verify-app-versions.bundle.mjs",
-    "test:issue-report": "esbuild scripts/verify-issue-report.mjs --bundle --platform=node --format=esm --outfile=work/verify-issue-report.bundle.mjs && node work/verify-issue-report.bundle.mjs"
+    "test:issue-report": "esbuild scripts/verify-issue-report.mjs --bundle --platform=node --format=esm --outfile=work/verify-issue-report.bundle.mjs && node work/verify-issue-report.bundle.mjs",
+    "test:feature-flags": "esbuild scripts/verify-feature-flags.mjs --bundle --platform=node --format=esm --alias:@=./src --loader:.jsx=jsx --outfile=work/verify-feature-flags.bundle.mjs && node work/verify-feature-flags.bundle.mjs"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",

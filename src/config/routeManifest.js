@@ -1,4 +1,5 @@
 import { hasCapability } from "@/core/identity/capabilities";
+import { featureOn } from "@/config/featureFlags";
 
 export const ROUTE_MANIFEST = [
   { path: "/dashboard", label: "Dashboard", section: "core", iconKey: "dashboard", capability: "dashboard.read" },
@@ -25,7 +26,7 @@ export const ROUTE_MANIFEST = [
   { path: "/waste", label: "Clinical waste", section: "operations", iconKey: "waste", capability: "waste.read", anyOf: ["waste.read", "waste.manage"] },
   { path: "/compliance", label: "Compliance", section: "operations", iconKey: "compliance", capability: "compliance.read", anyOf: ["compliance.read", "coshh.read"], children: ["Overview", "Checks history", "Cleaning", "Maintenance", "Assets and tags", "PAT Testing", "Certificates", "COSHH"] },
 
-  { path: "/clinflow", label: "ClinFlow", section: "intelligence", iconKey: "clinflow", capability: "clinflow.read", children: ["Workflow", "NFWF", "QAIF", "Coding"] },
+  { path: "/clinflow", label: "ClinFlow", feature: "clinflow", section: "intelligence", iconKey: "clinflow", capability: "clinflow.read", children: ["Workflow", "NFWF", "QAIF", "Coding"] },
   { path: "/inspection", label: "Inspection pack", section: "intelligence", iconKey: "inspection", capability: "reports.inspection" },
   { path: "/reports", label: "Reports", section: "intelligence", iconKey: "reports", capability: "reports.read", children: ["Stock Levels", "Expiry Report", "Transactions", "Temperature", "Concerns", "SARs"] },
 
@@ -62,6 +63,7 @@ function routeAllowed(route, capabilities) {
 export function getVisibleRouteManifest({ isAdmin = false, capabilities = [], developer = false } = {}) {
   return ROUTE_MANIFEST.filter((route) => {
     if (route.alias || route.supportRoute || route.hiddenFromSidebar) return false;
+    if (route.feature && !featureOn(route.feature)) return false;
     if (route.adminOnly && !isAdmin) return false;
     if (route.developerOnly && !developer) return false;
     return routeAllowed(route, capabilities);
@@ -72,6 +74,7 @@ export function getRouteAuditRows({ isAdmin = false, capabilities = [], develope
   return ROUTE_MANIFEST.map((route) => ({
     ...route,
     accessible:
+      (!route.feature || featureOn(route.feature)) &&
       (!route.adminOnly || isAdmin) &&
       (!route.developerOnly || developer) &&
       routeAllowed(route, capabilities),

@@ -1,5 +1,6 @@
 import { getIcon } from "@/config/medtrakIcons";
 import { hasCapability } from "@/core/identity/capabilities";
+import { featureOn } from "@/config/featureFlags";
 
 const desktopNavigationConfig = [
   { to: "/dashboard", label: "Dashboard", iconKey: "dashboard", group: "core", capability: "dashboard.read" },
@@ -19,7 +20,7 @@ const desktopNavigationConfig = [
   { to: "/help", label: "Help", iconKey: "help", group: "support" },
   { to: "/theme-lab", label: "Theme Lab", iconKey: "settings", group: "admin", capability: "theme.lab" },
   { to: "/security-centre", label: "Security", iconKey: "security", group: "admin", capability: "security.read" },
-  { to: "/clinflow", label: "ClinFlow", iconKey: "clinflow", group: "insight", capability: "clinflow.read" },
+  { to: "/clinflow", label: "ClinFlow", feature: "clinflow", iconKey: "clinflow", group: "insight", capability: "clinflow.read" },
   { to: "/reports", label: "Reports", iconKey: "reports", group: "insight", capability: "reports.read" },
 ];
 
@@ -37,7 +38,7 @@ function filterByCapabilities(items, capabilities = []) {
 export const desktopNavigation = hydrateNavigation(desktopNavigationConfig);
 
 export function getDesktopNavigation({ isAdmin = false, capabilities = [] } = {}) {
-  const items = [...desktopNavigationConfig];
+  const items = desktopNavigationConfig.filter((item) => !item.feature || featureOn(item.feature));
   if (isAdmin) {
     items.splice(items.length - 1, 0, { to: "/admin", label: "Admin", iconKey: "admin", group: "admin", capability: "admin.access" });
   }

@@ -5,6 +5,7 @@
 // role does not give; deny takes away something it does. A capability is never in both.
 
 import { CAPABILITY_CATALOG, permissionExceptionsOf } from "./capabilities.js";
+import { groupVisible } from "../../config/featureFlags.js";
 
 const KNOWN = new Set(CAPABILITY_CATALOG.map((c) => c.id));
 
@@ -56,6 +57,7 @@ export function sourceOf(capability, roleCapabilities = [], exceptions = {}) {
 export function permissionRows(roleCapabilities = [], exceptions = {}) {
   const groups = new Map();
   for (const item of CAPABILITY_CATALOG) {
+    if (!groupVisible(item.group)) continue; // a switched-off feature is not offered
     const source = sourceOf(item.id, roleCapabilities, exceptions);
     const row = { id: item.id, label: item.label, source, on: source === "role" || source === "allowed" };
     groups.set(item.group, [...(groups.get(item.group) || []), row]);
