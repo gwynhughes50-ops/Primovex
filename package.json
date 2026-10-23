@@ -102,6 +102,7 @@
     "test:waste-return": "esbuild scripts/verify-waste-return.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-waste-return.bundle.mjs && node work/verify-waste-return.bundle.mjs",
     "test:timesheets": "esbuild scripts/verify-timesheets.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-timesheets.bundle.mjs && node work/verify-timesheets.bundle.mjs",
     "test:bright-hr": "esbuild scripts/verify-bright-hr.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-bright-hr.bundle.mjs && node work/verify-bright-hr.bundle.mjs",
+    "test:report-summary": "esbuild scripts/verify-report-summary.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-report-summary.bundle.mjs && node work/verify-report-summary.bundle.mjs",
     "test:mileage": "esbuild scripts/verify-mileage.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-mileage.bundle.mjs && node work/verify-mileage.bundle.mjs",
     "test:timesheet-flow": "esbuild scripts/verify-timesheet-flow.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-timesheet-flow.bundle.mjs && node work/verify-timesheet-flow.bundle.mjs",
     "test:training-import": "esbuild scripts/verify-training-import.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-training-import.bundle.mjs && node work/verify-training-import.bundle.mjs",

@@ -17,6 +17,8 @@ import {
   ShieldAlert,
   FileSearch,
   Pencil,
+  Car,
+  ClipboardList,
 } from "lucide-react";
 
 import jsPDF from "jspdf";
@@ -28,6 +30,24 @@ import { normalizeStockItemCategory } from "@/services/stockService";
 import { categoryLabel as taxonomyCategoryLabel, subcategoryLabel as taxonomySubcategoryLabel } from "@/data/stockCategories";
 import { useAuth } from "@/contexts/AuthContext";
 import StockItemEditDialog from "@/components/stock/StockItemEditDialog";
+import { CODES } from "@/modules/timesheets/timesheet";
+import { dateKey as mileageDateKey, money as mileageMoney } from "@/modules/mileage/mileage";
+import { useClaims, usePlaces } from "@/modules/mileage/mileageService";
+import { usePeriods, useSheets } from "@/modules/timesheets/timesheetFlowService";
+import {
+  ALL_PERIODS,
+  concernCards,
+  expiryCards,
+  mileageExport,
+  mileageReport,
+  rulesFor,
+  sarCards,
+  stockCards,
+  temperatureCards,
+  timesheetExport,
+  timesheetReport,
+  transactionCards,
+} from "@/modules/reports/reportSummary";
 import {
   CONCERN_CATEGORIES,
   CONCERN_OUTCOME_LABELS,
@@ -556,6 +576,78 @@ function SarsTable({ rows }) {
 
 // A simple horizontal-bar breakdown — count per category/type/status, the
 // core of an annual return ("how many of each").
+function MileageTable({ rows }) {
+  return (
+    <table className="min-w-full text-left text-sm">
+      <thead>
+        <tr className="border-b border-white/10 bg-slate-900/60 text-xs font-medium text-slate-300">
+          <th className="px-4 py-2">Date</th>
+          <th className="px-4 py-2">Name</th>
+          <th className="px-4 py-2">From</th>
+          <th className="px-4 py-2">To</th>
+          <th className="px-4 py-2 text-right">Miles</th>
+          <th className="px-4 py-2">Vehicle</th>
+          <th className="px-4 py-2">Reason</th>
+          <th className="px-4 py-2">Status</th>
+          <th className="px-4 py-2 text-right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.length === 0 ? (
+          <EmptyRow cols={9} />
+        ) : (
+          rows.map((r) => (
+            <tr key={r.id} className="border-b border-white/10 last:border-0">
+              <td className="px-4 py-3 text-xs text-slate-200 whitespace-nowrap">{r.date.split("-").reverse().join("/")}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{r.name || "\u2014"}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{r.from || "\u2014"}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{r.to || "\u2014"}{r.returnTrip ? " (and back)" : ""}</td>
+              <td className="px-4 py-3 text-xs text-slate-200 text-right">{r.miles}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{r.vehicle}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{r.purpose}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{r.statusLabel}</td>
+              <td className="px-4 py-3 text-xs text-slate-200 text-right">{r.pence === null ? "\u2014" : mileageMoney(r.pence)}</td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  );
+}
+
+function TimesheetTable({ rows }) {
+  return (
+    <table className="min-w-full text-left text-sm">
+      <thead>
+        <tr className="border-b border-white/10 bg-slate-900/60 text-xs font-medium text-slate-300">
+          <th className="px-4 py-2">Pay period</th>
+          <th className="px-4 py-2">Name</th>
+          <th className="px-4 py-2">Where it stands</th>
+          <th className="px-4 py-2">Declared</th>
+          {CODES.map((c) => <th key={c.code} className="px-3 py-2 text-right" title={c.label}>{c.code}</th>)}
+          <th className="px-4 py-2">What was claimed</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.length === 0 ? (
+          <EmptyRow cols={5 + CODES.length} />
+        ) : (
+          rows.map((r) => (
+            <tr key={r.id} className="border-b border-white/10 last:border-0 align-top">
+              <td className="px-4 py-3 text-xs text-slate-200 whitespace-nowrap">{r.period}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{r.name || "\u2014"}{r.payrollNo ? <span className="block text-slate-500">payroll no {r.payrollNo}</span> : null}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{r.stateLabel}</td>
+              <td className="px-4 py-3 text-xs text-slate-200">{r.declaration}</td>
+              {CODES.map((c) => <td key={c.code} className="px-3 py-3 text-xs text-slate-200 text-right">{r.totals[c.code] || ""}</td>)}
+              <td className="px-4 py-3 text-xs text-slate-300">{r.details || "\u2014"}</td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  );
+}
+
 function BreakdownCard({ title, counts, labelFor, total }) {
   const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   return (
@@ -585,8 +677,9 @@ function BreakdownCard({ title, counts, labelFor, total }) {
 
 // -------------------- Main component --------------------
 export default function Reports() {
-  const { can } = useAuth();
-  const [tab, setTab] = useState("stock"); // stock | expiry | tx | temp | concerns | sars
+  const { can, isAdmin } = useAuth();
+  const [tab, setTab] = useState("stock"); // stock | expiry | tx | temp | concerns | sars | mileage | timesheets
+  const rules = rulesFor(tab); // which controls and figures belong to this report
   // Editing a stock item from the report: anyone who can edit stock, in a window opened in place
   const canEditStock = can("inventory.write");
   const [editId, setEditId] = useState(null);
@@ -624,6 +717,10 @@ export default function Reports() {
 
   const canSeeConcerns = can("governance.concernsTeam") || can("governance.partnerAccess");
   const canSeeSars = can("governance.manageSars") || can("governance.partnerAccess");
+  // everyone's mileage claims and timesheets: whoever manages timesheets (the same people the rules let read them)
+  const canSeeStaffReports = isAdmin || can("timesheets.manage");
+  const [mileageStatus, setMileageStatus] = useState("all");
+  const [periodFilter, setPeriodFilter] = useState(ALL_PERIODS);
 
   // Data
   const [stock, setStock] = useState([]);
@@ -750,6 +847,12 @@ export default function Reports() {
     return subscribeConcerns(setConcerns, (err) => console.error("Reports concerns subscribe error:", err));
   }, [canSeeConcerns]);
 
+  // Mileage claims, rates and timesheets: only read while their own report is open
+  const claimsState = useClaims({ scope: "all", enabled: canSeeStaffReports && tab === "mileage" });
+  const { rates } = usePlaces(canSeeStaffReports && tab === "mileage");
+  const periodsState = usePeriods();
+  const sheetsState = useSheets("all", canSeeStaffReports && tab === "timesheets");
+
   // Subscribe governance_sars — same read pattern GovernanceSARs.jsx uses.
   useEffect(() => {
     if (!canSeeSars) { setSars([]); return undefined; }
@@ -765,14 +868,12 @@ export default function Reports() {
   // them (and the search text, since its meaning changes per tab) when
   // switching to a tab where they don't apply.
   useEffect(() => {
-    if (tab === "tx" || tab === "temp" || tab === "concerns" || tab === "sars") {
-      setCategoryFilter(ALL_CATEGORIES);
-      setLocationFilter(ALL_LOCATIONS);
-      setNeedsAttentionOnly(false);
-    }
-    if (tab === "concerns" || tab === "sars") {
-      setSiteFilter(ALL_SITES);
-    }
+    if (!rules.location) setLocationFilter(ALL_LOCATIONS);
+    if (!rules.category) setCategoryFilter(ALL_CATEGORIES);
+    if (!rules.attention) setNeedsAttentionOnly(false);
+    if (!rules.site) setSiteFilter(ALL_SITES);
+    if (!rules.status) setMileageStatus("all");
+    if (!rules.period) setPeriodFilter(ALL_PERIODS);
     setQueryText("");
   }, [tab]);
 
@@ -968,58 +1069,36 @@ export default function Reports() {
 
   const needsAttentionCount = useMemo(() => stock.filter(isNeedsAttention).length, [stock]);
 
-  // Summary
-  const summary = useMemo(() => {
-    if (tab === "tx") {
-      return {
-        totalItems: filteredTransactions.length,
-        outOfStock: 0,
-        lowStock: 0,
-        totalUnits: filteredTransactions.reduce((sum, t) => sum + (Number(t.qty) || 0), 0),
-      };
-    }
-    if (tab === "temp") {
-      return {
-        totalItems: filteredTemps.length,
-        outOfStock: 0,
-        lowStock: 0,
-        totalUnits: filteredTemps.length,
-      };
-    }
-    if (tab === "concerns") {
-      return {
-        totalItems: filteredConcerns.length,
-        outOfStock: filteredConcerns.filter((c) => c.priority === "high").length,
-        lowStock: concernBreakdown.closedCount,
-        totalUnits: filteredConcerns.length - concernBreakdown.closedCount,
-      };
-    }
-    if (tab === "sars") {
-      return {
-        totalItems: filteredSars.length,
-        outOfStock: sarBreakdown.late,
-        lowStock: sarBreakdown.onTime,
-        totalUnits: filteredSars.filter((s) => s.status !== SAR_STATUSES.completed).length,
-      };
-    }
+  // Mileage claims and timesheets, shaped for their reports
+  const mileage = useMemo(
+    () => mileageReport(claimsState.list || [], rates, {
+      from: dateFrom ? mileageDateKey(dateFrom) : "",
+      to: dateTo ? mileageDateKey(dateTo) : "",
+      status: mileageStatus,
+      query: queryText,
+    }),
+    [claimsState.list, rates, dateFrom, dateTo, mileageStatus, queryText]
+  );
+  const timesheets = useMemo(
+    () => timesheetReport(sheetsState.list || [], periodsState.list || [], { periodId: periodFilter, query: queryText }),
+    [sheetsState.list, periodsState.list, periodFilter, queryText]
+  );
+  const periodOptions = useMemo(
+    () => [{ value: ALL_PERIODS, label: "All pay periods" }, ...(periodsState.list || []).map((p) => ({ value: p.id, label: p.name || `${p.from} to ${p.to}` }))],
+    [periodsState.list]
+  );
 
-    const rows = tab === "expiry" ? expiryRows : filteredStock;
-    const outOfStock = rows.filter((i) => Number(i.current_stock ?? i.qty ?? 0) === 0).length;
-    const lowStock = rows.filter((i) => {
-      const cur = Number(i.current_stock ?? i.qty ?? 0);
-      const min = Number(i.min_stock ?? 0);
-      return cur > 0 && cur <= min;
-    }).length;
-
-    const totalUnits = rows.reduce((sum, i) => sum + (Number(i.current_stock ?? i.qty ?? 0) || 0), 0);
-
-    return {
-      totalItems: rows.length,
-      outOfStock,
-      lowStock,
-      totalUnits,
-    };
-  }, [tab, filteredStock, expiryRows, filteredTransactions, filteredTemps, filteredConcerns, concernBreakdown, filteredSars, sarBreakdown]);
+  // The four figures for this report only
+  const cards = useMemo(() => {
+    if (tab === "tx") return transactionCards(filteredTransactions);
+    if (tab === "temp") return temperatureCards(filteredTemps);
+    if (tab === "concerns") return concernCards(filteredConcerns, { high: filteredConcerns.filter((c) => c.priority === "high").length, closed: concernBreakdown.closedCount });
+    if (tab === "sars") return sarCards(filteredSars, { late: sarBreakdown.late, onTime: sarBreakdown.onTime, notDone: filteredSars.filter((s) => s.status !== SAR_STATUSES.completed).length });
+    if (tab === "mileage") return mileage.cards;
+    if (tab === "timesheets") return timesheets.cards;
+    if (tab === "expiry") return expiryCards(expiryRows);
+    return stockCards(filteredStock);
+  }, [tab, filteredStock, expiryRows, filteredTransactions, filteredTemps, filteredConcerns, concernBreakdown, filteredSars, sarBreakdown, mileage, timesheets]);
 
   // Export rows match current tab
   const exportRows = useMemo(() => {
@@ -1087,6 +1166,9 @@ export default function Reports() {
       }));
     }
 
+    if (tab === "mileage") return mileageExport(mileage.rows);
+    if (tab === "timesheets") return timesheetExport(timesheets.rows);
+
     return filteredSars.map((s) => ({
       Reference: s.reference || "",
       Received: formatDateTimeAny(s.receivedDate),
@@ -1096,7 +1178,7 @@ export default function Reports() {
       Completed: s.completedAt ? formatDateTimeAny(s.completedAt) : "",
       AssignedTo: s.assignedToName || "",
     }));
-  }, [tab, filteredStock, expiryRows, filteredTransactions, filteredTemps, filteredConcerns, filteredSars]);
+  }, [tab, filteredStock, expiryRows, filteredTransactions, filteredTemps, filteredConcerns, filteredSars, mileage, timesheets]);
 
   const exportBaseName = useMemo(() => {
     const map = {
@@ -1106,6 +1188,8 @@ export default function Reports() {
       temp: "temperature",
       concerns: "concerns",
       sars: "sars",
+      mileage: "mileage-claims",
+      timesheets: "timesheets",
     };
     return `primovex-${map[tab]}-${new Date().toISOString().slice(0, 10)}`;
   }, [tab]);
@@ -1158,14 +1242,7 @@ export default function Reports() {
     }
   };
 
-  const searchPlaceholder = {
-    stock: "Search item, barcode, batch, location…",
-    expiry: "Search item, barcode, batch, location…",
-    tx: "Search item, action, user, site…",
-    temp: "Search site, unit, recorded by, notes…",
-    concerns: "Search reference, summary, category, source…",
-    sars: "Search reference, request type, status, assigned to…",
-  }[tab];
+  const searchPlaceholder = rules.search;
 
   return (
     <div className="space-y-6">
@@ -1178,7 +1255,7 @@ export default function Reports() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-100">Reports</h1>
             <p className="text-sm text-slate-400">
-              Filter by Site, Location, Category and date range. Exports match what you see.
+              Pick a report, then filter it. Exports match what you see.
             </p>
           </div>
         </div>
@@ -1223,11 +1300,13 @@ export default function Reports() {
           <TabButton active={tab === "temp"} onClick={() => setTab("temp")} icon={Thermometer} label="Temperature" />
           {canSeeConcerns && <TabButton active={tab === "concerns"} onClick={() => setTab("concerns")} icon={ShieldAlert} label="Concerns" />}
           {canSeeSars && <TabButton active={tab === "sars"} onClick={() => setTab("sars")} icon={FileSearch} label="SARs" />}
+          {canSeeStaffReports && <TabButton active={tab === "mileage"} onClick={() => setTab("mileage")} icon={Car} label="Mileage" />}
+          {canSeeStaffReports && <TabButton active={tab === "timesheets"} onClick={() => setTab("timesheets")} icon={ClipboardList} label="Timesheets" />}
         </div>
       </Card>
 
-      {/* Date range — applies to every tab */}
-      <Card className="border border-white/10 bg-slate-900/70 backdrop-blur p-3 shadow-lg">
+      {/* Date range: only for the reports whose records have dates (stock and expiry are as they are now) */}
+      {rules.date && <Card className="border border-white/10 bg-slate-900/70 backdrop-blur p-3 shadow-lg">
         <div className="flex flex-wrap items-center gap-2">
           <Calendar className="h-4 w-4 text-slate-400" />
           {[
@@ -1257,29 +1336,28 @@ export default function Reports() {
             </>
           )}
         </div>
-      </Card>
+      </Card>}
 
       {/* Filters */}
       <Card className="border border-white/10 bg-slate-900/70 backdrop-blur p-4 shadow-lg">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-3 items-center">
-            <PillSelect icon={MapPin} value={siteFilter} onChange={setSiteFilter} options={siteOptions} disabled={tab === "concerns" || tab === "sars"} />
+            {rules.site && <PillSelect icon={MapPin} value={siteFilter} onChange={setSiteFilter} options={siteOptions} />}
 
-            <PillSelect
-              icon={LocateFixed}
-              value={locationFilter}
-              onChange={setLocationFilter}
-              options={locationOptions}
-              disabled={tab === "tx" || tab === "temp" || tab === "concerns" || tab === "sars"}
-            />
+            {rules.location && <PillSelect icon={LocateFixed} value={locationFilter} onChange={setLocationFilter} options={locationOptions} />}
 
-            <PillSelect
-              icon={Tags}
-              value={categoryFilter}
-              onChange={setCategoryFilter}
-              options={categoryOptions}
-              disabled={tab === "tx" || tab === "temp" || tab === "concerns" || tab === "sars"}
-            />
+            {rules.category && <PillSelect icon={Tags} value={categoryFilter} onChange={setCategoryFilter} options={categoryOptions} />}
+
+            {rules.status && (
+              <PillSelect
+                icon={FileText}
+                value={mileageStatus}
+                onChange={setMileageStatus}
+                options={[{ value: "all", label: "All claims" }, { value: "submitted", label: "Waiting for approval" }, { value: "approved", label: "Approved" }, { value: "rejected", label: "Not approved" }]}
+              />
+            )}
+
+            {rules.period && <PillSelect icon={Calendar} value={periodFilter} onChange={setPeriodFilter} options={periodOptions} />}
 
             <Input
               value={queryText}
@@ -1288,7 +1366,7 @@ export default function Reports() {
               className="h-10 w-72 rounded-full border-white/10 bg-slate-800/70 text-slate-100 placeholder:text-slate-400"
             />
 
-            <button
+            {rules.attention && <button
               type="button"
               onClick={() => setNeedsAttentionOnly((v) => !v)}
               className={
@@ -1297,44 +1375,20 @@ export default function Reports() {
                   : "inline-flex items-center gap-2 rounded-full border border-white/10 bg-slate-800/70 px-3 py-2 text-xs text-slate-200 hover:bg-slate-800"
               }
               title="Show only items missing a real Site or Location"
-              disabled={tab === "tx" || tab === "temp" || tab === "concerns" || tab === "sars"}
             >
               <AlertTriangle className="h-4 w-4" />
               Needs attention
               <span className="ml-1 rounded-full bg-black/30 px-2 py-0.5 text-[11px]">
                 {needsAttentionCount}
               </span>
-            </button>
+            </button>}
           </div>
         </div>
       </Card>
 
-      {/* Summary cards */}
+      {/* The four figures for this report */}
       <div className="grid gap-3 md:grid-cols-4">
-        <MiniStat
-          title={tab === "tx" || tab === "temp" || tab === "concerns" || tab === "sars" ? "Records" : "Total Items"}
-          value={summary.totalItems}
-          icon={Package}
-          tone="teal"
-        />
-        <MiniStat
-          title={tab === "concerns" ? "High priority" : tab === "sars" ? "Completed late" : "Out of Stock"}
-          value={summary.outOfStock}
-          icon={tab === "concerns" || tab === "sars" ? AlertTriangle : FileText}
-          tone="rose"
-        />
-        <MiniStat
-          title={tab === "concerns" ? "Closed" : tab === "sars" ? "Completed on time" : "Low Stock"}
-          value={summary.lowStock}
-          icon={tab === "concerns" || tab === "sars" ? FileText : FileText}
-          tone="amber"
-        />
-        <MiniStat
-          title={tab === "tx" ? "Total Qty" : tab === "temp" ? "Logs" : tab === "concerns" ? "Still open" : tab === "sars" ? "Not yet completed" : "Total Units"}
-          value={summary.totalUnits}
-          icon={Package}
-          tone="emerald"
-        />
+        {cards.map((c) => <MiniStat key={c.title} title={c.title} value={c.value} icon={Package} tone={c.tone} />)}
       </div>
 
       {/* Breakdown — the core of an annual return */}
@@ -1363,9 +1417,12 @@ export default function Reports() {
             {tab === "temp" && "Temperature"}
             {tab === "concerns" && "Concerns"}
             {tab === "sars" && "SARs"}
+            {tab === "mileage" && "Mileage claims"}
+            {tab === "timesheets" && "Timesheets"}
           </p>
           <p className="mt-0.5 text-[0.7rem] text-slate-400">
-            Filters apply to the current tab. Exports match what you see.
+            {tab === "mileage" ? "Amounts are for approved claims, worked out at the rate on the day of each journey. " : tab === "timesheets" ? "Hours by code: A sick, B overtime, C overtime at time and a half, D annual leave, E time off in lieu, F other. " : ""}
+            Filters apply to this report. Exports match what you see.
           </p>
         </div>
 
@@ -1376,6 +1433,8 @@ export default function Reports() {
           {tab === "temp" && <TempTable rows={filteredTemps} />}
           {tab === "concerns" && <ConcernsTable rows={filteredConcerns} />}
           {tab === "sars" && <SarsTable rows={filteredSars} />}
+          {tab === "mileage" && <MileageTable rows={mileage.rows} />}
+          {tab === "timesheets" && <TimesheetTable rows={timesheets.rows} />}
         </div>
       </Card>
 

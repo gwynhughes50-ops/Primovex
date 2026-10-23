@@ -28,7 +28,7 @@ export const ROUTE_MANIFEST = [
 
   { path: "/clinflow", label: "ClinFlow", feature: "clinflow", section: "intelligence", iconKey: "clinflow", capability: "clinflow.read", children: ["Workflow", "NFWF", "QAIF", "Coding"] },
   { path: "/inspection", label: "Inspection pack", section: "intelligence", iconKey: "inspection", capability: "reports.inspection" },
-  { path: "/reports", label: "Reports", section: "intelligence", iconKey: "reports", capability: "reports.read", children: ["Stock Levels", "Expiry Report", "Transactions", "Temperature", "Concerns", "SARs"] },
+  { path: "/reports", label: "Reports", section: "intelligence", iconKey: "reports", capability: "reports.read", children: ["Stock Levels", "Expiry Report", "Transactions", "Temperature", "Concerns", "SARs", "Mileage", "Timesheets"] },
 
   { path: "/connect", label: "Connected Practice", section: "connected", iconKey: "connect", capability: "connect.view", children: ["Providers", "Device Onboarding", "Tuya", "Connectivity"] },
   { path: "/temperature", label: "Temperature", section: "connected", iconKey: "temperature", capability: "temperature.read", children: ["Monitoring", "Temperature Log", "Incidents"] },
