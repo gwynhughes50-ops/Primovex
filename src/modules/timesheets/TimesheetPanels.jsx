@@ -104,6 +104,7 @@ export function MyTimesheetPanel({ skin = "desktop" }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [editing, setEditing] = useState(null); // the line being changed: { index, line } (a hook, so it stays above the early returns below)
   const current = useCurrentPeriod(periods.list, today());
   const period = (periods.list || []).find((p) => p.id === periodId) || current;
   const existing = period ? (sheets.list || []).find((t) => t.periodId === period.id) || null : null;
@@ -136,7 +137,6 @@ export function MyTimesheetPanel({ skin = "desktop" }) {
     } catch (failure) { setError(failure?.message || "That didn't send. Check you have permission."); } finally { setBusy(false); }
   }
   // a line being changed is lifted out of the list into the boxes below; "Update this line" puts it back, "Leave it as it was" restores it
-  const [editing, setEditing] = useState(null); // { index, line }
   const addLine = () => {
     const line = { ...draft, hours: Number(draft.hours) };
     setLines(editing ? [...lines.slice(0, editing.index), line, ...lines.slice(editing.index)] : [...lines, line]);

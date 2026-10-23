@@ -95,4 +95,21 @@ t("the screens carry it: lines are listed with Edit and Remove, a sent one can b
   assert.ok((src.match(/<History [^>]*period=\{period\}/g) || []).length === 4, "and each prints with the pay period's name");
 });
 
+t("every timesheet panel keeps its hooks above its early returns (a hook after them crashes the screen when the data loads)", () => {
+  const src = readFileSync(new URL("../src/modules/timesheets/TimesheetPanels.jsx", import.meta.url), "utf8");
+  const hook = /\buse(State|Memo|Effect|Auth|History|Sheets|Periods|Claims|Places|MyStaffRecord|CurrentPeriod|TimesheetStaff)\(/;
+  let checked = 0;
+  for (const name of ["MyTimesheetPanel", "SignOffPanel", "PayrollPanel", "PeriodsPanel"]) {
+    const start = src.indexOf(`export function ${name}`);
+    assert.ok(start >= 0, name);
+    const next = src.slice(start + 10).search(/\n(export )?function /);
+    const body = next === -1 ? src.slice(start) : src.slice(start, start + 10 + next);
+    const early = body.search(/\n {2}if \(.*\) return /);
+    if (early === -1) continue;
+    checked += 1;
+    assert.ok(!hook.test(body.slice(early)), `${name}: a hook is called after an early return`);
+  }
+  assert.ok(checked >= 2, "the early returns were found");
+});
+
 console.log(`\n${n} passed`);
