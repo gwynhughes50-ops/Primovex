@@ -1,42 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useMyStaffRecord, useClaims, usePlaces } from "@/modules/mileage/mileageService";
+import { useMyStaffRecord } from "@/modules/mileage/mileageService";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
 import { auditHtml, historySteps, stateWords } from "./timesheetAudit";
-import { periodTotals } from "@/modules/mileage/mileage";
-import { CODES, STATE, STATE_LABEL, codeLabel, declarationText, describeLines, dueStatus, expectedFor, lineProblem, needsStaff, payrollCsv, periodLabel, periodProblem, submitProblem, suggestPeriod, summary } from "./timesheet";
+import { CODES, STATE, STATE_LABEL, codeLabel, declarationText, dueStatus, expectedFor, lineProblem, needsStaff, periodLabel, periodProblem, submitProblem, suggestPeriod } from "./timesheet";
 import { dateKey, hoursLabel, parseKey } from "./workPattern";
 import { useTimesheetStaff } from "./timesheetService";
-import { decideTimesheet, dispatchTimesheet, savePeriod, sendTimesheet, takeBackTimesheet, useCurrentPeriod, useHistory, usePeriods, useSheets } from "./timesheetFlowService";
+import { SKINS } from "./timesheetSkins";
+import { QueriesInbox } from "./QueryThread";
+import { decideTimesheet, savePeriod, sendTimesheet, takeBackTimesheet, useCurrentPeriod, useHistory, usePeriods, useSheets } from "./timesheetFlowService";
 
 // The screens for pay-period timesheets, used on the desktop (My timesheet page) and the phone (Me tab). `skin` picks the look.
 //   MyTimesheetPanel   the person: "no changes" in one tap, or record what was different
 //   SignOffPanel       the line manager: declarations to sign off in one go, and the ones with changes in full
-//   PayrollPanel       the payroll team: signed-off timesheets, sent on or returned with a reason (desktop)
+//   (the payroll team's screen is PayrollDesk.jsx)
 //   PeriodsPanel       whoever manages timesheets: the pay periods and who has not sent theirs yet (desktop)
-
-const SKINS = {
-  desktop: {
-    field: "mt-1 w-full rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-teal-300/60",
-    label: "block text-xs font-semibold uppercase tracking-wide text-slate-400",
-    card: "rounded-2xl border border-white/10 bg-slate-900/70 p-4", muted: "text-slate-400", strong: "text-slate-100", body: "text-slate-200",
-    btn: "inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/15 px-4 py-2 text-sm font-semibold text-slate-100 hover:bg-white/5 disabled:opacity-40",
-    primary: "inline-flex items-center justify-center gap-1.5 rounded-lg bg-teal-500/90 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-40",
-    big: "flex-1 rounded-2xl border border-white/15 p-4 text-left hover:bg-white/5", bigOn: "flex-1 rounded-2xl border border-teal-300/60 bg-teal-500/10 p-4 text-left",
-    warn: "rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm text-amber-100", ok: "rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100", bad: "text-rose-300",
-    note: "rounded-lg bg-white/5 p-3 text-sm text-slate-300", line: "border-t border-white/5",
-    chip: { submitted: "bg-amber-400/25 text-amber-100", approved: "bg-sky-500/20 text-sky-100", sent: "bg-emerald-500/20 text-emerald-100", declined: "bg-rose-500/20 text-rose-100", returned: "bg-rose-500/20 text-rose-100", draft: "bg-white/10 text-slate-200" },
-  },
-  phone: {
-    field: "mt-1 min-h-12 w-full rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 text-base",
-    label: "block text-sm font-bold", card: "rounded-2xl border border-[var(--medtrak-border)] p-3", muted: "text-[var(--medtrak-muted)]", strong: "", body: "",
-    btn: "min-h-12 rounded-2xl border border-[var(--medtrak-border)] px-4 font-bold disabled:opacity-40", primary: "min-h-12 rounded-2xl bg-[var(--medtrak-accent)] px-4 font-bold text-white disabled:opacity-40",
-    big: "rounded-2xl border border-[var(--medtrak-border)] p-4 text-left", bigOn: "rounded-2xl border-2 border-[var(--medtrak-accent)] bg-black/5 p-4 text-left",
-    warn: "rounded-2xl bg-amber-400/20 p-3 text-sm font-semibold text-amber-900", ok: "rounded-2xl bg-emerald-500/10 p-3 text-sm font-semibold text-emerald-800", bad: "text-rose-700",
-    note: "rounded-2xl bg-black/5 p-3 text-sm", line: "border-t border-[var(--medtrak-border)]",
-    chip: { submitted: "bg-amber-400/25 text-amber-800", approved: "bg-sky-500/15 text-sky-800", sent: "bg-emerald-500/15 text-emerald-700", declined: "bg-rose-500/15 text-rose-700", returned: "bg-rose-500/15 text-rose-700", draft: "bg-black/5" },
-  },
-};
 
 const uk = (key) => (key ? key.split("-").reverse().join("/") : "");
 const dayLabel = (key) => { const d = parseKey(key); return d ? d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }) : key; };
@@ -73,6 +51,7 @@ function History({ s, sheet, role, period = null }) {
           {steps.map((h) => (
             <li key={h.id} className={`${s.note} space-y-0.5`}>
               <p className={s.body}><b className={s.strong}>{h.action.charAt(0).toUpperCase() + h.action.slice(1)}</b>{h.who ? ` by ${h.who}` : ""} <span className={s.muted}>· {whenText(h.atMs)}</span></p>
+              {h.query?.text && <p className={s.body}>“{h.query.text}”</p>}
               {h.reason && <p className={s.body}>Reason: “{h.reason}”</p>}
               {h.reference && <p className={s.body}>Reference: {h.reference}</p>}
               {h.kindNote && <p className={s.body}>{h.kindNote}</p>}
@@ -157,6 +136,7 @@ export function MyTimesheetPanel({ skin = "desktop" }) {
 
   return (
     <div className="space-y-3">
+      <QueriesInbox scope="person" skin={skin} />
       <PeriodPicker s={s} periods={periods.list} value={period.id} onChange={setPeriodId} />
       <p className={`text-sm ${s.muted}`}>Due by {uk(period.due)}{due === "overdue" ? " (overdue)" : due === "due-soon" ? " (soon)" : ""}. Your usual hours in this period: <b className={s.strong}>{hoursLabel(expected?.hours || 0)}</b>{expected?.days.some((d) => d.bankHoliday) ? `, including ${expected.days.filter((d) => d.bankHoliday).map((d) => d.bankHoliday).join(" and ")}` : ""}.</p>
       {!expected?.hasPattern && <p className={s.warn}>Your working pattern hasn't been set up yet, so there are no usual hours to compare with. Ask the Practice Manager to set it (Timesheets, People).</p>}
@@ -261,6 +241,7 @@ export function SignOffPanel({ skin = "desktop", canManage = false }) {
   if (periods.list === null || sheets.list === null) return <p className={`text-sm ${s.muted}`}>Opening…</p>;
   return (
     <div className="space-y-3">
+      <QueriesInbox scope="manager" skin={skin} />
       {message && <p className={s.ok} role="status">{message}</p>}
       {error && <p className={`text-sm font-semibold ${s.bad}`} role="alert">{error}</p>}
       {sheets.error && <p className={s.warn}>{sheets.error}</p>}
@@ -304,78 +285,6 @@ function DeclineBox({ s, reason, setReason, busy, onConfirm, onCancel }) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------
-export function PayrollPanel({ skin = "desktop", canSend }) {
-  const s = SKINS[skin];
-  const { user, displayName } = useAuth();
-  const actor = { displayName: displayName || user?.email || "" };
-  const periods = usePeriods();
-  const sheets = useSheets("payroll");
-  const claims = useClaims({ scope: "all" });
-  const places = usePlaces(true);
-  const [periodId, setPeriodId] = useState("");
-  const [picked, setPicked] = useState({});
-  const [reference, setReference] = useState("");
-  const [returning, setReturning] = useState("");
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState("");
-  const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
-  const period = (periods.list || []).find((p) => p.id === periodId) || (periods.list || []).find((p) => (sheets.list || []).some((t) => t.periodId === p.id)) || (periods.list || [])[0] || null;
-  const list = (sheets.list || []).filter((t) => t.periodId === period?.id).sort((a, b) => String(a.staffName).localeCompare(String(b.staffName)));
-  const toSend = list.filter((t) => t.state === STATE.approved);
-  const mileage = useMemo(() => (period ? Object.fromEntries(periodTotals(claims.list || [], period.from, period.to, places.rates).map((r) => [r.uid, r.pence])) : {}), [claims.list, period, places.rates]);
-  const chosen = toSend.filter((t) => picked[t.id]);
-  const sum = summary(list);
-
-  async function run(id, work, done) { setBusy(id); setError(""); setMessage(""); try { await work(); setMessage(done); } catch (failure) { setError(failure?.message || "That didn't save. Check you have permission."); } finally { setBusy(""); } }
-  const send = () => run("send", async () => { for (const t of chosen) await dispatchTimesheet(t, STATE.sent, { reference, actor, uid: user.uid }); setPicked({}); }, `${chosen.length} marked as sent to payroll.`);
-  const giveBack = (t) => run(t.id, async () => { await dispatchTimesheet(t, STATE.returned, { reason, actor, uid: user.uid }); setReturning(""); setReason(""); }, `${t.staffName}'s timesheet was returned, with your reason.`);
-  function download() {
-    const url = URL.createObjectURL(new Blob([payrollCsv(list, period, mileage)], { type: "text/csv" }));
-    const link = document.createElement("a");
-    link.href = url; link.download = `primovex-timesheets-${period.from}.csv`; link.click(); URL.revokeObjectURL(url);
-  }
-
-  if (periods.list === null || sheets.list === null) return <p className={`text-sm ${s.muted}`}>Opening…</p>;
-  if (!period) return <p className={`text-sm ${s.muted}`}>No pay period has been set up yet.</p>;
-  return (
-    <div className="space-y-3">
-      <PeriodPicker s={s} periods={periods.list} value={period.id} onChange={(id) => { setPeriodId(id); setPicked({}); }} />
-      {message && <p className={s.ok} role="status">{message}</p>}
-      {error && <p className={`text-sm font-semibold ${s.bad}`} role="alert">{error}</p>}
-      <p className={`text-sm ${s.muted}`}>{list.length} signed off ({sum.noChange} with no changes, {sum.withChanges} with changes){toSend.length ? `; ${toSend.length} still to send to payroll` : ""}.</p>
-      {!list.length ? <p className={`text-sm ${s.muted}`}>No signed-off timesheets for this period yet.</p> : (
-        <div className="overflow-x-auto rounded-2xl border border-white/10">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-900 text-left text-xs uppercase tracking-wide text-slate-400"><tr>{canSend && <th className="px-2 py-2" />}<th className="px-3 py-2">Person</th><th className="px-3 py-2">Payroll no</th><th className="px-3 py-2">Hours</th><th className="px-3 py-2">Mileage</th><th className="px-3 py-2">Status</th><th className="px-3 py-2" /></tr></thead>
-            <tbody>{list.map((t) => (
-              <tr key={t.id} className="border-t border-white/5 align-top">
-                {canSend && <td className="px-2 py-2">{t.state === STATE.approved && <input type="checkbox" checked={Boolean(picked[t.id])} onChange={(e) => setPicked({ ...picked, [t.id]: e.target.checked })} aria-label={`Select ${t.staffName}`} />}</td>}
-                <td className="px-3 py-2 font-semibold text-slate-100">{t.staffName}</td>
-                <td className="px-3 py-2 text-slate-200">{t.payrollNo || <span className="text-amber-200">missing</span>}</td>
-                <td className="px-3 py-2 text-slate-200">{t.kind === "no-change" ? "As normal" : <><span>{CODES.filter((c) => t.totals?.[c.code]).map((c) => `${c.code} ${t.totals[c.code]}h`).join(" · ")}</span><span className="block text-xs text-slate-400">{describeLines(t.lines)}</span></>}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-slate-200">{mileage[t.uid] ? `£${(mileage[t.uid] / 100).toFixed(2)}` : ""}</td>
-                <td className="px-3 py-2"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${s.chip[t.state]}`}>{SHORT_STATE[t.state]}</span>{t.payroll?.reference && t.state === STATE.sent ? <span className="block text-xs text-slate-400">ref {t.payroll.reference}</span> : null}</td>
-                <td className="px-3 py-2 text-right">{canSend && t.state === STATE.approved && (returning === t.id
-                  ? <DeclineBox s={s} reason={reason} setReason={setReason} busy={busy === t.id} onConfirm={() => giveBack(t)} onCancel={() => setReturning("")} />
-                  : <button type="button" className={s.btn} onClick={() => { setReturning(t.id); setReason(""); }}>Return…</button>)}
-                  <History s={s} sheet={t} role="payroll" period={period} /></td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
-      )}
-      <div className="flex flex-wrap items-end gap-2">
-        {canSend && <><label className={s.label}>Reference for payroll (optional)<input className={s.field} value={reference} onChange={(e) => setReference(e.target.value)} placeholder="e.g. the batch or email reference" /></label>
-          <button type="button" className={s.primary} disabled={!chosen.length || Boolean(busy)} onClick={send}>{busy === "send" ? "Saving…" : `Mark ${chosen.length || ""} as sent to payroll`}</button>
-          <button type="button" className={s.btn} onClick={() => setPicked(Object.fromEntries(toSend.map((t) => [t.id, true])))} disabled={!toSend.length}>Select all</button></>}
-        <button type="button" className={`${s.btn} ml-auto`} onClick={download} disabled={!list.length}>Download CSV</button>
-      </div>
-      <p className={`text-xs ${s.muted}`}>Mileage is the approved claims for journeys in this period. Returning a timesheet sends it back to the person with your reason; they correct it and it goes back through their line manager.</p>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------------------------------------------------------------
 export function PeriodsPanel({ skin = "desktop" }) {
   const s = SKINS[skin];

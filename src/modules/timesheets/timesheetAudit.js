@@ -64,6 +64,7 @@ export function historySteps(entries = []) {
     return {
       id: e.id, atMs: timeOf(e), who: e.actorName || "", action: e.action || "", reason: e.reason || "", reference: e.reference || "",
       fromState: e.fromState || "", toState: e.toState || "", changes,
+      query: e.query?.event ? { id: e.query.id || "", event: e.query.event, text: e.query.text || "", to: e.query.to === "manager" ? "manager" : "person", toName: e.query.toName || "" } : null,
       kindNote: kindChanged ? (e.kind === "no-change" ? "Changed to: no changes" : "Changed to: something was different") : "",
       totals: totalsText(e.totals, lines), lineCount: lines.length,
       declaration: e.declaration?.confirmedAt ? { by: e.declaration.confirmedByName || "", at: e.declaration.confirmedAt } : null,
@@ -79,6 +80,7 @@ export function auditHtml({ sheet, period = null, steps = [], stateLabel = "", p
   const lines = Array.isArray(sheet?.lines) ? sheet.lines : [];
   const stepRows = steps.map((s) => {
     const details = [
+      s.query ? `<div class="q"><b>${s.query.event === "raised" ? "Query" : s.query.event === "reply" ? "Reply" : s.query.event === "resolved" ? "Resolution note" : "Why it was reopened"}:</b> ${s.query.text ? esc(s.query.text) : "none given"}${s.query.event === "raised" ? ` <span class="was">(asked of ${esc(s.query.toName || (s.query.to === "manager" ? "the line manager" : "the person"))})</span>` : ""}</div>` : "",
       s.reason ? `<div><b>Reason:</b> ${esc(s.reason)}</div>` : "",
       s.reference ? `<div><b>Reference:</b> ${esc(s.reference)}</div>` : "",
       s.kindNote ? `<div>${esc(s.kindNote)}</div>` : "",
@@ -95,6 +97,7 @@ export function auditHtml({ sheet, period = null, steps = [], stateLabel = "", p
     h1 { font-size: 16pt; margin: 0 0 2px; } h2 { font-size: 11pt; margin: 14px 0 4px; border-bottom: 1px solid #b9c6dc; padding-bottom: 2px; }
     .sub { color: #4a5a78; margin-bottom: 8px; } table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #b9c6dc; padding: 3px 5px; text-align: left; vertical-align: top; }
     th { background: #e6edf8; } td.num { text-align: right; white-space: nowrap; } td.when { white-space: nowrap; width: 105px; }
+    .q { margin: 2px 0; padding: 2px 6px; border-left: 3px solid #4a5a78; background: #f2f5fa; }
     .added { color: #14653c; } .removed { color: #a02525; } .changed { color: #7a5200; } .was, .decl, .tot { color: #4a5a78; font-size: 9pt; }
     .facts td { border: none; padding: 1px 12px 1px 0; } .note { margin-top: 12px; color: #4a5a78; font-size: 9pt; }
   </style></head><body>

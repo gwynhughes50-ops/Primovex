@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { ClipboardCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { MyTimesheetPanel, PayrollPanel, PeriodsPanel, SignOffPanel } from "@/modules/timesheets/TimesheetPanels";
+import { MyTimesheetPanel, PeriodsPanel, SignOffPanel } from "@/modules/timesheets/TimesheetPanels";
+import PayrollDesk from "@/modules/timesheets/PayrollDesk";
 import { STATE } from "@/modules/timesheets/timesheet";
 import { useSheets } from "@/modules/timesheets/timesheetFlowService";
 
@@ -24,7 +25,7 @@ export default function MyTimesheet() {
         <p className="max-w-3xl text-sm text-slate-400">At the end of each pay period, confirm your hours were as normal, or say what was different. Your line manager signs it off and the payroll team sends it on.</p>
       </div>
       <div className="flex flex-wrap gap-1 border-b border-white/10" role="tablist">{tabs.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)} className={`rounded-t-lg px-4 py-2 text-sm font-semibold ${tab === key ? "bg-white/10 text-slate-50" : "text-slate-400 hover:text-slate-200"}`}>{label}</button>)}</div>
-      {tab === "mine" ? <MyTimesheetPanel skin="desktop" /> : tab === "signoff" ? <SignOffPanel skin="desktop" canManage={canManage} /> : tab === "payroll" ? <PayrollPanel skin="desktop" canSend={canPayroll} /> : <PeriodsPanel skin="desktop" />}
+      {tab === "mine" ? <MyTimesheetPanel skin="desktop" /> : tab === "signoff" ? <SignOffPanel skin="desktop" canManage={canManage} /> : tab === "payroll" ? <PayrollDesk canSend={canPayroll} /> : <PeriodsPanel skin="desktop" />}
     </div>
   );
 }

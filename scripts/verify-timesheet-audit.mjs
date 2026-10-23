@@ -91,15 +91,16 @@ t("the screens carry it: lines are listed with Edit and Remove, a sent one can b
   assert.match(src, /onClick=\{\(\) => setLines\(lines\.filter\(\(_, j\) => j !== i\)\)\}>Remove</);
   assert.match(src, /Take it back to change it/);
   assert.match(src, /Print the audit/);
-  assert.equal((src.match(/<History /g) || []).length, 4, "the person, the line manager and payroll all get the full history");
-  assert.ok((src.match(/<History [^>]*period=\{period\}/g) || []).length === 4, "and each prints with the pay period's name");
+  assert.equal((src.match(/<History /g) || []).length, 3, "the person and the line manager get the full history here (payroll has its own on the desk)");
+  assert.ok((src.match(/<History [^>]*period=\{period\}/g) || []).length === 3, "and each prints with the pay period's name");
+  assert.match(readFileSync(new URL("../src/modules/timesheets/PayrollDesk.jsx", import.meta.url), "utf8"), /auditHtml\(\{ sheet: t, period, steps/, "payroll prints it from the desk");
 });
 
 t("every timesheet panel keeps its hooks above its early returns (a hook after them crashes the screen when the data loads)", () => {
   const src = readFileSync(new URL("../src/modules/timesheets/TimesheetPanels.jsx", import.meta.url), "utf8");
   const hook = /\buse(State|Memo|Effect|Auth|History|Sheets|Periods|Claims|Places|MyStaffRecord|CurrentPeriod|TimesheetStaff)\(/;
   let checked = 0;
-  for (const name of ["MyTimesheetPanel", "SignOffPanel", "PayrollPanel", "PeriodsPanel"]) {
+  for (const name of ["MyTimesheetPanel", "SignOffPanel", "PeriodsPanel"]) {
     const start = src.indexOf(`export function ${name}`);
     assert.ok(start >= 0, name);
     const next = src.slice(start + 10).search(/\n(export )?function /);

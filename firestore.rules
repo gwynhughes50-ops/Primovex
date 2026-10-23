@@ -1011,6 +1011,63 @@ match /subject_access_requests/{requestId} {
       allow create, update, delete: if false;
     }
 
+    // PAYROLL QUERIES on a timesheet (src/modules/timesheets/timesheetPayroll.js): the payroll team asks the person, or their line manager, about
+    // a signed-off timesheet; they reply; whoever raised it marks it resolved (and can reopen it). The thread is a run of messages that nobody can
+    // change or delete afterwards, and the server writes each one to timesheet_audit (functions/services/timesheetQueryService.js).
+    function tsQueryParty(q) {
+      return q.raisedByUid == request.auth.uid || q.toUid == request.auth.uid || q.staffUid == request.auth.uid || q.managerUid == request.auth.uid;
+    }
+    match /timesheet_queries/{queryId} {
+      allow get, list: if signedIn() && (tsQueryParty(resource.data) || tsPayroll() || mileageManages());
+      // only the payroll team raises one, on a signed-off timesheet, with that timesheet's own person or line manager (never someone else)
+      allow create: if tsPayroll()
+        && request.resource.data.keys().hasOnly(["timesheetId", "periodId", "staffId", "staffUid", "staffName", "managerUid", "to", "toUid", "toName", "subject", "status", "raisedByUid", "raisedByName", "createdAt", "updatedAt"])
+        && request.resource.data.raisedByUid == request.auth.uid
+        && request.resource.data.status == "open"
+        && request.resource.data.to in ["person", "manager"]
+        && request.resource.data.subject is string && request.resource.data.subject.size() >= 3 && request.resource.data.subject.size() <= 140
+        && exists(/databases/$(database)/documents/timesheets/$(request.resource.data.timesheetId))
+        && get(/databases/$(database)/documents/timesheets/$(request.resource.data.timesheetId)).data.state in ["approved", "sent", "returned"]
+        && request.resource.data.staffUid == get(/databases/$(database)/documents/timesheets/$(request.resource.data.timesheetId)).data.uid
+        && request.resource.data.managerUid == get(/databases/$(database)/documents/timesheets/$(request.resource.data.timesheetId)).data.get("managerUid", null)
+        && ((request.resource.data.to == "person" && request.resource.data.toUid == request.resource.data.staffUid)
+          || (request.resource.data.to == "manager" && request.resource.data.managerUid != null && request.resource.data.toUid == request.resource.data.managerUid));
+      // only whoever raised it (or the System Admin) closes it or opens it again; nothing else about it changes
+      allow update: if signedIn() && (resource.data.raisedByUid == request.auth.uid || isAdmin())
+        && request.resource.data.status in ["open", "resolved"]
+        && request.resource.data.status != resource.data.status
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["status", "updatedAt", "resolvedAt", "resolvedByUid", "resolvedByName", "resolution", "lastMessageId"])
+        // a change of status always comes with the message that says why, written in the same batch, so the trail can not miss it
+        && getAfter(/databases/$(database)/documents/timesheet_query_messages/$(request.resource.data.lastMessageId)).data.queryId == queryId
+        && getAfter(/databases/$(database)/documents/timesheet_query_messages/$(request.resource.data.lastMessageId)).data.kind == (request.resource.data.status == "resolved" ? "resolved" : "reopened");
+      allow delete: if false;
+    }
+    match /timesheet_query_messages/{messageId} {
+      allow get, list: if signedIn() && (tsPayroll() || mileageManages() || tsQueryParty(get(/databases/$(database)/documents/timesheet_queries/$(resource.data.queryId)).data));
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(["queryId", "timesheetId", "kind", "text", "authorUid", "authorName", "createdAt", "createdAtMs"])
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.kind in ["raised", "reply", "resolved", "reopened"]
+        && request.resource.data.text is string && request.resource.data.text.size() <= 1000
+        && (request.resource.data.kind == "resolved" || request.resource.data.text.size() >= 3)
+        && getAfter(/databases/$(database)/documents/timesheet_queries/$(request.resource.data.queryId)).data.timesheetId == request.resource.data.timesheetId
+        && (getAfter(/databases/$(database)/documents/timesheet_queries/$(request.resource.data.queryId)).data.raisedByUid == request.auth.uid
+          || getAfter(/databases/$(database)/documents/timesheet_queries/$(request.resource.data.queryId)).data.toUid == request.auth.uid)
+        && (request.resource.data.kind == "raised"
+          ? getAfter(/databases/$(database)/documents/timesheet_queries/$(request.resource.data.queryId)).data.raisedByUid == request.auth.uid
+          : request.resource.data.kind == "reply"
+            ? get(/databases/$(database)/documents/timesheet_queries/$(request.resource.data.queryId)).data.status == "open"
+            : request.resource.data.kind == "resolved"
+              ? get(/databases/$(database)/documents/timesheet_queries/$(request.resource.data.queryId)).data.status == "open"
+                && getAfter(/databases/$(database)/documents/timesheet_queries/$(request.resource.data.queryId)).data.status == "resolved"
+                && getAfter(/databases/$(database)/documents/timesheet_queries/$(request.resource.data.queryId)).data.raisedByUid == request.auth.uid
+              : get(/databases/$(database)/documents/timesheet_queries/$(request.resource.data.queryId)).data.status == "resolved"
+                && getAfter(/databases/$(database)/documents/timesheet_queries/$(request.resource.data.queryId)).data.status == "open"
+                && getAfter(/databases/$(database)/documents/timesheet_queries/$(request.resource.data.queryId)).data.raisedByUid == request.auth.uid);
+      allow update, delete: if false;
+    }
+
     // MILEAGE CLAIMS (src/modules/mileage): a journey in a member of staff's own vehicle, paid at the HMRC rate.
     //   the person    adds their own, and changes or withdraws it while it is waiting
     //   their line manager (set in the timesheet register) approves or declines it

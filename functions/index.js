@@ -39,6 +39,7 @@ const { getOrbCapabilities } = require("./services/orbScope");
 const { notifySignificantEvent } = require("./services/significantEventNotify");
 const { runStockReview } = require("./services/stockReviewService");
 const { buildAuditEntry } = require("./services/timesheetAuditService");
+const { queryAuditEntry, queryNotices, enrichment } = require("./services/timesheetQueryService");
 const { notifyIssueReport } = require("./services/issueReportNotify");
 const { runTimesheetReminders, statusNotice, deliver: deliverNotices } = require("./services/timesheetReminderService");
 
@@ -961,11 +962,41 @@ exports.auditTimesheets = onDocumentWritten({ document: "timesheets/{timesheetId
   const before = event.data?.before?.exists ? event.data.before.data() : null;
   const after = event.data?.after?.exists ? event.data.after.data() : null;
   const entry = buildAuditEntry(before, after, { id: event.params.timesheetId });
-  if (!entry) return;
-  await db.collection("timesheet_audit").add({ ...entry, at: FieldValue.serverTimestamp() });
-  // a person is told at once, with the reason, when their timesheet is declined or returned
-  const notice = statusNotice(entry, after);
-  if (notice) await deliverNotices(db, FieldValue, [notice]);
+  if (entry) {
+    await db.collection("timesheet_audit").add({ ...entry, at: FieldValue.serverTimestamp() });
+    // a person is told at once, with the reason, when their timesheet is declined or returned
+    const notice = statusNotice(entry, after);
+    if (notice) await deliverNotices(db, FieldValue, [notice]);
+  }
+  // the payroll team may not read the staff register, so the person's teams, job title and line manager's name are copied onto the
+  // timesheet here (the copy is not a change anyone needs audited, and a second pass finds nothing left to copy)
+  if (after?.staffId) {
+    const patch = await timesheetDetails(after);
+    if (patch) await event.data.after.ref.update(patch);
+  }
+});
+
+// What to copy onto one timesheet from the staff register (null when it is already there)
+async function timesheetDetails(sheet) {
+  const person = await db.collection("timesheet_staff").doc(sheet.staffId).get();
+  if (!person.exists) return null;
+  const staffById = new Map([[sheet.staffId, person.data()]]);
+  const managerId = person.data().managerId;
+  if (managerId) { const manager = await db.collection("timesheet_staff").doc(managerId).get(); if (manager.exists) staffById.set(managerId, manager.data()); }
+  return enrichment(sheet, staffById);
+}
+
+// A payroll query is a thread of messages nobody can change. Each one is written to the timesheet's audit trail, and the other side is told.
+exports.auditTimesheetQueries = onDocumentCreated({ document: "timesheet_query_messages/{messageId}", region: "europe-west2" }, async (event) => {
+  const message = event.data?.data();
+  if (!message?.queryId) return;
+  const queryDoc = await db.collection("timesheet_queries").doc(message.queryId).get();
+  if (!queryDoc.exists) return;
+  const query = queryDoc.data();
+  const sheetDoc = await db.collection("timesheets").doc(query.timesheetId).get();
+  const entry = queryAuditEntry(message, query, sheetDoc.exists ? sheetDoc.data() : null, { id: message.queryId });
+  if (entry) await db.collection("timesheet_audit").add({ ...entry, at: FieldValue.serverTimestamp() });
+  await deliverNotices(db, FieldValue, queryNotices(message, query, event.params.messageId));
 });
 
 // Every morning: reminders to staff who have not sent their timesheet (5 and 2 days before, the day, then daily when overdue), the line
@@ -985,6 +1016,13 @@ exports.scheduledTimesheetReminders = onSchedule({ region: "europe-west2", sched
     if (Array.isArray(capabilities) && capabilities.includes("timesheets.payroll")) payrollUids.push(user.id);
   }
   await runTimesheetReminders({ db, FieldValue, managerUids, payrollUids });
+  // timesheets made before their teams and line manager's name were copied onto them
+  const [staffSnap, sheetsSnap] = await Promise.all([db.collection("timesheet_staff").get(), db.collection("timesheets").get()]);
+  const staffById = new Map(staffSnap.docs.map((d) => [d.id, d.data()]));
+  for (const sheet of sheetsSnap.docs) {
+    const patch = enrichment({ id: sheet.id, ...sheet.data() }, staffById);
+    if (patch) await sheet.ref.update(patch);
+  }
 });
 
 exports.scheduledTrainingReminders = onSchedule({ region: "europe-west2", schedule: "every day 07:40", timeZone: "Europe/London", timeoutSeconds: 180 }, async () => {

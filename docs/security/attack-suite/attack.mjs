@@ -1572,6 +1572,117 @@ async function main() {
     await assertFails(getDoc(doc(cleaner, "mileage_claims", "m-pay")));
   });
 
+  console.log("\n=== 28b. Payroll queries on a timesheet (timesheet_queries, timesheet_query_messages) ===");
+  await seed(async (db) => {
+    const base = { periodId: "p28", staffId: "ts-m-nurse", uid: "nurse-uid", staffName: "Nurse Claimant", payrollNo: "12", managerUid: "reception-uid", kind: "no-change", lines: [], totals: {}, submissions: 1, lastActorUid: "reception-uid", lastActorName: "Manager" };
+    await setDoc(doc(db, "timesheets", "q28_signed"), { ...base, state: "approved", decision: { outcome: "approved", byUid: "reception-uid", by: "Manager", at: "2026-10-06T09:00:00Z" } });
+    await setDoc(doc(db, "timesheets", "q28_waiting"), { ...base, state: "submitted" });
+    await setDoc(doc(db, "timesheets", "q28_nomanager"), { ...base, managerUid: null, state: "approved" });
+  });
+  const qDoc = (extra = {}) => ({
+    timesheetId: "q28_signed", periodId: "p28", staffId: "ts-m-nurse", staffUid: "nurse-uid", staffName: "Nurse Claimant", managerUid: "reception-uid", to: "person", toUid: "nurse-uid", toName: "Nurse Claimant",
+    subject: "Was the overtime agreed?", status: "open", raisedByUid: "payroll-uid", raisedByName: "Payroll", createdAt: serverTimestamp(), updatedAt: serverTimestamp(), ...extra,
+  });
+  const mDoc = (queryId, kind, who, extra = {}) => ({ queryId, timesheetId: "q28_signed", kind, text: "Was the overtime agreed?", authorUid: who, authorName: "Someone", createdAt: serverTimestamp(), createdAtMs: 1, ...extra });
+  const raise = (db, id, q = {}, m = {}) => { const b = writeBatch(db); b.set(doc(db, "timesheet_queries", id), qDoc(q)); b.set(doc(db, "timesheet_query_messages", `${id}_m1`), mDoc(id, "raised", "payroll-uid", m)); return b.commit(); };
+  const say = (db, id, who, kind = "reply", extra = {}) => setDoc(doc(db, "timesheet_query_messages", `${id}_${who}_${Math.random().toString(36).slice(2, 8)}`), mDoc(id, kind, who, extra));
+  const settle = (db, id, uid, status, kind, text = "Sorted, thank you") => {
+    const b = writeBatch(db);
+    const said = `${id}_${kind}_${Math.random().toString(36).slice(2, 8)}`;
+    b.update(doc(db, "timesheet_queries", id), { status, resolvedAt: status === "resolved" ? serverTimestamp() : null, resolvedByUid: status === "resolved" ? uid : null, resolvedByName: status === "resolved" ? "Payroll" : null, resolution: status === "resolved" ? text : "", lastMessageId: said, updatedAt: serverTimestamp() });
+    b.set(doc(db, "timesheet_query_messages", said), mDoc(id, kind, uid, { text }));
+    return b.commit();
+  };
+
+  await check("The payroll team CAN raise a query on a signed-off timesheet, with the person or with their line manager", async () => {
+    await assertSucceeds(raise(payroll, "qp"));
+    await assertSucceeds(raise(payroll, "qm", { to: "manager", toUid: "reception-uid", toName: "Manager" }));
+  });
+  await check("Nobody else raises one: not the person, their manager, whoever manages timesheets, or a stranger", async () => {
+    for (const [who, uid] of [[nurse, "nurse-uid"], [reception, "reception-uid"], [pm, "pm-uid"], [tsAdmin, "tsadmin-uid"], [cleaner, "cleaner-uid"], [anon, ""]]) {
+      await assertFails(raise(who, `qx-${uid || "anon"}`, { raisedByUid: uid }, { authorUid: uid }));
+    }
+  });
+  await check("A query can't be raised with the wrong person, an invented line manager, on a timesheet that is not signed off, or with forged details", async () => {
+    await assertFails(raise(payroll, "qb1", { toUid: "cleaner-uid" }));
+    await assertFails(raise(payroll, "qb2", { to: "manager", toUid: "cleaner-uid" }));
+    await assertFails(raise(payroll, "qb3", { to: "manager", toUid: null, managerUid: null }));
+    await assertFails(raise(payroll, "qb4", { timesheetId: "q28_waiting" }, { timesheetId: "q28_waiting" }));
+    await assertFails(raise(payroll, "qb5", { timesheetId: "q28_nomanager", to: "manager", toUid: "reception-uid" }, { timesheetId: "q28_nomanager" }));
+    await assertFails(raise(payroll, "qb6", { raisedByUid: "someone-else" }));
+    await assertFails(raise(payroll, "qb7", { status: "resolved" }));
+    await assertFails(raise(payroll, "qb8", { staffUid: "cleaner-uid" }));
+    await assertFails(raise(payroll, "qb9", { secret: "x" }));
+    await assertFails(raise(payroll, "qb10", { subject: "hi" }));
+    await assertFails(raise(payroll, "qb11", {}, { authorUid: "reception-uid" }));
+    await assertFails(raise(payroll, "qb12", {}, { createdAt: new Date("2020-01-01") }));
+    await assertFails(raise(payroll, "qb13", {}, { text: "x".repeat(1001) }));
+    await assertFails(raise(payroll, "qb14", {}, { kind: "resolved" }));
+  });
+  await check("A query is read by payroll, the person it is about, their line manager and whoever manages timesheets; not by anyone else", async () => {
+    for (const who of [payroll, nurse, reception, pm, tsAdmin]) {
+      await assertSucceeds(getDoc(doc(who, "timesheet_queries", "qp")));
+      await assertSucceeds(getDoc(doc(who, "timesheet_query_messages", "qp_m1")));
+    }
+    for (const who of [cleaner, partner, caretaker, anon]) {
+      await assertFails(getDoc(doc(who, "timesheet_queries", "qp")));
+      await assertFails(getDoc(doc(who, "timesheet_query_messages", "qp_m1")));
+    }
+    await assertSucceeds(getDocs(query(collection(nurse, "timesheet_queries"), where("staffUid", "==", "nurse-uid"), where("to", "==", "person"))));
+    await assertSucceeds(getDocs(query(collection(reception, "timesheet_queries"), where("toUid", "==", "reception-uid"), where("to", "==", "manager"))));
+    await assertSucceeds(getDocs(collection(payroll, "timesheet_queries")));
+    await assertSucceeds(getDocs(query(collection(nurse, "timesheet_query_messages"), where("queryId", "==", "qp"))));
+    await assertFails(getDocs(collection(nurse, "timesheet_queries")));
+    await assertFails(getDocs(collection(cleaner, "timesheet_queries")));
+    await assertFails(getDocs(query(collection(cleaner, "timesheet_query_messages"), where("queryId", "==", "qp"))));
+  });
+  await check("Only the two sides reply, and only as themselves: the person asked can, payroll can; the line manager of a person-query and strangers cannot", async () => {
+    await assertSucceeds(say(nurse, "qp", "nurse-uid"));
+    await assertSucceeds(say(payroll, "qp", "payroll-uid"));
+    await assertSucceeds(say(reception, "qm", "reception-uid"));
+    await assertFails(say(reception, "qp", "reception-uid"));
+    await assertFails(say(pm, "qp", "pm-uid"));
+    await assertFails(say(cleaner, "qp", "cleaner-uid"));
+    await assertFails(say(anon, "qp", "payroll-uid"));
+    await assertFails(say(nurse, "qp", "nurse-uid", "reply", { authorUid: "payroll-uid" }));      // in someone else's name
+    await assertFails(say(nurse, "qp", "nurse-uid", "reply", { createdAt: new Date("2020-01-01") })); // with a made-up time
+    await assertFails(say(nurse, "qp", "nurse-uid", "reply", { text: "no" }));
+    await assertFails(say(nurse, "qp", "nurse-uid", "reply", { timesheetId: "q28_waiting" }));
+    await assertFails(say(nurse, "qp", "nurse-uid", "raised"));
+    await assertFails(say(nurse, "qp", "nurse-uid", "reply", { extra: true }));
+  });
+  await check("Messages can never be changed or deleted by anyone, an administrator included", async () => {
+    for (const who of [nurse, reception, payroll, pm, tsAdmin, admin]) {
+      await assertFails(updateDoc(doc(who, "timesheet_query_messages", "qp_m1"), { text: "I never said that" }));
+      await assertFails(deleteDoc(doc(who, "timesheet_query_messages", "qp_m1")));
+      await assertFails(deleteDoc(doc(who, "timesheet_queries", "qp")));
+    }
+  });
+  await check("Only whoever raised the query closes it, and only with the message that says so; the person asked cannot, and the rest of the query cannot be altered", async () => {
+    await assertFails(settle(nurse, "qp", "nurse-uid", "resolved", "resolved"));
+    await assertFails(settle(reception, "qm", "reception-uid", "resolved", "resolved"));
+    await assertFails(settle(cleaner, "qp", "cleaner-uid", "resolved", "resolved"));
+    await assertFails(updateDoc(doc(payroll, "timesheet_queries", "qp"), { status: "resolved", updatedAt: serverTimestamp() }));  // no message to say why
+    await assertFails(updateDoc(doc(payroll, "timesheet_queries", "qp"), { subject: "something else" }));
+    await assertFails(updateDoc(doc(payroll, "timesheet_queries", "qp"), { toUid: "cleaner-uid" }));
+    await assertFails(updateDoc(doc(payroll, "timesheet_queries", "qp"), { raisedByUid: "nurse-uid" }));
+    await assertSucceeds(settle(payroll, "qp", "payroll-uid", "resolved", "resolved"));
+  });
+  await check("Once resolved nobody can reply; only whoever raised it opens it again, with a message; then replies work again", async () => {
+    await assertFails(say(nurse, "qp", "nurse-uid"));
+    await assertFails(say(payroll, "qp", "payroll-uid"));
+    await assertFails(settle(nurse, "qp", "nurse-uid", "open", "reopened", "Actually one more thing"));
+    await assertFails(settle(payroll, "qp", "payroll-uid", "resolved", "resolved"));            // already resolved
+    await assertSucceeds(settle(payroll, "qp", "payroll-uid", "open", "reopened", "Payroll needs one more detail"));
+    await assertSucceeds(say(nurse, "qp", "nurse-uid"));
+  });
+  await check("A resolve can't borrow a message that says something else, or one from a different query", async () => {
+    await assertSucceeds(raise(payroll, "qq", {}));
+    const b = writeBatch(payroll);
+    b.update(doc(payroll, "timesheet_queries", "qq"), { status: "resolved", resolvedAt: serverTimestamp(), resolvedByUid: "payroll-uid", resolvedByName: "Payroll", resolution: "", lastMessageId: "qp_m1", updatedAt: serverTimestamp() });
+    await assertFails(b.commit());
+  });
+
   console.log("\n=== 29. Changing an original role's permissions (role_overrides) ===");
   await seed(async (db) => {
     await setDoc(doc(db, "users", "hca-ovr-uid"), { role: "HCA", displayName: "HCA Override" });
