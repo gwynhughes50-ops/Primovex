@@ -35,6 +35,11 @@ src-tauri/gen/android/app/*.jks
 *.apk
 *.aab
 
+# The UK SNOMED CT release and the list built from it are licensed (NHS England, SNOMED CT UK National Release Affiliate Licence): never commit or publish them
+SnomedCT_*
+*snomed-uk-index*
+*.rf2
+
 # Local verification output
 work/
 

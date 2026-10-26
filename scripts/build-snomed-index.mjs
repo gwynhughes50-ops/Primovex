@@ -2,7 +2,10 @@
 //
 //   1. On TRUD (https://isd.digital.nhs.uk) download "SNOMED CT UK Clinical Edition, RF2" and unzip it (right-click, Extract All).
 //   2. npm run snomed:index -- "C:\path\to\the\unzipped\folder"
-//   3. In ClinFlow, open a letter's SNOMED tab and choose the file this makes (snomed-uk-index.json.gz).
+//   3. In ClinFlow, open a letter's SNOMED tab and choose the file this makes (work\snomed-uk-index.json.gz).
+//
+// The release and the list are licensed under the UK National Release Affiliate Licence: keep them on your own computers, and never commit or
+// publish them (work/ and the SNOMED file names are in .gitignore for that reason).
 //
 // Optional: --refset "<path to a simple reference set file>" keeps only the codes in that set (for example the primary care one), which
 // makes the list smaller and the suggestions more relevant. --out "<file>" says where to write it.
@@ -57,6 +60,7 @@ if (flag("--refset")) only = new Set(await rows(flag("--refset"), parseMemberLin
 const release = (files.concepts[0].match(/_(\d{8})\.txt$/) || [])[1] || "";
 
 const index = buildIndex({ concepts, descriptions, language, only, release, edition: "UK SNOMED CT" });
-const out = flag("--out") || "snomed-uk-index.json.gz";
+const out = flag("--out") || path.join("work", "snomed-uk-index.json.gz");
+fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
 fs.writeFileSync(out, zlib.gzipSync(JSON.stringify(index), { level: 9 }));
 console.log(`\nBuilt ${describeIndex(index)}${only ? " (limited to the reference set)" : ""}.\nWritten to ${path.resolve(out)} (${(fs.statSync(out).size / 1e6).toFixed(1)} MB).`);
