@@ -39,6 +39,7 @@ import { triageLabel } from "./clinflowTriageService";
 import { createClinFlowDemoPdfBlob, createClinFlowSummaryPdfBlob, downloadClinFlowDemoPdf, downloadClinFlowSummaryPdf } from "./clinflowSummaryExportService";
 import { createDocmanPackZip, downloadBlob, safePackName } from "./clinflowZipService";
 import DocmanReadiness from "./DocmanReadiness";
+import NextSteps from "./NextSteps";
 import CodeReview from "./CodeReview";
 import { addCode, candidateKey, choose, codesAfterReview, decide, removeAdded, reviewCandidates, reviewOutcome } from "./clinflowCodeReview";
 import { useAbbreviations, useSnomedList } from "./snomedListStore";
@@ -190,7 +191,9 @@ function AzureReviewView({ selected, activeTab, onDownloadSummary, onOpenOrigina
     const aiConfidence = Math.round((analysis?.triage?.confidence || 0) * 100);
     const urgent = Boolean(analysis?.docmanDraft?.urgent);
     const calculatedValues = reviewCandidates(analysis, ocr?.content).filter((c) => c.calculated).map((candidate) => ({ key: candidateKey(candidate), candidate }));
+    const codingState = reviewOutcome(reviewCandidates(analysis, ocr?.content), selected.codeReview);
     return <div className="cf-tab-content cf-glance">
+      <NextSteps analysis={analysis} coding={{ waiting: codingState.waiting.length, accepted: codingState.accepted.length }} />
       <section className="cf-glance-facts">
         <div><span>Patient</span><strong>{selected.patient}</strong></div>
         <div><span>Date of birth</span><strong>{selected.dob}</strong></div>
