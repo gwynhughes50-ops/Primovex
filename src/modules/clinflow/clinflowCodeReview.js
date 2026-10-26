@@ -9,7 +9,19 @@ const STOP = new Set(["the", "a", "an", "of", "and", "or", "with", "for", "to", 
 const words = (value) => text(value).toLowerCase().replace(/[^a-z0-9\s./%-]/g, " ").split(" ").filter((w) => w && !STOP.has(w));
 
 // A stable key for a suggested code, so a decision stays with the same suggestion
-export const candidateKey = (c) => [c?.conceptId || "", text(c?.sourceLabel), text(c?.searchTerm || c?.sourceValue), c?.component || ""].join("|").toLowerCase();
+// (it does not include the code itself: a code found later from the SNOMED list must not lose the decision already made)
+export const candidateKey = (c) => [text(c?.sourceLabel), text(c?.searchTerm || c?.sourceValue), c?.component || ""].join("|").toLowerCase();
+
+// ---- the codes the loaded SNOMED list offers for a finding ----
+// search: a createSearch() of the loaded list, or null when none is loaded. A code the reader already knew comes first, then the best matches.
+export function optionsFor(candidate, search) {
+  if (!search) return [];
+  const known = candidate.conceptId ? search.byConcept(candidate.conceptId) : null;
+  const query = text(candidate.component ? candidate.preferredTerm : (candidate.sourceValue || candidate.searchTerm));
+  const found = query ? search.search(query, { limit: 5 }) : [];
+  return (known ? [known, ...found.filter((f) => f.conceptId !== known.conceptId)] : found).slice(0, 5);
+}
+const asPick = (o) => (o ? { conceptId: o.conceptId, term: o.term, descriptionId: o.descriptionId || "" } : null);
 
 // ---- the words in the letter behind a suggestion ----
 
@@ -68,16 +80,28 @@ export function snomedIdProblem(value, kind = "concept") {
 // ---- the review itself ----
 // review = { decisions: { [key]: { decision: "accepted" | "removed", byUid, byName, at } }, added: [{ id, term, conceptId, descriptionId, byUid, byName, at }], log: [...] }
 
-export const emptyReview = () => ({ decisions: {}, added: [], log: [] });
+export const emptyReview = () => ({ decisions: {}, choices: {}, added: [], log: [] });
 const stamp = (now) => (now instanceof Date ? now : new Date(now)).toISOString();
 
-export function decide(review, candidate, decision, { uid = "", name = "", now = new Date() } = {}) {
+// `pick` is the code being accepted ({ conceptId, term, descriptionId }), from the loaded list or the reader's own; it is kept with the decision
+export function decide(review, candidate, decision, { uid = "", name = "", now = new Date(), pick = null } = {}) {
   if (!["accepted", "removed", "suggested"].includes(decision)) throw new Error("A code can be accepted, removed or put back as a suggestion.");
+  if (decision === "accepted" && pick && snomedIdProblem(pick.conceptId, "concept")) throw new Error(snomedIdProblem(pick.conceptId, "concept"));
   const key = candidateKey(candidate);
   const base = review || emptyReview();
   const decisions = { ...base.decisions };
-  if (decision === "suggested") delete decisions[key]; else decisions[key] = { decision, byUid: uid, byName: name, at: stamp(now) };
-  return { ...base, decisions, log: [...(base.log || []), { at: stamp(now), byUid: uid, byName: name, action: decision, key, term: text(candidate.preferredTerm || candidate.searchTerm || candidate.sourceValue) }] };
+  if (decision === "suggested") delete decisions[key]; else decisions[key] = { decision, byUid: uid, byName: name, at: stamp(now), ...(decision === "accepted" && pick ? { chosen: asPick(pick) } : {}) };
+  const term = text(pick?.term || candidate.preferredTerm || candidate.searchTerm || candidate.sourceValue);
+  return { ...base, decisions, log: [...(base.log || []), { at: stamp(now), byUid: uid, byName: name, action: decision, key, term, ...(pick?.conceptId ? { conceptId: String(pick.conceptId) } : {}) }] };
+}
+
+// The coder picks a different match from the list for a finding, before accepting it
+export function choose(review, candidate, option, { uid = "", name = "", now = new Date() } = {}) {
+  const base = review || emptyReview();
+  const key = candidateKey(candidate);
+  const choices = { ...(base.choices || {}) };
+  if (option) choices[key] = asPick(option); else delete choices[key];
+  return { ...base, choices, log: [...(base.log || []), { at: stamp(now), byUid: uid, byName: name, action: option ? "chose a different code" : "went back to the first match", key, term: text(option?.term || candidate.preferredTerm || candidate.searchTerm), ...(option?.conceptId ? { conceptId: String(option.conceptId) } : {}) }] };
 }
 
 // A code the reader missed, added by the coder. A concept ID is optional (a term alone is kept as a note); when given it is checked.
@@ -105,14 +129,19 @@ export function removeAdded(review, id, { uid = "", name = "", now = new Date() 
 }
 
 // Each suggestion with the words behind it and where the coder has got to: [{ key, candidate, term, evidence, state, by, at }]
-export function reviewRows(candidates = [], letter = "", review = null) {
+// `search` (the loaded SNOMED list) is optional: with it each row also has the codes the list offers and the one that will be used if accepted.
+export function reviewRows(candidates = [], letter = "", review = null, search = null) {
   return candidates.map((candidate) => {
     const key = candidateKey(candidate);
     const decision = review?.decisions?.[key];
     const evidence = findEvidence(letter, candidate.sourceValue || candidate.searchTerm || candidate.preferredTerm);
+    const options = optionsFor(candidate, search);
+    const own = candidate.conceptId ? { conceptId: candidate.conceptId, term: text(candidate.preferredTerm), descriptionId: candidate.descriptionId || "" } : null;
+    // what accepting will use: the code chosen with the decision, else the coder's pick, else the first match, else the reader's own
+    const pick = decision?.chosen || review?.choices?.[key] || asPick(options[0]) || own;
     return {
-      key, candidate, term: text(candidate.preferredTerm || candidate.searchTerm || candidate.sourceValue), label: text(candidate.sourceLabel), conceptId: candidate.conceptId || "",
-      evidence, state: decision?.decision || "suggested", by: decision?.byName || "", at: decision?.at || "",
+      key, candidate, term: text(pick?.term || candidate.preferredTerm || candidate.searchTerm || candidate.sourceValue), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
+      descriptionId: pick?.descriptionId || "", pick, options, evidence, state: decision?.decision || "suggested", by: decision?.byName || "", at: decision?.at || "",
     };
   });
 }
@@ -124,7 +153,9 @@ export function codesAfterReview(candidates = [], review = null) {
   for (const c of candidates) {
     const decision = review?.decisions?.[candidateKey(c)];
     if (decision?.decision === "removed") continue;
-    out.push(decision?.decision === "accepted" ? { ...c, acceptedByUid: decision.byUid || "unknown", acceptedByName: decision.byName, acceptedAt: decision.at } : c);
+    const chosen = decision?.decision === "accepted" ? decision.chosen : null;
+    const code = chosen ? { ...c, conceptId: chosen.conceptId, preferredTerm: chosen.term, descriptionId: chosen.descriptionId || c.descriptionId || null, status: "code_chosen_from_uk_list" } : c;
+    out.push(decision?.decision === "accepted" ? { ...code, acceptedByUid: decision.byUid || "unknown", acceptedByName: decision.byName, acceptedAt: decision.at } : c);
   }
   for (const a of review?.added || []) {
     out.push({ sourceLabel: "Added by the coder", sourceValue: a.term, searchTerm: a.term, conceptId: a.conceptId || null, descriptionId: a.descriptionId || null, preferredTerm: a.term, assertion: "present", scheme: 2, codeSystem: "SNOMED CT UK Edition", status: "added_by_clinician", acceptedByUid: a.byUid || "unknown", acceptedByName: a.byName, acceptedAt: a.at, addedByCoder: true });
