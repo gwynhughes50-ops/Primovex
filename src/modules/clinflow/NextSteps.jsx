@@ -4,8 +4,8 @@ import { buildNextSteps } from "./clinflowNextSteps";
 
 // "What to do with this letter": the headline decision, then numbered steps, each saying who does it, when, and why (the words in the letter).
 // Written for the administrator who opens the letter first: nothing clinical is left for them to decide.
-export default function NextSteps({ analysis, coding }) {
-  const plan = useMemo(() => buildNextSteps(analysis, coding), [analysis, coding]);
+export default function NextSteps({ analysis, coding, letter }) {
+  const plan = useMemo(() => buildNextSteps(analysis, coding, letter), [analysis, coding, letter]);
   if (!plan.headline) return null;
   const { headline, steps } = plan;
   return (
@@ -25,6 +25,7 @@ export default function NextSteps({ analysis, coding }) {
                 {step.when && <span className="cf-next-when">{step.when}{step.due ? ` · by about ${step.due}` : ""}</span>}
               </div>
               <p>{step.detail}</p>
+              {step.points?.length > 0 && <ul className="cf-next-points">{step.points.map((point) => <li key={point}>{point}</li>)}</ul>}
               {step.because && <p className="cf-next-because">From the letter: “{step.because}”</p>}
             </div>
           </li>

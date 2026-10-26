@@ -112,3 +112,12 @@
 .cf-score-bars{list-style:none;margin:8px 0;padding:0;display:grid;gap:7px}.cf-score-bars li{display:grid;grid-template-columns:140px 1fr 44px;align-items:center;gap:10px;font-size:13px}
 .cf-score-bar{height:12px;border-radius:999px;background:#e4ecf6;overflow:hidden}.cf-score-bar i{display:block;height:100%;background:#16a06a;border-radius:999px}
 .cf-score-list{list-style:none;margin:8px 0;padding:0;display:grid;gap:8px}.cf-score-list li{padding:9px 12px;border:1px solid #dce5ef;border-left:5px solid #e08a00;border-radius:10px;background:#fffaf0}.cf-score-list p{margin:2px 0;font-size:12.5px}
+
+/* Steps for the practice manager and the safeguarding lead, and the bullet points under a step */
+.cf-next-step--manager{--s-edge:#d9822b;--s-bg:#fff4e8;--s-soft:#f7dcbc;--s-ink:#8a4a07}
+.cf-next-step--safeguarding{--s-edge:#a3267d;--s-bg:#fdeef8;--s-soft:#f3c9e6;--s-ink:#74175a}
+.cf-next-points{margin:6px 0 0;padding-left:18px;display:grid;gap:3px}.cf-next-points li{font-size:12.5px;line-height:1.4;color:#1d2f49}
+
+/* A strip under the patient banner when the name is common or an identifier is missing or doubtful */
+.cf-identity-note{display:flex;gap:10px;align-items:flex-start;margin:8px 0;padding:10px 14px;border-radius:12px;border:1px solid #f1d98f;border-left:6px solid #e08a00;background:#fff7e0;color:#6b4300}
+.cf-identity-note b{display:block;font-size:13.5px;color:#4d3000}.cf-identity-note span{display:block;font-size:12.5px;line-height:1.4}

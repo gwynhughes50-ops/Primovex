@@ -83,7 +83,7 @@ function ListSearch({ search, onUse }) {
 
 // The coder's screen for one letter: each suggested SNOMED code with the words in the letter behind it, and buttons to accept it, remove it
 // or put it back; other matches from the UK list; a way to add a code the reader missed; and the counts that say how well the reader did.
-export default function CodeReview({ candidates, letter, review, canEdit, list, medList, abbreviations, onDecide, onChoose, onAdd, onRemoveAdded }) {
+export default function CodeReview({ candidates, letter, review, canEdit, list, medList, abbreviations, onCopy, onDecide, onChoose, onAdd, onRemoveAdded }) {
   const rows = useMemo(() => reviewRows(candidates, letter, review, list?.search || null, medList?.search || null), [candidates, letter, review, list?.search, medList?.search, abbreviations?.version]);
   const stats = useMemo(() => reviewStats(candidates, review), [candidates, review]);
   const summary = useMemo(() => matchSummary(rows), [rows]);
@@ -91,9 +91,9 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
   const [copiedDetails, setCopiedDetails] = useState(false);
   const copyDetails = async () => {
     const version = (typeof import.meta !== "undefined" && import.meta.env?.VITE_APP_VERSION) || "";
-    try { await navigator.clipboard.writeText(diagnosticText(rows, { version, snomedInfo: list?.search ? list.info : "", medicinesInfo: medList?.search ? medList.info : "" })); setCopiedDetails(true); setTimeout(() => setCopiedDetails(false), 2500); } catch { /* the details are also on each row */ }
+    try { await navigator.clipboard.writeText(diagnosticText(rows, { version, snomedInfo: list?.search ? list.info : "", medicinesInfo: medList?.search ? medList.info : "" })); setCopiedDetails(true); onCopy?.("lookup details"); setTimeout(() => setCopiedDetails(false), 2500); } catch { /* the details are also on each row */ }
   };
-  const copyUnmatched = async () => { try { await navigator.clipboard.writeText(unmatchedText(summary)); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch { /* the list is also shown above */ } };
+  const copyUnmatched = async () => { try { await navigator.clipboard.writeText(unmatchedText(summary)); setCopied(true); onCopy?.("words with no code"); setTimeout(() => setCopied(false), 2500); } catch { /* the list is also shown above */ } };
   const [form, setForm] = useState({ term: "", conceptId: "", descriptionId: "" });
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);

@@ -42,6 +42,7 @@ import { createDocmanPackZip, downloadBlob, safePackName } from "./clinflowZipSe
 import DocmanReadiness from "./DocmanReadiness";
 import NextSteps from "./NextSteps";
 import Scorecard from "./Scorecard";
+import { identityChecks } from "./clinflowSignals";
 import { codingAuditMeta, termVersions, terminologyEvent } from "./clinflowAuditMeta";
 import CodeReview from "./CodeReview";
 import { addCode, candidateKey, choose, codesAfterReview, decide, removeAdded, reviewCandidates, reviewOutcome } from "./clinflowCodeReview";
@@ -169,7 +170,7 @@ function effectiveTriageFor(document) {
   };
 }
 
-function AzureReviewView({ selected, activeTab, onDocmanCopy, onDownloadSummary, onOpenOriginal, onTriageDecision, onOpenTeaching, canReviewCodes, snomedList, medicinesList, abbreviations, onCodeDecision, onCodeChoose, onCodeAdd, onCodeRemoveAdded }) {
+function AzureReviewView({ selected, activeTab, onDocmanCopy, onCodeCopy, onDownloadSummary, onOpenOriginal, onTriageDecision, onOpenTeaching, canReviewCodes, snomedList, medicinesList, abbreviations, onCodeDecision, onCodeChoose, onCodeAdd, onCodeRemoveAdded }) {
   const ocr = selected.syntheticOcr;
   const analysis = selected.clinflowAnalysis;
   const confidence = Math.round((ocr.averageConfidence || 0) * 100);
@@ -196,7 +197,7 @@ function AzureReviewView({ selected, activeTab, onDocmanCopy, onDownloadSummary,
     const calculatedValues = reviewCandidates(analysis, ocr?.content).filter((c) => c.calculated).map((candidate) => ({ key: candidateKey(candidate), candidate }));
     const codingState = reviewOutcome(reviewCandidates(analysis, ocr?.content), selected.codeReview);
     return <div className="cf-tab-content cf-glance">
-      <NextSteps analysis={analysis} coding={{ waiting: codingState.waiting.length, accepted: codingState.accepted.length }} />
+      <NextSteps analysis={analysis} letter={ocr?.content || ""} coding={{ waiting: codingState.waiting.length, accepted: codingState.accepted.length }} />
       <section className="cf-glance-facts">
         <div><span>Patient</span><strong>{selected.patient}</strong></div>
         <div><span>Date of birth</span><strong>{selected.dob}</strong></div>
@@ -261,7 +262,7 @@ function AzureReviewView({ selected, activeTab, onDocmanCopy, onDownloadSummary,
   if (activeTab === "snomed") return <div className="cf-tab-content">
     <section className="cf-summary-card"><Tag size={18} /><div><b>SNOMED CT candidate review</b><p>Structured observations use governed baseline concepts where available. Every candidate still requires current UK Edition validation, patient matching and trained clinician acceptance before filing.</p></div></section>
     {analysis?.structuredObservations?.length ? <div className="cf-info-grid">{analysis.structuredObservations.map((item) => <section key={`${item.type}-${item.sourceValue}`}><h3>{item.preferredTerm}</h3>{item.type === "blood_pressure" ? <p><b>{item.systolic.value}/{item.diastolic.value} {item.unit.display}</b><br />Blood pressure: {item.conceptId}<br />Systolic: {item.systolic.conceptId}<br />Diastolic: {item.diastolic.conceptId}<br />Unit: {item.unit.ucumCode}<br />Status: clinician review required</p> : <p><b>{item.value} {item.unit.display}</b><br />Concept ID: {item.conceptId}<br />Unit: {item.unit.ucumCode}<br />Status: clinician review required</p>}</section>)}</div> : null}
-    <CodeReview candidates={reviewCandidates(analysis, ocr?.content)} letter={ocr?.content || ""} review={selected.codeReview} canEdit={canReviewCodes} list={snomedList} medList={medicinesList} abbreviations={abbreviations} onDecide={onCodeDecision} onChoose={onCodeChoose} onAdd={onCodeAdd} onRemoveAdded={onCodeRemoveAdded} />
+    <CodeReview onCopy={onCodeCopy} candidates={reviewCandidates(analysis, ocr?.content)} letter={ocr?.content || ""} review={selected.codeReview} canEdit={canReviewCodes} list={snomedList} medList={medicinesList} abbreviations={abbreviations} onDecide={onCodeDecision} onChoose={onCodeChoose} onAdd={onCodeAdd} onRemoveAdded={onCodeRemoveAdded} />
   </div>;
   if (activeTab === "quality") return <div className="cf-tab-content"><section className="cf-summary-card"><ShieldCheck size={18} /><div><b>Wales and England quality/register review</b><p>A hospital letter cannot establish a QAIF, Unified Contract or QOF opportunity by itself. ClinFlow therefore produces governed record-check prompts—not confirmed opportunities.</p></div></section><div className="cf-info-grid"><section><h3>Confirmed opportunities</h3><p><b>{analysis?.qaifOpportunities?.length || 0}</b><br />None are confirmed from this letter alone.<br />Awareness: {analysis?.qualityAwareness?.relevance || "Low"}</p></section>{analysis?.qualityPrompts?.map((item) => <section key={`${item.domain}-${item.title}`}><h3>{item.title}</h3><p><b>{item.domain}</b>{item.priority === "high" ? " · High-priority review" : ""}<br />{item.rationale}<br /><br />Next: {item.nextStep}<br /><small>{item.framework}</small></p></section>)}</div></div>;
   if (activeTab === "outflow") return <div className="cf-tab-content"><section className="cf-summary-card"><FileText size={18} /><div><b>Docman companion summary</b><p>Download this summary, have a trained clinician compare and sign it against the untouched original, then drag both PDFs into Docman. Primovex does not transmit or file either document automatically.</p></div></section><div className="cf-info-grid"><section><h3>Document</h3><p>{analysis?.documentType}<br />Source: {ocr.fileName}</p></section><section><h3>Patient identity</h3><p>{analysis?.patient?.givenNames} {analysis?.patient?.familyName}<br /><b>Unverified</b> · NHS number and DOB must be checked</p></section><section><h3>Review status</h3><p>{analysis?.missing?.length || 0} required verification item{analysis?.missing?.length === 1 ? "" : "s"}<br />Not ready for automated transfer</p></section><section><h3>Output</h3><p><button type="button" className="cf-top-button cf-top-button--primary" onClick={onDownloadSummary}><Download size={14} /> Download summary PDF</button></p></section></div><DocmanReadiness analysis={analysis} fileReady={Boolean(ocr?.fileName)} outcome={reviewOutcome(reviewCandidates(analysis, ocr?.content), selected.codeReview)} onDownload={onDownloadSummary} onCopy={onDocmanCopy} /></div>;
@@ -345,6 +346,12 @@ export default function ClinFlowWorkspace() {
   }, () => setSyncState("error")), [context]);
 
   const selected = documents.find((item) => item.id === selectedId) || documents[0];
+  const identityNote = useMemo(() => {
+    const analysis = selected?.clinflowAnalysis;
+    if (!analysis || !selected?.syntheticOcr) return null;
+    const checks = identityChecks({ givenNames: analysis.patient?.givenNames, familyName: analysis.patient?.familyName, nhsNumber: analysis.docmanDraft?.patient?.identifier, birthDate: analysis.docmanDraft?.patient?.birthDate, letterDate: analysis.docmanDraft?.document?.eventDate }, selected.syntheticOcr.content);
+    return checks.level === "high" || checks.commonName ? checks : null;
+  }, [selected]);
   // who opened which letter: once per letter per session, so reading a letter is on the record without a line for every click
   const viewedLetters = useRef(new Set());
   useEffect(() => {
@@ -352,6 +359,16 @@ export default function ClinFlowWorkspace() {
     viewedLetters.current.add(selected.id);
     record("clinflow.document.view", "ClinFlow letter opened for review", { dataMode: selected.dataMode || "synthetic" }).catch(() => {});
   }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // which tab of a letter was opened, which queue was looked at, and that a search was made (how long, never what for)
+  const trackedTab = useRef(activeTab);
+  useEffect(() => { if (trackedTab.current === activeTab) return; trackedTab.current = activeTab; track("clinflow.tab.view", "ClinFlow tab opened", { tab: String(activeTab).replace(/^synthetic-/, "") }); }, [activeTab]); // eslint-disable-line react-hooks/exhaustive-deps
+  const trackedFilter = useRef(filter);
+  useEffect(() => { if (trackedFilter.current === filter) return; trackedFilter.current = filter; track("clinflow.queue.filter", "ClinFlow queue changed", { queue: filter }); }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (query.trim().length < 2) return undefined;
+    const timer = setTimeout(() => track("clinflow.search", "ClinFlow documents searched", { termLength: query.trim().length }), 1500);
+    return () => clearTimeout(timer);
+  }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function replaceSelected(changes) {
     if (!selected?.id) return null;
@@ -400,6 +417,14 @@ export default function ClinFlowWorkspace() {
     notify(`${imported.length} analysed document${imported.length === 1 ? "" : "s"} added to ClinFlow review`);
   }
 
+  // Every move a person makes is on the record: what they changed, what they opened, what they copied or downloaded, and what they were refused
+  function track(action, summary, metadata = {}) {
+    return record(action, summary, { ...metadata, automatedTransmission: false }).catch(() => {});
+  }
+  function denied(permission, message) {
+    writeAuditEvent({ actor: { uid: user?.uid, displayName: displayName || user?.email }, action: "clinflow.action.denied", module: "clinflow", targetType: "clinical_document", targetId: selected?.id, summary: message, metadata: { permission, automatedTransmission: false }, permissionDecision: "denied", outcome: "denied", classification: selected?.dataMode === "live" ? "special_category" : "synthetic" }).catch(() => {});
+    notify(message);
+  }
   async function record(action, summary, metadata = {}, targetId = selected?.id) {
     await writeAuditEvent({
       actor: { uid: user?.uid, displayName: displayName || user?.email },
@@ -415,7 +440,7 @@ export default function ClinFlowWorkspace() {
 
   // The coder accepts, removes or adds codes. The change is kept on the letter, in this device's copy, and written to the audit trail with who did it.
   async function saveCodeReview(review, action, summary, metadata = {}) {
-    if (!can("clinflow.workflow")) return notify("Your role cannot change the codes on a ClinFlow letter");
+    if (!can("clinflow.workflow")) return denied("clinflow.workflow", "Your role cannot change the codes on a ClinFlow letter");
     await runAction(async () => {
       const updated = { ...selected, codeReview: review, clinflowAnalysis: { ...selected.clinflowAnalysis, docmanDraft: { ...selected.clinflowAnalysis?.docmanDraft, clinicalCodes: codesAfterReview(reviewCandidates(selected.clinflowAnalysis, selected.syntheticOcr?.content), review) } } };
       setDocuments((items) => items.map((item) => item.id === selected.id ? updated : item));
@@ -430,7 +455,7 @@ export default function ClinFlowWorkspace() {
   const removeAddedCode = (id) => saveCodeReview(removeAdded(selected.codeReview, id, coder()), "clinflow.code_review", "A code added by the coder was taken out", { decision: "took out an added code" });
 
   async function routeDocument(destination) {
-    if (!can("clinflow.workflow")) return notify("Your role cannot route ClinFlow documents");
+    if (!can("clinflow.workflow")) return denied("clinflow.workflow", "Your role cannot route ClinFlow documents");
     await runAction(async () => {
       if (context.cloudEnabled) await applyClinFlowAction(selected, { type: "route", destination, summary: `Document routed to ${destination}`, metadata: { destination } }, context);
       const updated = { ...selected, destination, persisted: context.cloudEnabled || selected.persisted };
@@ -442,9 +467,10 @@ export default function ClinFlowWorkspace() {
   }
 
   function requestFinishDocument() {
-    if (!can("clinflow.workflow")) return notify("Your role cannot finish ClinFlow documents");
+    if (!can("clinflow.workflow")) return denied("clinflow.workflow", "Your role cannot finish ClinFlow documents");
     setFinishChecks({ original: false, identity: false, review: false });
     setFinishOpen(true);
+    track("clinflow.finish.open", "Finish dialog opened", { codesWaiting: codingOf(selected).codesWaiting ?? 0 });
   }
 
   async function resolveOriginalFile(document = selected) {
@@ -514,7 +540,7 @@ export default function ClinFlowWorkspace() {
   }
 
   async function archiveDocument() {
-    if (!can("clinflow.manage")) return notify("ClinFlow management permission is required");
+    if (!can("clinflow.manage")) return denied("clinflow.manage", "ClinFlow management permission is required");
     await runAction(async () => {
       if (context.cloudEnabled) await applyClinFlowAction(selected, { type: "archive", summary: "Synthetic workflow document archived" }, context);
       await removeCachedClinFlowDocument(selected.id);
@@ -533,7 +559,7 @@ export default function ClinFlowWorkspace() {
   }
 
   async function permanentlyDeleteDocument() {
-    if (!can("clinflow.manage")) return notify("ClinFlow management permission is required");
+    if (!can("clinflow.manage")) return denied("clinflow.manage", "ClinFlow management permission is required");
     await runAction(async () => {
       if (context.cloudEnabled) await applyClinFlowAction(selected, { type: "delete", summary: "Synthetic workflow document permanently deleted from view" }, context);
       await removeCachedClinFlowDocument(selected.id);
@@ -565,12 +591,12 @@ export default function ClinFlowWorkspace() {
   }
 
   async function saveDemoQueue() {
-    if (!can("clinflow.capture")) return notify("ClinFlow capture permission is required");
+    if (!can("clinflow.capture")) return denied("clinflow.capture", "ClinFlow capture permission is required");
     await runAction(async () => { await saveSyntheticWorkflowQueue(SAMPLE_DOCUMENTS, context); notify("Non-identifying demonstration workflow saved"); });
   }
 
   async function setPriority() {
-    if (!can("clinflow.workflow")) return notify("Your role cannot change workflow priority");
+    if (!can("clinflow.workflow")) return denied("clinflow.workflow", "Your role cannot change workflow priority");
     await runAction(async () => {
       if (context.cloudEnabled) await applyClinFlowAction(selected, { type: "priority", priority: "high", summary: "Document marked high priority" }, context);
       const updated = { ...selected, priority: "high", persisted: context.cloudEnabled || selected.persisted };
@@ -582,7 +608,7 @@ export default function ClinFlowWorkspace() {
   }
 
   async function claimDocument() {
-    if (!can("clinflow.workflow")) return notify("Your role cannot claim workflow documents");
+    if (!can("clinflow.workflow")) return denied("clinflow.workflow", "Your role cannot claim workflow documents");
     await runAction(async () => {
       if (context.cloudEnabled) await applyClinFlowAction(selected, { type: "claim", summary: "Document claimed for review" }, context);
       replaceSelected({ status: "in_review", claimedByUid: user?.uid || "synthetic-demo-user", claimedAt: new Date().toISOString(), persisted: context.cloudEnabled || selected.persisted });
@@ -592,7 +618,7 @@ export default function ClinFlowWorkspace() {
   }
 
   async function saveNote() {
-    if (!can("clinflow.workflow")) return notify("Your role cannot add workflow notes");
+    if (!can("clinflow.workflow")) return denied("clinflow.workflow", "Your role cannot add workflow notes");
     const trimmedNote = note.trim();
     if (!trimmedNote) return notify("Enter a note before saving");
     await runAction(async () => {
@@ -605,7 +631,7 @@ export default function ClinFlowWorkspace() {
   }
 
   async function confirmTriageDecision(decision, feedback = {}) {
-    if (!can("clinflow.workflow")) return notify("Your role cannot confirm ClinFlow triage");
+    if (!can("clinflow.workflow")) return denied("clinflow.workflow", "Your role cannot confirm ClinFlow triage");
     let saved = false;
     await runAction(async () => {
       const triage = effectiveTriageFor(selected);
@@ -624,10 +650,11 @@ export default function ClinFlowWorkspace() {
   }
 
   function openTeaching() {
-    if (!can("clinflow.workflow")) return notify("Your role cannot score or teach ClinFlow");
+    if (!can("clinflow.workflow")) return denied("clinflow.workflow", "Your role cannot score or teach ClinFlow");
     if (selected?.dataMode === "live") return notify("Score and Teach is currently restricted to approved synthetic cases");
     setTeachingForm(teachingFormFor(effectiveTriageFor(selected)));
     setTeachingOpen(true);
+    track("clinflow.teaching.open", "Score and teach opened", {});
   }
 
   async function saveTeaching() {
@@ -708,7 +735,7 @@ export default function ClinFlowWorkspace() {
   }
 
   async function reprocessOcr() {
-    if (!can("clinflow.capture")) return notify("ClinFlow capture permission is required to reprocess OCR");
+    if (!can("clinflow.capture")) return denied("clinflow.capture", "ClinFlow capture permission is required to reprocess OCR");
     const file = await resolveOriginalFile(selected);
     if (!(file instanceof Blob)) {
       setAzureTestOpen(true);
@@ -870,6 +897,7 @@ export default function ClinFlowWorkspace() {
             <span className="cf-match">{selected.syntheticOcr ? "Synthetic · verify" : "Match 98%"}</span>
             <button type="button" onClick={verifyPatientRequest}>{selected.syntheticOcr ? "Verify patient" : "View patient"}</button>
           </div>
+          {identityNote && <div className="cf-identity-note" role="status"><AlertTriangle size={16} /><div><b>{identityNote.commonName ? "Common name: double-check this patient" : "Double-check this patient"}</b><span>{identityNote.reasons[0]}{identityNote.reasons.length > 2 ? ` (and ${identityNote.reasons.length - 2} more in What to do with this letter)` : ""}</span></div></div>}
           {(selected.clinflowAnalysis?.docmanDraft?.urgent || selected.clinflowAnalysis?.docmanDraft?.medicationChanged) && (
             <div className="cf-high-risk-banner"><AlertTriangle size={16} />{HIGH_RISK_BANNER}</div>
           )}
@@ -879,7 +907,7 @@ export default function ClinFlowWorkspace() {
           </section>}
           <nav className="cf-tabs">{tabs.map(([key, label]) => { const tabKey = selected.syntheticOcr ? `synthetic-${key}` : key; return <button type="button" key={key} className={activeTab === tabKey ? "active" : ""} onClick={() => setActiveTab(tabKey)}>{label}</button>; })}</nav>
           <section className="cf-viewer">
-            {selected.syntheticOcr && <AzureReviewView onDocmanCopy={(field) => record("clinflow.docman.copy", "A detail was copied for Docman", { field, automatedTransmission: false }).catch(() => {})} selected={selected} activeTab={activeTab.replace(/^synthetic-/, "")} onDownloadSummary={downloadSummary} onOpenOriginal={openOriginal} onTriageDecision={confirmTriageDecision} onOpenTeaching={openTeaching} canReviewCodes={can("clinflow.workflow")} snomedList={auditedList(snomedList, "snomed")} medicinesList={auditedList(medicinesList, "dmd")} abbreviations={auditedAbbreviations} onCodeDecision={decideCode} onCodeChoose={chooseCode} onCodeAdd={addCodeByCoder} onCodeRemoveAdded={removeAddedCode} />}
+            {selected.syntheticOcr && <AzureReviewView onCodeCopy={(what) => track("clinflow.codes.copy", "Coding details copied", { what })} onDocmanCopy={(field) => record("clinflow.docman.copy", "A detail was copied for Docman", { field, automatedTransmission: false }).catch(() => {})} selected={selected} activeTab={activeTab.replace(/^synthetic-/, "")} onDownloadSummary={downloadSummary} onOpenOriginal={openOriginal} onTriageDecision={confirmTriageDecision} onOpenTeaching={openTeaching} canReviewCodes={can("clinflow.workflow")} snomedList={auditedList(snomedList, "snomed")} medicinesList={auditedList(medicinesList, "dmd")} abbreviations={auditedAbbreviations} onCodeDecision={decideCode} onCodeChoose={chooseCode} onCodeAdd={addCodeByCoder} onCodeRemoveAdded={removeAddedCode} />}
             {!selected.syntheticOcr && activeTab === "document" && <>
               <div className="cf-viewer-toolbar"><button type="button">−</button><b>100%</b><button type="button">+</button><button type="button"><Download size={14} /></button><span>Page 1 of 2</span></div>
               <div className="cf-viewer-body"><aside className="cf-thumbnails"><div className="active">Page 1</div><small>1</small><div>Page 2</div><small>2</small></aside><div className="cf-paper-stage"><article className="cf-paper"><div className="cf-letterhead"><strong>Glan Clwyd Hospital<br /><small>Cardiology Department</small></strong><strong>Date: 14 May 2026</strong></div><p>Dr A N Other<br />Greenfield Surgery<br />123 High Street<br />Mold<br />CH7 1AB</p><p>Dear Dr Other</p><p><b>Re: {selected.patient} · DOB: {selected.dob} · NHS: {selected.nhs}</b></p><p>Thank you for referring Mr Smith to the Cardiology Clinic.</p><h3>Assessment</h3><p>Mr Smith was reviewed today for atrial fibrillation. He remains symptomatic with exertional dyspnoea. Echocardiogram shows mild left ventricular dysfunction.</p><h3>Plan</h3><ul><li>Increase Bisoprolol to 5 mg once daily</li><li>Continue Apixaban 5 mg twice daily</li><li>Repeat U&Es in 2 weeks</li><li>Review in 3 months</li></ul><p>Yours sincerely</p><p><b>Dr B Consultant<br />Consultant Cardiologist</b></p></article></div></div>
@@ -937,7 +965,7 @@ export default function ClinFlowWorkspace() {
             <hr /><p>FINALISE</p><div className="cf-action-grid">
               <ActionButton active={selected?.status === "in_review" || Boolean(selected?.claimedByUid)} disabled={busy || !selected || selected?.status === "completed"} onClick={claimDocument}><UserCheck size={14} />{selected?.status === "in_review" || selected?.claimedByUid ? "Claimed" : "Claim"}</ActionButton>
               <ActionButton disabled={busy || !selected} onClick={openTeaching}><GraduationCap size={14} />Score / Teach</ActionButton>
-              <ActionButton onClick={() => setScorecardOpen(true)}><BarChart3 size={14} />Scorecard</ActionButton>
+              <ActionButton onClick={() => { setScorecardOpen(true); track("clinflow.scorecard.open", "ClinFlow scorecard opened", {}); }}><BarChart3 size={14} />Scorecard</ActionButton>
               <ActionButton tone="success" wide active={selected?.status === "completed"} disabled={busy || !selected || selected?.status === "completed"} onClick={requestFinishDocument}><CheckCircle2 size={15} />{selected?.status === "completed" ? "Finished · ready for Docman" : "Confirm & Finish"}</ActionButton>
             </div>
           </section>

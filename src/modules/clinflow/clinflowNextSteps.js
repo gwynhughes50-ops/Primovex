@@ -4,7 +4,9 @@
 // advice), so it only ever repeats what the letter says; it adds the standing steps (check the patient, check the codes, file it). Pure (no screens).
 
 const text = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
-export const OWNERS = { admin: "Admin", gp: "GP", nurse: "Nurse / HCA", pharmacist: "Pharmacist" };
+import { identityChecks, letterSignals } from "./clinflowSignals.js";
+
+export const OWNERS = { admin: "Admin", gp: "GP", nurse: "Nurse / HCA", pharmacist: "Pharmacist", manager: "Practice manager", safeguarding: "Safeguarding lead" };
 
 const WORDS = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, twelve: 12 };
 const number = (v) => (WORDS[String(v).toLowerCase()] ?? Number(v));
@@ -60,7 +62,7 @@ const DIRECTIONS = {
 
 // analysis: ClinFlow's analysis of the letter. coding: { waiting, accepted } counts from the code review (optional).
 // Returns { headline: { tone, title, detail }, steps: [{ id, owner, tone, title, detail, when, due, because }], note }
-export function buildNextSteps(analysis, coding = {}) {
+export function buildNextSteps(analysis, coding = {}, letter = "") {
   if (!analysis) return { headline: null, steps: [], note: "" };
   const base = dayOf(analysis.docmanDraft?.document?.eventDate);
   const urgent = Boolean(analysis.docmanDraft?.urgent) || analysis.triage?.decision === "urgent";
@@ -71,7 +73,15 @@ export function buildNextSteps(analysis, coding = {}) {
   if (urgent) {
     add({ owner: OWNERS.gp, tone: "gp", title: "Take it to a GP today", detail: "The letter says this is urgent. Do not leave it in the queue: hand it to the duty doctor now, then carry on with the steps below.", when: "today", because: analysis.triage?.reasons?.[0]?.detail || "" });
   }
-  add({ owner: OWNERS.admin, tone: "admin", title: "Check it is the right patient", detail: "Match the name, date of birth and NHS number on the letter with the practice record. If they do not match, stop and ask the practice manager." });
+  const identity = identityChecks({
+    givenNames: analysis.patient?.givenNames, familyName: analysis.patient?.familyName, nhsNumber: analysis.docmanDraft?.patient?.identifier,
+    birthDate: analysis.docmanDraft?.patient?.birthDate, letterDate: analysis.docmanDraft?.document?.eventDate,
+  }, letter);
+  add({
+    owner: OWNERS.admin, tone: "admin", title: "Check it is the right patient", when: identity.level === "high" ? "check carefully" : "",
+    detail: "Match the name, date of birth and NHS number on the letter with the practice record. If they do not match, stop and ask the practice manager.",
+    points: identity.reasons,
+  });
 
   const medicationItems = [...(analysis.medicationInstructions || [])];
   const actions = [...(analysis.actions || [])];
@@ -92,11 +102,17 @@ export function buildNextSteps(analysis, coding = {}) {
   if (analysis.safetyNettingAdvice) {
     add({ owner: OWNERS.admin, tone: "admin", title: "Keep the safety advice with the letter", detail: "The hospital told the patient what to do if they get worse. No booking is needed. If the patient rings with those symptoms, the clinician must see this advice straight away.", because: text(analysis.safetyNettingAdvice) });
   }
+  const signals = letterSignals(letter);
+  for (const signal of signals) {
+    if (signal.id === "referral-needed" && steps.some((x) => x.title.startsWith("Referral: pass to a GP"))) continue; // the letter's own action already says it
+    add({ owner: signal.owner, tone: signal.owner === OWNERS.manager ? "manager" : signal.owner === OWNERS.safeguarding ? "safeguarding" : signal.tone, title: signal.title, detail: signal.detail, because: signal.because, signal: signal.id, rank: signal.rank });
+  }
   const waiting = Number(coding.waiting) || 0;
   if (waiting > 0) add({ owner: OWNERS.admin, tone: "admin", title: `Check the clinical codes (${waiting} not checked)`, detail: "Open the Codes tab. Accept the codes that match the letter, remove the ones that do not. If you are not sure, leave it for a clinician." });
   // the order a person does them in: urgent first, the patient check, what a clinician must decide (so it is started early), the bookings, then the tidying up
   const RANK = { urgent: 0, identity: 1, clinician: 2, booking: 3, safety: 4, codes: 5, file: 6 };
   steps.forEach((step) => {
+    if (step.rank !== undefined) return; // a signal from the letter carries its own place
     step.rank = step.title.startsWith("Take it to a GP today") ? RANK.urgent
       : step.title.startsWith("Check it is the right patient") ? RANK.identity
         : [OWNERS.gp, OWNERS.pharmacist].includes(step.owner) ? RANK.clinician
@@ -108,14 +124,24 @@ export function buildNextSteps(analysis, coding = {}) {
   steps.sort((a, b) => a.rank - b.rank);
   steps.forEach((step, i) => { step.id = `s${i + 1}`; step.number = i + 1; delete step.rank; });
 
-  const needsClinician = steps.some((s) => [OWNERS.gp, OWNERS.pharmacist].includes(s.owner));
+  const needsClinician = steps.some((s) => [OWNERS.gp, OWNERS.pharmacist, OWNERS.safeguarding].includes(s.owner));
+  const sig = (id) => signals.find((x) => x.id === id);
   const clinician = steps.some((s) => s.owner === OWNERS.gp) ? OWNERS.gp : [OWNERS.nurse, OWNERS.pharmacist].includes(destination) ? destination : OWNERS.gp;
-  const headline = urgent
-    ? { tone: "danger", title: "Urgent: take this to a GP today", detail: "Do this first. The other steps can wait until a clinician has seen the letter." }
-    : needsClinician
-      ? { tone: "warning", title: `Needs a ${clinician === OWNERS.nurse ? "nurse" : clinician}: pass this letter on`, detail: "A clinician must decide part of this. You can do the admin steps below at the same time." }
-      : steps.length > 3
-        ? { tone: "info", title: "Admin can action this", detail: "Do the steps in order, then file it." }
-        : { tone: "success", title: "No action needed from the letter", detail: "Check the patient, check the codes, then file it." };
+  const manager = sig("complaint") || sig("legal") || sig("incident");
+  const headline = sig("misdirected")
+    ? { tone: "danger", title: "This letter may not be for this practice", detail: "Stop. Do not read it further or file it. Tell the practice manager now." }
+    : sig("safeguarding")
+      ? { tone: "danger", title: "Safeguarding or safety worry: pass to a clinician today", detail: "Do this first. Do not decide anything yourself." }
+      : urgent
+        ? { tone: "danger", title: "Urgent: take this to a GP today", detail: manager ? "Do this first, then tell the practice manager: the letter may also be a complaint." : "Do this first. The other steps can wait until a clinician has seen the letter." }
+        : manager
+          ? { tone: "warning", title: sig("complaint") ? "This letter may be a complaint or concern: pass it to the practice manager today" : "This letter needs the practice manager today", detail: "Do not file it as routine post and do not reply to it. The other steps can wait." }
+          : sig("cancer")
+            ? { tone: "danger", title: "Suspected-cancer pathway: pass to a GP today", detail: "Do this first so that nothing is delayed." }
+            : needsClinician
+              ? { tone: "warning", title: `Needs a ${clinician === OWNERS.nurse ? "nurse" : clinician}: pass this letter on`, detail: "A clinician must decide part of this. You can do the admin steps below at the same time." }
+              : steps.length > 3
+                ? { tone: "info", title: "Admin can action this", detail: "Do the steps in order, then file it." }
+                : { tone: "success", title: "No action needed from the letter", detail: "Check the patient, check the codes, then file it." };
   return { headline, steps, note: "ClinFlow suggests these steps from what the letter says. They are suggestions: check them against the letter. Administrative staff do not make clinical decisions: anything about medicines, results, referrals or a diagnosis goes to a clinician." };
 }

@@ -63,4 +63,34 @@ t("who opened a letter and what was copied out of it for Docman are on the recor
   assert.ok(!/onCopy\?\.\([^)]*\bvalue\b/.test(panel), "the copied value is not passed on");
 });
 
+t("every move is on the record: what was opened, searched, copied, refused, finished or scored", () => {
+  const source = read("src/modules/clinflow/ClinFlowWorkspace.jsx");
+  assert.equal((source.match(/if \(!can\("[^"]+"\)\) return notify\(/g) || []).length, 0, "no refusal goes unrecorded");
+  assert.ok((source.match(/return denied\(/g) || []).length >= 12, "each refusal is written to the audit trail");
+  assert.match(source, /action: "clinflow\.action\.denied"[^\n]*permissionDecision: "denied", outcome: "denied"/);
+  for (const action of ["clinflow.tab.view", "clinflow.queue.filter", "clinflow.search", "clinflow.finish.open", "clinflow.teaching.open", "clinflow.scorecard.open", "clinflow.codes.copy", "clinflow.docman.copy", "clinflow.document.view", "clinflow.terminology.load"]) {
+    assert.ok(source.includes(action) || read("src/modules/clinflow/clinflowAuditMeta.js").includes(action), `${action} is recorded`);
+  }
+  assert.match(source, /track\("clinflow\.search"[^\n]*\{ termLength: query\.trim\(\)\.length \}/, "a search records how long it was, never what was typed");
+  assert.ok(!/track\("clinflow\.search"[^\n]*\bquery\b[^\n]*\bquery\b[^)]*\)\s*\}\)/.test(source), "the search words are not sent");
+  const review = read("src/modules/clinflow/CodeReview.jsx");
+  assert.match(review, /onCopy\?\.\("lookup details"\)/);
+  assert.match(review, /onCopy\?\.\("words with no code"\)/);
+});
+
+t("nothing that needs the selected letter is set up before it exists (this crashed the screen twice)", () => {
+  const source = read("src/modules/clinflow/ClinFlowWorkspace.jsx");
+  const selectedAt = source.indexOf("  const selected = documents.find(");
+  assert.ok(selectedAt > 0);
+  for (const marker of ["const identityNote = useMemo", "const viewedLetters = useRef", "viewedLetters.current.has(selected.id)"]) {
+    assert.ok(source.indexOf(marker) > selectedAt, `${marker} must come after the selected letter is defined`);
+  }
+  for (const [marker, state] of [["const trackedTab = useRef(activeTab)", "const [activeTab,"], ["const trackedFilter = useRef(filter)", "const [filter,"], ["[query]); // eslint", "const [query,"]]) {
+    assert.ok(source.indexOf(marker) > source.indexOf(state), `${marker} must come after ${state}`);
+  }
+  // the hooks are in the component's body, not after an early return
+  const body = source.slice(source.indexOf("export default function ClinFlowWorkspace()"));
+  assert.ok(body.indexOf("const identityNote = useMemo") < body.indexOf("return (\n    <section"), "hooks come before the screen is returned");
+});
+
 console.log(`\n${n} passed`);
