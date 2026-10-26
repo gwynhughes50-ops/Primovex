@@ -128,7 +128,7 @@ t("every medicine in a letter gets a row, once, with two medicines in one line a
   assert.equal(rows.find((r) => r.candidate.sourceValue === "Cardicor").conceptId, "19711000001106");
   assert.equal(rows.find((r) => r.candidate.sourceValue === "amoxicillin 500 mg").conceptId, "555");
   assert.equal(rows.find((r) => r.candidate.sourceValue === "doxycycline 100 mg").conceptId, "666");
-  assert.match(read("src/modules/clinflow/ClinFlowWorkspace.jsx"), /candidates=\{reviewCandidates\(analysis\)\}/);
+  assert.match(read("src/modules/clinflow/ClinFlowWorkspace.jsx"), /candidates=\{reviewCandidates\(analysis, ocr\?\.content\)\}/);
 });
 
 t("a medicine is given its SNOMED description ID from the Drug Extension, only where the term is the dm+d name, so name and ID belong together", () => {
