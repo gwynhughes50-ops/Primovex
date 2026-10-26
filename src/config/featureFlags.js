@@ -1,7 +1,9 @@
-// Features that are built but switched off everywhere, for everyone including the System Admin: no menu entry, no page, no Orb
+// Features that can be switched off everywhere, for everyone including the System Admin: no menu entry, no page, no Orb
 // shortcut, nothing in the permission lists. The code and the data stay in the background, so switching one back on is one word here.
+// ClinFlow is on again (26 Oct 2026) so a partner can see it; it still shows only to whoever Practice Admin > Modules allows
+// (see core/identity/moduleAccess.js), and uses synthetic documents only until the data protection paperwork is done.
 export const FEATURES = {
-  clinflow: false,
+  clinflow: true,
 };
 
 export const featureOn = (name) => FEATURES[name] !== false;

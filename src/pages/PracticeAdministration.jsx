@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { featureOn } from "@/config/featureFlags";
+import { moduleMode, moduleToggleFor } from "@/core/identity/moduleAccess";
 import { Icons } from "@/config/medtrakIcons";
 
 import { Button } from "@/components/ui/button";
@@ -316,25 +317,19 @@ export default function PracticeAdministration() {
     }
   };
 
-  // off unless it has been deliberately turned on for everyone (see core/identity/moduleAccess.js)
-  const clinflowDisabled = practice?.moduleToggles?.clinflow?.disabled !== false;
+  // who ClinFlow is on for: off for everyone unless it has been deliberately turned on (see core/identity/moduleAccess.js)
+  const clinflowMode = moduleMode("clinflow", practice?.moduleToggles?.clinflow, user?.uid);
 
-  const toggleClinflowModule = async () => {
+  const setClinflowMode = async (mode) => {
     if (!requireManage()) return;
     beginAction();
     try {
       setBusy(true);
-      const nextDisabled = !clinflowDisabled;
       await savePracticeConfig(
-        {
-          moduleToggles: {
-            ...(practice?.moduleToggles || {}),
-            clinflow: nextDisabled ? { disabled: true, allowUids: [user?.uid].filter(Boolean) } : { disabled: false, allowUids: [] },
-          },
-        },
+        { moduleToggles: { ...(practice?.moduleToggles || {}), clinflow: moduleToggleFor(mode, user?.uid, practice?.moduleToggles?.clinflow) } },
         actor
       );
-      setSuccess(nextDisabled ? "ClinFlow is now only visible to you." : "ClinFlow is visible to everyone with ClinFlow access again.");
+      setSuccess(mode === "everyone" ? "ClinFlow is on for everyone with ClinFlow access." : mode === "me" ? "ClinFlow is now visible only to you." : "ClinFlow is now off for everyone.");
     } catch (err) {
       console.error(err);
       setError(err?.message || "Failed to update module access.");
@@ -748,16 +743,19 @@ export default function PracticeAdministration() {
             <Card className="rounded-2xl mt-card border p-4 mt-text-primary">
               <SectionHeader title="Module Access" />
               <p className="mb-4 text-sm leading-6 mt-text-secondary">
-                Turn a module off for everyone except yourself — useful while you're still testing something before rolling it out to the rest of the practice. This doesn't change anyone's role or permissions, it just hides the module until you switch it back on.
+                Choose who a module is on for. This doesn't change anyone's role or permissions, it just hides the module from the people it is not on for.
+                ClinFlow works on clinical letters, so use it with made-up (synthetic) documents only until the data protection paperwork is done.
               </p>
-              <div className="rounded-xl mt-card-strong border p-4 flex items-center justify-between gap-3">
+              <div className="rounded-xl mt-card-strong border p-4 space-y-3">
                 <div>
                   <div className="font-bold mt-text-primary">ClinFlow</div>
-                  <div className="text-xs mt-text-secondary">{clinflowDisabled ? "Only visible to you" : "Visible to everyone with ClinFlow access"}</div>
+                  <div className="text-xs mt-text-secondary" role="status">{clinflowMode === "everyone" ? "On for everyone with ClinFlow access" : clinflowMode === "me" ? "On for you only" : "Off for everyone, you included"}</div>
                 </div>
-                <Button variant={clinflowDisabled ? "outline" : "default"} disabled={busy || !canManage} onClick={toggleClinflowModule}>
-                  {clinflowDisabled ? "Make visible to everyone" : "Make visible to only me"}
-                </Button>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Who ClinFlow is on for">
+                  {[["off", "Off for everyone"], ["me", "Only me"], ["everyone", "Everyone with access"]].map(([mode, label]) => (
+                    <Button key={mode} variant={clinflowMode === mode ? "default" : "outline"} aria-pressed={clinflowMode === mode} disabled={busy || !canManage || clinflowMode === mode} onClick={() => setClinflowMode(mode)}>{label}</Button>
+                  ))}
+                </div>
               </div>
             </Card>
           )}

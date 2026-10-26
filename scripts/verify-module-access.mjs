@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { OFF_BY_DEFAULT, blockedModuleDomains, shouldPurgeClinFlowLocalData } from "../src/core/identity/moduleAccess.js";
+import { OFF_BY_DEFAULT, blockedModuleDomains, moduleMode, moduleToggleFor, shouldPurgeClinFlowLocalData } from "../src/core/identity/moduleAccess.js";
 import { purgeClinFlowLocalData } from "../src/modules/clinflow/clinflowDocumentCache.js";
 import { CAPABILITY_CATALOG, getCapabilitiesForProfile } from "../src/core/identity/capabilities.js";
 
@@ -74,5 +74,27 @@ assert.equal(await purgeClinFlowLocalData(fakeFactory("onblocked")), false);
 assert.equal(await purgeClinFlowLocalData({ deleteDatabase: () => { throw new Error("no"); } }), false);
 assert.equal(await purgeClinFlowLocalData(null), true, "no local database in this environment: nothing to wipe");
 n += 1; console.log("ok  the wipe deletes the whole ClinFlow database and says whether it worked");
+
+t("Practice Admin shows who ClinFlow is really on for: off, only me, or everyone", () => {
+  for (const toggle of [undefined, null, {}, { disabled: true }, { disabled: true, allowUids: ["someone-else"] }]) assert.equal(moduleMode("clinflow", toggle, dev), "off", JSON.stringify(toggle));
+  assert.equal(moduleMode("clinflow", { disabled: true, allowUids: [dev] }, dev), "me");
+  assert.equal(moduleMode("clinflow", { disabled: true, allowUids: [dev] }, "someone-else"), "off", "someone not on the list is off");
+  assert.equal(moduleMode("clinflow", { disabled: false, allowUids: [] }, dev), "everyone");
+  assert.equal(moduleMode("other", undefined, dev), "everyone", "a module that is on unless switched off");
+  assert.equal(moduleMode("other", { disabled: true, allowUids: [] }, dev), "off");
+});
+
+t("choosing a mode saves exactly the setting that gives it, and the setting is what the rules and menus then read", () => {
+  assert.deepEqual(moduleToggleFor("off", dev), { disabled: true, allowUids: [] });
+  assert.deepEqual(moduleToggleFor("me", dev), { disabled: true, allowUids: [dev] });
+  assert.deepEqual(moduleToggleFor("me", dev, { allowUids: ["partner", dev] }), { disabled: true, allowUids: ["partner", dev] }, "anyone already allowed stays allowed, nobody twice");
+  assert.deepEqual(moduleToggleFor("everyone", dev, { allowUids: ["partner"] }), { disabled: false, allowUids: [] });
+  for (const mode of ["off", "me", "everyone"]) {
+    const toggle = moduleToggleFor(mode, dev);
+    assert.equal(moduleMode("clinflow", toggle, dev), mode);
+    assert.equal(blockedModuleDomains({ toggles: { clinflow: toggle }, uid: dev }).includes("clinflow"), mode === "off", `${mode}: what the menus hide from the administrator`);
+    assert.equal(blockedModuleDomains({ toggles: { clinflow: toggle }, uid: "a-nurse" }).includes("clinflow"), mode !== "everyone", `${mode}: what a nurse is blocked from`);
+  }
+});
 
 console.log(`\n${n} passed`);

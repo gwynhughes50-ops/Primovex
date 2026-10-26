@@ -19,6 +19,20 @@ function isSwitchedOff(domain, toggle) {
   return Boolean(toggle?.disabled);
 }
 
+// Who a module is on for, as Practice Admin shows it: "everyone" (everyone with the permission), "me" (only the people on its allow-list,
+// this person among them) or "off" (nobody, this person included). A module never set, and off by default, is "off".
+export function moduleMode(domain, toggle, uid) {
+  if (!isSwitchedOff(domain, toggle)) return "everyone";
+  return Boolean(uid) && Array.isArray(toggle?.allowUids) && toggle.allowUids.includes(uid) ? "me" : "off";
+}
+
+// The setting that gives a module that mode. "me" keeps anyone already on the allow-list and adds this person.
+export function moduleToggleFor(mode, uid, existing) {
+  if (mode === "everyone") return { disabled: false, allowUids: [] };
+  if (mode === "me") return { disabled: true, allowUids: [...new Set([...(Array.isArray(existing?.allowUids) ? existing.allowUids : []), uid].filter(Boolean))] };
+  return { disabled: true, allowUids: [] };
+}
+
 // The domains (the part of a capability before the dot) that this person must not see.
 //   viewingAs: a System Admin looking at the app as another role: the allow-list is about the real person, so it
 //   does not apply to the role being viewed, who would not be on it.
