@@ -35,8 +35,9 @@ function ListSearch({ search, onUse }) {
   const results = useMemo(() => (q.trim().length >= 2 ? search.search(q, { limit: 6 }) : []), [q, search]);
   return (
     <div className="cf-code-search">
-      <label>Search the list<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. heart failure" /></label>
-      {q.trim().length >= 2 && !results.length && <p className="cf-muted">Nothing in the list matches those words.</p>}
+      <label>Type what you are looking for<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. heart failure" /></label>
+      {q.trim().length >= 2 && !results.length && <p className="cf-muted">Nothing in the list matches those words. Try one word, or a different spelling.</p>}
+      {results[0]?.corrected?.length > 0 && <p className="cf-muted">Showing results for {results[0].corrected.map((c) => `“${c.to}”`).join(", ")} (you typed {results[0].corrected.map((c) => `“${c.from}”`).join(", ")}).</p>}
       <ul>{results.map((r) => <li key={r.conceptId}><span><b>{r.term}</b> <small>{r.tag} · SNOMED {r.conceptId}</small></span><button type="button" className="cf-top-button" onClick={() => { onUse(r); setQ(""); }}>Use this</button></li>)}</ul>
     </div>
   );
@@ -81,12 +82,18 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
             <div className="cf-code-main">
               <p><b>{row.term || "No term found"}</b> <small>{row.label}</small></p>
               <p className="cf-code-ids">{row.medicine ? (row.medicineListMissing ? "A medicine: it is looked up in the NHS dm+d list, which is not loaded yet." : row.conceptId ? `dm+d ${row.conceptId}${row.descriptionId ? ` · description ${row.descriptionId}` : " · SNOMED description ID not in this list (build it with the Drug Extension)"}` : "Nothing in the dm+d list matches these words") : <>{row.conceptId ? `SNOMED ${row.conceptId}` : list?.search ? "Nothing in the UK list matches these words" : "No SNOMED code found yet"}{row.descriptionId ? ` · description ${row.descriptionId}` : row.conceptId ? " · description ID still needed" : ""}</>}</p>
+              {row.quality && <p className={`cf-quality cf-quality--${row.quality.level}`}>{row.quality.label}</p>}
               {row.evidence.found
                 ? <blockquote className="cf-evidence">“{row.evidence.quote}”</blockquote>
                 : <p className="cf-evidence cf-evidence--none">No matching words found in the letter. Check the original before accepting.</p>}
               {canEdit && row.options.length > 1 && row.state !== "removed" && (
                 <details className="cf-code-others"><summary>Other matches ({row.options.length - 1})</summary>
                   <ul>{row.options.filter((o) => o.conceptId !== row.conceptId).map((o) => <li key={o.conceptId}><span>{o.term} <small>{o.tag} · {row.medicine ? "dm+d" : "SNOMED"} {o.conceptId}</small></span><button type="button" className="cf-top-button" onClick={() => onChoose(row.candidate, o)}>Use this</button></li>)}</ul>
+                </details>
+              )}
+              {canEdit && row.state !== "removed" && (row.medicine ? medList?.search : list?.search) && (
+                <details className="cf-code-others"><summary>Search for a different code</summary>
+                  <ListSearch search={row.medicine ? medList.search : list.search} onUse={(r) => onChoose(row.candidate, r)} />
                 </details>
               )}
               <p className="cf-code-state"><span className={`cf-code-chip cf-code-chip--${row.state}`}>{STATE_WORDS[row.state]}</span>{row.by ? ` ${row.by}` : ""}</p>

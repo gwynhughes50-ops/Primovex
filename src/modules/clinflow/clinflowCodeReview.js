@@ -237,6 +237,16 @@ export function removeAdded(review, id, { uid = "", name = "", now = new Date() 
   return { ...base, added: base.added.filter((a) => a.id !== id), log: [...(base.log || []), { at: stamp(now), byUid: uid, byName: name, action: "took out an added code", key: id, term: entry.term }] };
 }
 
+// How sure a suggestion is, in words a coder can act on: exact, close, a spelling that was corrected, or only possible
+export function matchQuality(option, chosen = false) {
+  if (chosen) return { level: "chosen", label: "Chosen by you" };
+  if (!option) return null;
+  if (option.corrected?.length) return { level: "corrected", label: `Spelling corrected: ${option.corrected.map((c) => `“${c.from}” read as “${c.to}”`).join(", ")}. Check it is what the letter meant.` };
+  if (option.score >= 95) return { level: "exact", label: "Exact match" };
+  if (option.score >= 75) return { level: "close", label: "Close match: check the other matches" };
+  return { level: "possible", label: "Possible match only: check it against the letter" };
+}
+
 // Each suggestion with the words behind it and where the coder has got to: [{ key, candidate, term, evidence, state, by, at }]
 // `search` (the loaded SNOMED list) is optional: with it each row also has the codes the list offers and the one that will be used if accepted.
 export function reviewRows(candidates = [], letter = "", review = null, search = null, medSearch = null) {
@@ -250,8 +260,10 @@ export function reviewRows(candidates = [], letter = "", review = null, search =
     const own = !search && !medicine && candidate.conceptId ? { conceptId: candidate.conceptId, term: text(candidate.preferredTerm), descriptionId: candidate.descriptionId || "" } : null;
     // what accepting will use: the code chosen with the decision, else the coder's pick, else the first match, else the reader's own
     const pick = decision?.chosen || review?.choices?.[key] || asPick(options[0]) || own;
+    const source = pick ? options.find((o) => o.conceptId === pick.conceptId) : null;
+    const quality = matchQuality(source, Boolean(decision?.chosen || review?.choices?.[key]));
     return {
-      key, candidate, medicine, medicineListMissing: medicine && !medSearch, term: text(pick?.term || shownAs(candidate) || candidate.preferredTerm), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
+      key, candidate, medicine, quality, medicineListMissing: medicine && !medSearch, term: text(pick?.term || shownAs(candidate) || candidate.preferredTerm), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
       descriptionId: pick?.descriptionId || "", pick, options, evidence, state: decision?.decision || "suggested", by: decision?.byName || "", at: decision?.at || "",
     };
   });

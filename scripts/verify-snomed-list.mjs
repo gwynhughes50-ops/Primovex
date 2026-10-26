@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { REPLACE_AFTER_DAYS, SNOMED_NOTICE, buildIndex, describeIndex, indexAgeDays, indexIsOld, indexProblem, parseConceptLine, parseDescriptionLine, parseLanguageLine, parseMemberLine } from "../src/modules/clinflow/snomedIndex.js";
 import { createSearch, tokens } from "../src/modules/clinflow/snomedSearch.js";
-import { choose, codesAfterReview, decide, isMedicine, lookupText, matchSummary, optionsFor, reviewRows, shownAs, subjectOf, unmatchedText, withoutQualifiers } from "../src/modules/clinflow/clinflowCodeReview.js";
+import { choose, codesAfterReview, decide, isMedicine, lookupText, matchQuality, matchSummary, optionsFor, reviewRows, shownAs, subjectOf, unmatchedText, withoutQualifiers } from "../src/modules/clinflow/clinflowCodeReview.js";
 import { buildDocmanPayload } from "../src/modules/clinflow/docmanPayload.js";
 
 let n = 0;
@@ -232,6 +232,40 @@ t("a measurement whose name is in its label, with only the number as its value, 
   assert.equal(lookupText("CRP 4 mg/L"), "c-reactive protein", "a unit like mg/L goes whole, not just its first letters");
   assert.equal(lookupText("eGFR 45 mmol/L"), "eGFR", "mmol/L too");
   assert.equal(lookupText("MI"), "MI", "an abbreviation with more than one meaning is left alone");
+});
+
+t("a misspelt word is read as the nearest word in the list, it is reported, and the user is told to check it", () => {
+  const typo = find.search("atrial fibrilation");
+  assert.equal(typo[0].conceptId, "49436004");
+  assert.deepEqual(typo[0].corrected, [{ from: "fibrilation", to: "fibrillation" }]);
+  assert.ok(typo[0].score < find.search("atrial fibrillation")[0].score, "a corrected match is rated below an exact one");
+  assert.equal(find.search("asthama")[0].conceptId, "195967001", "two letters swapped");
+  assert.equal(find.search("ventricluar dysfunction")[0].conceptId, "134401001");
+  assert.equal(find.search("dispnoea")[0].conceptId, "267036007", "a letter wrong in the middle");
+  assert.equal(find.search("atrial fibrillation")[0].corrected, undefined, "nothing is corrected when nothing was wrong");
+  assert.deepEqual(find.search("qzxvwk"), [], "a word like nothing in the list stays nothing");
+  assert.deepEqual(find.search("5mg"), [], "a strength is never 'corrected'");
+  assert.deepEqual(find.search("afx"), [], "a very short word is never 'corrected'");
+});
+
+t("every suggestion says how sure it is: exact, close, spelling corrected, possible, or chosen by the person", () => {
+  const q = (o, chosen) => matchQuality(o, chosen)?.level;
+  assert.equal(q({ score: 103 }), "exact");
+  assert.equal(q({ score: 80 }), "close");
+  assert.equal(q({ score: 50 }), "possible");
+  assert.equal(q({ score: 98, corrected: [{ from: "asthama", to: "asthma" }] }), "corrected");
+  assert.match(matchQuality({ score: 98, corrected: [{ from: "asthama", to: "asthma" }] }).label, /“asthama” read as “asthma”/);
+  assert.equal(q({ score: 10 }, true), "chosen");
+  assert.equal(matchQuality(null), null);
+  const exact = reviewRows([finding("atrial fibrillation")], "", null, find)[0];
+  assert.equal(exact.quality.level, "exact");
+  const wrong = reviewRows([finding("atrial fibrilation")], "", null, find)[0];
+  assert.equal(wrong.quality.level, "corrected");
+  assert.equal(wrong.conceptId, "49436004", "still offered, so the person can accept it or choose another");
+  const picked = choose(null, finding("atrial fibrilation"), wrong.options[0], { uid: "gp-1", name: "Dr Example" });
+  assert.equal(reviewRows([finding("atrial fibrilation")], "", picked, find)[0].quality.level, "chosen");
+  const screen = read("src/modules/clinflow/CodeReview.jsx");
+  for (const text of ["Search for a different code", "row.quality", "Try one word, or a different spelling"]) assert.ok(screen.includes(text), text);
 });
 
 t("a long phrase that is not a code's name still finds the code for a shorter stretch of it, and nonsense still finds nothing", () => {

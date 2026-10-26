@@ -27,6 +27,42 @@ export function createSearch(index) {
   const sortedWords = [...postings.keys()].sort();
   const byId = new Map(concepts.map((c, i) => [c[0], i]));
 
+  // ---- spelling: a word the list does not have is read as the nearest word it does have (one slip in a short word, two in a long one) ----
+  const byFirst = new Map();
+  for (const w of sortedWords) if (/^[a-z]{4,}$/.test(w)) { if (!byFirst.has(w[0])) byFirst.set(w[0], []); byFirst.get(w[0]).push(w); }
+  const fixes = new Map();
+  function distance(a, b, max) { // letters added, left out, changed, or two next to each other swapped
+    if (Math.abs(a.length - b.length) > max) return max + 1;
+    let prev2 = null; let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i += 1) {
+      const row = [i]; let low = i;
+      for (let j = 1; j <= b.length; j += 1) {
+        let v = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+        if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) v = Math.min(v, prev2[j - 2] + 1);
+        row.push(v); if (v < low) low = v;
+      }
+      if (low > max) return max + 1;
+      prev2 = prev; prev = row;
+    }
+    return prev[b.length];
+  }
+  function nearest(w) {
+    if (!/^[a-z]{4,}$/.test(w)) return null; // numbers, strengths and short words are never "corrected"
+    if (fixes.has(w)) return fixes.get(w);
+    const max = w.length <= 7 ? 1 : 2;
+    let best = null;
+    for (const c of byFirst.get(w[0]) || []) {
+      if (Math.abs(c.length - w.length) > max) continue;
+      const d = distance(w, c, max);
+      if (d > max) continue;
+      const n = postings.get(c).length;
+      if (!best || d < best.d || (d === best.d && n > best.n)) best = { word: c, d, n };
+    }
+    const found = best ? best.word : null;
+    fixes.set(w, found);
+    return found;
+  }
+
   // codes with a word starting with `w` (for words long enough that a different ending is likely: "fibrillating" / "fibrillation")
   function withPrefix(w) {
     if (w.length < 6) return postings.get(w) || [];
@@ -60,8 +96,16 @@ export function createSearch(index) {
     size: concepts.length,
     // the codes that best match some words: [{ conceptId, term, descriptionId, tag, matched, score }]
     search(query, { limit = 6, tags = null, minScore = 30 } = {}) {
-      const q = tokens(query);
-      if (!q.length) return [];
+      const said = tokens(query);
+      if (!said.length) return [];
+      // a word that is in no code is read as the nearest word that is, and the correction is reported with every answer
+      const corrected = [];
+      const q = said.map((w) => {
+        if (postings.has(w)) return w;
+        const fix = nearest(w);
+        if (fix) { corrected.push({ from: w, to: fix }); return fix; }
+        return w;
+      });
       const lists = q.map((w) => withPrefix(w));
       let pool;
       if (lists.every((l) => l.length)) { const sets = lists.map((l) => new Set(l)); pool = [...sets[0]].filter((i) => sets.every((s) => s.has(i))); }
@@ -70,11 +114,11 @@ export function createSearch(index) {
       const allowed = tags ? new Set(tags.map((t) => (index.tags || []).indexOf(t))) : null;
       return pool
         .filter((i) => !allowed || allowed.has(concepts[i][3]))
-        .map((i) => ({ i, ...scoreConcept(i, q) }))
+        .map((i) => { const r = scoreConcept(i, q); return { i, ...r, score: r.score ? r.score - 5 * corrected.length : 0 }; })
         .filter((r) => r.score >= minScore)
         .sort((a, b) => b.score - a.score || concepts[a.i][1].length - concepts[b.i][1].length)
         .slice(0, limit)
-        .map(({ i, score, matched }) => ({ conceptId: concepts[i][0], term: concepts[i][1], descriptionId: concepts[i][2], tag: index.tags[concepts[i][3]] || "", matched, score: Math.round(score) }));
+        .map(({ i, score, matched }) => ({ conceptId: concepts[i][0], term: concepts[i][1], descriptionId: concepts[i][2], tag: index.tags[concepts[i][3]] || "", matched, score: Math.round(score), ...(corrected.length ? { corrected } : {}) }));
     },
     // one code by its ID, or null
     byConcept(id) {
