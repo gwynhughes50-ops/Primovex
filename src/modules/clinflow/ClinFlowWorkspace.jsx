@@ -13,6 +13,7 @@ import {
   FileText,
   Filter,
   FolderCheck,
+  BarChart3,
   GraduationCap,
   MoreHorizontal,
   Printer,
@@ -40,6 +41,7 @@ import { createClinFlowDemoPdfBlob, createClinFlowSummaryPdfBlob, downloadClinFl
 import { createDocmanPackZip, downloadBlob, safePackName } from "./clinflowZipService";
 import DocmanReadiness from "./DocmanReadiness";
 import NextSteps from "./NextSteps";
+import Scorecard from "./Scorecard";
 import CodeReview from "./CodeReview";
 import { addCode, candidateKey, choose, codesAfterReview, decide, removeAdded, reviewCandidates, reviewOutcome } from "./clinflowCodeReview";
 import { useAbbreviations, useSnomedList } from "./snomedListStore";
@@ -284,6 +286,7 @@ export default function ClinFlowWorkspace() {
   const [busy, setBusy] = useState(false);
   const [azureTestOpen, setAzureTestOpen] = useState(false);
   const [teachingOpen, setTeachingOpen] = useState(false);
+  const [scorecardOpen, setScorecardOpen] = useState(false);
   const [teachingForm, setTeachingForm] = useState(teachingFormFor());
   const [finishedPacks, setFinishedPacks] = useState([]);
   const [finishOpen, setFinishOpen] = useState(false);
@@ -906,6 +909,7 @@ export default function ClinFlowWorkspace() {
             <hr /><p>FINALISE</p><div className="cf-action-grid">
               <ActionButton active={selected?.status === "in_review" || Boolean(selected?.claimedByUid)} disabled={busy || !selected || selected?.status === "completed"} onClick={claimDocument}><UserCheck size={14} />{selected?.status === "in_review" || selected?.claimedByUid ? "Claimed" : "Claim"}</ActionButton>
               <ActionButton disabled={busy || !selected} onClick={openTeaching}><GraduationCap size={14} />Score / Teach</ActionButton>
+              <ActionButton onClick={() => setScorecardOpen(true)}><BarChart3 size={14} />Scorecard</ActionButton>
               <ActionButton tone="success" wide active={selected?.status === "completed"} disabled={busy || !selected || selected?.status === "completed"} onClick={requestFinishDocument}><CheckCircle2 size={15} />{selected?.status === "completed" ? "Finished · ready for Docman" : "Confirm & Finish"}</ActionButton>
             </div>
           </section>
@@ -938,6 +942,7 @@ export default function ClinFlowWorkspace() {
         <fieldset className="cf-accuracy-checks"><legend>What was accurate?</legend>{Object.entries({ identity: "Patient identity", summary: "Summary", medicines: "Medicines", actions: "Actions", urgency: "Urgency", coding: "Coding prompts" }).map(([key, label]) => <label key={key}><input type="checkbox" checked={teachingForm.accuracyChecks[key]} onChange={(event) => setTeachingForm((current) => ({ ...current, accuracyChecks: { ...current.accuracyChecks, [key]: event.target.checked } }))} />{label}</label>)}</fieldset>
         <footer><button type="button" onClick={() => setTeachingOpen(false)}>Cancel</button><button type="button" className="primary" onClick={saveTeaching} disabled={busy}>Save governed evidence</button></footer>
       </div></div>}
+      {scorecardOpen && <Scorecard documents={documents} canExport={can("clinflow.workflow")} onClose={() => setScorecardOpen(false)} onExported={(card) => record("clinflow.scorecard.export", "ClinFlow scorecard downloaded for the rule reviewer", { corrections: card.corrections.length, triageConfirmed: card.triage.total, automatedTransmission: false }).catch(() => {})} />}
       {azureTestOpen && <SyntheticDocumentBatchPanel onClose={() => setAzureTestOpen(false)} onImport={importAzureResults} />}
       {toast && <div className="cf-toast">{toast}</div>}
     </section>
