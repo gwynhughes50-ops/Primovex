@@ -48,7 +48,11 @@ export const withoutQualifiers = (value) => text(String(value ?? "").replace(QUA
 // The codes the list offers for a finding, best first. Doses and timings are ignored; if nothing matches closely, the qualifiers ("mild", "suspected")
 // are left off too and what that finds is added. A code the reader guessed at is offered only if it is really in the list.
 export function optionsFor(candidate, search) {
-  if (!search) return [];
+  if (!search) {
+    // With no list loaded the practice's own choices are still offered (CRP, oxygen saturation): they are codes it has already decided on
+    const usual = preferredFor(lookupText(subjectOf(candidate)));
+    return usual ? [{ conceptId: usual.conceptId, term: usual.name, descriptionId: "", tag: "", matched: usual.name, score: 100, preferred: true }] : [];
+  }
   // An abbreviation with more than one meaning is never guessed at: a code is offered for each meaning, and the person chooses
   const subject = subjectOf(candidate);
   const unsure = ambiguityOf(subject)[0];

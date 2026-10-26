@@ -267,6 +267,12 @@ t("where the practice has chosen a code for a finding, that code comes first, ma
   const [row] = reviewRows([m("Observation", "CRP 4 mg/L")], "", null, find);
   assert.equal(row.conceptId, "55235003");
   assert.equal(row.quality.label, "The practice's preferred code for this");
+  for (const [label, value, code] of [["Investigation", "CRP 4 mg/L", "55235003"], ["CRP", "raised", "55235003"], ["Observation", "Oxygen saturation", "431314004"], ["Observation", "SpO2 97%", "431314004"]]) {
+    const [noList] = reviewRows([m(label, value)], "", null, null);
+    assert.equal(noList.conceptId, code, `${label} / ${value}: the practice's own code is used even when no list is loaded`);
+    assert.equal(noList.quality.label, "The practice's preferred code for this");
+  }
+  assert.equal(optionsFor(m("Diagnosis", "asthma"), null).length, 0, "other findings need the list");
   for (const value of ["raised CRP", "CRP raised", "inflammatory markers: CRP 4, WCC 7.2"]) assert.equal(optionsFor(m("Investigation", value), find)[0]?.conceptId, "55235003", `${value}: CRP anywhere in the finding`);
   // oxygen saturation: the practice's code for it, however it is written, but "on room air" can still find its own code
   for (const [label, value] of [["Observation", "Oxygen saturation"], ["Observation", "SpO2 97%"], ["Observation", "O2 sats 97%"], ["Observation", "Sats 94% RA"], ["Oxygen saturation", "normal on room air"], ["Oxygen saturation", "97%"], ["Observation", "oxygen saturations were 97%"]]) assert.equal(optionsFor(m(label, value), find)[0]?.conceptId, "431314004", `${label} / ${value}`);
