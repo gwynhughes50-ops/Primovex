@@ -39,8 +39,37 @@ function ListStatus({ list, canLoad }) {
           <button type="button" className="cf-top-button" onClick={() => input.current?.click()} disabled={list.loading}>{list.search ? "Load a newer list" : meds ? "Choose the medicines list file" : "Choose the SNOMED list file"}</button>
         </>
       )}
-      <p className="cf-snomed-notice"><small>{SNOMED_NOTICE}</small></p>
     </div></section>
+  );
+}
+
+// The three lists in one slim line: which release of each is in use. The full boxes (to load or replace a list) open with Manage, and open by themselves
+// when a list is missing, old or has failed, so a problem is never hidden.
+function ListsBar({ list, medList, abbreviations, canLoad }) {
+  const needsAttention = Boolean((list && (!list.search || list.old || list.error)) || (medList && (!medList.search || medList.old || medList.error)) || abbreviations?.error);
+  const [chosen, setChosen] = useState(() => { try { const v = globalThis.localStorage?.getItem("primovex.clinflow.listsOpen"); return v === null || v === undefined ? null : v === "true"; } catch { return null; } });
+  const open = needsAttention || chosen === true;
+  const toggle = () => { const next = !open; setChosen(next); try { globalThis.localStorage?.setItem("primovex.clinflow.listsOpen", String(next)); } catch { /* only a convenience */ } };
+  const chip = (ok, label) => <span className={`cf-list-chip ${ok ? "cf-list-chip--ok" : "cf-list-chip--warn"}`}>{ok ? <CheckCircle2 size={12} /> : <XCircle size={12} />}{label}</span>;
+  return (
+    <>
+      <div className="cf-lists-bar">
+        <Database size={15} aria-hidden="true" />
+        <div className="cf-lists-chips">
+          {list && chip(Boolean(list.search) && !list.old, list.search ? `SNOMED ${list.info.replace(/^UK SNOMED CT\s*/, "")}${list.old ? " · old" : ""}` : "SNOMED list not loaded")}
+          {medList && chip(Boolean(medList.search) && !medList.old, medList.search ? `dm+d ${medList.info.replace(/^NHS dm\+d\s*/, "")}${medList.old ? " · old" : ""}` : "dm+d list not loaded")}
+          {abbreviations && chip(!abbreviations.error, abbreviations.info.builtIn ? `Abbreviations: built-in (${abbreviations.info.count})` : `Abbreviations: ${abbreviations.info.label} (${abbreviations.info.count})`)}
+        </div>
+        {needsAttention ? <span className="cf-lists-toggle">Needs attention</span> : <button type="button" className="cf-lists-toggle" onClick={toggle} aria-expanded={open}>{open ? "Hide" : "Manage lists"}</button>}
+      </div>
+      {open && (
+        <div className="cf-lists-open">
+          {list && <ListStatus list={list} canLoad={canLoad} />}
+          {medList && <ListStatus list={medList} canLoad={canLoad} />}
+          {abbreviations && <AbbreviationsStatus abbreviations={abbreviations} canLoad={canLoad} />}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -107,10 +136,8 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
 
   return (
     <div className="cf-code-review">
-      {list && <ListStatus list={list} canLoad={canEdit} />}
-      {medList && <ListStatus list={medList} canLoad={canEdit} />}
-      {abbreviations && <AbbreviationsStatus abbreviations={abbreviations} canLoad={canEdit} />}
-      <section className="cf-summary-card"><Tag size={18} /><div><b>Codes for this letter</b><p>Each suggestion shows the words in the letter that led to it. Accept the ones that are right, remove the ones that are wrong, and add any the reader missed. Nothing is filed until you have checked it against the original letter.</p><p><small>{statsLine(stats)}{stats.right !== null ? ` The reader was right ${stats.right}% of the time on the ones you have looked at.` : ""}</small></p></div></section>
+      <ListsBar list={list} medList={medList} abbreviations={abbreviations} canLoad={canEdit} />
+      <section className="cf-codes-head"><Tag size={16} /><div><b>Codes for this letter</b> <small>{statsLine(stats)}{stats.right !== null ? ` The reader was right ${stats.right}% of the time on the ones you have looked at.` : ""}</small><p><small>Accept the codes that are right, remove the ones that are wrong, and add any the reader missed. Nothing is filed until you have checked it against the original letter.</small></p></div></section>
       {(list?.search || medList?.search) && summary.total > 0 && (
         <section className="cf-summary-card cf-match-summary" role="status"><div>
           <b>{summary.matched} of {summary.total} found a code in the lists.</b>
@@ -199,6 +226,7 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
           )}
         </div>
       )}
+      <p className="cf-snomed-notice"><small>{SNOMED_NOTICE}</small></p>
     </div>
   );
 }
