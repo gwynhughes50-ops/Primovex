@@ -68,7 +68,7 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
           <li key={row.key} className={`cf-code-row cf-code-row--${row.state}`}>
             <div className="cf-code-main">
               <p><b>{row.term || "No term found"}</b> <small>{row.label}</small></p>
-              <p className="cf-code-ids">{row.conceptId ? `SNOMED ${row.conceptId}` : "No SNOMED code found yet"}{row.descriptionId ? ` · description ${row.descriptionId}` : " · description ID still needed"}</p>
+              <p className="cf-code-ids">{row.medicine ? "A medicine: coded from the NHS dm+d list, which is not loaded yet, so there is no clinical code to accept." : <>{row.conceptId ? `SNOMED ${row.conceptId}` : list?.search ? "Nothing in the UK list matches these words" : "No SNOMED code found yet"}{row.descriptionId ? ` · description ${row.descriptionId}` : row.conceptId ? " · description ID still needed" : ""}</>}</p>
               {row.evidence.found
                 ? <blockquote className="cf-evidence">“{row.evidence.quote}”</blockquote>
                 : <p className="cf-evidence cf-evidence--none">No matching words found in the letter. Check the original before accepting.</p>}
@@ -81,7 +81,7 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
             </div>
             {canEdit && (
               <div className="cf-code-buttons">
-                {row.state !== "accepted" && <button type="button" className="cf-top-button cf-top-button--primary" disabled={list?.search && !row.pick} title={list?.search && !row.pick ? "Nothing in the list matches this. Remove it, or add the right code below." : undefined} onClick={() => onDecide(row.candidate, "accepted", row.pick)}><CheckCircle2 size={13} /> Accept</button>}
+                {row.state !== "accepted" && <button type="button" className="cf-top-button cf-top-button--primary" disabled={row.medicine || (list?.search && !row.pick)} title={row.medicine ? "Medicines are coded from the dm+d list." : list?.search && !row.pick ? "Nothing in the list matches this. Remove it, or add the right code below." : undefined} onClick={() => onDecide(row.candidate, "accepted", row.pick)}><CheckCircle2 size={13} /> Accept</button>}
                 {row.state !== "removed" && <button type="button" className="cf-top-button" onClick={() => onDecide(row.candidate, "removed")}><XCircle size={13} /> Remove</button>}
                 {row.state !== "suggested" && <button type="button" className="cf-top-button" onClick={() => onDecide(row.candidate, "suggested")}><RotateCcw size={13} /> Put back</button>}
               </div>

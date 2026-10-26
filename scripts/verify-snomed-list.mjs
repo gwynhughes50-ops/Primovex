@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { REPLACE_AFTER_DAYS, SNOMED_NOTICE, buildIndex, describeIndex, indexAgeDays, indexIsOld, indexProblem, parseConceptLine, parseDescriptionLine, parseLanguageLine, parseMemberLine } from "../src/modules/clinflow/snomedIndex.js";
 import { createSearch, tokens } from "../src/modules/clinflow/snomedSearch.js";
-import { choose, codesAfterReview, decide, optionsFor, reviewRows } from "../src/modules/clinflow/clinflowCodeReview.js";
+import { choose, codesAfterReview, decide, isMedicine, lookupText, optionsFor, reviewRows, withoutQualifiers } from "../src/modules/clinflow/clinflowCodeReview.js";
 import { buildDocmanPayload } from "../src/modules/clinflow/docmanPayload.js";
 
 let n = 0;
@@ -17,6 +17,7 @@ const ACC = "900000000000549004";
 const concepts = [
   { id: "49436004", active: true }, { id: "195967001", active: true }, { id: "267036007", active: true }, { id: "134401001", active: true },
   { id: "60621009", active: true }, { id: "271649006", active: true }, { id: "80891009", active: true }, { id: "999000001", active: false }, { id: "60845006", active: true },
+  { id: "472775000", active: true }, { id: "252167001", active: true },
 ];
 const d = (id, conceptId, typeId, term, active = true) => ({ id, active, conceptId, typeId, term });
 const descriptions = [
@@ -30,6 +31,8 @@ const descriptions = [
   d("307000", "999000001", FSN, "Old thing (disorder)"), d("307001", "999000001", SYN, "Old thing"),
   d("308000", "60845006", FSN, "Dyspnea on exertion (finding)"), d("308001", "60845006", SYN, "Dyspnoea on exertion"), d("308002", "60845006", SYN, "Exertional dyspnoea"),
   d("309999", "195967001", SYN, "Retired asthma term", false),
+  d("501000", "472775000", FSN, "Fetal left ventricular dysfunction (disorder)"), d("501001", "472775000", SYN, "Fetal left ventricular dysfunction"),
+  d("502000", "252167001", FSN, "Urea and electrolytes (procedure)"), d("502001", "252167001", SYN, "Urea and electrolytes"),
 ];
 const GB = "900000000000508004";
 const language = [
@@ -39,6 +42,7 @@ const language = [
   { refsetId: GB, active: true, descriptionId: "303002", acceptabilityId: PREF },
   { refsetId: GB, active: true, descriptionId: "304001", acceptabilityId: PREF }, { refsetId: GB, active: true, descriptionId: "305001", acceptabilityId: PREF },
   { refsetId: GB, active: true, descriptionId: "308001", acceptabilityId: PREF },
+  { refsetId: GB, active: true, descriptionId: "501001", acceptabilityId: PREF }, { refsetId: GB, active: true, descriptionId: "502001", acceptabilityId: PREF },
 ];
 const index = buildIndex({ concepts, descriptions, language, release: "20261014", now: new Date("2026-10-26T10:00:00Z") });
 const find = createSearch(index);
@@ -54,7 +58,7 @@ t("the release's own files are read: concepts, descriptions and the language lis
 });
 
 t("the list keeps what a letter's codes are made of, with the preferred term and its description ID, and leaves the rest out", () => {
-  assert.equal(index.concepts.length, 7, "inactive and body-structure concepts are out");
+  assert.equal(index.concepts.length, 9, "inactive and body-structure concepts are out");
   const af = index.concepts.find((c) => c[0] === "49436004");
   assert.deepEqual([af[1], af[2]], ["Atrial fibrillation", "80004015"], "the preferred synonym, with its own description ID");
   assert.deepEqual(af[4], [["AF - Atrial fibrillation", "80005016"], ["Auricular fibrillation", "80006017"]]);
@@ -62,8 +66,8 @@ t("the list keeps what a letter's codes are made of, with the preferred term and
   assert.ok(!index.concepts.some((c) => c[0] === "80891009"), "a body structure is not a code for a letter");
   assert.ok(!index.concepts.some((c) => c[0] === "999000001"), "a retired concept is not offered");
   assert.ok(!JSON.stringify(index).includes("Retired asthma term"), "nor a retired term");
-  assert.deepEqual([...index.tags].sort(), ["disorder", "finding", "observable entity"]);
-  assert.equal(describeIndex(index), "UK Clinical Edition 14 Oct 2026: 7 codes");
+  assert.deepEqual([...index.tags].sort(), ["disorder", "finding", "observable entity", "procedure"]);
+  assert.equal(describeIndex(index), "UK Clinical Edition 14 Oct 2026: 9 codes");
   assert.equal(indexProblem(index), "");
   assert.match(indexProblem({ format: 2 }), /not a ClinFlow SNOMED list/);
   assert.match(indexProblem({ format: 1, tags: [], concepts: [] }), /no codes/);
@@ -75,7 +79,7 @@ t("a reference set can limit the list to the codes a practice actually uses", ()
 });
 
 t("the search finds a code from the words in a letter, by its name or a synonym", () => {
-  assert.equal(find.size, 7);
+  assert.equal(find.size, 9);
   const af = find.search("atrial fibrillation");
   assert.equal(af[0].conceptId, "49436004");
   assert.equal(af[0].term, "Atrial fibrillation");
@@ -172,6 +176,57 @@ t("the builder and the loader exist and say what to do", () => {
   const panel = read("src/modules/clinflow/CodeReview.jsx");
   for (const text of ["UK SNOMED list", "Choose the SNOMED list file", "Other matches", "Use this"]) assert.ok(panel.includes(text), text);
   assert.match(read("src/modules/clinflow/snomedListStore.js"), /indexedDB/);
+});
+
+t("what a letter says around a finding is taken off before it is looked up: doses, numbers, timings, abbreviations", () => {
+  assert.equal(lookupText("Bisoprolol 5 mg once daily"), "Bisoprolol");
+  assert.equal(lookupText("Apixaban 5 mg twice daily"), "Apixaban");
+  assert.equal(lookupText("Blood pressure 132/84 mmHg"), "Blood pressure");
+  assert.equal(lookupText("Repeat U&Es in 2 weeks"), "urea and electrolytes");
+  assert.equal(lookupText("SOB on exertion"), "shortness of breath on exertion");
+  assert.equal(lookupText("known CKD, T2DM"), "known chronic kidney disease type 2 diabetes mellitus");
+  assert.equal(lookupText("Type 2 diabetes mellitus"), "Type 2 diabetes mellitus", "a number that is part of a name stays");
+  assert.equal(lookupText("CKD stage 3"), "chronic kidney disease stage 3", "a stage stays");
+  assert.equal(lookupText("oxygen saturation 97%"), "oxygen saturation");
+  assert.equal(withoutQualifiers("mild left ventricular dysfunction"), "left ventricular dysfunction");
+  assert.equal(withoutQualifiers("suspected atrial fibrillation"), "atrial fibrillation");
+  assert.equal(withoutQualifiers("persistent atrial fibrillation"), "persistent atrial fibrillation", "a word that is part of a name stays");
+});
+
+t("a finding with doses or severity words still finds its code, and the qualifier-free search is only used when the first finds nothing close", () => {
+  const top = (value) => optionsFor({ sourceValue: value }, find).map((o) => o.conceptId);
+  assert.equal(top("mild left ventricular dysfunction")[0], "134401001", "'mild' is not in the code's name, so it is left off");
+  assert.equal(top("Repeat U&Es in 2 weeks")[0], "252167001");
+  assert.ok(!top("Blood pressure 132/84 mmHg").includes("75367002"), "blood pressure itself is not in this small list: it is not invented");
+  assert.equal(top("quantum flux 5 mg twice daily").length, 0, "nothing matches: nothing offered");
+  assert.equal(top("atrial fibrillation")[0], "49436004");
+  assert.equal(top("AF")[0], "49436004", "an abbreviation in a letter");
+  assert.equal(top("exertional dyspnoea")[0], "60845006");
+});
+
+t("a baby's or unborn code does not outrank the ordinary one unless the letter says so", () => {
+  const ids = find.search("left ventricular dysfunction").map((r) => r.conceptId);
+  assert.ok(ids.indexOf("134401001") < ids.indexOf("472775000"), "the ordinary code comes before the fetal one");
+  assert.equal(find.search("fetal left ventricular dysfunction")[0].conceptId, "472775000", "asked for by name it comes first");
+});
+
+t("with the list loaded, a code the reader guessed at is only offered if it is really in the list, and medicines are left for the dm+d list", () => {
+  const guess = { sourceLabel: "Diagnosis", sourceValue: "atrial fibrillation", searchTerm: "atrial fibrillation", conceptId: "99999999999", preferredTerm: "Some old guess", descriptionId: null };
+  const [row] = reviewRows([guess], "", null, find);
+  assert.equal(row.conceptId, "49436004", "the list's own best match is used, not the guess that is not in it");
+  assert.ok(!row.options.some((o) => o.conceptId === "99999999999"));
+  const [unmatched] = reviewRows([{ sourceLabel: "Diagnosis", sourceValue: "quantum flux", searchTerm: "quantum flux", conceptId: "88888888888", preferredTerm: "Old guess" }], "", null, find);
+  assert.equal(unmatched.pick, null, "nothing in the list, and the old guess is not in it: nothing to accept");
+  const [before] = reviewRows([guess], "", null, null);
+  assert.equal(before.conceptId, "99999999999", "with no list loaded the reader's own guess is still shown, as before");
+  const drug = { sourceLabel: "Current medication", sourceValue: "Bisoprolol 5 mg once daily", searchTerm: "Bisoprolol 5 mg once daily", conceptId: "429503008", preferredTerm: "Bisoprolol therapy" };
+  assert.equal(isMedicine(drug), true);
+  assert.equal(isMedicine({ sourceLabel: "Diagnosis" }), false);
+  const [medicine] = reviewRows([drug], "", null, find);
+  assert.equal(medicine.medicine, true);
+  assert.equal(medicine.pick, null);
+  assert.deepEqual(medicine.options, []);
+  assert.match(read("src/modules/clinflow/CodeReview.jsx"), /NHS dm\+d list/);
 });
 
 t("the licence's conditions are kept: the required notice is shown wherever codes are, and an old list is flagged for replacing", () => {

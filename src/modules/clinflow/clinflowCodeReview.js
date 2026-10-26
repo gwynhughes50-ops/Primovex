@@ -14,13 +14,45 @@ export const candidateKey = (c) => [text(c?.sourceLabel), text(c?.searchTerm || 
 
 // ---- the codes the loaded SNOMED list offers for a finding ----
 // search: a createSearch() of the loaded list, or null when none is loaded. A code the reader already knew comes first, then the best matches.
+// What a letter says about a finding is often more than the finding: "Bisoprolol 5 mg once daily", "Blood pressure 132/84 mmHg", "Repeat U&Es in 2
+// weeks", "mild left ventricular dysfunction". Doses, numbers, timings and the words around them are taken off, so what is looked up is the thing itself.
+// Only numbers that are doses, readings or durations go ("5 mg", "132/84", "97%", "in 2 weeks"); a number that is part of a name stays ("type 2 diabetes").
+const NOISE = /\b\d+(?:\.\d+)?\s*(?:mg|mcg|micrograms?|g|ml|mmhg|kg|bpm|mmol\/l|hours?|minutes?|weeks?|days?|months?|years?)\b|\b\d+(?:\.\d+)?\s*%|\b\d+\s*\/\s*\d+\b|\b(?:mmhg|mg|mcg|micrograms?|ml|kg|bpm|once|twice|three times|daily|weekly|monthly|bd|od|tds|qds|nocte|mane|prn|today|tomorrow|repeat|review|continue|increase|decrease|reduce|start|stop|restart|check|please|arrange|book|in|within|for)\b|[^a-z0-9\s-]/gi;
+const QUALIFIERS = /\b(?:mild|mildly|moderate|moderately|severe|severely|slight|slightly|minor|marked|borderline|known|likely|possible|probable|suspected|new|ongoing)\b/gi;
+// Abbreviations a letter uses, written out so the list can find them (the list knows some, not all)
+const ABBREVIATIONS = [
+  [/\bu\s*&\s*es?\b/gi, "urea and electrolytes"], [/\bfbc\b/gi, "full blood count"], [/\blfts?\b/gi, "liver function test"], [/\btfts?\b/gi, "thyroid function test"],
+  [/\bcxr\b/gi, "chest x-ray"], [/\bcrp\b/gi, "c-reactive protein"], [/\bhba1c\b/gi, "haemoglobin a1c"], [/\bsob\b/gi, "shortness of breath"], [/\bbp\b/gi, "blood pressure"],
+  [/\baf\b/gi, "atrial fibrillation"], [/\bmi\b/gi, "myocardial infarction"], [/\bhf\b/gi, "heart failure"], [/\bcopd\b/gi, "chronic obstructive pulmonary disease"],
+  [/\bckd\b/gi, "chronic kidney disease"], [/\bt2dm\b/gi, "type 2 diabetes mellitus"], [/\bt1dm\b/gi, "type 1 diabetes mellitus"], [/\buti\b/gi, "urinary tract infection"],
+  [/\bdvt\b/gi, "deep vein thrombosis"], [/\bpe\b/gi, "pulmonary embolism"], [/\btia\b/gi, "transient ischaemic attack"], [/\bcva\b/gi, "cerebrovascular accident"],
+  [/\bgord\b|\bgerd\b/gi, "gastro-oesophageal reflux disease"], [/\bbmi\b/gi, "body mass index"], [/\becg\b/gi, "electrocardiogram"], [/\becho\b/gi, "echocardiogram"],
+];
+export const lookupText = (value) => text(ABBREVIATIONS.reduce((s, [pattern, full]) => s.replace(pattern, ` ${full} `), String(value ?? "")).replace(NOISE, " "));
+export const withoutQualifiers = (value) => text(String(value ?? "").replace(QUALIFIERS, " "));
+
+// The codes the list offers for a finding, best first. Doses and timings are ignored; if nothing matches closely, the qualifiers ("mild", "suspected")
+// are left off too and what that finds is added. A code the reader guessed at is offered only if it is really in the list.
 export function optionsFor(candidate, search) {
   if (!search) return [];
   const known = candidate.conceptId ? search.byConcept(candidate.conceptId) : null;
-  const query = text(candidate.component ? candidate.preferredTerm : (candidate.sourceValue || candidate.searchTerm));
-  const found = query ? search.search(query, { limit: 5 }) : [];
-  return (known ? [known, ...found.filter((f) => f.conceptId !== known.conceptId)] : found).slice(0, 5);
+  const query = lookupText(candidate.component ? candidate.preferredTerm : (candidate.sourceValue || candidate.searchTerm));
+  let found = query ? search.search(query, { limit: 6 }) : [];
+  if (query && (!found.length || found[0].score < 90)) {
+    const plain = withoutQualifiers(query);
+    if (plain && plain !== query) {
+      const again = search.search(plain, { limit: 6 }).map((r) => ({ ...r, score: r.score - 8 }));
+      const best = new Map();
+      for (const r of [...found, ...again]) if (!best.has(r.conceptId) || best.get(r.conceptId).score < r.score) best.set(r.conceptId, r);
+      found = [...best.values()].sort((a, b) => b.score - a.score);
+    }
+  }
+  const list = known ? [...found.filter((f) => f.conceptId === known.conceptId), ...found.filter((f) => f.conceptId !== known.conceptId)] : found;
+  return (known && !list.some((f) => f.conceptId === known.conceptId) ? [...list, known] : list).slice(0, 5);
 }
+
+// Medicines are coded from the NHS dm+d list (a different list), not from the clinical SNOMED list
+export const isMedicine = (candidate) => /medic|drug|prescri/i.test(`${candidate?.sourceLabel || ""} ${candidate?.kind || ""}`);
 const asPick = (o) => (o ? { conceptId: o.conceptId, term: o.term, descriptionId: o.descriptionId || "" } : null);
 
 // ---- the words in the letter behind a suggestion ----
@@ -135,12 +167,14 @@ export function reviewRows(candidates = [], letter = "", review = null, search =
     const key = candidateKey(candidate);
     const decision = review?.decisions?.[key];
     const evidence = findEvidence(letter, candidate.sourceValue || candidate.searchTerm || candidate.preferredTerm);
-    const options = optionsFor(candidate, search);
-    const own = candidate.conceptId ? { conceptId: candidate.conceptId, term: text(candidate.preferredTerm), descriptionId: candidate.descriptionId || "" } : null;
+    const medicine = isMedicine(candidate);
+    const options = medicine ? [] : optionsFor(candidate, search);
+    // the reader's own first guess is only used when no list is loaded: with the list, a code that is not in it is not offered
+    const own = !search && !medicine && candidate.conceptId ? { conceptId: candidate.conceptId, term: text(candidate.preferredTerm), descriptionId: candidate.descriptionId || "" } : null;
     // what accepting will use: the code chosen with the decision, else the coder's pick, else the first match, else the reader's own
-    const pick = decision?.chosen || review?.choices?.[key] || asPick(options[0]) || own;
+    const pick = medicine ? null : decision?.chosen || review?.choices?.[key] || asPick(options[0]) || own;
     return {
-      key, candidate, term: text(pick?.term || candidate.preferredTerm || candidate.searchTerm || candidate.sourceValue), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
+      key, candidate, medicine, term: text(pick?.term || candidate.searchTerm || candidate.sourceValue || candidate.preferredTerm), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
       descriptionId: pick?.descriptionId || "", pick, options, evidence, state: decision?.decision || "suggested", by: decision?.byName || "", at: decision?.at || "",
     };
   });

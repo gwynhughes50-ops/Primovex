@@ -6,6 +6,8 @@ const STOP = new Set(["the", "a", "an", "of", "and", "or", "with", "for", "to", 
 // On a tie, what a letter usually means comes first: a disorder or finding before a situation ("history of", "no"), a procedure or a therapy.
 const TAG_BIAS = { disorder: 2, finding: 2, "observable entity": 1, "medicinal product": 1, product: 0, "medicinal product form": 0, procedure: -1, "regime/therapy": -2, situation: -3 };
 
+const UNLESS_ASKED = new Set(["fetal", "foetal", "neonatal", "congenital", "paediatric", "pediatric", "juvenile", "maternal", "antenatal", "postnatal", "perinatal"]);
+
 export const tokens = (value) => String(value ?? "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w && !STOP.has(w));
 
 // Turns a loaded list into something quick to search: each word points at the codes whose terms contain it
@@ -45,7 +47,9 @@ export function createSearch(index) {
       const bonus = t === 0 ? 3 : 0;
       if (score + bonus > best) { best = score + bonus; matched = terms[i][t][0]; }
     });
-    return { score: best ? best + (TAG_BIAS[index.tags[concepts[i][3]]] || 0) : 0, matched };
+    // a code for an unborn or newborn baby, a child or a pregnancy is not what a letter means unless it says so
+    const flagged = (words[i][0] || []).some((w) => UNLESS_ASKED.has(w)) && !queryTokens.some((q) => UNLESS_ASKED.has(q)) ? -8 : 0;
+    return { score: best ? best + (TAG_BIAS[index.tags[concepts[i][3]]] || 0) + flagged : 0, matched };
   }
 
   return {
