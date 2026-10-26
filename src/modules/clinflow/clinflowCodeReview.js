@@ -326,6 +326,20 @@ export function codesAfterReview(candidates = [], review = null) {
   return out;
 }
 
+// Where the coding of a letter has got to, in words for the summary that goes with it to Docman:
+// accepted (the codes that will be sent, with who accepted them), removed, and waiting (suggested but not yet decided).
+export function reviewOutcome(candidates = [], review = null) {
+  const kept = codesAfterReview(candidates, review);
+  const accepted = kept.filter((c) => c.acceptedByUid).map((c) => ({
+    term: text(c.preferredTerm || c.searchTerm || c.sourceValue), conceptId: c.conceptId ? String(c.conceptId) : "", descriptionId: c.descriptionId ? String(c.descriptionId) : "",
+    by: text(c.acceptedByName), at: c.acceptedAt || "", added: c.status === "added_by_clinician",
+  }));
+  const decisionOf = (c) => review?.decisions?.[candidateKey(c)]?.decision;
+  const removed = candidates.filter((c) => decisionOf(c) === "removed").map(shownAs);
+  const waiting = candidates.filter((c) => !["accepted", "removed"].includes(decisionOf(c))).map(shownAs);
+  return { accepted, removed, waiting, touched: accepted.length + removed.length > 0 };
+}
+
 // The figures that say how good the reader is on real use
 export function reviewStats(candidates = [], review = null) {
   const keys = candidates.map(candidateKey);

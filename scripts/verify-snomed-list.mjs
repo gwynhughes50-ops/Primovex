@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import { REPLACE_AFTER_DAYS, SNOMED_NOTICE, buildIndex, describeIndex, indexAgeDays, indexIsOld, indexProblem, parseConceptLine, parseDescriptionLine, parseLanguageLine, parseMemberLine } from "../src/modules/clinflow/snomedIndex.js";
 import { createSearch, tokens } from "../src/modules/clinflow/snomedSearch.js";
 import { preferredFor } from "../src/modules/clinflow/preferredCodes.js";
-import { choose, codesAfterReview, decide, diagnosticText, isMedicine, lookupText, matchQuality, matchSummary, optionsFor, reviewRows, shownAs, subjectOf, unmatchedText, withoutQualifiers } from "../src/modules/clinflow/clinflowCodeReview.js";
+import { choose, codesAfterReview, reviewCandidates, reviewOutcome, decide, diagnosticText, isMedicine, lookupText, matchQuality, matchSummary, optionsFor, reviewRows, shownAs, subjectOf, unmatchedText, withoutQualifiers } from "../src/modules/clinflow/clinflowCodeReview.js";
 import { BUILT_IN_ABBREVIATIONS, abbreviationInfo, expandAbbreviations, parseAbbreviationCsv, setAbbreviationList, withMeaning } from "../src/modules/clinflow/clinicalAbbreviations.js";
+import { createClinFlowSummaryPdfBlob } from "../src/modules/clinflow/clinflowSummaryExportService.js";
+import { analyseClinFlowOcr } from "../src/modules/clinflow/clinflowAnalysisService.js";
 import { buildDocmanPayload } from "../src/modules/clinflow/docmanPayload.js";
 
 let n = 0;
@@ -422,5 +424,40 @@ t("abbreviations: one meaning is written out, several meanings are never guessed
   assert.match(read("src/modules/clinflow/CodeReview.jsx"), /Load an abbreviations file/);
   assert.match(read("src/modules/clinflow/snomedListStore.js"), /export function useAbbreviations/);
 });
+
+t("the summary that goes with the letter to Docman carries the codes the coder checked: accepted (who, when), removed, and anything not yet checked", async () => {
+  const candidates = [finding("atrial fibrillation"), finding("quantum flux"), finding("asthma")];
+  const rows = reviewRows(candidates, "", null, find);
+  let review = decide(null, candidates[0], "accepted", { uid: "gp-1", name: "Dr Example", pick: rows[0].pick });
+  review = decide(review, candidates[1], "removed", { uid: "gp-1", name: "Dr Example" });
+  const outcome = reviewOutcome(candidates, review);
+  assert.equal(outcome.touched, true);
+  assert.equal(outcome.accepted.length, 1);
+  assert.equal(outcome.accepted[0].conceptId, "49436004");
+  assert.equal(outcome.accepted[0].by, "Dr Example");
+  assert.deepEqual(outcome.removed, ["quantum flux"]);
+  assert.deepEqual(outcome.waiting, ["asthma"], "what nobody has looked at is said to be unchecked, not left out");
+  assert.equal(reviewOutcome(candidates, null).touched, false, "before anyone has looked, the summary keeps showing the reader's own suggestions");
+  const withAdded = reviewOutcome(candidates, { ...review, added: [{ term: "Asthma", conceptId: "195967001", descriptionId: "301001", byUid: "gp-1", byName: "Dr Example", at: "2026-10-26T10:00:00Z" }] });
+  assert.equal(withAdded.accepted.at(-1).added, true);
+  const source = read("src/modules/clinflow/clinflowSummaryExportService.js");
+  assert.match(source, /NOT YET CHECKED/);
+  assert.match(source, /SNOMED codes checked by the coder/);
+});
+
+{
+  // the real summary PDF is built, with and without a coder's decisions, so the new section cannot break the export
+  const ocr = { document: { id: "respiratory-clinic-letter" }, content: "Re: persistent cough and exertional breathlessness. CRP 4 mg/L. Oxygen saturation was recorded as 97% on room air.", groundTruth: [{ label: "Patient", expected: "Synthetic Patient", matched: true }] };
+  const analysis = analyseClinFlowOcr(ocr);
+  const base = { id: "doc-1", clinflowAnalysis: analysis, syntheticOcr: { ...ocr, fileName: "letter.pdf" } };
+  const candidates = reviewCandidates(analysis);
+  const rows = reviewRows(candidates, "", null, find);
+  const decided = { ...base, codeReview: decide(null, candidates[0], "accepted", { uid: "gp-1", name: "Dr Example", pick: rows[0].pick || { conceptId: "49436004", term: "Atrial fibrillation", descriptionId: "80004015" } }) };
+  for (const document of [base, decided]) {
+    const result = await createClinFlowSummaryPdfBlob(document, null);
+    assert.ok(result.blob.size > 1000, "a summary PDF is produced");
+  }
+  n += 1; console.log("ok  the summary PDF is built with and without the coder's decisions");
+}
 
 console.log(`\n${n} passed`);

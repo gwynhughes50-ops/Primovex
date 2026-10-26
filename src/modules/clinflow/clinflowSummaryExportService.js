@@ -1,16 +1,26 @@
 import { jsPDF } from "jspdf";
 import { PDFDocument } from "pdf-lib";
 import { SNOMED_NOTICE } from "./snomedIndex";
+import { reviewCandidates, reviewOutcome } from "./clinflowCodeReview";
 import { AI_OUTPUT_FOOTER, CLINICAL_DECISION_SUPPORT_BANNER, HIGH_RISK_BANNER, SYNTHETIC_TEST_BANNER, isRealAnalysedDocument } from "./clinflowDisclaimers";
 
 const cleanFileName = (value) => String(value || "clinflow-summary").replace(/[^a-z0-9._-]+/gi, "-").replace(/-+/g, "-").slice(0, 90);
+
+// What the coder did with the suggested codes, one line each: the accepted codes with who accepted them, then what was removed and what is still waiting
+const shortDay = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-GB"); };
+function codingLines(coding) {
+  const out = coding.accepted.map((c) => `${c.term} — SNOMED ${c.conceptId || "no code"}${c.descriptionId ? ` (description ${c.descriptionId})` : ""} — ${c.added ? "added" : "accepted"} by ${c.by || "a clinician"}${c.at ? ` on ${shortDay(c.at)}` : ""}`);
+  if (coding.removed.length) out.push(`Removed by the coder: ${coding.removed.join("; ")}`);
+  if (coding.waiting.length) out.push(`NOT YET CHECKED (${coding.waiting.length}): ${coding.waiting.join("; ")}`);
+  return out;
+}
 
 // A short, scannable cover sheet — key facts as a two-column grid, then each
 // question answered in one line, mirroring how a human reviewer actually
 // wants to triage a letter at a glance. The exhaustive evidence trail
 // (every extracted field, every terminology candidate) still follows on the
 // pages after it for anyone who needs to check the working.
-function drawCoverSheet(pdf, analysis, ocr, margin, width) {
+function drawCoverSheet(pdf, analysis, ocr, margin, width, coding) {
   const colWidth = width / 2;
   let y = 16;
 
@@ -141,7 +151,8 @@ function drawCoverSheet(pdf, analysis, ocr, margin, width) {
       ? `No lasting medication change identified. Temporary/test-preparation instructions only: ${analysis.medicationInstructions.map((item) => item.value).join("; ")}`
       : "No medication changes identified.");
 
-  bulletSection("SNOMED suggestions", (analysis.terminologyCandidates || []).slice(0, 10).map((item) => item.conceptId
+  if (coding?.touched) bulletSection("SNOMED codes checked by the coder", codingLines(coding), "No codes accepted.");
+  else bulletSection("SNOMED suggestions", (analysis.terminologyCandidates || []).slice(0, 10).map((item) => item.conceptId
     ? `${item.preferredTerm || item.searchTerm} — candidate concept ${item.conceptId} (clinician acceptance required)`
     : `${item.searchTerm} — code not verified`), "No SNOMED suggestions.");
 
@@ -167,7 +178,8 @@ function buildClinFlowSummaryPdf(document) {
   const margin = 16;
   const width = 210 - margin * 2;
 
-  drawCoverSheet(pdf, analysis, ocr, margin, width);
+  const coding = reviewOutcome(reviewCandidates(analysis), document.codeReview);
+  drawCoverSheet(pdf, analysis, ocr, margin, width, coding);
   pdf.addPage();
 
   let y = 16;
@@ -230,6 +242,11 @@ function buildClinFlowSummaryPdf(document) {
   analysis.nfwfAssessment?.blockers?.forEach((item) => line(`Blocker: ${item}`));
 
   heading("SNOMED CT review");
+  if (coding.touched) {
+    line("Codes checked by the coder (these are the codes for Docman):", { bold: true, after: 1 });
+    codingLines(coding).forEach((entry) => line(`• ${entry}`));
+    line("The reader's own suggestions, before checking:", { bold: true, after: 1 });
+  }
   analysis.structuredObservations?.forEach((item) => {
     if (item.type === "blood_pressure") {
       line(`• ${item.preferredTerm}: ${item.systolic.value}/${item.diastolic.value} ${item.unit.display}`, { bold: true, after: 1 });
