@@ -4,6 +4,7 @@ import { REPLACE_AFTER_DAYS, SNOMED_NOTICE, buildIndex, describeIndex, indexAgeD
 import { createSearch, tokens } from "../src/modules/clinflow/snomedSearch.js";
 import { preferredFor } from "../src/modules/clinflow/preferredCodes.js";
 import { choose, codesAfterReview, decide, diagnosticText, isMedicine, lookupText, matchQuality, matchSummary, optionsFor, reviewRows, shownAs, subjectOf, unmatchedText, withoutQualifiers } from "../src/modules/clinflow/clinflowCodeReview.js";
+import { BUILT_IN_ABBREVIATIONS, abbreviationInfo, expandAbbreviations, parseAbbreviationCsv, setAbbreviationList, withMeaning } from "../src/modules/clinflow/clinicalAbbreviations.js";
 import { buildDocmanPayload } from "../src/modules/clinflow/docmanPayload.js";
 
 let n = 0;
@@ -235,7 +236,7 @@ t("a measurement whose name is in its label, with only the number as its value, 
   assert.equal(top("Observation", "sats 94% on room air"), "431314004");
   assert.equal(top("Observation", "SpO2 97%"), "431314004");
   assert.equal(lookupText("CRP 4 mg/L"), "c-reactive protein", "a unit like mg/L goes whole, not just its first letters");
-  assert.equal(lookupText("eGFR 45 mmol/L"), "eGFR", "mmol/L too");
+  assert.equal(lookupText("eGFR 45 mmol/L"), "estimated glomerular filtration rate", "mmol/L too, and eGFR is written out");
   assert.equal(lookupText("MI"), "MI", "an abbreviation with more than one meaning is left alone");
 });
 
@@ -369,6 +370,47 @@ t("the licence's conditions are kept: the required notice is shown wherever code
   assert.match(read("src/modules/clinflow/CodeReview.jsx"), /SNOMED_NOTICE/);
   assert.match(read("src/modules/clinflow/clinflowSummaryExportService.js"), /line\(SNOMED_NOTICE/);
   assert.match(read("src/modules/clinflow/CodeReview.jsx"), /within 180 days/);
+});
+
+t("abbreviations: one meaning is written out, several meanings are never guessed, and a practice's own file replaces the built-in list", () => {
+  assert.equal(expandAbbreviations("CKD stage 3").text, "chronic kidney disease stage 3");
+  assert.equal(expandAbbreviations("U&Es normal").text, "urea and electrolytes normal");
+  assert.equal(expandAbbreviations("ckdish").text, "ckdish", "only whole abbreviations");
+  const ra = expandAbbreviations("RA");
+  assert.deepEqual(ra.ambiguous.map((a) => a.abbr), ["RA"]);
+  assert.ok(ra.ambiguous[0].meanings.includes("rheumatoid arthritis") && ra.ambiguous[0].meanings.length >= 2);
+  assert.equal(expandAbbreviations("ra").ambiguous.length, 0, "a several-meaning abbreviation is only read in capitals");
+  assert.equal(withMeaning("RA", "RA", "rheumatoid arthritis"), "rheumatoid arthritis");
+  assert.ok(BUILT_IN_ABBREVIATIONS.length > 100);
+  assert.equal(abbreviationInfo().builtIn, true);
+
+  const parsed = parseAbbreviationCsv('Abbreviation,Meaning\n"CKD","chronic kidney disease"\nXX\tasthma\nXX\tatrial fibrillation\nbroken\n,no abbreviation\nQQ,\n');
+  assert.equal(parsed.entries.length, 2, "the heading row is skipped; repeats are one entry");
+  assert.equal(parsed.ambiguous, 1);
+  assert.equal(parsed.problems.length, 3, "lines that cannot be used are reported, not dropped");
+  assert.equal(parsed.problems[0].line, 5);
+  assert.equal(parseAbbreviationCsv("").entries.length, 0);
+  assert.equal(parseAbbreviationCsv("ab,x\nab,x\n").entries[0].meanings.length, 1, "the same meaning twice is one meaning");
+  assert.equal(parseAbbreviationCsv("MS,multiple sclerosis\n").entries[0].upper, true, "two letters: capitals only");
+
+  setAbbreviationList(parsed.entries, "test.csv");
+  try {
+    assert.equal(abbreviationInfo().builtIn, false);
+    assert.equal(abbreviationInfo().label, "test.csv");
+    assert.equal(expandAbbreviations("CKD").text, "chronic kidney disease");
+    assert.equal(expandAbbreviations("COPD").text, "COPD", "the loaded list replaces the built-in one");
+    const [row] = reviewRows([finding("XX")], "", null, find);
+    assert.equal(row.ambiguity.abbr, "XX");
+    assert.equal(row.pick, null, "nothing is picked until the person chooses a meaning");
+    assert.equal(row.options.length, 2, "a code for each meaning");
+    assert.deepEqual(row.options.map((o) => o.viaAbbreviation).sort(), ["XX = asthma", "XX = atrial fibrillation"]);
+    const review = choose(null, finding("XX"), row.options[0]);
+    assert.equal(reviewRows([finding("XX")], "", review, find)[0].pick.conceptId, row.options[0].conceptId, "a meaning can be chosen");
+  } finally { setAbbreviationList(null); }
+  assert.equal(abbreviationInfo().builtIn, true, "going back restores the built-in list");
+  assert.equal(expandAbbreviations("COPD").text, "chronic obstructive pulmonary disease");
+  assert.match(read("src/modules/clinflow/CodeReview.jsx"), /Load an abbreviations file/);
+  assert.match(read("src/modules/clinflow/snomedListStore.js"), /export function useAbbreviations/);
 });
 
 console.log(`\n${n} passed`);

@@ -77,14 +77,18 @@ export function createSearch(index) {
   function scoreConcept(i, queryTokens, exact) {
     let best = 0;
     let matched = terms[i][0][0];
-    words[i].forEach((termWords, t) => {
+    // a term written "COPD - Chronic obstructive pulmonary disease" is also the name after the dash: the abbreviation is not part of what it is called
+    const named = (t) => { const m = /^[A-Za-z0-9&]{2,8} - (.+)$/.exec(terms[i][t][0]); return m ? tokens(m[1]) : null; };
+    const variants = [];
+    words[i].forEach((termWords, t) => { variants.push([termWords, t, 0]); const after = named(t); if (after?.length) variants.push([after, t, 1]); });
+    variants.forEach(([termWords, t, penalty]) => {
       const has = queryTokens.filter((q) => termWords.includes(q) || termWords.some((w) => w.length > 5 && q.length > 5 && (w.startsWith(stemOf(q)) || q.startsWith(stemOf(w))))).length;
       if (!has) return;
       const coverage = has / queryTokens.length;
       const tidy = termWords.length ? Math.min(1, queryTokens.length / termWords.length) : 0;
       const isExact = termWords.length === queryTokens.length && has === queryTokens.length && termWords.join(" ") === queryTokens.join(" ");
       const score = isExact ? 100 : coverage === 1 ? 60 + 35 * tidy : 40 * coverage * (0.5 + 0.5 * tidy);
-      const bonus = t === 0 ? 3 : 0;
+      const bonus = (t === 0 ? 3 : 0) - penalty;
       if (score + bonus > best) { best = score + bonus; matched = terms[i][t][0]; }
     });
     // a code for an unborn or newborn baby, a child or a pregnancy is not what a letter means unless it says so

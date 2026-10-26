@@ -29,6 +29,29 @@ function ListStatus({ list, canLoad }) {
   );
 }
 
+// The abbreviations a letter uses ("CKD", "SOB", "U&Es"): the built-in list, or the practice's own, loaded from a plain file
+function AbbreviationsStatus({ abbreviations, canLoad }) {
+  const input = useRef(null);
+  const pick = (e) => { const file = e.target.files?.[0]; if (file) abbreviations.load(file); e.target.value = ""; };
+  const { info, problems } = abbreviations;
+  return (
+    <section className="cf-summary-card cf-snomed-list"><Database size={18} /><div>
+      <b>Abbreviations</b>
+      <p>{info.builtIn ? `Using the built-in list of ${info.count} common abbreviations (not an official NHS list: a clinician should check it).` : `Using ${info.label}: ${info.count} abbreviations.`} {info.ambiguous} can mean more than one thing; for those you choose the meaning, nothing is guessed.</p>
+      {problems?.length > 0 && <p className="cf-muted">{problems.length} line{problems.length === 1 ? "" : "s"} in that file could not be used, for example line {problems[0].line}: {problems[0].why}.</p>}
+      {abbreviations.error && <p className="cf-code-error" role="alert">{abbreviations.error}</p>}
+      {canLoad && (
+        <>
+          <input ref={input} type="file" accept=".csv,.txt,.tsv,text/csv,text/plain" onChange={pick} hidden />
+          <button type="button" className="cf-top-button" onClick={() => input.current?.click()} disabled={abbreviations.loading}>Load an abbreviations file</button>
+          {!info.builtIn && <button type="button" className="cf-top-button" onClick={abbreviations.remove} disabled={abbreviations.loading}>Go back to the built-in list</button>}
+        </>
+      )}
+      <p className="cf-muted"><small>The file needs one abbreviation per line: the abbreviation, then its meaning, separated by a comma or a tab. An abbreviation on several lines has several meanings.</small></p>
+    </div></section>
+  );
+}
+
 // A search of the list for the add-a-code form
 function ListSearch({ search, onUse }) {
   const [q, setQ] = useState("");
@@ -45,8 +68,8 @@ function ListSearch({ search, onUse }) {
 
 // The coder's screen for one letter: each suggested SNOMED code with the words in the letter behind it, and buttons to accept it, remove it
 // or put it back; other matches from the UK list; a way to add a code the reader missed; and the counts that say how well the reader did.
-export default function CodeReview({ candidates, letter, review, canEdit, list, medList, onDecide, onChoose, onAdd, onRemoveAdded }) {
-  const rows = useMemo(() => reviewRows(candidates, letter, review, list?.search || null, medList?.search || null), [candidates, letter, review, list?.search, medList?.search]);
+export default function CodeReview({ candidates, letter, review, canEdit, list, medList, abbreviations, onDecide, onChoose, onAdd, onRemoveAdded }) {
+  const rows = useMemo(() => reviewRows(candidates, letter, review, list?.search || null, medList?.search || null), [candidates, letter, review, list?.search, medList?.search, abbreviations?.version]);
   const stats = useMemo(() => reviewStats(candidates, review), [candidates, review]);
   const summary = useMemo(() => matchSummary(rows), [rows]);
   const [copied, setCopied] = useState(false);
@@ -71,6 +94,7 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
     <div className="cf-code-review">
       {list && <ListStatus list={list} canLoad={canEdit} />}
       {medList && <ListStatus list={medList} canLoad={canEdit} />}
+      {abbreviations && <AbbreviationsStatus abbreviations={abbreviations} canLoad={canEdit} />}
       <section className="cf-summary-card"><Tag size={18} /><div><b>Codes for this letter</b><p>Each suggestion shows the words in the letter that led to it. Accept the ones that are right, remove the ones that are wrong, and add any the reader missed. Nothing is filed until you have checked it against the original letter.</p><p><small>{statsLine(stats)}{stats.right !== null ? ` The reader was right ${stats.right}% of the time on the ones you have looked at.` : ""}</small></p></div></section>
       {(list?.search || medList?.search) && summary.total > 0 && (
         <section className="cf-summary-card cf-match-summary" role="status"><div>
@@ -91,13 +115,14 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
               <details className="cf-code-others"><summary>How this was looked up</summary>
                 <p className="cf-muted">Label: {row.label || "none"}<br />Words found: {row.candidate.sourceValue || row.candidate.searchTerm || "none"}<br />Looked up as: {row.lookedUp ? `“${row.lookedUp}”` : "nothing to look up"}{row.options.length ? <><br />Best matches: {row.options.slice(0, 3).map((o) => `${o.term} (${o.score})`).join("; ")}</> : null}</p>
               </details>
+              {row.ambiguity && !row.pick && <p className="cf-quality cf-quality--possible">“{row.ambiguity.abbr}” can mean more than one thing: {row.ambiguity.meanings.join("; ")}. Choose the one the letter means; nothing is picked for you.</p>}
               {row.quality && <p className={`cf-quality cf-quality--${row.quality.level}`}>{row.quality.label}</p>}
               {row.evidence.found
                 ? <blockquote className="cf-evidence">“{row.evidence.quote}”</blockquote>
                 : <p className="cf-evidence cf-evidence--none">No matching words found in the letter. Check the original before accepting.</p>}
-              {canEdit && row.options.length > 1 && row.state !== "removed" && (
-                <details className="cf-code-others"><summary>Other matches ({row.options.length - 1})</summary>
-                  <ul>{row.options.filter((o) => o.conceptId !== row.conceptId).map((o) => <li key={o.conceptId}><span>{o.term} <small>{o.tag} · {row.medicine ? "dm+d" : "SNOMED"} {o.conceptId}</small></span><button type="button" className="cf-top-button" onClick={() => onChoose(row.candidate, o)}>Use this</button></li>)}</ul>
+              {canEdit && (row.options.length > 1 || row.ambiguity) && row.state !== "removed" && (
+                <details className="cf-code-others" open={Boolean(row.ambiguity && !row.pick)}><summary>{row.ambiguity && !row.pick ? `Choose the meaning (${row.options.length})` : `Other matches (${Math.max(0, row.options.length - 1)})`}</summary>
+                  <ul>{row.options.filter((o) => o.conceptId !== row.conceptId).map((o) => <li key={o.conceptId}><span>{o.term} <small>{o.viaAbbreviation ? `${o.viaAbbreviation} · ` : ""}{o.tag} · {row.medicine ? "dm+d" : "SNOMED"} {o.conceptId}</small></span><button type="button" className="cf-top-button" onClick={() => onChoose(row.candidate, o)}>Use this</button></li>)}</ul>
                 </details>
               )}
               {canEdit && row.state !== "removed" && (row.medicine ? medList?.search : list?.search) && (

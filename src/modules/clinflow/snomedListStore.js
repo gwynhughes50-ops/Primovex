@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { describeIndex, indexIsOld, indexProblem } from "./snomedIndex";
 import { createSearch } from "./snomedSearch";
+import { abbreviationInfo, parseAbbreviationCsv, setAbbreviationList } from "./clinicalAbbreviations";
 
 // Keeps the UK SNOMED list and the dm+d medicines list on this computer (the browser's own database), so each is loaded once and nothing about
 // them, or about any letter searched against them, leaves the computer. They are terminology only: no patient information is in either.
@@ -92,4 +93,43 @@ export function useSnomedList(kind = "snomed") {
   const remove = useCallback(async () => { await clearList(kind).catch(() => {}); setState({ index: null, loading: false, error: "", kept: null }); }, [kind]);
   const search = useMemo(() => (state.index ? createSearch(state.index) : null), [state.index]);
   return { kind, search, info: describeIndex(state.index), old: indexIsOld(state.index), loading: state.loading, error: state.error, kept: state.kept, load, remove };
+}
+
+// ---- the practice's own list of abbreviations (a plain file; see clinicalAbbreviations.js) ----
+const ABBREVIATIONS_KEY = "abbreviations-file";
+export const loadSavedAbbreviations = () => run("readonly", (store) => store.get(ABBREVIATIONS_KEY));
+export const saveAbbreviations = (record) => run("readwrite", (store) => store.put(record, ABBREVIATIONS_KEY));
+export const clearAbbreviations = () => run("readwrite", (store) => store.delete(ABBREVIATIONS_KEY));
+
+export function useAbbreviations() {
+  const [state, setState] = useState({ version: 0, loading: true, error: "", problems: [], info: abbreviationInfo() });
+  const apply = (text, name) => {
+    const parsed = parseAbbreviationCsv(text);
+    if (!parsed.entries.length) throw new Error("There were no abbreviations in that file. It needs one per line: the abbreviation, then its meaning, separated by a comma or a tab.");
+    setAbbreviationList(parsed.entries, name);
+    return parsed;
+  };
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const record = await loadSavedAbbreviations();
+        if (record?.text) { const parsed = apply(record.text, record.name || "your list"); if (live) setState((s) => ({ ...s, version: s.version + 1, loading: false, problems: parsed.problems, info: abbreviationInfo() })); return; }
+      } catch { /* the built-in list is used */ }
+      if (live) setState((s) => ({ ...s, loading: false }));
+    })();
+    return () => { live = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const load = useCallback(async (file) => {
+    setState((s) => ({ ...s, loading: true, error: "" }));
+    try {
+      const text = await file.text();
+      const parsed = apply(text, file.name);
+      let kept = true;
+      try { await saveAbbreviations({ text, name: file.name, savedAt: new Date().toISOString() }); } catch { kept = false; }
+      setState((s) => ({ version: s.version + 1, loading: false, error: kept ? "" : "The list is in use for now, but this computer would not keep it, so it will need loading again next time.", problems: parsed.problems, info: abbreviationInfo() }));
+    } catch (failure) { setState((s) => ({ ...s, loading: false, error: failure?.message || "That file could not be read." })); }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const remove = useCallback(async () => { await clearAbbreviations().catch(() => {}); setAbbreviationList(null); setState((s) => ({ version: s.version + 1, loading: false, error: "", problems: [], info: abbreviationInfo() })); }, []);
+  return { ...state, load, remove };
 }

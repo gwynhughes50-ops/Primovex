@@ -1,5 +1,6 @@
 import { medicineLookup, medicineName, medicineParts } from "./dmdIndex.js";
 import { preferredFor } from "./preferredCodes.js";
+import { expandAbbreviations, withMeaning } from "./clinicalAbbreviations.js";
 
 // The coder's part of a ClinFlow letter: each suggested SNOMED code is shown with the words in the letter that led to it, and the clinician
 // accepts it, removes it, or adds one the reader missed. Pure (no screens, no storage) so it can be tested.
@@ -19,7 +20,8 @@ export const candidateKey = (c) => [text(c?.sourceLabel), text(c?.searchTerm || 
 // search: a createSearch() of the loaded list, or null when none is loaded. A code the reader already knew comes first, then the best matches.
 // What a finding is about. A measurement keeps its name in its label and only the number as its value ("Oxygen saturation" / "97%", "Heart rate" / "96"),
 // so when the value has no name in it, the label is what is looked up.
-const hasName = (value) => /[a-z]{3,}/i.test(text(value).replace(/\b\d+(?:[.,]\d+)?\s*(?:mg|mcg|ml|kg|g|l|mmhg|bpm|mmol|iu|u)(?:\/[a-z]+)?\b/gi, " ").replace(/\b(?:celsius|percent|per|min|room|air|ra|on)\b/gi, " "));
+const isAbbreviation = (value) => { const v = text(value); if (!v || /\d/.test(v)) return false; const e = expandAbbreviations(v); return e.ambiguous.length > 0 || e.text.toLowerCase() !== v.toLowerCase(); };
+const hasName = (value) => isAbbreviation(value) || /[a-z]{3,}/i.test(text(value).replace(/\b\d+(?:[.,]\d+)?\s*(?:mg|mcg|ml|kg|g|l|mmhg|bpm|mmol|iu|u)(?:\/[a-z]+)?\b/gi, " ").replace(/\b(?:celsius|percent|per|min|room|air|ra|on)\b/gi, " "));
 export function subjectOf(candidate) {
   const value = text(candidate.component ? candidate.preferredTerm : (candidate.sourceValue || candidate.searchTerm));
   return hasName(value) || !text(candidate.sourceLabel) ? value : text(candidate.sourceLabel);
@@ -32,24 +34,32 @@ export const shownAs = (candidate) => { const value = text(candidate.sourceValue
 // Only numbers that are doses, readings or durations go ("5 mg", "132/84", "97%", "in 2 weeks"); a number that is part of a name stays ("type 2 diabetes").
 const NOISE = /\b\d+(?:\.\d+)?\s*(?:mg|ng|g|mcg|ml|mmol|mol|iu|u)\s*\/\s*(?:l|dl|ml|min|hr|h|kg)\b|\b(?:mg|ng|g|mmol)\s*\/\s*(?:l|dl)\b|\b\d+(?:\.\d+)?\s*(?:mg|mcg|micrograms?|g|ml|mmhg|kg|bpm|mmol\/l|hours?|minutes?|weeks?|days?|months?|years?)\b|\b\d+(?:\.\d+)?\s*%|\b\d+\s*\/\s*\d+\b|\b(?:mmhg|mg|mcg|micrograms?|ml|kg|bpm|once|twice|three times|daily|weekly|monthly|bd|od|tds|qds|nocte|mane|prn|today|tomorrow|repeat|review|continue|increase|decrease|reduce|start|stop|restart|check|please|arrange|book|in|within|for)\b|[^a-z0-9\s-]/gi;
 const QUALIFIERS = /\b(?:mild|mildly|moderate|moderately|severe|severely|slight|slightly|minor|marked|borderline|known|likely|possible|probable|suspected|new|ongoing)\b/gi;
-// Abbreviations a letter uses, written out so the list can find them (the list knows some, not all)
-const ABBREVIATIONS = [
-  [/\bu\s*&\s*es?\b/gi, "urea and electrolytes"], [/\bfbc\b/gi, "full blood count"], [/\blfts?\b/gi, "liver function test"], [/\btfts?\b/gi, "thyroid function test"],
-  [/\bcxr\b/gi, "chest x-ray"], [/\bcrp\b/gi, "c-reactive protein"], [/\bhba1c\b/gi, "haemoglobin a1c"], [/\bsob\b/gi, "shortness of breath"], [/\bbp\b/gi, "blood pressure"],
-  [/\baf\b/gi, "atrial fibrillation"], [/\bhf\b/gi, "heart failure"], [/\bcopd\b/gi, "chronic obstructive pulmonary disease"],
-  [/\bckd\b/gi, "chronic kidney disease"], [/\bt2dm\b/gi, "type 2 diabetes mellitus"], [/\bt1dm\b/gi, "type 1 diabetes mellitus"], [/\buti\b/gi, "urinary tract infection"],
-  [/\bdvt\b/gi, "deep vein thrombosis"], [/\btia\b/gi, "transient ischaemic attack"], [/\bcva\b/gi, "cerebrovascular accident"],
-  [/\b(?:spo2|sats|oxygen saturations?)\b/gi, "peripheral oxygen saturation"], [/(?<!body )(?<!core )\btemperature\b/gi, "body temperature"], [/\bgord\b|\bgerd\b/gi, "gastro-oesophageal reflux disease"], [/\bbmi\b/gi, "body mass index"], [/\becg\b/gi, "electrocardiogram"], [/\becho\b/gi, "echocardiogram"],
-];
-export const lookupText = (value) => text(ABBREVIATIONS.reduce((s, [pattern, full]) => s.replace(pattern, ` ${full} `), String(value ?? "")).replace(NOISE, " "));
+// Measurement names a letter writes in several ways, read the way the list names them (pulse oximetry, body temperature)
+const MEASUREMENTS = [[/\boxygen saturations?\b/gi, "peripheral oxygen saturation"], [/(?<!body )(?<!core )\btemperature\b/gi, "body temperature"]];
+// Abbreviations with one meaning are written out (see clinicalAbbreviations.js); ones with several are reported, never guessed at.
+export const lookupText = (value) => {
+  const named = MEASUREMENTS.reduce((s, [pattern, full]) => s.replace(pattern, ` ${full} `), expandAbbreviations(value).text);
+  return text(named.replace(NOISE, " "));
+};
+export const ambiguityOf = (value) => expandAbbreviations(value).ambiguous;
 export const withoutQualifiers = (value) => text(String(value ?? "").replace(QUALIFIERS, " "));
 
 // The codes the list offers for a finding, best first. Doses and timings are ignored; if nothing matches closely, the qualifiers ("mild", "suspected")
 // are left off too and what that finds is added. A code the reader guessed at is offered only if it is really in the list.
 export function optionsFor(candidate, search) {
   if (!search) return [];
+  // An abbreviation with more than one meaning is never guessed at: a code is offered for each meaning, and the person chooses
+  const subject = subjectOf(candidate);
+  const unsure = ambiguityOf(subject)[0];
+  if (unsure) {
+    const out = [];
+    for (const meaning of unsure.meanings) {
+      for (const r of search.search(lookupText(withMeaning(subject, unsure.abbr, meaning)), { limit: 2 })) if (!out.some((o) => o.conceptId === r.conceptId)) out.push({ ...r, viaAbbreviation: `${unsure.abbr} = ${meaning}` });
+    }
+    return out.slice(0, 6);
+  }
   const known = candidate.conceptId ? search.byConcept(candidate.conceptId) : null;
-  const query = lookupText(subjectOf(candidate));
+  const query = lookupText(subject);
   let found = query ? search.search(query, { limit: 6 }) : [];
   if (query && (!found.length || found[0].score < 90)) {
     const plain = withoutQualifiers(query);
@@ -281,12 +291,14 @@ export function reviewRows(candidates = [], letter = "", review = null, search =
     // the reader's own first guess is only used when no list is loaded: with the list, a code that is not in it is not offered
     const own = !search && !medicine && candidate.conceptId ? { conceptId: candidate.conceptId, term: text(candidate.preferredTerm), descriptionId: candidate.descriptionId || "" } : null;
     // what accepting will use: the code chosen with the decision, else the coder's pick, else the first match, else the reader's own
-    const pick = decision?.chosen || review?.choices?.[key] || asPick(options[0]) || own;
+    // an abbreviation that means several things has no first choice: the person picks the meaning
+    const ambiguity = medicine ? null : ambiguityOf(subjectOf(candidate))[0] || null;
+    const pick = decision?.chosen || review?.choices?.[key] || (ambiguity ? null : asPick(options[0]) || own);
     const lookedUp = medicine ? medicineParts(candidate.sourceValue || candidate.searchTerm).join("  +  ") : lookupText(subjectOf(candidate));
     const source = pick ? options.find((o) => o.conceptId === pick.conceptId) : null;
     const quality = matchQuality(source, Boolean(decision?.chosen || review?.choices?.[key]));
     return {
-      key, candidate, medicine, quality, lookedUp, medicineListMissing: medicine && !medSearch, term: text(pick?.term || shownAs(candidate) || candidate.preferredTerm), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
+      key, candidate, medicine, quality, ambiguity, lookedUp, medicineListMissing: medicine && !medSearch, term: text(pick?.term || shownAs(candidate) || candidate.preferredTerm), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
       descriptionId: pick?.descriptionId || "", pick, options, evidence, state: decision?.decision || "suggested", by: decision?.byName || "", at: decision?.at || "",
     };
   });
