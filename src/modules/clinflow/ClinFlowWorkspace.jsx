@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -42,6 +42,7 @@ import { createDocmanPackZip, downloadBlob, safePackName } from "./clinflowZipSe
 import DocmanReadiness from "./DocmanReadiness";
 import NextSteps from "./NextSteps";
 import Scorecard from "./Scorecard";
+import { codingAuditMeta, termVersions, terminologyEvent } from "./clinflowAuditMeta";
 import CodeReview from "./CodeReview";
 import { addCode, candidateKey, choose, codesAfterReview, decide, removeAdded, reviewCandidates, reviewOutcome } from "./clinflowCodeReview";
 import { useAbbreviations, useSnomedList } from "./snomedListStore";
@@ -168,7 +169,7 @@ function effectiveTriageFor(document) {
   };
 }
 
-function AzureReviewView({ selected, activeTab, onDownloadSummary, onOpenOriginal, onTriageDecision, onOpenTeaching, canReviewCodes, snomedList, medicinesList, abbreviations, onCodeDecision, onCodeChoose, onCodeAdd, onCodeRemoveAdded }) {
+function AzureReviewView({ selected, activeTab, onDocmanCopy, onDownloadSummary, onOpenOriginal, onTriageDecision, onOpenTeaching, canReviewCodes, snomedList, medicinesList, abbreviations, onCodeDecision, onCodeChoose, onCodeAdd, onCodeRemoveAdded }) {
   const ocr = selected.syntheticOcr;
   const analysis = selected.clinflowAnalysis;
   const confidence = Math.round((ocr.averageConfidence || 0) * 100);
@@ -263,7 +264,7 @@ function AzureReviewView({ selected, activeTab, onDownloadSummary, onOpenOrigina
     <CodeReview candidates={reviewCandidates(analysis, ocr?.content)} letter={ocr?.content || ""} review={selected.codeReview} canEdit={canReviewCodes} list={snomedList} medList={medicinesList} abbreviations={abbreviations} onDecide={onCodeDecision} onChoose={onCodeChoose} onAdd={onCodeAdd} onRemoveAdded={onCodeRemoveAdded} />
   </div>;
   if (activeTab === "quality") return <div className="cf-tab-content"><section className="cf-summary-card"><ShieldCheck size={18} /><div><b>Wales and England quality/register review</b><p>A hospital letter cannot establish a QAIF, Unified Contract or QOF opportunity by itself. ClinFlow therefore produces governed record-check prompts—not confirmed opportunities.</p></div></section><div className="cf-info-grid"><section><h3>Confirmed opportunities</h3><p><b>{analysis?.qaifOpportunities?.length || 0}</b><br />None are confirmed from this letter alone.<br />Awareness: {analysis?.qualityAwareness?.relevance || "Low"}</p></section>{analysis?.qualityPrompts?.map((item) => <section key={`${item.domain}-${item.title}`}><h3>{item.title}</h3><p><b>{item.domain}</b>{item.priority === "high" ? " · High-priority review" : ""}<br />{item.rationale}<br /><br />Next: {item.nextStep}<br /><small>{item.framework}</small></p></section>)}</div></div>;
-  if (activeTab === "outflow") return <div className="cf-tab-content"><section className="cf-summary-card"><FileText size={18} /><div><b>Docman companion summary</b><p>Download this summary, have a trained clinician compare and sign it against the untouched original, then drag both PDFs into Docman. Primovex does not transmit or file either document automatically.</p></div></section><div className="cf-info-grid"><section><h3>Document</h3><p>{analysis?.documentType}<br />Source: {ocr.fileName}</p></section><section><h3>Patient identity</h3><p>{analysis?.patient?.givenNames} {analysis?.patient?.familyName}<br /><b>Unverified</b> · NHS number and DOB must be checked</p></section><section><h3>Review status</h3><p>{analysis?.missing?.length || 0} required verification item{analysis?.missing?.length === 1 ? "" : "s"}<br />Not ready for automated transfer</p></section><section><h3>Output</h3><p><button type="button" className="cf-top-button cf-top-button--primary" onClick={onDownloadSummary}><Download size={14} /> Download summary PDF</button></p></section></div><DocmanReadiness analysis={analysis} fileReady={Boolean(ocr?.fileName)} outcome={reviewOutcome(reviewCandidates(analysis, ocr?.content), selected.codeReview)} onDownload={onDownloadSummary} /></div>;
+  if (activeTab === "outflow") return <div className="cf-tab-content"><section className="cf-summary-card"><FileText size={18} /><div><b>Docman companion summary</b><p>Download this summary, have a trained clinician compare and sign it against the untouched original, then drag both PDFs into Docman. Primovex does not transmit or file either document automatically.</p></div></section><div className="cf-info-grid"><section><h3>Document</h3><p>{analysis?.documentType}<br />Source: {ocr.fileName}</p></section><section><h3>Patient identity</h3><p>{analysis?.patient?.givenNames} {analysis?.patient?.familyName}<br /><b>Unverified</b> · NHS number and DOB must be checked</p></section><section><h3>Review status</h3><p>{analysis?.missing?.length || 0} required verification item{analysis?.missing?.length === 1 ? "" : "s"}<br />Not ready for automated transfer</p></section><section><h3>Output</h3><p><button type="button" className="cf-top-button cf-top-button--primary" onClick={onDownloadSummary}><Download size={14} /> Download summary PDF</button></p></section></div><DocmanReadiness analysis={analysis} fileReady={Boolean(ocr?.fileName)} outcome={reviewOutcome(reviewCandidates(analysis, ocr?.content), selected.codeReview)} onDownload={onDownloadSummary} onCopy={onDocmanCopy} /></div>;
   return <div className="cf-timeline">{[["Document accepted", "Approved synthetic fingerprint verified"], ["OCR completed", `Azure Document Intelligence · ${confidence}% average word confidence`], ["Added to ClinFlow", "Session-only OCR evidence added to the review queue"], ["Awaiting human review", "No patient match, route or clinical action has been confirmed"]].map(([title, detail]) => <div key={title}><span /><strong>{title}</strong><p>{detail}</p></div>)}</div>;
 }
 
@@ -272,6 +273,26 @@ export default function ClinFlowWorkspace() {
   const snomedList = useSnomedList("snomed");
   const medicinesList = useSnomedList("dmd");
   const abbreviations = useAbbreviations();
+  // Loading or removing a terminology list changes what codes are suggested, so each is written to the audit trail with the release that is in use
+  const pendingLoad = useRef({ snomed: "", dmd: "", abbreviations: "" });
+  const auditedList = (list, kind) => ({
+    ...list,
+    load: async (file) => { pendingLoad.current[kind] = file?.name || "file"; await list.load(file); },
+    remove: async () => { await list.remove(); pendingLoad.current[kind] = ""; recordTerminology(terminologyEvent(kind, "remove")); },
+  });
+  const auditedAbbreviations = {
+    ...abbreviations,
+    load: async (file) => { pendingLoad.current.abbreviations = file?.name || "file"; await abbreviations.load(file); },
+    remove: async () => { await abbreviations.remove(); pendingLoad.current.abbreviations = ""; recordTerminology(terminologyEvent("abbreviations", "remove")); },
+  };
+  function recordTerminology(event) {
+    return writeAuditEvent({ actor: { uid: user?.uid, displayName: displayName || user?.email }, action: event.action, module: "clinflow", targetType: "clinflow_terminology", targetId: event.metadata.kind, summary: event.summary, metadata: event.metadata, classification: "operational" }).catch(() => {});
+  }
+  useEffect(() => { if (pendingLoad.current.snomed && snomedList.search) { recordTerminology(terminologyEvent("snomed", "load", { info: snomedList.info, fileLabel: pendingLoad.current.snomed })); pendingLoad.current.snomed = ""; } }, [snomedList.search]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (pendingLoad.current.dmd && medicinesList.search) { recordTerminology(terminologyEvent("dmd", "load", { info: medicinesList.info, fileLabel: pendingLoad.current.dmd })); pendingLoad.current.dmd = ""; } }, [medicinesList.search]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (pendingLoad.current.abbreviations && abbreviations.version) { recordTerminology(terminologyEvent("abbreviations", "load", { info: `${abbreviations.info.label}: ${abbreviations.info.count} abbreviations`, fileLabel: pendingLoad.current.abbreviations })); pendingLoad.current.abbreviations = ""; } }, [abbreviations.version]); // eslint-disable-line react-hooks/exhaustive-deps
+  const versionsInUse = () => termVersions({ snomed: snomedList.search ? snomedList.info : "", medicines: medicinesList.search ? medicinesList.info : "", abbreviations: abbreviations.info.builtIn ? "built-in list" : abbreviations.info.label });
+  const codingOf = (doc) => (doc?.clinflowAnalysis ? codingAuditMeta(reviewCandidates(doc.clinflowAnalysis, doc.syntheticOcr?.content), doc.codeReview) : {});
   const [documents, setDocuments] = useState(SAMPLE_DOCUMENTS);
   const [selectedId, setSelectedId] = useState(SAMPLE_DOCUMENTS[0].id);
   const [query, setQuery] = useState("");
@@ -324,6 +345,13 @@ export default function ClinFlowWorkspace() {
   }, () => setSyncState("error")), [context]);
 
   const selected = documents.find((item) => item.id === selectedId) || documents[0];
+  // who opened which letter: once per letter per session, so reading a letter is on the record without a line for every click
+  const viewedLetters = useRef(new Set());
+  useEffect(() => {
+    if (!selected?.id || viewedLetters.current.has(selected.id)) return;
+    viewedLetters.current.add(selected.id);
+    record("clinflow.document.view", "ClinFlow letter opened for review", { dataMode: selected.dataMode || "synthetic" }).catch(() => {});
+  }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function replaceSelected(changes) {
     if (!selected?.id) return null;
@@ -392,12 +420,12 @@ export default function ClinFlowWorkspace() {
       const updated = { ...selected, codeReview: review, clinflowAnalysis: { ...selected.clinflowAnalysis, docmanDraft: { ...selected.clinflowAnalysis?.docmanDraft, clinicalCodes: codesAfterReview(reviewCandidates(selected.clinflowAnalysis, selected.syntheticOcr?.content), review) } } };
       setDocuments((items) => items.map((item) => item.id === selected.id ? updated : item));
       if (selected.dataMode === "synthetic") await cacheClinFlowDocuments([updated]);
-      await record(action, summary, { ...metadata, automatedTransmission: false });
+      await record(action, summary, { ...metadata, ...versionsInUse(), automatedTransmission: false });
     });
   }
   const coder = () => ({ uid: user?.uid || "", name: displayName || user?.email || "" });
-  const decideCode = (candidate, decision, pick = null) => saveCodeReview(decide(selected.codeReview, candidate, decision, { ...coder(), pick }), "clinflow.code_review", `SNOMED code ${decision === "suggested" ? "put back as a suggestion" : decision}: ${pick?.term || candidate.preferredTerm || candidate.searchTerm || candidate.sourceValue}`, { decision, conceptId: pick?.conceptId || candidate.conceptId || null });
-  const chooseCode = (candidate, option) => saveCodeReview(choose(selected.codeReview, candidate, option, coder()), "clinflow.code_review", `A different SNOMED code was chosen for ${candidate.searchTerm || candidate.sourceValue}: ${option?.term || "the first match"}`, { decision: "chose a different code", conceptId: option?.conceptId || null });
+  const decideCode = (candidate, decision, pick = null) => saveCodeReview(decide(selected.codeReview, candidate, decision, { ...coder(), pick }), "clinflow.code_review", `SNOMED code ${decision === "suggested" ? "put back as a suggestion" : decision}: ${pick?.term || candidate.preferredTerm || candidate.searchTerm || candidate.sourceValue}`, { decision, conceptId: pick?.conceptId || candidate.conceptId || null, calculated: candidate.calculated?.kind || "" });
+  const chooseCode = (candidate, option) => saveCodeReview(choose(selected.codeReview, candidate, option, coder()), "clinflow.code_review", `A different SNOMED code was chosen for ${candidate.searchTerm || candidate.sourceValue}: ${option?.term || "the first match"}`, { decision: "chose a different code", conceptId: option?.conceptId || null, calculated: candidate.calculated?.kind || "" });
   const addCodeByCoder = async (input) => { await saveCodeReview(addCode(selected.codeReview, input, coder()), "clinflow.code_review", `SNOMED code added by the coder: ${input.term}`, { decision: "added", conceptId: input.conceptId || null }); };
   const removeAddedCode = (id) => saveCodeReview(removeAdded(selected.codeReview, id, coder()), "clinflow.code_review", "A code added by the coder was taken out", { decision: "took out an added code" });
 
@@ -480,7 +508,7 @@ export default function ClinFlowWorkspace() {
       setFinishedPacks((packs) => [pack, ...packs.filter((item) => item.id !== pack.id)]);
       setFinishOpen(false);
       setFilter("finished");
-      await record("clinflow.finished.pack_created", "ClinFlow reviewed document moved to Finished and Docman pack prepared", { destination: updated.destination, originalUnchanged: true, automatedTransmission: false });
+      await record("clinflow.finished.pack_created", "ClinFlow reviewed document moved to Finished and Docman pack prepared", { destination: updated.destination, originalUnchanged: true, automatedTransmission: false, ...codingOf(updated), ...versionsInUse() });
       notify("Finished pack created with the original and ClinFlow summary");
     });
   }
@@ -614,7 +642,7 @@ export default function ClinFlowWorkspace() {
     try {
       const originalBlob = await resolveOriginalFile(selected).catch(() => null);
       const result = await downloadClinFlowSummaryPdf(selected, originalBlob);
-      await record("clinflow.summary.download", "ClinFlow clinician-review summary downloaded", { format: "pdf", appendedOriginal: result.appendedOriginal });
+      await record("clinflow.summary.download", "ClinFlow clinician-review summary downloaded", { format: "pdf", appendedOriginal: result.appendedOriginal, ...codingOf(selected), ...versionsInUse() });
       notify(result.appendedOriginal ? "ClinFlow review summary downloaded (original letter attached)" : "ClinFlow review summary downloaded");
     } catch (error) {
       console.error("ClinFlow summary export failed", error);
@@ -851,7 +879,7 @@ export default function ClinFlowWorkspace() {
           </section>}
           <nav className="cf-tabs">{tabs.map(([key, label]) => { const tabKey = selected.syntheticOcr ? `synthetic-${key}` : key; return <button type="button" key={key} className={activeTab === tabKey ? "active" : ""} onClick={() => setActiveTab(tabKey)}>{label}</button>; })}</nav>
           <section className="cf-viewer">
-            {selected.syntheticOcr && <AzureReviewView selected={selected} activeTab={activeTab.replace(/^synthetic-/, "")} onDownloadSummary={downloadSummary} onOpenOriginal={openOriginal} onTriageDecision={confirmTriageDecision} onOpenTeaching={openTeaching} canReviewCodes={can("clinflow.workflow")} snomedList={snomedList} medicinesList={medicinesList} abbreviations={abbreviations} onCodeDecision={decideCode} onCodeChoose={chooseCode} onCodeAdd={addCodeByCoder} onCodeRemoveAdded={removeAddedCode} />}
+            {selected.syntheticOcr && <AzureReviewView onDocmanCopy={(field) => record("clinflow.docman.copy", "A detail was copied for Docman", { field, automatedTransmission: false }).catch(() => {})} selected={selected} activeTab={activeTab.replace(/^synthetic-/, "")} onDownloadSummary={downloadSummary} onOpenOriginal={openOriginal} onTriageDecision={confirmTriageDecision} onOpenTeaching={openTeaching} canReviewCodes={can("clinflow.workflow")} snomedList={auditedList(snomedList, "snomed")} medicinesList={auditedList(medicinesList, "dmd")} abbreviations={auditedAbbreviations} onCodeDecision={decideCode} onCodeChoose={chooseCode} onCodeAdd={addCodeByCoder} onCodeRemoveAdded={removeAddedCode} />}
             {!selected.syntheticOcr && activeTab === "document" && <>
               <div className="cf-viewer-toolbar"><button type="button">−</button><b>100%</b><button type="button">+</button><button type="button"><Download size={14} /></button><span>Page 1 of 2</span></div>
               <div className="cf-viewer-body"><aside className="cf-thumbnails"><div className="active">Page 1</div><small>1</small><div>Page 2</div><small>2</small></aside><div className="cf-paper-stage"><article className="cf-paper"><div className="cf-letterhead"><strong>Glan Clwyd Hospital<br /><small>Cardiology Department</small></strong><strong>Date: 14 May 2026</strong></div><p>Dr A N Other<br />Greenfield Surgery<br />123 High Street<br />Mold<br />CH7 1AB</p><p>Dear Dr Other</p><p><b>Re: {selected.patient} · DOB: {selected.dob} · NHS: {selected.nhs}</b></p><p>Thank you for referring Mr Smith to the Cardiology Clinic.</p><h3>Assessment</h3><p>Mr Smith was reviewed today for atrial fibrillation. He remains symptomatic with exertional dyspnoea. Echocardiogram shows mild left ventricular dysfunction.</p><h3>Plan</h3><ul><li>Increase Bisoprolol to 5 mg once daily</li><li>Continue Apixaban 5 mg twice daily</li><li>Repeat U&Es in 2 weeks</li><li>Review in 3 months</li></ul><p>Yours sincerely</p><p><b>Dr B Consultant<br />Consultant Cardiologist</b></p></article></div></div>

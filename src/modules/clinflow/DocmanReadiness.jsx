@@ -6,7 +6,7 @@ import { handoverCodes, handoverFields, handoverSteps, handoverText } from "./do
 // Getting a coded letter into Docman 10X: the steps in order, the details Docman asks for with a Copy button on each, and the one PDF to drag in.
 // Nothing is sent from here: the clinician still files the letter in Docman themselves. This is the checklist for that, and the exact record that
 // would be posted if Docman's API is ever used.
-export default function DocmanReadiness({ analysis, fileReady, outcome, onDownload }) {
+export default function DocmanReadiness({ analysis, fileReady, outcome, onDownload, onCopy }) {
   const [showRecord, setShowRecord] = useState(false);
   const [copied, setCopied] = useState("");
   const result = useMemo(() => buildDocmanPayload(analysis?.docmanDraft || {}, { fileReady: Boolean(fileReady) }), [analysis, fileReady]);
@@ -15,7 +15,7 @@ export default function DocmanReadiness({ analysis, fileReady, outcome, onDownlo
   const steps = useMemo(() => handoverSteps(result, outcome), [result, outcome]);
   const notes = result.problems.filter((p) => p.severity !== "blocks");
   const copy = async (key, value) => {
-    try { await navigator.clipboard.writeText(value); setCopied(key); setTimeout(() => setCopied(""), 1800); } catch { /* the value is shown beside the button */ }
+    try { await navigator.clipboard.writeText(value); setCopied(key); setTimeout(() => setCopied(""), 1800); onCopy?.(key === "all" ? "all the details" : /^\d/.test(key) ? "a SNOMED code" : key); } catch { /* the value is shown beside the button */ }
   };
   return (
     <section className="cf-summary-card cf-docman-ready" aria-label="What Docman needs">
