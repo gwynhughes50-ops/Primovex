@@ -82,7 +82,7 @@ export function parseAbbreviationCsv(source) {
     if (i === 0 && /^(abbrev|abbreviation|short|term|acronym)/i.test(abbr || "") ) return; // a heading row
     lines += 1;
     if (!abbr || !meaning) { problems.push({ line: i + 1, text: raw.slice(0, 80), why: "needs an abbreviation and its meaning" }); return; }
-    if (abbr.length > 12 || abbr.split(" ").length > 2) { problems.push({ line: i + 1, text: raw.slice(0, 80), why: "that does not look like an abbreviation" }); return; }
+    if (abbr.length > 16 || abbr.split(" ").length > 2) { problems.push({ line: i + 1, text: raw.slice(0, 80), why: "that does not look like an abbreviation" }); return; }
     if (meaning.length > 120) { problems.push({ line: i + 1, text: raw.slice(0, 80), why: "the meaning is too long" }); return; }
     const key = abbr.toLowerCase();
     if (!byAbbr.has(key)) byAbbr.set(key, { abbr: abbr.toLowerCase(), meanings: [], upper: false, written: abbr });
