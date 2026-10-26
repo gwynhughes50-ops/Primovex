@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { CheckCircle2, Database, Plus, RotateCcw, Tag, Trash2, XCircle } from "lucide-react";
-import { addProblem, reviewRows, reviewStats, statsLine } from "./clinflowCodeReview";
+import { addProblem, matchSummary, reviewRows, reviewStats, statsLine, unmatchedText } from "./clinflowCodeReview";
 import { SNOMED_NOTICE } from "./snomedIndex";
 
 const STATE_WORDS = { suggested: "Waiting for you", accepted: "Accepted", removed: "Removed" };
@@ -14,7 +14,7 @@ function ListStatus({ list, canLoad }) {
     <section className="cf-summary-card cf-snomed-list"><Database size={18} /><div>
       <b>{meds ? "NHS dm+d medicines list" : "UK SNOMED list"}</b>
       {list.loading ? <p>Opening…</p> : list.search
-        ? <p>{list.info}. {meds ? "Medicines" : "Codes"} are looked up here, on this computer; nothing from the letter is sent anywhere to find them.</p>
+        ? <p>{list.info}. {meds ? "Medicines" : "Codes"} are looked up here, on this computer; nothing from the letter is sent anywhere to find them.{list.kept === true ? " It is kept on this computer, so it is ready each time ClinFlow opens." : ""}</p>
         : <p>{meds ? "The dm+d medicines list is not loaded on this computer, so medicines cannot be looked up yet. It is made from the dm+d download on NHS TRUD." : "The UK SNOMED list is not loaded on this computer, so codes cannot be looked up yet. It is made from the SNOMED CT download on NHS TRUD (see the note on the builder)."}</p>}
       {list.old && <p className="cf-code-error" role="status">{meds ? "This list is more than four months old. Download the newest dm+d from TRUD and load it." : "This list is more than four months old. Download the newest SNOMED CT UK Clinical Edition from TRUD and load it: the licence asks for a new version to be taken up within 180 days."}</p>}
       {list.error && <p className="cf-code-error" role="alert">{list.error}</p>}
@@ -47,6 +47,9 @@ function ListSearch({ search, onUse }) {
 export default function CodeReview({ candidates, letter, review, canEdit, list, medList, onDecide, onChoose, onAdd, onRemoveAdded }) {
   const rows = useMemo(() => reviewRows(candidates, letter, review, list?.search || null, medList?.search || null), [candidates, letter, review, list?.search, medList?.search]);
   const stats = useMemo(() => reviewStats(candidates, review), [candidates, review]);
+  const summary = useMemo(() => matchSummary(rows), [rows]);
+  const [copied, setCopied] = useState(false);
+  const copyUnmatched = async () => { try { await navigator.clipboard.writeText(unmatchedText(summary)); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch { /* the list is also shown above */ } };
   const [form, setForm] = useState({ term: "", conceptId: "", descriptionId: "" });
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
@@ -63,6 +66,13 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
       {list && <ListStatus list={list} canLoad={canEdit} />}
       {medList && <ListStatus list={medList} canLoad={canEdit} />}
       <section className="cf-summary-card"><Tag size={18} /><div><b>Codes for this letter</b><p>Each suggestion shows the words in the letter that led to it. Accept the ones that are right, remove the ones that are wrong, and add any the reader missed. Nothing is filed until you have checked it against the original letter.</p><p><small>{statsLine(stats)}{stats.right !== null ? ` The reader was right ${stats.right}% of the time on the ones you have looked at.` : ""}</small></p></div></section>
+      {(list?.search || medList?.search) && summary.total > 0 && (
+        <section className="cf-summary-card cf-match-summary" role="status"><div>
+          <b>{summary.matched} of {summary.total} found a code in the lists.</b>
+          {summary.unmatched.length > 0 && <><p>Nothing in the lists matched: {summary.unmatched.map((u) => `“${u.words}”`).join(", ")}. Check the original letter, remove them, or add the right code below.</p>
+            <button type="button" className="cf-top-button" onClick={copyUnmatched}>{copied ? "Copied" : "Copy these words"}</button></>}
+        </div></section>
+      )}
       {!canEdit && <p className="cf-muted">You can see these suggestions, but your role cannot accept or remove them.</p>}
       <ul className="cf-code-list">
         {rows.length === 0 && <li className="cf-code-row"><p>No codes were suggested for this letter.</p></li>}

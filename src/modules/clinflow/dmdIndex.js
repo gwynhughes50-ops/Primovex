@@ -63,7 +63,7 @@ export function chooseDescriptionIds(wanted, descriptions = []) {
 }
 
 // ---- looking a medicine up from the words in a letter ----
-const FREQUENCY = /\bat\s+\d{1,2}[:.]\d{2}(?:\s*(?:am|pm|hrs?))?\b|\b(?:once|twice|three times|four times|daily|weekly|monthly|bd|od|tds|qds|nocte|mane|prn|at night|in the morning|in the evening|every \d+ hours?|with food|when required|as needed|to be taken|take|taken|orally|oral|increase to|increased to|increase|decrease|reduce to|reduced to|reduce|continue|continued|start|started|stop|stopped|restart|restarted|please|the|dose|dosage|to)\b/gi;
+const FREQUENCY = /\bat\s+\d{1,2}[:.]\d{2}(?:\s*(?:am|pm|hrs?))?\b|\b(?:trial|trialled|trialling|try|commence|commenced|commencing|initiate|initiated|prescribe|prescribed|issue|issued|switch|switched|change|changed|puffs?|inhalations?|when required|as required|once|twice|three times|four times|daily|weekly|monthly|bd|od|tds|qds|nocte|mane|prn|at night|in the morning|in the evening|every \d+ hours?|with food|when required|as needed|to be taken|take|taken|orally|oral|increase to|increased to|increase|decrease|reduce to|reduced to|reduce|continue|continued|start|started|stop|stopped|restart|restarted|please|the|dose|dosage|to)\b/gi;
 
 // "Bisoprolol 5 mg once daily" -> "Bisoprolol 5mg": the strength is written the way dm+d writes it, and how often it is taken goes
 export function medicineLookup(value) {

@@ -1,4 +1,4 @@
-import { medicineName, medicineParts } from "./dmdIndex.js";
+import { medicineLookup, medicineName, medicineParts } from "./dmdIndex.js";
 
 // The coder's part of a ClinFlow letter: each suggested SNOMED code is shown with the words in the letter that led to it, and the clinician
 // accepts it, removes it, or adds one the reader missed. Pure (no screens, no storage) so it can be tested.
@@ -49,9 +49,37 @@ export function optionsFor(candidate, search) {
       found = [...best.values()].sort((a, b) => b.score - a.score);
     }
   }
+  // A long phrase from a letter ("symptomatic paroxysmal atrial fibrillation with rapid ventricular response") may not be a code's name, but a shorter
+  // stretch of it is. If nothing matches closely, the stretches inside it are tried, longest first, each a little less sure the more is left off.
+  if (query && (!found.length || found[0].score < 60)) {
+    const words = query.split(/\s+/).filter(Boolean);
+    const best = new Map(found.map((r) => [r.conceptId, r]));
+    let tried = 0;
+    for (let length = Math.min(words.length - 1, 6); length >= 1 && tried < 45; length -= 1) {
+      for (let start = 0; start + length <= words.length && tried < 45; start += 1) {
+        const stretch = words.slice(start, start + length).join(" ");
+        if (length === 1 && stretch.length < 5) continue; // one short word is too little to go on
+        tried += 1;
+        const dropped = words.length - length;
+        for (const r of search.search(stretch, { limit: 4 })) {
+          const score = r.score - (length === 1 ? 10 : 6) * dropped;
+          if (score >= 45 && (!best.has(r.conceptId) || best.get(r.conceptId).score < score)) best.set(r.conceptId, { ...r, score });
+        }
+      }
+    }
+    found = [...best.values()].sort((a, b) => b.score - a.score).slice(0, 6);
+  }
   const list = known ? [...found.filter((f) => f.conceptId === known.conceptId), ...found.filter((f) => f.conceptId !== known.conceptId)] : found;
   return (known && !list.some((f) => f.conceptId === known.conceptId) ? [...list, known] : list).slice(0, 5);
 }
+
+// How many findings found a code, and the words of those that found none, for the line at the top of the review
+export function matchSummary(rows = []) {
+  const coded = rows.filter((r) => r.pick);
+  const none = rows.filter((r) => !r.pick && !r.medicineListMissing);
+  return { total: rows.length, matched: coded.length, unmatched: none.map((r) => ({ label: r.label, words: text(r.candidate.sourceValue || r.candidate.searchTerm) })) };
+}
+export const unmatchedText = (summary) => summary.unmatched.map((u) => `${u.label ? `${u.label}: ` : ""}${u.words}`).join("\n");
 
 // Medicines are coded from the NHS dm+d list (a different list), not from the clinical SNOMED list
 export const isMedicine = (candidate) => candidate?.codeSystem === "dm+d" || /medic|drug|prescri/i.test(`${candidate?.sourceLabel || ""} ${candidate?.kind || ""}`);
@@ -71,7 +99,10 @@ export function reviewCandidates(analysis) {
       medicines.push({ sourceLabel: "Medication", sourceValue: value, searchTerm: value, conceptId: null, preferredTerm: null, descriptionId: null, scheme: 2, codeSystem: "dm+d", status: "terminology_lookup_required", acceptedByUid: null });
     }
   }
-  return [...clinical, ...medicines];
+  // "Trial salbutamol inhaler 100 micrograms" says more than "salbutamol 100 micrograms": the shorter one is the same medicine, so only the longer is kept
+  const words = (m) => new Set(medicineLookup(m.sourceValue).split(/\s+/).filter(Boolean));
+  const kept = medicines.filter((m, i) => { const mine = words(m); return !medicines.some((o, j) => j !== i && (words(o).size > mine.size || (words(o).size === mine.size && j < i)) && [...mine].every((w) => words(o).has(w))); });
+  return [...clinical, ...kept];
 }
 
 // The medicines the dm+d list offers for a finding ("Bisoprolol 5 mg once daily" -> Bisoprolol 5mg tablets). Each medicine named is looked up on its own;

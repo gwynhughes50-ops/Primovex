@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { REPLACE_AFTER_DAYS, SNOMED_NOTICE, buildIndex, describeIndex, indexAgeDays, indexIsOld, indexProblem, parseConceptLine, parseDescriptionLine, parseLanguageLine, parseMemberLine } from "../src/modules/clinflow/snomedIndex.js";
 import { createSearch, tokens } from "../src/modules/clinflow/snomedSearch.js";
-import { choose, codesAfterReview, decide, isMedicine, lookupText, optionsFor, reviewRows, withoutQualifiers } from "../src/modules/clinflow/clinflowCodeReview.js";
+import { choose, codesAfterReview, decide, isMedicine, lookupText, matchSummary, optionsFor, reviewRows, unmatchedText, withoutQualifiers } from "../src/modules/clinflow/clinflowCodeReview.js";
 import { buildDocmanPayload } from "../src/modules/clinflow/docmanPayload.js";
 
 let n = 0;
@@ -202,6 +202,27 @@ t("a finding with doses or severity words still finds its code, and the qualifie
   assert.equal(top("atrial fibrillation")[0], "49436004");
   assert.equal(top("AF")[0], "49436004", "an abbreviation in a letter");
   assert.equal(top("exertional dyspnoea")[0], "60845006");
+});
+
+t("a long phrase that is not a code's name still finds the code for a shorter stretch of it, and nonsense still finds nothing", () => {
+  const top = (value) => optionsFor({ sourceValue: value }, find).map((o) => o.conceptId);
+  assert.equal(top("symptomatic paroxysmal atrial fibrillation with rapid response")[0], "49436004", "'atrial fibrillation' is inside it");
+  assert.equal(top("echocardiogram shows significant asthma exacerbation overnight")[0], "195967001");
+  assert.deepEqual(top("completely unrelated words about nothing medical"), []);
+  assert.deepEqual(top("quantum flux capacitor realignment"), []);
+  assert.ok(top("atrial fibrillation")[0] === "49436004", "a name that matches closely is not disturbed");
+});
+
+t("the review says how many findings found a code, and which words found none", () => {
+  const rows = reviewRows([finding("atrial fibrillation"), finding("quantum flux"), finding("asthma")], "", null, find);
+  const summary = matchSummary(rows);
+  assert.deepEqual([summary.total, summary.matched], [3, 2]);
+  assert.deepEqual(summary.unmatched, [{ label: "Diagnosis", words: "quantum flux" }]);
+  assert.equal(unmatchedText(summary), "Diagnosis: quantum flux");
+  const noList = matchSummary(reviewRows([{ sourceLabel: "Medication", sourceValue: "Bisoprolol", codeSystem: "dm+d" }], "", null, null, null));
+  assert.equal(noList.unmatched.length, 0, "a medicine whose list is not loaded is not called unmatched");
+  assert.match(read("src/modules/clinflow/CodeReview.jsx"), /found a code in the lists/);
+  assert.match(read("src/modules/clinflow/CodeReview.jsx"), /Copy these words/);
 });
 
 t("a baby's or unborn code does not outrank the ordinary one unless the letter says so", () => {

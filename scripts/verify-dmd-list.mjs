@@ -189,6 +189,12 @@ t("a brand is written with its supplier in SNOMED, so it is matched on that name
   assert.equal(first.term, "Cardicor 5mg tablets (Merck Serono Ltd)");
 });
 
+t("the same medicine written twice in a letter is one row, with the wording the letter used for the more complete one", () => {
+  assert.equal(medicineLookup("Trial salbutamol inhaler 100 micrograms, puffs when required"), "salbutamol inhaler 100micrograms");
+  const analysis = { medicationCandidates: [{ sourceValue: "salbutamol 100 micrograms", codeSystem: "dm+d" }, { sourceValue: "Trial salbutamol inhaler 100 micrograms", codeSystem: "dm+d" }, { sourceValue: "Bisoprolol 5 mg", codeSystem: "dm+d" }, { sourceValue: "Bisoprolol 2.5 mg", codeSystem: "dm+d" }] };
+  assert.deepEqual(reviewCandidates(analysis).map((c) => c.sourceValue), ["Trial salbutamol inhaler 100 micrograms", "Bisoprolol 5 mg", "Bisoprolol 2.5 mg"], "a different strength is a different medicine; the same one written shorter is not");
+});
+
 t("the screen and the builder: a second list to load, the builder says what to do, and the licence notice is kept", () => {
   const panel = read("src/modules/clinflow/CodeReview.jsx");
   for (const text of ["NHS dm+d medicines list", "Choose the medicines list file", "medList"]) assert.ok(panel.includes(text), text);
