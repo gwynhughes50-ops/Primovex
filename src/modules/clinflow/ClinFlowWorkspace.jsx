@@ -14,6 +14,7 @@ import {
   Filter,
   FolderCheck,
   BarChart3,
+  X,
   Maximize2,
   Minimize2,
   PanelLeftClose,
@@ -311,6 +312,16 @@ export default function ClinFlowWorkspace() {
   const remembered = (key) => { try { return globalThis.localStorage?.getItem(key) === "true"; } catch { return false; } };
   const [panelCollapsed, setPanelCollapsed] = useState(() => remembered("primovex.clinflow.panelCollapsed"));
   const [queueCollapsed, setQueueCollapsed] = useState(() => remembered("primovex.clinflow.queueCollapsed"));
+  // Notices above the letter (double-check the patient, human review, what's required next) can be put away once they have been seen, to give the letter more room.
+  // They come back for the next letter, and can be shown again; each is on the audit trail.
+  const [putAway, setPutAway] = useState({});
+  const noticesFor = (id) => putAway[id] || [];
+  const dismissNotice = (notice) => {
+    if (!selected?.id) return;
+    setPutAway((current) => ({ ...current, [selected.id]: [...(current[selected.id] || []).filter((n) => n !== notice), notice] }));
+    track("clinflow.notice.dismiss", "A notice above the letter was put away", { notice });
+  };
+  const showNotices = () => { setPutAway((current) => ({ ...current, [selected.id]: [] })); track("clinflow.notice.show", "Notices above the letter were shown again", {}); };
   const setLayout = (queue, panel) => {
     setQueueCollapsed(queue); setPanelCollapsed(panel);
     try { globalThis.localStorage?.setItem("primovex.clinflow.queueCollapsed", String(queue)); globalThis.localStorage?.setItem("primovex.clinflow.panelCollapsed", String(panel)); } catch { /* the layout is only a convenience */ }
@@ -919,11 +930,13 @@ export default function ClinFlowWorkspace() {
             <span className="cf-match">{selected.syntheticOcr ? "Synthetic · verify" : "Match 98%"}</span>
             <button type="button" onClick={verifyPatientRequest}>{selected.syntheticOcr ? "Verify patient" : "View patient"}</button>
           </div>
-          {identityNote && <div className="cf-identity-note" role="status"><AlertTriangle size={16} /><div><b>{identityNote.commonName ? "Common name: double-check this patient" : "Double-check this patient"}</b><span>{identityNote.reasons[0]}{identityNote.reasons.length > 2 ? ` (and ${identityNote.reasons.length - 2} more in What to do with this letter)` : ""}</span></div></div>}
-          {(selected.clinflowAnalysis?.docmanDraft?.urgent || selected.clinflowAnalysis?.docmanDraft?.medicationChanged) && (
-            <div className="cf-high-risk-banner"><AlertTriangle size={16} />{HIGH_RISK_BANNER}</div>
+          {identityNote && !noticesFor(selected.id).includes("identity") && <div className="cf-identity-note" role="status"><AlertTriangle size={16} /><div><b>{identityNote.commonName ? "Common name: double-check this patient" : "Double-check this patient"}</b><span>{identityNote.reasons[0]}{identityNote.reasons.length > 2 ? ` (and ${identityNote.reasons.length - 2} more in What to do with this letter)` : ""}</span></div><button type="button" className="cf-notice-close" onClick={() => dismissNotice("identity")} aria-label="Put this notice away" title="Put this notice away"><X size={14} /></button></div>}
+          {noticesFor(selected.id).length > 0 && <button type="button" className="cf-notices-show" onClick={showNotices}>Show {noticesFor(selected.id).length} notice{noticesFor(selected.id).length === 1 ? "" : "s"} put away</button>}
+          {(selected.clinflowAnalysis?.docmanDraft?.urgent || selected.clinflowAnalysis?.docmanDraft?.medicationChanged) && !noticesFor(selected.id).includes("risk") && (
+            <div className="cf-high-risk-banner"><AlertTriangle size={16} />{HIGH_RISK_BANNER}<button type="button" className="cf-notice-close" onClick={() => dismissNotice("risk")} aria-label="Put this notice away" title="Put this notice away"><X size={14} /></button></div>
           )}
-          {selected.clinflowAnalysis && <section className="cf-reviewer-brief">
+          {selected.clinflowAnalysis && !noticesFor(selected.id).includes("brief") && <section className="cf-reviewer-brief">
+            <button type="button" className="cf-notice-close" onClick={() => dismissNotice("brief")} aria-label="Put this notice away" title="Put this notice away"><X size={14} /></button>
             <h3><ClipboardCheck size={16} />What's required next</h3>
             <div className="cf-brief-chips">{buildReviewerBrief(selected.clinflowAnalysis).map((step, index) => <span key={index} className={`cf-brief-chip cf-brief-${step.tone}`}>{step.text}</span>)}</div>
           </section>}
