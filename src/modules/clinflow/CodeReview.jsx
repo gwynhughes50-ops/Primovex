@@ -124,16 +124,16 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
         {rows.map((row) => (
           <li key={row.key} className={`cf-code-row cf-code-row--${row.state} cf-kind--${kindOf(row)}`}>
             <div className="cf-code-main">
-              <p className="cf-code-head"><span className="cf-kind-tag">{KINDS[kindOf(row)]}</span><b>{row.term || "No term found"}</b> <small>{row.label}</small></p>
-              <p className="cf-code-ids">{row.medicine ? (row.medicineListMissing ? "A medicine: it is looked up in the NHS dm+d list, which is not loaded yet." : row.conceptId ? <><span className="cf-code-big">dm+d {row.conceptId}</span>{row.descriptionId ? ` · description ${row.descriptionId}` : " · SNOMED description ID not in this list (build it with the Drug Extension)"}</> : "Nothing in the dm+d list matches these words") : <>{row.conceptId ? <span className="cf-code-big">SNOMED {row.conceptId}</span> : list?.search ? "Nothing in the UK list matches these words" : "No SNOMED code found yet"}{row.descriptionId ? ` · description ${row.descriptionId}` : row.conceptId ? " · description ID still needed" : ""}</>}</p>
-              <details className="cf-code-others"><summary>How this was looked up</summary>
-                <p className="cf-muted">Label: {row.label || "none"}<br />Words found: {row.candidate.sourceValue || row.candidate.searchTerm || "none"}<br />Looked up as: {row.lookedUp ? `“${row.lookedUp}”` : "nothing to look up"}{row.options.length ? <><br />Best matches: {row.options.slice(0, 3).map((o) => `${o.term} (${o.score})`).join("; ")}</> : null}</p>
-              </details>
-              {row.ambiguity && !row.pick && <p className="cf-quality cf-quality--possible">“{row.ambiguity.abbr}” can mean more than one thing: {row.ambiguity.meanings.join("; ")}. Choose the one the letter means; nothing is picked for you.</p>}
-              {row.quality && <p className={`cf-quality cf-quality--${row.quality.level}`}>{row.quality.label}</p>}
+              <p className="cf-kind-eyebrow">{KINDS[kindOf(row)]}</p>
+              <p className="cf-code-head"><b>{row.term || "No term found"}</b> <small>from “{row.label}”</small></p>
               {row.evidence.found
                 ? <blockquote className="cf-evidence">“{row.evidence.quote}”</blockquote>
                 : <p className="cf-evidence cf-evidence--none">No matching words found in the letter. Check the original before accepting.</p>}
+              {row.ambiguity && !row.pick && <p className="cf-quality cf-quality--possible">“{row.ambiguity.abbr}” can mean more than one thing: {row.ambiguity.meanings.join("; ")}. Choose the one the letter means; nothing is picked for you.</p>}
+              {row.quality && <p className={`cf-quality cf-quality--${row.quality.level}`}>{row.quality.level === "exact" && row.quality.label.startsWith("The practice") ? <i className="cf-star" aria-hidden="true">★</i> : null}{row.quality.label}</p>}
+              <details className="cf-code-others"><summary>How this was looked up</summary>
+                <p className="cf-muted">Label: {row.label || "none"}<br />Words found: {row.candidate.sourceValue || row.candidate.searchTerm || "none"}<br />Looked up as: {row.lookedUp ? `“${row.lookedUp}”` : "nothing to look up"}{row.options.length ? <><br />Best matches: {row.options.slice(0, 3).map((o) => `${o.term} (${o.score})`).join("; ")}</> : null}</p>
+              </details>
               {canEdit && (row.options.length > 1 || row.ambiguity) && row.state !== "removed" && (
                 <details className="cf-code-others" open={Boolean(row.ambiguity && !row.pick)}><summary>{row.ambiguity && !row.pick ? `Choose the meaning (${row.options.length})` : `Other matches (${Math.max(0, row.options.length - 1)})`}</summary>
                   <ul>{row.options.filter((o) => o.conceptId !== row.conceptId).map((o) => <li key={o.conceptId}><span>{o.term} <small>{o.viaAbbreviation ? `${o.viaAbbreviation} · ` : ""}{o.tag} · {row.medicine ? "dm+d" : "SNOMED"} {o.conceptId}</small></span><button type="button" className="cf-top-button" onClick={() => onChoose(row.candidate, o)}>Use this</button></li>)}</ul>
@@ -146,6 +146,13 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
               )}
               <p className="cf-code-state"><span className={`cf-code-chip cf-code-chip--${row.state}`}>{STATE_WORDS[row.state]}</span>{row.by ? ` ${row.by}` : ""}</p>
             </div>
+            <div className="cf-code-panel">
+              <div>
+                <p className="cf-panel-label">{row.medicine ? "dm+d code" : "SNOMED code"}</p>
+                {row.medicine
+                  ? (row.medicineListMissing ? <p className="cf-panel-note">A medicine: it is looked up in the NHS dm+d list, which is not loaded yet.</p> : row.conceptId ? <><p className="cf-panel-code">{row.conceptId}</p><p className="cf-panel-note">{row.descriptionId ? `description ${row.descriptionId}` : "SNOMED description ID not in this list (build it with the Drug Extension)"}</p></> : <p className="cf-panel-note">Nothing in the dm+d list matches these words</p>)
+                  : (row.conceptId ? <><p className="cf-panel-code">{row.conceptId}</p><p className="cf-panel-note">{row.descriptionId ? `description ${row.descriptionId}` : "description ID still needed"}</p></> : <p className="cf-panel-note">{list?.search ? "Nothing in the UK list matches these words" : "No SNOMED code found yet"}</p>)}
+              </div>
             {canEdit && (
               <div className="cf-code-buttons">
                 {row.state !== "accepted" && <button type="button" className="cf-top-button cf-top-button--primary" disabled={row.medicine ? !row.pick : (list?.search && !row.pick)} title={row.medicine ? (!row.pick ? "No medicine in the dm+d list matches this. Remove it, or load the dm+d list." : undefined) : list?.search && !row.pick ? "Nothing in the list matches this. Remove it, or add the right code below." : undefined} onClick={() => onDecide(row.candidate, "accepted", row.pick)}><CheckCircle2 size={13} /> Accept</button>}
@@ -153,6 +160,7 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
                 {row.state !== "suggested" && <button type="button" className="cf-top-button" onClick={() => onDecide(row.candidate, "suggested")}><RotateCcw size={13} /> Put back</button>}
               </div>
             )}
+            </div>
           </li>
         ))}
         {(review?.added || []).map((a) => (

@@ -54,3 +54,22 @@
 .cf-fields--codes .cf-field{border-left-color:#7b4fd8;background:#f1ebff}
 .cf-copy{flex:0 0 auto;border:1px solid #9dbfe6;background:#fff;color:#075eae;border-radius:7px;padding:4px 8px;font-size:10.5px;font-weight:700;cursor:pointer}
 .cf-copy:hover{background:#075eae;color:#fff}
+
+/* Finding card, "code panel" layout: the finding and its evidence on the left, the code in its own panel with the buttons on the right */
+.cf-code-row[class*="cf-kind--"]{align-items:stretch;gap:16px;padding:14px 16px;border-width:1.5px;border-left-width:8px;border-radius:14px}
+.cf-code-row[class*="cf-kind--"] .cf-code-main{flex:1;min-width:0}
+.cf-kind-eyebrow{margin:0 0 2px!important;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--k-ink)}
+.cf-code-row[class*="cf-kind--"] .cf-code-head{display:block;margin:0 0 10px;font-size:12px;color:var(--cf-muted)}
+.cf-code-row[class*="cf-kind--"] .cf-code-head b{font-size:17px;margin-right:6px}
+.cf-code-row[class*="cf-kind--"] .cf-evidence{margin:0 0 8px;padding:8px 12px;border-radius:0 8px 8px 0;font-size:12.5px}
+.cf-code-row[class*="cf-kind--"] .cf-quality{display:flex;align-items:center;gap:5px;margin:6px 0}
+.cf-star{font-style:normal;color:#e0a100;font-size:14px}
+.cf-code-panel{flex:0 0 200px;display:flex;flex-direction:column;justify-content:space-between;gap:12px;padding:12px;border-radius:12px;background:#fff;border:1px solid var(--k-soft,#dce5ef)}
+.cf-code-panel .cf-panel-label{margin:0;font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--cf-muted)}
+.cf-code-panel .cf-panel-code{margin:2px 0 0;font-size:22px;font-weight:800;letter-spacing:.01em;color:var(--k-ink,#0c2037);word-break:break-all}
+.cf-code-panel .cf-panel-note{margin:3px 0 0;font-size:11px;color:var(--cf-muted);line-height:1.35}
+.cf-code-panel .cf-code-buttons{display:flex;flex-direction:column;gap:6px}
+.cf-code-panel .cf-code-buttons .cf-top-button{justify-content:center;width:100%}
+.cf-code-row--accepted .cf-code-panel{border-color:#2db37e;background:#f4fcf8}
+.cf-code-row--removed .cf-code-panel{background:#f7f7f8}
+@media (max-width:900px){.cf-code-row[class*="cf-kind--"]{flex-direction:column}.cf-code-panel{flex-basis:auto}}
