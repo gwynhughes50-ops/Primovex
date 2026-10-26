@@ -7,7 +7,8 @@ import { choose, codesAfterReview, reviewCandidates, reviewOutcome, decide, diag
 import { BUILT_IN_ABBREVIATIONS, abbreviationInfo, expandAbbreviations, parseAbbreviationCsv, setAbbreviationList, withMeaning } from "../src/modules/clinflow/clinicalAbbreviations.js";
 import { createClinFlowSummaryPdfBlob } from "../src/modules/clinflow/clinflowSummaryExportService.js";
 import { analyseClinFlowOcr } from "../src/modules/clinflow/clinflowAnalysisService.js";
-import { buildDocmanPayload } from "../src/modules/clinflow/docmanPayload.js";
+import { calculateBloodPressureAverage, calculateBmi } from "../src/modules/clinflow/clinflowCalculations.js";
+import { buildDocmanPayload, clinicalCodesFrom } from "../src/modules/clinflow/docmanPayload.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
@@ -443,6 +444,60 @@ t("the summary that goes with the letter to Docman carries the codes the coder c
   const source = read("src/modules/clinflow/clinflowSummaryExportService.js");
   assert.match(source, /NOT YET CHECKED/);
   assert.match(source, /SNOMED codes checked by the coder/);
+});
+
+t("values the letter implies are worked out: BMI from a weight and height, the average of a run of ambulatory or home readings", () => {
+  const bmi = calculateBmi("On examination weight 82 kg, height 175 cm. Chest clear.");
+  assert.equal(bmi.value, "26.8");
+  assert.equal(bmi.conceptId, "60621009");
+  assert.match(bmi.working, /82 kg ÷ \(1\.75 m × 1\.75 m\) = 26\.8 kg\/m2/);
+  assert.match(bmi.notes[0], /overweight/);
+  assert.deepEqual(bmi.from, ["weight 82 kg", "height 175 cm"]);
+  assert.equal(calculateBmi("Height 1.80 m. Weight: 95kg").value, "29.3", "metres, and no space before kg");
+  assert.equal(calculateBmi("Weight 12 st 4 lb. Height 5 ft 9 in").value, "25.4", "stones, pounds, feet and inches");
+  assert.equal(calculateBmi("Weight 82 kg.") , null, "a weight alone is not enough");
+  assert.equal(calculateBmi("Height 175 cm.") , null, "a height alone is not enough");
+  assert.equal(calculateBmi("weight 8 kg, height 175 cm"), null, "an unbelievable weight is not worked with");
+  assert.equal(calculateBmi("Her dose was 82 kg of something and 175 cm"), null, "unlabelled numbers are not taken for a weight or height");
+  assert.match(calculateBmi("weight 82 kg, height 175 cm, BMI 26.8").notes[1], /agrees/);
+  assert.match(calculateBmi("weight 82 kg, height 175 cm, BMI 31").notes[1], /does not match/);
+
+  const abpm = "24 hour ABPM results: 08:00 134/82, 09:00 138/84, 10:00 142/86, 11:00 130/80, 12:00 136/84.";
+  const [sys, dia] = calculateBloodPressureAverage(abpm);
+  assert.equal(sys.value, "136");
+  assert.equal(dia.value, "83");
+  assert.equal(sys.how, "24 hour");
+  assert.equal(sys.searchTerm, "average 24 hour systolic blood pressure");
+  assert.match(sys.working, /134 \+ 138 \+ 142 \+ 130 \+ 136 ÷ 5 = 136/);
+  assert.match(sys.notes.join(" "), /at least 14 daytime readings; this run has 5/);
+  assert.equal(calculateBloodPressureAverage("Clinic blood pressure 150/90 and 148/92 today.").length, 0, "two readings and no monitoring is not an average");
+  assert.equal(calculateBloodPressureAverage("Readings 134/82, 138/84, 142/86, 130/80 were noted.").length, 0, "four readings with no mention of ambulatory or home monitoring are not averaged");
+  assert.equal(calculateBloodPressureAverage("Home blood pressure: 130/80, 128/78, 132/82, 126/80, 134/84")[0].how, "home");
+
+  assert.equal(lookupText("average 24 hour systolic blood pressure"), "average 24 hour systolic blood pressure", "\"24 hour\" in the name of an average is kept");
+  assert.equal(lookupText("Repeat U&Es in 24 hours"), "urea and electrolytes", "a duration is still taken off");
+  // they join the suggestions as their own kind, with the number and unit ready for Docman, and are not repeated if the letter states them
+  const letter = `${abpm} Weight 82 kg, height 175 cm.`;
+  const analysis = { terminologyCandidates: [{ sourceLabel: "Diagnosis", sourceValue: "asthma", searchTerm: "asthma", conceptId: null }], medicationCandidates: [] };
+  const withWorked = reviewCandidates(analysis, letter);
+  assert.equal(withWorked.filter((c) => c.calculated).length, 3, "BMI, and the systolic and diastolic averages");
+  assert.equal(reviewCandidates(analysis, "").filter((c) => c.calculated).length, 0, "no letter, nothing worked out");
+  const stated = { ...analysis, terminologyCandidates: [...analysis.terminologyCandidates, { sourceLabel: "Observation", sourceValue: "BMI 26.8", searchTerm: "BMI 26.8", conceptId: null }] };
+  assert.equal(reviewCandidates(stated, letter).some((c) => c.calculated?.kind === "bmi"), false, "a BMI the letter states is not worked out again");
+  const rows = reviewRows(withWorked, letter, null, find);
+  const bmiRow = rows.find((r) => r.calculated?.kind === "bmi");
+  assert.equal(bmiRow.conceptId, "60621009");
+  assert.equal(bmiRow.state, "suggested", "worked out values are suggestions, accepted by nobody");
+  assert.equal(bmiRow.candidate.sourceValue, "26.8 kg/m2");
+  const accepted = decide(null, bmiRow.candidate, "accepted", { uid: "gp-1", name: "Dr Example", pick: bmiRow.pick });
+  const [code] = codesAfterReview(withWorked, accepted).filter((c) => c.acceptedByUid);
+  const docman = clinicalCodesFrom([{ ...code, descriptionId: "304001" }]).codes[0];
+  assert.equal(docman.Code, "60621009");
+  assert.equal(docman.Value, "26.8");
+  assert.equal(docman.ValueUnit, "kg/m2");
+  assert.equal(reviewOutcome(withWorked, accepted).accepted[0].calculated, true);
+  assert.match(read("src/modules/clinflow/CodeReview.jsx"), /How ClinFlow worked this out/);
+  assert.match(read("src/modules/clinflow/clinflowSummaryExportService.js"), /calculated by ClinFlow/);
 });
 
 {

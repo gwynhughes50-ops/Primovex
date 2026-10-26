@@ -40,7 +40,7 @@ import { createClinFlowDemoPdfBlob, createClinFlowSummaryPdfBlob, downloadClinFl
 import { createDocmanPackZip, downloadBlob, safePackName } from "./clinflowZipService";
 import DocmanReadiness from "./DocmanReadiness";
 import CodeReview from "./CodeReview";
-import { addCode, choose, codesAfterReview, decide, removeAdded, reviewCandidates, reviewOutcome } from "./clinflowCodeReview";
+import { addCode, candidateKey, choose, codesAfterReview, decide, removeAdded, reviewCandidates, reviewOutcome } from "./clinflowCodeReview";
 import { useAbbreviations, useSnomedList } from "./snomedListStore";
 import { analyzeSyntheticDocument } from "./azureDocumentIntelligenceClient";
 import { normaliseClinFlowPages } from "./clinflowPageService";
@@ -189,6 +189,7 @@ function AzureReviewView({ selected, activeTab, onDownloadSummary, onOpenOrigina
     const totalConcepts = analysis?.terminologyCandidates?.length || 0;
     const aiConfidence = Math.round((analysis?.triage?.confidence || 0) * 100);
     const urgent = Boolean(analysis?.docmanDraft?.urgent);
+    const calculatedValues = reviewCandidates(analysis, ocr?.content).filter((c) => c.calculated).map((candidate) => ({ key: candidateKey(candidate), candidate }));
     return <div className="cf-tab-content cf-glance">
       <section className="cf-glance-facts">
         <div><span>Patient</span><strong>{selected.patient}</strong></div>
@@ -198,6 +199,8 @@ function AzureReviewView({ selected, activeTab, onDownloadSummary, onOpenOrigina
       </section>
 
       <section className="cf-summary-card"><Sparkles size={18} /><div><b>Clinical summary</b><p>{analysis?.clinicalConclusion || `Azure extracted ${ocr.wordCount} words across ${ocr.pageCount} page${ocr.pageCount === 1 ? "" : "s"}. No single overall conclusion sentence was found in the letter — review the diagnoses and actions below.`}</p></div></section>
+
+      {calculatedValues.length > 0 && <div className="cf-info-grid">{calculatedValues.map((item) => <section key={item.key} className="cf-tone cf-tone--calculated"><h3>Calculated by ClinFlow</h3><p><b>{item.candidate.preferredTerm}: {item.candidate.sourceValue}</b><br /><small>{item.candidate.calculated.working}</small></p></section>)}</div>}
 
       <div className="cf-info-grid">
         <section className="cf-tone cf-tone--diagnosis"><h3>Diagnoses / problems</h3><p>{analysis?.diagnoses?.map((item) => item.value).join("; ") || "None extracted"}</p></section>
@@ -252,10 +255,10 @@ function AzureReviewView({ selected, activeTab, onDownloadSummary, onOpenOrigina
   if (activeTab === "snomed") return <div className="cf-tab-content">
     <section className="cf-summary-card"><Tag size={18} /><div><b>SNOMED CT candidate review</b><p>Structured observations use governed baseline concepts where available. Every candidate still requires current UK Edition validation, patient matching and trained clinician acceptance before filing.</p></div></section>
     {analysis?.structuredObservations?.length ? <div className="cf-info-grid">{analysis.structuredObservations.map((item) => <section key={`${item.type}-${item.sourceValue}`}><h3>{item.preferredTerm}</h3>{item.type === "blood_pressure" ? <p><b>{item.systolic.value}/{item.diastolic.value} {item.unit.display}</b><br />Blood pressure: {item.conceptId}<br />Systolic: {item.systolic.conceptId}<br />Diastolic: {item.diastolic.conceptId}<br />Unit: {item.unit.ucumCode}<br />Status: clinician review required</p> : <p><b>{item.value} {item.unit.display}</b><br />Concept ID: {item.conceptId}<br />Unit: {item.unit.ucumCode}<br />Status: clinician review required</p>}</section>)}</div> : null}
-    <CodeReview candidates={reviewCandidates(analysis)} letter={ocr?.content || ""} review={selected.codeReview} canEdit={canReviewCodes} list={snomedList} medList={medicinesList} abbreviations={abbreviations} onDecide={onCodeDecision} onChoose={onCodeChoose} onAdd={onCodeAdd} onRemoveAdded={onCodeRemoveAdded} />
+    <CodeReview candidates={reviewCandidates(analysis, ocr?.content)} letter={ocr?.content || ""} review={selected.codeReview} canEdit={canReviewCodes} list={snomedList} medList={medicinesList} abbreviations={abbreviations} onDecide={onCodeDecision} onChoose={onCodeChoose} onAdd={onCodeAdd} onRemoveAdded={onCodeRemoveAdded} />
   </div>;
   if (activeTab === "quality") return <div className="cf-tab-content"><section className="cf-summary-card"><ShieldCheck size={18} /><div><b>Wales and England quality/register review</b><p>A hospital letter cannot establish a QAIF, Unified Contract or QOF opportunity by itself. ClinFlow therefore produces governed record-check prompts—not confirmed opportunities.</p></div></section><div className="cf-info-grid"><section><h3>Confirmed opportunities</h3><p><b>{analysis?.qaifOpportunities?.length || 0}</b><br />None are confirmed from this letter alone.<br />Awareness: {analysis?.qualityAwareness?.relevance || "Low"}</p></section>{analysis?.qualityPrompts?.map((item) => <section key={`${item.domain}-${item.title}`}><h3>{item.title}</h3><p><b>{item.domain}</b>{item.priority === "high" ? " · High-priority review" : ""}<br />{item.rationale}<br /><br />Next: {item.nextStep}<br /><small>{item.framework}</small></p></section>)}</div></div>;
-  if (activeTab === "outflow") return <div className="cf-tab-content"><section className="cf-summary-card"><FileText size={18} /><div><b>Docman companion summary</b><p>Download this summary, have a trained clinician compare and sign it against the untouched original, then drag both PDFs into Docman. Primovex does not transmit or file either document automatically.</p></div></section><div className="cf-info-grid"><section><h3>Document</h3><p>{analysis?.documentType}<br />Source: {ocr.fileName}</p></section><section><h3>Patient identity</h3><p>{analysis?.patient?.givenNames} {analysis?.patient?.familyName}<br /><b>Unverified</b> · NHS number and DOB must be checked</p></section><section><h3>Review status</h3><p>{analysis?.missing?.length || 0} required verification item{analysis?.missing?.length === 1 ? "" : "s"}<br />Not ready for automated transfer</p></section><section><h3>Output</h3><p><button type="button" className="cf-top-button cf-top-button--primary" onClick={onDownloadSummary}><Download size={14} /> Download summary PDF</button></p></section></div><DocmanReadiness analysis={analysis} fileReady={Boolean(ocr?.fileName)} outcome={reviewOutcome(reviewCandidates(analysis), selected.codeReview)} onDownload={onDownloadSummary} /></div>;
+  if (activeTab === "outflow") return <div className="cf-tab-content"><section className="cf-summary-card"><FileText size={18} /><div><b>Docman companion summary</b><p>Download this summary, have a trained clinician compare and sign it against the untouched original, then drag both PDFs into Docman. Primovex does not transmit or file either document automatically.</p></div></section><div className="cf-info-grid"><section><h3>Document</h3><p>{analysis?.documentType}<br />Source: {ocr.fileName}</p></section><section><h3>Patient identity</h3><p>{analysis?.patient?.givenNames} {analysis?.patient?.familyName}<br /><b>Unverified</b> · NHS number and DOB must be checked</p></section><section><h3>Review status</h3><p>{analysis?.missing?.length || 0} required verification item{analysis?.missing?.length === 1 ? "" : "s"}<br />Not ready for automated transfer</p></section><section><h3>Output</h3><p><button type="button" className="cf-top-button cf-top-button--primary" onClick={onDownloadSummary}><Download size={14} /> Download summary PDF</button></p></section></div><DocmanReadiness analysis={analysis} fileReady={Boolean(ocr?.fileName)} outcome={reviewOutcome(reviewCandidates(analysis, ocr?.content), selected.codeReview)} onDownload={onDownloadSummary} /></div>;
   return <div className="cf-timeline">{[["Document accepted", "Approved synthetic fingerprint verified"], ["OCR completed", `Azure Document Intelligence · ${confidence}% average word confidence`], ["Added to ClinFlow", "Session-only OCR evidence added to the review queue"], ["Awaiting human review", "No patient match, route or clinical action has been confirmed"]].map(([title, detail]) => <div key={title}><span /><strong>{title}</strong><p>{detail}</p></div>)}</div>;
 }
 
@@ -380,7 +383,7 @@ export default function ClinFlowWorkspace() {
   async function saveCodeReview(review, action, summary, metadata = {}) {
     if (!can("clinflow.workflow")) return notify("Your role cannot change the codes on a ClinFlow letter");
     await runAction(async () => {
-      const updated = { ...selected, codeReview: review, clinflowAnalysis: { ...selected.clinflowAnalysis, docmanDraft: { ...selected.clinflowAnalysis?.docmanDraft, clinicalCodes: codesAfterReview(reviewCandidates(selected.clinflowAnalysis), review) } } };
+      const updated = { ...selected, codeReview: review, clinflowAnalysis: { ...selected.clinflowAnalysis, docmanDraft: { ...selected.clinflowAnalysis?.docmanDraft, clinicalCodes: codesAfterReview(reviewCandidates(selected.clinflowAnalysis, selected.syntheticOcr?.content), review) } } };
       setDocuments((items) => items.map((item) => item.id === selected.id ? updated : item));
       if (selected.dataMode === "synthetic") await cacheClinFlowDocuments([updated]);
       await record(action, summary, { ...metadata, automatedTransmission: false });
@@ -873,7 +876,7 @@ export default function ClinFlowWorkspace() {
               </div>
               <div className="cf-list-row cf-list-row--action">
                 <span>SNOMED Candidates</span>
-                <small>{selected?.syntheticOcr ? reviewCandidates(selected.clinflowAnalysis).length : CODING.length} candidate(s)</small>
+                <small>{selected?.syntheticOcr ? reviewCandidates(selected.clinflowAnalysis, selected.syntheticOcr.content).length : CODING.length} candidate(s)</small>
                 <button type="button" onClick={() => selected?.syntheticOcr ? setActiveTab("synthetic-snomed") : notify("Coding review opened")}>Review</button>
               </div>
             </section>

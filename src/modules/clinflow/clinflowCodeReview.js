@@ -1,5 +1,6 @@
 import { medicineLookup, medicineName, medicineParts } from "./dmdIndex.js";
 import { preferredFor } from "./preferredCodes.js";
+import { calculateFindings, calculatedCandidate } from "./clinflowCalculations.js";
 import { expandAbbreviations, withMeaning } from "./clinicalAbbreviations.js";
 
 // The coder's part of a ClinFlow letter: each suggested SNOMED code is shown with the words in the letter that led to it, and the clinician
@@ -40,7 +41,8 @@ const MEASUREMENTS = [[/(?<!peripheral )\boxygen saturations?\b/gi, "peripheral 
 // Abbreviations with one meaning are written out (see clinicalAbbreviations.js); ones with several are reported, never guessed at.
 export const lookupText = (value) => {
   const named = MEASUREMENTS.reduce((s, [pattern, full]) => s.replace(pattern, ` ${full} `), expandAbbreviations(value).text);
-  return text(named.replace(NOISE, " "));
+  // "24 hour" in the name of an average ("average 24 hour systolic blood pressure") is part of the name, not a duration to drop
+  return text(named.replace(/(average|mean)\s+24[\s-]?hours?/gi, "$1 xtwentyfourhourx").replace(NOISE, " ").replace(/xtwentyfourhourx/g, "24 hour"));
 };
 export const ambiguityOf = (value) => expandAbbreviations(value).ambiguous;
 export const withoutQualifiers = (value) => text(String(value ?? "").replace(QUALIFIERS, " "));
@@ -132,7 +134,7 @@ export const isMedicine = (candidate) => candidate?.codeSystem === "dm+d" || /me
 
 // Everything on a letter to be coded: the clinical findings the reader coded, and every medicine it found (the reader only coded the few medicines
 // it already knew, so the full list of medicines is used instead, once each).
-export function reviewCandidates(analysis) {
+export function reviewCandidates(analysis, letter = "") {
   const clinical = (analysis?.terminologyCandidates || []).filter((c) => !isMedicine(c));
   const seen = new Set();
   const medicines = [];
@@ -148,7 +150,9 @@ export function reviewCandidates(analysis) {
   // "Trial salbutamol inhaler 100 micrograms" says more than "salbutamol 100 micrograms": the shorter one is the same medicine, so only the longer is kept
   const words = (m) => new Set(medicineLookup(m.sourceValue).split(/\s+/).filter(Boolean));
   const kept = medicines.filter((m, i) => { const mine = words(m); return !medicines.some((o, j) => j !== i && (words(o).size > mine.size || (words(o).size === mine.size && j < i)) && [...mine].every((w) => words(o).has(w))); });
-  return [...clinical, ...kept];
+  // values the letter implies (BMI from a weight and height, an average of home or ambulatory readings), unless it already states them
+  const worked = (letter ? calculateFindings(letter) : []).filter((f) => f.kind !== "bmi" || !clinical.some((c) => /\bbmi\b|body mass index/i.test(`${c.sourceLabel} ${c.sourceValue}`)));
+  return [...clinical, ...kept, ...worked.map(calculatedCandidate)];
 }
 
 // The medicines the dm+d list offers for a finding ("Bisoprolol 5 mg once daily" -> Bisoprolol 5mg tablets). Each medicine named is looked up on its own;
@@ -297,13 +301,14 @@ export function reviewRows(candidates = [], letter = "", review = null, search =
     const own = !search && !medicine && candidate.conceptId ? { conceptId: candidate.conceptId, term: text(candidate.preferredTerm), descriptionId: candidate.descriptionId || "" } : null;
     // what accepting will use: the code chosen with the decision, else the coder's pick, else the first match, else the reader's own
     // an abbreviation that means several things has no first choice: the person picks the meaning
+    const calculated = candidate.calculated || null;
     const ambiguity = medicine ? null : ambiguityOf(subjectOf(candidate))[0] || null;
     const pick = decision?.chosen || review?.choices?.[key] || (ambiguity ? null : asPick(options[0]) || own);
     const lookedUp = medicine ? medicineParts(candidate.sourceValue || candidate.searchTerm).join("  +  ") : lookupText(subjectOf(candidate));
     const source = pick ? options.find((o) => o.conceptId === pick.conceptId) : null;
     const quality = matchQuality(source, Boolean(decision?.chosen || review?.choices?.[key]));
     return {
-      key, candidate, medicine, quality, ambiguity, lookedUp, medicineListMissing: medicine && !medSearch, term: text(pick?.term || shownAs(candidate) || candidate.preferredTerm), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
+      key, candidate, medicine, quality, ambiguity, calculated, lookedUp, medicineListMissing: medicine && !medSearch, term: text(pick?.term || (calculated ? candidate.preferredTerm : shownAs(candidate)) || candidate.preferredTerm), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
       descriptionId: pick?.descriptionId || "", pick, options, evidence, state: decision?.decision || "suggested", by: decision?.byName || "", at: decision?.at || "",
     };
   });
@@ -333,6 +338,7 @@ export function reviewOutcome(candidates = [], review = null) {
   const accepted = kept.filter((c) => c.acceptedByUid).map((c) => ({
     term: text(c.preferredTerm || c.searchTerm || c.sourceValue), conceptId: c.conceptId ? String(c.conceptId) : "", descriptionId: c.descriptionId ? String(c.descriptionId) : "",
     by: text(c.acceptedByName), at: c.acceptedAt || "", added: c.status === "added_by_clinician",
+    value: c.component ? text(c.sourceValue) : "", calculated: Boolean(c.calculated),
   }));
   const decisionOf = (c) => review?.decisions?.[candidateKey(c)]?.decision;
   const removed = candidates.filter((c) => decisionOf(c) === "removed").map(shownAs);

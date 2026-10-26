@@ -9,7 +9,7 @@ const cleanFileName = (value) => String(value || "clinflow-summary").replace(/[^
 // What the coder did with the suggested codes, one line each: the accepted codes with who accepted them, then what was removed and what is still waiting
 const shortDay = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-GB"); };
 function codingLines(coding) {
-  const out = coding.accepted.map((c) => `${c.term} — SNOMED ${c.conceptId || "no code"}${c.descriptionId ? ` (description ${c.descriptionId})` : ""} — ${c.added ? "added" : "accepted"} by ${c.by || "a clinician"}${c.at ? ` on ${shortDay(c.at)}` : ""}`);
+  const out = coding.accepted.map((c) => `${c.term}${c.value ? ` ${c.value}` : ""}${c.calculated ? " (calculated by ClinFlow)" : ""} — SNOMED ${c.conceptId || "no code"}${c.descriptionId ? ` (description ${c.descriptionId})` : ""} — ${c.added ? "added" : "accepted"} by ${c.by || "a clinician"}${c.at ? ` on ${shortDay(c.at)}` : ""}`);
   if (coding.removed.length) out.push(`Removed by the coder: ${coding.removed.join("; ")}`);
   if (coding.waiting.length) out.push(`NOT YET CHECKED (${coding.waiting.length}): ${coding.waiting.join("; ")}`);
   return out;
@@ -178,7 +178,7 @@ function buildClinFlowSummaryPdf(document) {
   const margin = 16;
   const width = 210 - margin * 2;
 
-  const coding = reviewOutcome(reviewCandidates(analysis), document.codeReview);
+  const coding = reviewOutcome(reviewCandidates(analysis, ocr?.content), document.codeReview);
   drawCoverSheet(pdf, analysis, ocr, margin, width, coding);
   pdf.addPage();
 

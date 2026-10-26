@@ -4,8 +4,9 @@ import { addProblem, diagnosticText, matchSummary, reviewRows, reviewStats, stat
 import { SNOMED_NOTICE } from "./snomedIndex";
 
 // What sort of finding it is, so each kind has its own colour and name on the screen
-const KINDS = { diagnosis: "Diagnosis", symptom: "Symptom", test: "Test or measurement", medicine: "Medicine", other: "Finding" };
+const KINDS = { calculated: "Calculated by ClinFlow", diagnosis: "Diagnosis", symptom: "Symptom", test: "Test or measurement", medicine: "Medicine", other: "Finding" };
 export function kindOf(row) {
+  if (row.calculated) return "calculated";
   if (row.medicine) return "medicine";
   const label = String(row.label || "").toLowerCase();
   if (/diagnos|condition|problem|history/.test(label)) return "diagnosis";
@@ -125,10 +126,20 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
           <li key={row.key} className={`cf-code-row cf-code-row--${row.state} cf-kind--${kindOf(row)}`}>
             <div className="cf-code-main">
               <p className="cf-kind-eyebrow">{KINDS[kindOf(row)]}</p>
-              <p className="cf-code-head"><b>{row.term || "No term found"}</b> <small>from “{row.label}”</small></p>
-              {row.evidence.found
-                ? <blockquote className="cf-evidence">“{row.evidence.quote}”</blockquote>
-                : <p className="cf-evidence cf-evidence--none">No matching words found in the letter. Check the original before accepting.</p>}
+              <p className="cf-code-head"><b>{row.term || "No term found"}</b>{row.calculated ? <span className="cf-result">{row.candidate.sourceValue}</span> : <small>from “{row.label}”</small>}</p>
+              {row.calculated
+                ? (
+                  <div className="cf-working">
+                    <p><b>How ClinFlow worked this out</b></p>
+                    <p>{row.calculated.working}</p>
+                    <p className="cf-working-from">From the letter: {row.calculated.from.map((q) => `“${q}”`).join(" · ")}</p>
+                    {row.calculated.notes.map((note) => <p key={note} className="cf-working-note">{note}</p>)}
+                    <p className="cf-working-note">Calculated, not stated in the letter: check the numbers against the original before accepting.</p>
+                  </div>
+                )
+                : row.evidence.found
+                  ? <blockquote className="cf-evidence">“{row.evidence.quote}”</blockquote>
+                  : <p className="cf-evidence cf-evidence--none">No matching words found in the letter. Check the original before accepting.</p>}
               {row.ambiguity && !row.pick && <p className="cf-quality cf-quality--possible">“{row.ambiguity.abbr}” can mean more than one thing: {row.ambiguity.meanings.join("; ")}. Choose the one the letter means; nothing is picked for you.</p>}
               {row.quality && <p className={`cf-quality cf-quality--${row.quality.level}`}>{row.quality.level === "exact" && row.quality.label.startsWith("The practice") ? <i className="cf-star" aria-hidden="true">★</i> : null}{row.quality.label}</p>}
               <details className="cf-code-others"><summary>How this was looked up</summary>
