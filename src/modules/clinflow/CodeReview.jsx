@@ -3,6 +3,18 @@ import { CheckCircle2, Database, Plus, RotateCcw, Tag, Trash2, XCircle } from "l
 import { addProblem, diagnosticText, matchSummary, reviewRows, reviewStats, statsLine, unmatchedText } from "./clinflowCodeReview";
 import { SNOMED_NOTICE } from "./snomedIndex";
 
+// What sort of finding it is, so each kind has its own colour and name on the screen
+const KINDS = { diagnosis: "Diagnosis", symptom: "Symptom", test: "Test or measurement", medicine: "Medicine", other: "Finding" };
+export function kindOf(row) {
+  if (row.medicine) return "medicine";
+  const label = String(row.label || "").toLowerCase();
+  if (/diagnos|condition|problem|history/.test(label)) return "diagnosis";
+  if (/symptom|complain|sign/.test(label)) return "symptom";
+  if (/investigat|test|result|observ|measure|examin|blood|pressure|saturation|rate|temperature|weight|height/.test(label)) return "test";
+  if (/medic|drug|prescri/.test(label)) return "medicine";
+  return "other";
+}
+
 const STATE_WORDS = { suggested: "Waiting for you", accepted: "Accepted", removed: "Removed" };
 
 // The UK SNOMED list on this computer: loaded once from the file the builder makes from the NHS TRUD download
@@ -110,10 +122,10 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
       <ul className="cf-code-list">
         {rows.length === 0 && <li className="cf-code-row"><p>No codes were suggested for this letter.</p></li>}
         {rows.map((row) => (
-          <li key={row.key} className={`cf-code-row cf-code-row--${row.state}`}>
+          <li key={row.key} className={`cf-code-row cf-code-row--${row.state} cf-kind--${kindOf(row)}`}>
             <div className="cf-code-main">
-              <p><b>{row.term || "No term found"}</b> <small>{row.label}</small></p>
-              <p className="cf-code-ids">{row.medicine ? (row.medicineListMissing ? "A medicine: it is looked up in the NHS dm+d list, which is not loaded yet." : row.conceptId ? `dm+d ${row.conceptId}${row.descriptionId ? ` · description ${row.descriptionId}` : " · SNOMED description ID not in this list (build it with the Drug Extension)"}` : "Nothing in the dm+d list matches these words") : <>{row.conceptId ? `SNOMED ${row.conceptId}` : list?.search ? "Nothing in the UK list matches these words" : "No SNOMED code found yet"}{row.descriptionId ? ` · description ${row.descriptionId}` : row.conceptId ? " · description ID still needed" : ""}</>}</p>
+              <p className="cf-code-head"><span className="cf-kind-tag">{KINDS[kindOf(row)]}</span><b>{row.term || "No term found"}</b> <small>{row.label}</small></p>
+              <p className="cf-code-ids">{row.medicine ? (row.medicineListMissing ? "A medicine: it is looked up in the NHS dm+d list, which is not loaded yet." : row.conceptId ? <><span className="cf-code-big">dm+d {row.conceptId}</span>{row.descriptionId ? ` · description ${row.descriptionId}` : " · SNOMED description ID not in this list (build it with the Drug Extension)"}</> : "Nothing in the dm+d list matches these words") : <>{row.conceptId ? <span className="cf-code-big">SNOMED {row.conceptId}</span> : list?.search ? "Nothing in the UK list matches these words" : "No SNOMED code found yet"}{row.descriptionId ? ` · description ${row.descriptionId}` : row.conceptId ? " · description ID still needed" : ""}</>}</p>
               <details className="cf-code-others"><summary>How this was looked up</summary>
                 <p className="cf-muted">Label: {row.label || "none"}<br />Words found: {row.candidate.sourceValue || row.candidate.searchTerm || "none"}<br />Looked up as: {row.lookedUp ? `“${row.lookedUp}”` : "nothing to look up"}{row.options.length ? <><br />Best matches: {row.options.slice(0, 3).map((o) => `${o.term} (${o.score})`).join("; ")}</> : null}</p>
               </details>

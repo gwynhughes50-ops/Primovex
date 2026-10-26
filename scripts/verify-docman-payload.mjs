@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { handoverCodes, handoverFields, handoverSteps, handoverText } from "../src/modules/clinflow/docmanHandover.js";
 import { DOCMAN_EXTENSIONS, buildDocmanPayload, clinicalCodesFrom, nhsNumberValid, readinessSummary } from "../src/modules/clinflow/docmanPayload.js";
 
 let n = 0;
@@ -105,6 +106,33 @@ t("the screen shows it: a readiness check on the Docman tab, and ClinFlow still 
   assert.match(panel, /Nothing is sent to Docman from here/);
   assert.match(read("src/modules/clinflow/ClinFlowWorkspace.jsx"), /<DocmanReadiness /);
   assert.ok(!/fetch\(|axios|XMLHttpRequest/.test(read("src/modules/clinflow/docmanPayload.js")), "the module cannot send anything");
+});
+
+t("the hand-over to Docman: steps in order, each Docman field with a copy value, the accepted codes, and what is still missing", () => {
+  const result = buildDocmanPayload(draft({ clinicalCodes: [candidate()] }), { fileReady: true, now });
+  const fields = handoverFields(result);
+  const nhs = fields.find((f) => f.label === "NHS number");
+  assert.equal(nhs.value, "943 476 5919", "shown with the spaces people read");
+  assert.equal(nhs.copy, "9434765919", "copied without them, as Docman takes it");
+  assert.match(fields.find((f) => f.label === "Date of birth").copy, /^\d{2}\/\d{2}\/\d{4}$/, "dates the UK way round");
+  assert.deepEqual(fields.map((f) => f.label).slice(0, 3), ["NHS number", "Family name", "Given names"]);
+  const codes = handoverCodes(result);
+  assert.equal(codes.length, 1);
+  assert.match(codes[0].line, /SNOMED 49436004 \(description 80004015\)/);
+  const all = handoverText(result);
+  assert.match(all, /NHS number: 943 476 5919/);
+  assert.match(all, /SNOMED codes accepted by the coder \(1\)/);
+  const steps = handoverSteps(result, { accepted: [{}], waiting: [] });
+  assert.deepEqual(steps.map((s) => s.id), ["details", "codes", "download", "file"]);
+  assert.equal(steps[0].done, true);
+  assert.equal(steps[1].done, true);
+  const incomplete = buildDocmanPayload(draft({ patient: {} , clinicalCodes: [] }), { fileReady: false, now });
+  assert.equal(handoverSteps(incomplete, { accepted: [], waiting: ["a", "b"] })[0].done, false, "missing details are flagged on the first step");
+  assert.match(handoverSteps(incomplete, { accepted: [], waiting: ["a", "b"] })[1].detail, /2 suggestions are not checked yet/);
+  assert.equal(handoverFields(incomplete).find((f) => f.label === "NHS number").missing, true);
+  assert.match(handoverText(incomplete), /\(not available\)/);
+  assert.ok(!/fetch\(|axios|XMLHttpRequest/.test(read("src/modules/clinflow/docmanHandover.js")), "nothing is sent anywhere");
+  assert.match(read("src/modules/clinflow/DocmanReadiness.jsx"), /Download the Docman PDF/);
 });
 
 console.log(`\n${n} passed`);

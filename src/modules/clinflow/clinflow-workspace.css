@@ -16,3 +16,41 @@
 .cf-snomed-list{margin-bottom:10px;align-items:flex-start}.cf-code-others{margin:5px 0;font-size:11px}.cf-code-others summary{cursor:pointer;color:#075eae;font-weight:700}.cf-code-others ul,.cf-code-search ul{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:5px}.cf-code-others li,.cf-code-search li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--cf-border);border-radius:8px;background:#fafcff}.cf-code-search{display:grid;gap:5px;padding:8px;border:1px dashed #9dbfe6;border-radius:8px;background:#f5f9ff}.cf-code-search label{display:grid;gap:3px;font-size:11px;font-weight:700;color:#41536b}
 .cf-snomed-notice{margin:8px 0 0;color:var(--cf-muted);font-size:10px;line-height:1.45}
 .cf-quality{margin:3px 0;font-size:10.5px;font-weight:700}.cf-quality--exact{color:#0d875d}.cf-quality--close{color:#8a5700}.cf-quality--corrected,.cf-quality--possible{color:#9f261d}.cf-quality--chosen{color:#075eae}
+
+/* What ClinFlow finds, colour-coded by kind so it stands out: diagnosis (blue), symptom (amber), test (teal), medicine (purple), action (green), alert (red) */
+.cf-kind--diagnosis,.cf-tone--diagnosis{--k-edge:#2f7de1;--k-bg:#eaf3ff;--k-ink:#0d4a9c;--k-soft:#d4e6ff}
+.cf-kind--symptom,.cf-tone--symptom{--k-edge:#e08a00;--k-bg:#fff4dc;--k-ink:#8a5200;--k-soft:#ffe6b0}
+.cf-kind--test,.cf-tone--test{--k-edge:#0f9d94;--k-bg:#e5f7f5;--k-ink:#066a64;--k-soft:#c4ece8}
+.cf-kind--medicine,.cf-tone--medicine{--k-edge:#7b4fd8;--k-bg:#f1ebff;--k-ink:#51299f;--k-soft:#e0d4fb}
+.cf-kind--other,.cf-tone--info{--k-edge:#5b6f8a;--k-bg:#eef2f7;--k-ink:#33455e;--k-soft:#dbe3ee}
+.cf-tone--action{--k-edge:#16a06a;--k-bg:#e6f7ef;--k-ink:#0b6a46;--k-soft:#c7ecdb}
+.cf-tone--alert{--k-edge:#d9453a;--k-bg:#fdecea;--k-ink:#9a251c;--k-soft:#f9d3cf}
+.cf-code-row[class*="cf-kind--"]{border:1px solid var(--k-soft);border-left:6px solid var(--k-edge);background:var(--k-bg);padding:12px 14px;box-shadow:0 1px 3px rgba(9,41,74,.08)}
+.cf-code-row.cf-code-row--accepted{background:#e3f6ec;box-shadow:0 0 0 2px #2db37e,0 1px 3px rgba(9,41,74,.1)}
+.cf-code-row.cf-code-row--removed{background:#f4f4f5;border-color:#d9d9dc;border-left-color:#a4a4ab;opacity:.7}
+.cf-code-row--removed .cf-code-head b{text-decoration:line-through}
+.cf-code-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 4px}
+.cf-code-head b{font-size:15px;color:#0c2037}
+.cf-kind-tag{display:inline-block;border-radius:6px;padding:2px 8px;font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;background:var(--k-edge);color:#fff}
+.cf-code-big{display:inline-block;margin-right:6px;border-radius:8px;padding:3px 10px;font-size:14px;font-weight:800;letter-spacing:.02em;background:#fff;color:var(--k-ink);border:1.5px solid var(--k-edge)}
+.cf-code-row[class*="cf-kind--"] .cf-evidence{background:#fff;border-left-color:var(--k-edge);color:#1d2f49}
+.cf-code-row .cf-code-chip{font-size:11px;padding:3px 10px}
+.cf-code-row .cf-code-chip--suggested{background:#fff;color:var(--k-ink);border:1px solid var(--k-edge)}
+.cf-info-grid .cf-tone{border:1px solid var(--k-soft);border-left:6px solid var(--k-edge);background:var(--k-bg)}
+.cf-info-grid .cf-tone h3{color:var(--k-ink)}
+
+/* Getting a letter into Docman: numbered steps, then each detail as its own copyable box */
+.cf-steps{list-style:none;margin:10px 0;padding:0;display:grid;gap:7px}
+.cf-step{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:10px;background:#fff7e0;border:1px solid #f1d98f}
+.cf-step small{display:block;color:#68778d;font-size:11px;margin-top:2px}
+.cf-step-no{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:#e08a00;color:#fff;font-size:12px;font-weight:800}
+.cf-step--done{background:#e6f7ef;border-color:#a8dcc3}.cf-step--done .cf-step-no{background:#16a06a}
+.cf-handover-title{margin:14px 0 6px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:#075eae}
+.cf-fields{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.cf-field{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;border:1px solid #cfe0f5;border-left:5px solid #2f7de1;background:#eaf3ff}
+.cf-field small{display:block;font-size:10px;color:#4b5f7a;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.cf-field b{font-size:13.5px;color:#0c2037;word-break:break-word}
+.cf-field--missing{border-left-color:#d9453a;background:#fdecea}.cf-field--missing b{color:#9a251c}
+.cf-fields--codes .cf-field{border-left-color:#7b4fd8;background:#f1ebff}
+.cf-copy{flex:0 0 auto;border:1px solid #9dbfe6;background:#fff;color:#075eae;border-radius:7px;padding:4px 8px;font-size:10.5px;font-weight:700;cursor:pointer}
+.cf-copy:hover{background:#075eae;color:#fff}

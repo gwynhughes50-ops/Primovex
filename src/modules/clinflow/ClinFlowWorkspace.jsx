@@ -40,7 +40,7 @@ import { createClinFlowDemoPdfBlob, createClinFlowSummaryPdfBlob, downloadClinFl
 import { createDocmanPackZip, downloadBlob, safePackName } from "./clinflowZipService";
 import DocmanReadiness from "./DocmanReadiness";
 import CodeReview from "./CodeReview";
-import { addCode, choose, codesAfterReview, decide, removeAdded, reviewCandidates } from "./clinflowCodeReview";
+import { addCode, choose, codesAfterReview, decide, removeAdded, reviewCandidates, reviewOutcome } from "./clinflowCodeReview";
 import { useAbbreviations, useSnomedList } from "./snomedListStore";
 import { analyzeSyntheticDocument } from "./azureDocumentIntelligenceClient";
 import { normaliseClinFlowPages } from "./clinflowPageService";
@@ -200,27 +200,27 @@ function AzureReviewView({ selected, activeTab, onDownloadSummary, onOpenOrigina
       <section className="cf-summary-card"><Sparkles size={18} /><div><b>Clinical summary</b><p>{analysis?.clinicalConclusion || `Azure extracted ${ocr.wordCount} words across ${ocr.pageCount} page${ocr.pageCount === 1 ? "" : "s"}. No single overall conclusion sentence was found in the letter — review the diagnoses and actions below.`}</p></div></section>
 
       <div className="cf-info-grid">
-        <section><h3>Diagnoses / problems</h3><p>{analysis?.diagnoses?.map((item) => item.value).join("; ") || "None extracted"}</p></section>
-        <section><h3>Current / relevant medication</h3><p>{(analysis?.currentMedications?.length ? analysis.currentMedications : analysis?.medicines)?.map((item) => item.value).join("; ") || "None extracted"}</p></section>
+        <section className="cf-tone cf-tone--diagnosis"><h3>Diagnoses / problems</h3><p>{analysis?.diagnoses?.map((item) => item.value).join("; ") || "None extracted"}</p></section>
+        <section className="cf-tone cf-tone--medicine"><h3>Current / relevant medication</h3><p>{(analysis?.currentMedications?.length ? analysis.currentMedications : analysis?.medicines)?.map((item) => item.value).join("; ") || "None extracted"}</p></section>
       </div>
 
       <section className="cf-summary-card cf-summary-card--list"><ClipboardCheck size={18} /><div className="cf-glance-actions"><b>Recommended actions</b>{analysis?.actions?.length ? <ul>{analysis.actions.map((item, index) => <li key={index}>{item.value}</li>)}</ul> : <p>No actions extracted.</p>}</div></section>
 
       <div className="cf-info-grid">
-        <section><h3>Temporary medication instructions</h3><p>{analysis?.medicationInstructions?.length ? analysis.medicationInstructions.map((item) => item.value).join("; ") : "None"}</p></section>
-        <section><h3>Correspondence priority</h3><p><span className={`cf-priority-pill cf-priority-pill--${urgent ? "urgent" : "routine"}`}>{urgent ? "Urgent" : "Routine"}</span><br /><small>Suggested — verify</small></p></section>
+        <section className="cf-tone cf-tone--medicine"><h3>Temporary medication instructions</h3><p>{analysis?.medicationInstructions?.length ? analysis.medicationInstructions.map((item) => item.value).join("; ") : "None"}</p></section>
+        <section className="cf-tone cf-tone--alert"><h3>Correspondence priority</h3><p><span className={`cf-priority-pill cf-priority-pill--${urgent ? "urgent" : "routine"}`}>{urgent ? "Urgent" : "Routine"}</span><br /><small>Suggested — verify</small></p></section>
       </div>
 
       <div className="cf-info-grid">
-        <section><h3>Suggested workflow destination</h3><p><span className="cf-priority-pill cf-priority-pill--destination">{analysis?.triage?.destination || "Workflow review"}</span></p></section>
-        <section><h3>Safety flags</h3><p>{urgent ? "Urgent — escalate immediately." : analysis?.safetyNettingAdvice ? `Safety-net advice: ${analysis.safetyNettingAdvice}` : "No safety concerns identified."}</p></section>
+        <section className="cf-tone cf-tone--info"><h3>Suggested workflow destination</h3><p><span className="cf-priority-pill cf-priority-pill--destination">{analysis?.triage?.destination || "Workflow review"}</span></p></section>
+        <section className="cf-tone cf-tone--alert"><h3>Safety flags</h3><p>{urgent ? "Urgent — escalate immediately." : analysis?.safetyNettingAdvice ? `Safety-net advice: ${analysis.safetyNettingAdvice}` : "No safety concerns identified."}</p></section>
       </div>
 
       <section className="cf-summary-card"><Tag size={18} /><div><b>Suggested SNOMED concepts</b><p>Candidates only — current UK Edition validation and clinician acceptance required before filing.</p></div></section>
       {matchedConcepts.length > 0 && <div className="cf-snomed-checklist">{matchedConcepts.map((item, index) => <div className="cf-snomed-row" key={`${item.sourceLabel}-${item.conceptId}-${index}`}><CheckCircle2 size={14} /><span>{item.preferredTerm}</span><code>{item.conceptId}</code></div>)}</div>}
 
       <div className="cf-info-grid">
-        <section><h3>SNOMED match count</h3><p>{matchedConcepts.length} of {totalConcepts} finding{totalConcepts === 1 ? "" : "s"} matched</p></section>
+        <section className="cf-tone cf-tone--test"><h3>SNOMED match count</h3><p>{matchedConcepts.length} of {totalConcepts} finding{totalConcepts === 1 ? "" : "s"} matched</p></section>
         <section><h3>Confidence</h3><p className="cf-confidence-value">{aiConfidence}%</p><div className="cf-confidence-bar"><div style={{ width: `${aiConfidence}%` }} /></div></section>
       </div>
     </div>;
@@ -245,7 +245,7 @@ function AzureReviewView({ selected, activeTab, onDownloadSummary, onOpenOrigina
     ];
     return <div className="cf-tab-content">
       <section className="cf-summary-card"><FileText size={18} /><div><b>Extracted data</b><p>Every field below is a candidate extracted from the document — nothing is clinically accepted until a trained clinician verifies it against the original.</p></div></section>
-      <div className="cf-info-grid">{extractedFields.length ? extractedFields.map((item, index) => <section key={`${item.group}-${item.value}-${index}`}><h3>{item.group}</h3><p>{item.value}<br /><b>{item.source === "llm_extraction" ? "AI-extracted · needs review" : "Extracted · needs review"}</b></p></section>) : <section><h3>No structured facts extracted</h3><p>ClinFlow did not extract any diagnoses, medicines, actions or observations from this document. Review the OCR text on the Document tab.</p></section>}</div>
+      <div className="cf-info-grid">{extractedFields.length ? extractedFields.map((item, index) => <section key={`${item.group}-${item.value}-${index}`} className={`cf-tone cf-tone--${{ Diagnosis: "diagnosis", Medication: "medicine", "Follow-up": "action", Observation: "test" }[item.group] || "info"}`}><h3>{item.group}</h3><p>{item.value}<br /><b>{item.source === "llm_extraction" ? "AI-extracted · needs review" : "Extracted · needs review"}</b></p></section>) : <section><h3>No structured facts extracted</h3><p>ClinFlow did not extract any diagnoses, medicines, actions or observations from this document. Review the OCR text on the Document tab.</p></section>}</div>
       {ocr.groundTruth?.length ? <div className="cf-info-grid">{ocr.groundTruth.map((item) => <section key={`${item.label}-${item.expected}`}><h3>{item.label}</h3><p>{item.expected}<br /><b>{item.matched ? "Detected in OCR" : "Not detected · review required"}</b></p></section>)}</div> : null}
     </div>;
   }
@@ -255,7 +255,7 @@ function AzureReviewView({ selected, activeTab, onDownloadSummary, onOpenOrigina
     <CodeReview candidates={reviewCandidates(analysis)} letter={ocr?.content || ""} review={selected.codeReview} canEdit={canReviewCodes} list={snomedList} medList={medicinesList} abbreviations={abbreviations} onDecide={onCodeDecision} onChoose={onCodeChoose} onAdd={onCodeAdd} onRemoveAdded={onCodeRemoveAdded} />
   </div>;
   if (activeTab === "quality") return <div className="cf-tab-content"><section className="cf-summary-card"><ShieldCheck size={18} /><div><b>Wales and England quality/register review</b><p>A hospital letter cannot establish a QAIF, Unified Contract or QOF opportunity by itself. ClinFlow therefore produces governed record-check prompts—not confirmed opportunities.</p></div></section><div className="cf-info-grid"><section><h3>Confirmed opportunities</h3><p><b>{analysis?.qaifOpportunities?.length || 0}</b><br />None are confirmed from this letter alone.<br />Awareness: {analysis?.qualityAwareness?.relevance || "Low"}</p></section>{analysis?.qualityPrompts?.map((item) => <section key={`${item.domain}-${item.title}`}><h3>{item.title}</h3><p><b>{item.domain}</b>{item.priority === "high" ? " · High-priority review" : ""}<br />{item.rationale}<br /><br />Next: {item.nextStep}<br /><small>{item.framework}</small></p></section>)}</div></div>;
-  if (activeTab === "outflow") return <div className="cf-tab-content"><section className="cf-summary-card"><FileText size={18} /><div><b>Docman companion summary</b><p>Download this summary, have a trained clinician compare and sign it against the untouched original, then drag both PDFs into Docman. Primovex does not transmit or file either document automatically.</p></div></section><div className="cf-info-grid"><section><h3>Document</h3><p>{analysis?.documentType}<br />Source: {ocr.fileName}</p></section><section><h3>Patient identity</h3><p>{analysis?.patient?.givenNames} {analysis?.patient?.familyName}<br /><b>Unverified</b> · NHS number and DOB must be checked</p></section><section><h3>Review status</h3><p>{analysis?.missing?.length || 0} required verification item{analysis?.missing?.length === 1 ? "" : "s"}<br />Not ready for automated transfer</p></section><section><h3>Output</h3><p><button type="button" className="cf-top-button cf-top-button--primary" onClick={onDownloadSummary}><Download size={14} /> Download summary PDF</button></p></section></div><DocmanReadiness analysis={analysis} fileReady={Boolean(ocr?.fileName)} /></div>;
+  if (activeTab === "outflow") return <div className="cf-tab-content"><section className="cf-summary-card"><FileText size={18} /><div><b>Docman companion summary</b><p>Download this summary, have a trained clinician compare and sign it against the untouched original, then drag both PDFs into Docman. Primovex does not transmit or file either document automatically.</p></div></section><div className="cf-info-grid"><section><h3>Document</h3><p>{analysis?.documentType}<br />Source: {ocr.fileName}</p></section><section><h3>Patient identity</h3><p>{analysis?.patient?.givenNames} {analysis?.patient?.familyName}<br /><b>Unverified</b> · NHS number and DOB must be checked</p></section><section><h3>Review status</h3><p>{analysis?.missing?.length || 0} required verification item{analysis?.missing?.length === 1 ? "" : "s"}<br />Not ready for automated transfer</p></section><section><h3>Output</h3><p><button type="button" className="cf-top-button cf-top-button--primary" onClick={onDownloadSummary}><Download size={14} /> Download summary PDF</button></p></section></div><DocmanReadiness analysis={analysis} fileReady={Boolean(ocr?.fileName)} outcome={reviewOutcome(reviewCandidates(analysis), selected.codeReview)} onDownload={onDownloadSummary} /></div>;
   return <div className="cf-timeline">{[["Document accepted", "Approved synthetic fingerprint verified"], ["OCR completed", `Azure Document Intelligence · ${confidence}% average word confidence`], ["Added to ClinFlow", "Session-only OCR evidence added to the review queue"], ["Awaiting human review", "No patient match, route or clinical action has been confirmed"]].map(([title, detail]) => <div key={title}><span /><strong>{title}</strong><p>{detail}</p></div>)}</div>;
 }
 
