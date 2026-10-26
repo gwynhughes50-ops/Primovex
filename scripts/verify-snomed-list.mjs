@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildIndex, describeIndex, indexProblem, parseConceptLine, parseDescriptionLine, parseLanguageLine, parseMemberLine } from "../src/modules/clinflow/snomedIndex.js";
+import { REPLACE_AFTER_DAYS, SNOMED_NOTICE, buildIndex, describeIndex, indexAgeDays, indexIsOld, indexProblem, parseConceptLine, parseDescriptionLine, parseLanguageLine, parseMemberLine } from "../src/modules/clinflow/snomedIndex.js";
 import { createSearch, tokens } from "../src/modules/clinflow/snomedSearch.js";
 import { choose, codesAfterReview, decide, optionsFor, reviewRows } from "../src/modules/clinflow/clinflowCodeReview.js";
 import { buildDocmanPayload } from "../src/modules/clinflow/docmanPayload.js";
@@ -172,6 +172,21 @@ t("the builder and the loader exist and say what to do", () => {
   const panel = read("src/modules/clinflow/CodeReview.jsx");
   for (const text of ["UK SNOMED list", "Choose the SNOMED list file", "Other matches", "Use this"]) assert.ok(panel.includes(text), text);
   assert.match(read("src/modules/clinflow/snomedListStore.js"), /indexedDB/);
+});
+
+t("the licence's conditions are kept: the required notice is shown wherever codes are, and an old list is flagged for replacing", () => {
+  assert.equal(SNOMED_NOTICE, "This material includes SNOMED Clinical Terms® (SNOMED CT®) which is used by permission of the International Health Terminology Standards Development Organisation (IHTSDO). All rights reserved. SNOMED CT®, was originally created by The College of American Pathologists. \"SNOMED\" and \"SNOMED CT\" are registered trademarks of the IHTSDO.", "word for word, as clause 8.3.1 gives it");
+  assert.match(describeIndex(index), /14 Oct 2026/, "the version and date of the release in use (clause 8.3.2)");
+  assert.equal(indexAgeDays(index, new Date("2026-10-26T00:00:00Z")), 12);
+  assert.equal(indexIsOld(index, new Date("2026-10-26T00:00:00Z")), false);
+  assert.equal(indexIsOld(index, new Date("2027-02-20T00:00:00Z")), true, "over four months old");
+  assert.equal(indexIsOld(index, new Date(Date.UTC(2026, 9, 14) + REPLACE_AFTER_DAYS * 86400000)), false, "exactly at the limit is not yet old");
+  assert.ok(REPLACE_AFTER_DAYS < 180, "flagged well before the 180 days the licence allows");
+  assert.equal(indexAgeDays({ release: "" }), null);
+  assert.equal(indexIsOld({ release: "" }), false, "no date: no false alarm");
+  assert.match(read("src/modules/clinflow/CodeReview.jsx"), /SNOMED_NOTICE/);
+  assert.match(read("src/modules/clinflow/clinflowSummaryExportService.js"), /line\(SNOMED_NOTICE/);
+  assert.match(read("src/modules/clinflow/CodeReview.jsx"), /within 180 days/);
 });
 
 console.log(`\n${n} passed`);

@@ -54,6 +54,20 @@ export function buildIndex({ concepts = [], descriptions = [], language = [], on
   return { format: 1, edition, release: clean(release), built: now.toISOString(), tags, concepts: concepts2 };
 }
 
+// The licence (SNOMED CT UK National Release Affiliate Licence, clause 8.3) requires this notice, word for word, wherever the product is
+// distributed, and the version and date of the release in use (clause 8.3.2, which describeIndex gives).
+export const SNOMED_NOTICE = "This material includes SNOMED Clinical Terms® (SNOMED CT®) which is used by permission of the International Health Terminology Standards Development Organisation (IHTSDO). All rights reserved. SNOMED CT®, was originally created by The College of American Pathologists. \"SNOMED\" and \"SNOMED CT\" are registered trademarks of the IHTSDO.";
+
+// The licence (clause 6.2) says a new version must be taken up within 180 days of being made available. Releases come out regularly, so a list
+// older than this is flagged for replacing, well before the limit could be reached.
+export const REPLACE_AFTER_DAYS = 120;
+export function indexAgeDays(index, now = new Date()) {
+  const r = /^(\d{4})(\d{2})(\d{2})$/.exec(index?.release || "");
+  if (!r) return null;
+  return Math.floor((now.getTime() - Date.UTC(Number(r[1]), Number(r[2]) - 1, Number(r[3]))) / 86400000);
+}
+export const indexIsOld = (index, now = new Date()) => { const days = indexAgeDays(index, now); return days !== null && days > REPLACE_AFTER_DAYS; };
+
 // What a loaded list says about itself, for the screen: "UK Clinical Edition 14 Oct 2026: 187,402 codes"
 export function describeIndex(index) {
   if (!index?.concepts) return "";

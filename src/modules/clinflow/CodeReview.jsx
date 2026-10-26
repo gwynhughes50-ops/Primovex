@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { CheckCircle2, Database, Plus, RotateCcw, Tag, Trash2, XCircle } from "lucide-react";
 import { addProblem, reviewRows, reviewStats, statsLine } from "./clinflowCodeReview";
+import { SNOMED_NOTICE } from "./snomedIndex";
 
 const STATE_WORDS = { suggested: "Waiting for you", accepted: "Accepted", removed: "Removed" };
 
@@ -14,6 +15,7 @@ function ListStatus({ list, canLoad }) {
       {list.loading ? <p>Opening…</p> : list.search
         ? <p>{list.info}. Codes are looked up here, on this computer; nothing from the letter is sent anywhere to find them.</p>
         : <p>The UK SNOMED list is not loaded on this computer, so codes cannot be looked up yet. It is made from the SNOMED CT download on NHS TRUD (see the note on the builder).</p>}
+      {list.old && <p className="cf-code-error" role="status">This list is more than four months old. Download the newest SNOMED CT UK Clinical Edition from TRUD and load it: the licence asks for a new version to be taken up within 180 days.</p>}
       {list.error && <p className="cf-code-error" role="alert">{list.error}</p>}
       {canLoad && (
         <>
@@ -21,6 +23,7 @@ function ListStatus({ list, canLoad }) {
           <button type="button" className="cf-top-button" onClick={() => input.current?.click()} disabled={list.loading}>{list.search ? "Load a newer list" : "Choose the SNOMED list file"}</button>
         </>
       )}
+      <p className="cf-snomed-notice"><small>{SNOMED_NOTICE}</small></p>
     </div></section>
   );
 }

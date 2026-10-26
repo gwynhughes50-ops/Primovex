@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { describeIndex, indexProblem } from "./snomedIndex";
+import { describeIndex, indexIsOld, indexProblem } from "./snomedIndex";
 import { createSearch } from "./snomedSearch";
 
 // Keeps the UK SNOMED list on this computer (the browser's own database), so it is loaded once and nothing about it, or about any letter searched
@@ -68,5 +68,5 @@ export function useSnomedList() {
   }, []);
   const remove = useCallback(async () => { await clearList().catch(() => {}); setState({ index: null, loading: false, error: "" }); }, []);
   const search = useMemo(() => (state.index ? createSearch(state.index) : null), [state.index]);
-  return { search, info: describeIndex(state.index), loading: state.loading, error: state.error, load, remove };
+  return { search, info: describeIndex(state.index), old: indexIsOld(state.index), loading: state.loading, error: state.error, load, remove };
 }

@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import { PDFDocument } from "pdf-lib";
+import { SNOMED_NOTICE } from "./snomedIndex";
 import { AI_OUTPUT_FOOTER, CLINICAL_DECISION_SUPPORT_BANNER, HIGH_RISK_BANNER, SYNTHETIC_TEST_BANNER, isRealAnalysedDocument } from "./clinflowDisclaimers";
 
 const cleanFileName = (value) => String(value || "clinflow-summary").replace(/[^a-z0-9._-]+/gi, "-").replace(/-+/g, "-").slice(0, 90);
@@ -245,6 +246,7 @@ function buildClinFlowSummaryPdf(document) {
       : `${item.searchTerm} · CODE NOT VERIFIED`;
     line(`• ${code}`);
   });
+  line(SNOMED_NOTICE, { size: 6.5, colour: [90, 105, 125] });
 
   heading("Medicines terminology review");
   if (!analysis.medicationCandidates?.length) line("No medicine terminology candidates were generated.");
