@@ -78,6 +78,19 @@ t("every move is on the record: what was opened, searched, copied, refused, fini
   assert.match(review, /onCopy\?\.\("words with no code"\)/);
 });
 
+t("the side panels fold away, the choice is remembered, and folding is on the record", () => {
+  const source = read("src/modules/clinflow/ClinFlowWorkspace.jsx");
+  assert.match(source, /clinflow-shell--queue-collapsed/);
+  assert.match(source, /track\("clinflow\.layout\.change"/);
+  assert.match(source, /primovex\.clinflow\.queueCollapsed/);
+  assert.match(source, /primovex\.clinflow\.panelCollapsed/);
+  assert.match(source, /Give the letter the whole screen/);
+  assert.match(source, /aria-label="Show the letters list"/, "a folded list can always be brought back");
+  assert.match(source, /aria-label="Show the actions panel"/, "a folded actions panel can always be brought back");
+  const css = read("src/modules/clinflow/clinflow-workspace.css");
+  assert.match(css, /\.clinflow-shell--queue-collapsed\.clinflow-shell--panel-collapsed\{grid-template-columns:38px minmax\(0,1fr\) 38px\}/, "with both folded the letter takes everything between two thin strips");
+});
+
 t("nothing that needs the selected letter is set up before it exists (this crashed the screen twice)", () => {
   const source = read("src/modules/clinflow/ClinFlowWorkspace.jsx");
   const selectedAt = source.indexOf("  const selected = documents.find(");

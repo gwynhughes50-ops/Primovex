@@ -121,3 +121,17 @@
 /* A strip under the patient banner when the name is common or an identifier is missing or doubtful */
 .cf-identity-note{display:flex;gap:10px;align-items:flex-start;margin:8px 0;padding:10px 14px;border-radius:12px;border:1px solid #f1d98f;border-left:6px solid #e08a00;background:#fff7e0;color:#6b4300}
 .cf-identity-note b{display:block;font-size:13.5px;color:#4d3000}.cf-identity-note span{display:block;font-size:12.5px;line-height:1.4}
+
+/* Both side panels fold away so the letter can have the whole screen */
+.clinflow-shell--queue-collapsed{grid-template-columns:38px minmax(0,1fr) 310px}
+.clinflow-shell--queue-collapsed.clinflow-shell--panel-collapsed{grid-template-columns:38px minmax(0,1fr) 38px}
+.clinflow-shell--panel-collapsed:not(.clinflow-shell--queue-collapsed){grid-template-columns:318px minmax(0,1fr) 38px}
+.cf-rail{display:none}
+.clinflow-shell--queue-collapsed .cf-queue>:not(.cf-rail){display:none}
+.clinflow-shell--queue-collapsed .cf-rail{display:flex;flex-direction:column;align-items:center;gap:14px;width:100%;height:100%;padding:12px 0;border:0;background:#fff;color:#52647d;cursor:pointer}
+.clinflow-shell--queue-collapsed .cf-rail span{writing-mode:vertical-rl;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.clinflow-shell--queue-collapsed .cf-rail:hover{background:#eef5ff;color:#075eae}
+.cf-document-heading .cf-pane-button{display:inline-grid;place-items:center;width:32px;height:32px;padding:0;border:1px solid var(--cf-border);border-radius:8px;background:#fff;color:#52647d;cursor:pointer}
+.cf-document-heading .cf-pane-button:hover{background:#eef5ff;color:#075eae;border-color:#9dbfe6}
+.cf-document-heading .cf-pane-button[aria-pressed="true"]{background:#eaf3ff;color:#075eae;border-color:#9dbfe6}
+.cf-document-heading>div:last-child{gap:8px}

@@ -14,6 +14,12 @@ import {
   Filter,
   FolderCheck,
   BarChart3,
+  Maximize2,
+  Minimize2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   GraduationCap,
   MoreHorizontal,
   Printer,
@@ -301,7 +307,15 @@ export default function ClinFlowWorkspace() {
   const [activeTab, setActiveTab] = useState("document");
   const [note, setNote] = useState("");
   const [noteOpen, setNoteOpen] = useState(false);
-  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  // The two side panels fold away so the letter gets the whole screen; each remembers how it was left on this computer
+  const remembered = (key) => { try { return globalThis.localStorage?.getItem(key) === "true"; } catch { return false; } };
+  const [panelCollapsed, setPanelCollapsed] = useState(() => remembered("primovex.clinflow.panelCollapsed"));
+  const [queueCollapsed, setQueueCollapsed] = useState(() => remembered("primovex.clinflow.queueCollapsed"));
+  const setLayout = (queue, panel) => {
+    setQueueCollapsed(queue); setPanelCollapsed(panel);
+    try { globalThis.localStorage?.setItem("primovex.clinflow.queueCollapsed", String(queue)); globalThis.localStorage?.setItem("primovex.clinflow.panelCollapsed", String(panel)); } catch { /* the layout is only a convenience */ }
+    track("clinflow.layout.change", "ClinFlow screen layout changed", { queue: queue ? "folded" : "open", actions: panel ? "folded" : "open" });
+  };
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [toast, setToast] = useState("");
   const [syncState, setSyncState] = useState("local");
@@ -846,7 +860,7 @@ export default function ClinFlowWorkspace() {
   ];
 
   return (
-    <section className={`clinflow-shell${panelCollapsed ? " clinflow-shell--panel-collapsed" : ""}`}>
+    <section className={`clinflow-shell${panelCollapsed ? " clinflow-shell--panel-collapsed" : ""}${queueCollapsed ? " clinflow-shell--queue-collapsed" : ""}`}>
       <header className="cf-topbar">
         <div>
           <p className="cf-eyebrow">Primovex clinical intelligence</p>
@@ -864,6 +878,7 @@ export default function ClinFlowWorkspace() {
       </header>
 
       <aside className="cf-queue">
+        <button type="button" className="cf-rail" onClick={() => setLayout(false, panelCollapsed)} aria-label="Show the letters list" title="Show the letters list"><PanelLeftOpen size={16} /><span>Letters ({visibleDocuments.length})</span></button>
         <div className="cf-queue-tabs">
           {[['all', `Active (${documents.filter((item) => item.status !== 'completed').length})`], ['high', `High (${documents.filter((item) => item.status !== 'completed' && item.priority === 'high').length})`], ['gp', `GP (${documents.filter((item) => item.status !== 'completed' && item.destination === 'GP').length})`], ['finished', `Finished (${documents.filter((item) => item.status === 'completed').length})`]].map(([key, label]) => (
             <button type="button" key={key} className={filter === key ? "active" : ""} onClick={() => setFilter(key)}>{label}</button>
@@ -888,8 +903,15 @@ export default function ClinFlowWorkspace() {
       <main className="cf-workspace">
         {!selected ? <div className="cf-empty">No document selected.</div> : <>
           <div className="cf-document-heading">
-            <div><h2>{selected.title}</h2>{selected.priority === "high" && <span>High Priority</span>}</div>
-            <small>Received: {selected.received}</small>
+            <div>
+              <button type="button" className="cf-pane-button" onClick={() => setLayout(!queueCollapsed, panelCollapsed)} aria-pressed={queueCollapsed} aria-label={queueCollapsed ? "Show the letters list" : "Hide the letters list"} title={queueCollapsed ? "Show the letters list" : "Hide the letters list"}>{queueCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button>
+              <h2>{selected.title}</h2>{selected.priority === "high" && <span>High Priority</span>}
+            </div>
+            <div>
+              <small>Received: {selected.received}</small>
+              <button type="button" className="cf-pane-button" onClick={() => (queueCollapsed && panelCollapsed ? setLayout(false, false) : setLayout(true, true))} aria-pressed={queueCollapsed && panelCollapsed} aria-label={queueCollapsed && panelCollapsed ? "Show both side panels" : "Give the letter the whole screen"} title={queueCollapsed && panelCollapsed ? "Show both side panels" : "Give the letter the whole screen"}>{queueCollapsed && panelCollapsed ? <Minimize2 size={16} /> : <Maximize2 size={16} />}</button>
+              <button type="button" className="cf-pane-button" onClick={() => setLayout(queueCollapsed, !panelCollapsed)} aria-pressed={panelCollapsed} aria-label={panelCollapsed ? "Show the actions panel" : "Hide the actions panel"} title={panelCollapsed ? "Show the actions panel" : "Hide the actions panel"}>{panelCollapsed ? <PanelRightOpen size={17} /> : <PanelRightClose size={17} />}</button>
+            </div>
           </div>
           <div className="cf-patient-banner">
             <UserCheck size={22} />
@@ -921,7 +943,7 @@ export default function ClinFlowWorkspace() {
       </main>
 
       <aside className="cf-insights">
-        <button className="cf-panel-toggle" type="button" onClick={() => setPanelCollapsed((value) => !value)}>{panelCollapsed ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}</button>
+        {panelCollapsed && <button className="cf-panel-toggle" type="button" onClick={() => setLayout(queueCollapsed, false)} aria-label="Show the actions panel" title="Show the actions panel"><ChevronLeft size={16} /></button>}
         {!panelCollapsed && <>
           <div className="cf-insight-scroll">
             <section className="cf-side-card">
