@@ -1,4 +1,5 @@
 import { medicineLookup, medicineName, medicineParts } from "./dmdIndex.js";
+import { preferredFor } from "./preferredCodes.js";
 
 // The coder's part of a ClinFlow letter: each suggested SNOMED code is shown with the words in the letter that led to it, and the clinician
 // accepts it, removes it, or adds one the reader missed. Pure (no screens, no storage) so it can be tested.
@@ -79,8 +80,13 @@ export function optionsFor(candidate, search) {
     }
     found = [...best.values()].sort((a, b) => b.score - a.score).slice(0, 6);
   }
+  // the practice's own first choice for this finding, when it is one it has chosen a code for and the list has that code
+  const chosen = query ? preferredFor(query) : null;
+  const usual = chosen ? search.byConcept(chosen.conceptId) : null;
+  if (usual) found = [{ ...usual, score: 100, preferred: true }, ...found.filter((f) => f.conceptId !== usual.conceptId)];
   const list = known ? [...found.filter((f) => f.conceptId === known.conceptId), ...found.filter((f) => f.conceptId !== known.conceptId)] : found;
-  return (known && !list.some((f) => f.conceptId === known.conceptId) ? [...list, known] : list).slice(0, 5);
+  const ordered = usual ? [...list.filter((f) => f.conceptId === usual.conceptId), ...list.filter((f) => f.conceptId !== usual.conceptId)] : list;
+  return (known && !ordered.some((f) => f.conceptId === known.conceptId) ? [...ordered, known] : ordered).slice(0, 5);
 }
 
 // Everything about how each finding was looked up, as plain text to copy and send when something is not found: what the letter said, what was
@@ -256,6 +262,7 @@ export function removeAdded(review, id, { uid = "", name = "", now = new Date() 
 export function matchQuality(option, chosen = false) {
   if (chosen) return { level: "chosen", label: "Chosen by you" };
   if (!option) return null;
+  if (option.preferred) return { level: "exact", label: "The practice's preferred code for this" };
   if (option.corrected?.length) return { level: "corrected", label: `Spelling corrected: ${option.corrected.map((c) => `“${c.from}” read as “${c.to}”`).join(", ")}. Check it is what the letter meant.` };
   if (option.score >= 95) return { level: "exact", label: "Exact match" };
   if (option.score >= 75) return { level: "close", label: "Close match: check the other matches" };

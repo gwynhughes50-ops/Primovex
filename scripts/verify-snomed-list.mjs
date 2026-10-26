@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { REPLACE_AFTER_DAYS, SNOMED_NOTICE, buildIndex, describeIndex, indexAgeDays, indexIsOld, indexProblem, parseConceptLine, parseDescriptionLine, parseLanguageLine, parseMemberLine } from "../src/modules/clinflow/snomedIndex.js";
 import { createSearch, tokens } from "../src/modules/clinflow/snomedSearch.js";
+import { preferredFor } from "../src/modules/clinflow/preferredCodes.js";
 import { choose, codesAfterReview, decide, diagnosticText, isMedicine, lookupText, matchQuality, matchSummary, optionsFor, reviewRows, shownAs, subjectOf, unmatchedText, withoutQualifiers } from "../src/modules/clinflow/clinflowCodeReview.js";
 import { buildDocmanPayload } from "../src/modules/clinflow/docmanPayload.js";
 
@@ -19,6 +20,7 @@ const concepts = [
   { id: "60621009", active: true }, { id: "271649006", active: true }, { id: "80891009", active: true }, { id: "999000001", active: false }, { id: "60845006", active: true },
   { id: "472775000", active: true }, { id: "252167001", active: true },
   { id: "431314004", active: true }, { id: "364075005", active: true }, { id: "386725007", active: true },
+  { id: "55235003", active: true }, { id: "999651000000107", active: true },
 ];
 const d = (id, conceptId, typeId, term, active = true) => ({ id, active, conceptId, typeId, term });
 const descriptions = [
@@ -37,6 +39,8 @@ const descriptions = [
   d("503000", "431314004", FSN, "Peripheral oxygen saturation (observable entity)"), d("503001", "431314004", SYN, "Peripheral oxygen saturation"),
   d("504000", "364075005", FSN, "Heart rate (observable entity)"), d("504001", "364075005", SYN, "Heart rate"),
   d("505000", "386725007", FSN, "Body temperature (observable entity)"), d("505001", "386725007", SYN, "Body temperature"),
+  d("506000", "55235003", FSN, "C-reactive protein measurement (procedure)"), d("506001", "55235003", SYN, "C-reactive protein measurement"),
+  d("507000", "999651000000107", FSN, "Plasma C reactive protein (observable entity)"), d("507001", "999651000000107", SYN, "Plasma C reactive protein"),
 ];
 const GB = "900000000000508004";
 const language = [
@@ -48,6 +52,7 @@ const language = [
   { refsetId: GB, active: true, descriptionId: "308001", acceptabilityId: PREF },
   { refsetId: GB, active: true, descriptionId: "501001", acceptabilityId: PREF }, { refsetId: GB, active: true, descriptionId: "502001", acceptabilityId: PREF },
   { refsetId: GB, active: true, descriptionId: "503001", acceptabilityId: PREF }, { refsetId: GB, active: true, descriptionId: "504001", acceptabilityId: PREF }, { refsetId: GB, active: true, descriptionId: "505001", acceptabilityId: PREF },
+  { refsetId: GB, active: true, descriptionId: "506001", acceptabilityId: PREF }, { refsetId: GB, active: true, descriptionId: "507001", acceptabilityId: PREF },
 ];
 const index = buildIndex({ concepts, descriptions, language, release: "20261014", now: new Date("2026-10-26T10:00:00Z") });
 const find = createSearch(index);
@@ -63,7 +68,7 @@ t("the release's own files are read: concepts, descriptions and the language lis
 });
 
 t("the list keeps what a letter's codes are made of, with the preferred term and its description ID, and leaves the rest out", () => {
-  assert.equal(index.concepts.length, 12, "inactive and body-structure concepts are out");
+  assert.equal(index.concepts.length, 14, "inactive and body-structure concepts are out");
   const af = index.concepts.find((c) => c[0] === "49436004");
   assert.deepEqual([af[1], af[2]], ["Atrial fibrillation", "80004015"], "the preferred synonym, with its own description ID");
   assert.deepEqual(af[4], [["AF - Atrial fibrillation", "80005016"], ["Auricular fibrillation", "80006017"]]);
@@ -72,7 +77,7 @@ t("the list keeps what a letter's codes are made of, with the preferred term and
   assert.ok(!index.concepts.some((c) => c[0] === "999000001"), "a retired concept is not offered");
   assert.ok(!JSON.stringify(index).includes("Retired asthma term"), "nor a retired term");
   assert.deepEqual([...index.tags].sort(), ["disorder", "finding", "observable entity", "procedure"]);
-  assert.equal(describeIndex(index), "UK Clinical Edition 14 Oct 2026: 12 codes");
+  assert.equal(describeIndex(index), "UK Clinical Edition 14 Oct 2026: 14 codes");
   assert.equal(indexProblem(index), "");
   assert.match(indexProblem({ format: 2 }), /not a ClinFlow SNOMED list/);
   assert.match(indexProblem({ format: 1, tags: [], concepts: [] }), /no codes/);
@@ -84,7 +89,7 @@ t("a reference set can limit the list to the codes a practice actually uses", ()
 });
 
 t("the search finds a code from the words in a letter, by its name or a synonym", () => {
-  assert.equal(find.size, 12);
+  assert.equal(find.size, 14);
   const af = find.search("atrial fibrillation");
   assert.equal(af[0].conceptId, "49436004");
   assert.equal(af[0].term, "Atrial fibrillation");
@@ -240,13 +245,35 @@ t("every row can show how it was looked up, and all of it can be copied to send 
   assert.equal(rows[2].lookedUp, "bisoprolol 5mg");
   const text = diagnosticText(rows, { version: "0.15.77", snomedInfo: describeIndex(index), medicinesInfo: "" });
   assert.match(text, /ClinFlow code lookup details \(app 0\.15\.77\)/);
-  assert.match(text, /SNOMED list: UK Clinical Edition 14 Oct 2026: 12 codes/);
+  assert.match(text, /SNOMED list: UK Clinical Edition 14 Oct 2026: 14 codes/);
   assert.match(text, /Medicines list: not loaded/);
   assert.match(text, /1\. label="Oxygen saturation" value="97%"\n   looked up as: "peripheral oxygen saturation"\n   used: Peripheral oxygen saturation \(431314004\) - Exact match/);
   assert.match(text, /2\. label="Diagnosis" value="quantum flux"\n   looked up as: "quantum flux"\n   used: NOTHING\n   no options/);
   assert.match(text, /3\. \[medicine\]/);
   const screen = read("src/modules/clinflow/CodeReview.jsx");
   for (const words of ["How this was looked up", "Copy the lookup details", "Looked up as"]) assert.ok(screen.includes(words), words);
+});
+
+t("where the practice has chosen a code for a finding, that code comes first, marked as preferred, and the others are still offered", () => {
+  const m = (label, value) => ({ sourceLabel: label, sourceValue: value, searchTerm: value, conceptId: null, preferredTerm: null });
+  for (const [label, value] of [["Observation", "CRP 4 mg/L"], ["CRP", "4 mg/L"], ["Observation", "C-reactive protein 4"], ["Observation", "crp was 4 mg/L"], ["Investigation", "CRP"], ["Observation", "C reactive protein"]]) {
+    const options = optionsFor(m(label, value), find);
+    assert.equal(options[0].conceptId, "55235003", `${label} / ${value}`);
+    assert.equal(options[0].preferred, true);
+    assert.equal(options[0].descriptionId, "506001", "with its description ID");
+    assert.ok(options.some((o) => o.conceptId === "999651000000107"), "the other code is still offered");
+  }
+  const [row] = reviewRows([m("Observation", "CRP 4 mg/L")], "", null, find);
+  assert.equal(row.conceptId, "55235003");
+  assert.equal(row.quality.label, "The practice's preferred code for this");
+  assert.ok(!optionsFor(m("Observation", "inflammatory markers: CRP 4 mg/L, normal"), find)[0]?.preferred, "a finding that only mentions it is not forced");
+  assert.ok(!optionsFor(m("Diagnosis", "atrial fibrillation"), find).some((o) => o.preferred), "other findings are not affected");
+  assert.equal(preferredFor("CRP")?.conceptId, "55235003");
+  assert.equal(preferredFor("crp 4")?.conceptId, "55235003");
+  assert.equal(preferredFor("crpx"), null, "a different word is not the same word");
+  assert.equal(preferredFor(""), null);
+  const reduced = createSearch({ ...index, concepts: index.concepts.filter((c) => c[0] !== "55235003") });
+  assert.ok(!optionsFor(m("Observation", "CRP 4 mg/L"), reduced).some((o) => o.preferred), "a preferred code that is not in the loaded list is not offered");
 });
 
 t("a misspelt word is read as the nearest word in the list, it is reported, and the user is told to check it", () => {
