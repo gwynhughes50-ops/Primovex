@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { REPLACE_AFTER_DAYS, SNOMED_NOTICE, buildIndex, describeIndex, indexAgeDays, indexIsOld, indexProblem, parseConceptLine, parseDescriptionLine, parseLanguageLine, parseMemberLine } from "../src/modules/clinflow/snomedIndex.js";
 import { createSearch, tokens } from "../src/modules/clinflow/snomedSearch.js";
-import { choose, codesAfterReview, decide, isMedicine, lookupText, matchQuality, matchSummary, optionsFor, reviewRows, shownAs, subjectOf, unmatchedText, withoutQualifiers } from "../src/modules/clinflow/clinflowCodeReview.js";
+import { choose, codesAfterReview, decide, diagnosticText, isMedicine, lookupText, matchQuality, matchSummary, optionsFor, reviewRows, shownAs, subjectOf, unmatchedText, withoutQualifiers } from "../src/modules/clinflow/clinflowCodeReview.js";
 import { buildDocmanPayload } from "../src/modules/clinflow/docmanPayload.js";
 
 let n = 0;
@@ -232,6 +232,21 @@ t("a measurement whose name is in its label, with only the number as its value, 
   assert.equal(lookupText("CRP 4 mg/L"), "c-reactive protein", "a unit like mg/L goes whole, not just its first letters");
   assert.equal(lookupText("eGFR 45 mmol/L"), "eGFR", "mmol/L too");
   assert.equal(lookupText("MI"), "MI", "an abbreviation with more than one meaning is left alone");
+});
+
+t("every row can show how it was looked up, and all of it can be copied to send when something is not found", () => {
+  const rows = reviewRows([{ sourceLabel: "Oxygen saturation", sourceValue: "97%", searchTerm: "97%" }, { sourceLabel: "Diagnosis", sourceValue: "quantum flux", searchTerm: "quantum flux" }, { sourceLabel: "Medication", sourceValue: "Bisoprolol 5 mg", codeSystem: "dm+d" }], "", null, find, null);
+  assert.equal(rows[0].lookedUp, "peripheral oxygen saturation", "what was searched for, after the label is used and abbreviations are written out");
+  assert.equal(rows[2].lookedUp, "bisoprolol 5mg");
+  const text = diagnosticText(rows, { version: "0.15.77", snomedInfo: describeIndex(index), medicinesInfo: "" });
+  assert.match(text, /ClinFlow code lookup details \(app 0\.15\.77\)/);
+  assert.match(text, /SNOMED list: UK Clinical Edition 14 Oct 2026: 12 codes/);
+  assert.match(text, /Medicines list: not loaded/);
+  assert.match(text, /1\. label="Oxygen saturation" value="97%"\n   looked up as: "peripheral oxygen saturation"\n   used: Peripheral oxygen saturation \(431314004\) - Exact match/);
+  assert.match(text, /2\. label="Diagnosis" value="quantum flux"\n   looked up as: "quantum flux"\n   used: NOTHING\n   no options/);
+  assert.match(text, /3\. \[medicine\]/);
+  const screen = read("src/modules/clinflow/CodeReview.jsx");
+  for (const words of ["How this was looked up", "Copy the lookup details", "Looked up as"]) assert.ok(screen.includes(words), words);
 });
 
 t("a misspelt word is read as the nearest word in the list, it is reported, and the user is told to check it", () => {

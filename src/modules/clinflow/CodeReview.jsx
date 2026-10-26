@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { CheckCircle2, Database, Plus, RotateCcw, Tag, Trash2, XCircle } from "lucide-react";
-import { addProblem, matchSummary, reviewRows, reviewStats, statsLine, unmatchedText } from "./clinflowCodeReview";
+import { addProblem, diagnosticText, matchSummary, reviewRows, reviewStats, statsLine, unmatchedText } from "./clinflowCodeReview";
 import { SNOMED_NOTICE } from "./snomedIndex";
 
 const STATE_WORDS = { suggested: "Waiting for you", accepted: "Accepted", removed: "Removed" };
@@ -50,6 +50,11 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
   const stats = useMemo(() => reviewStats(candidates, review), [candidates, review]);
   const summary = useMemo(() => matchSummary(rows), [rows]);
   const [copied, setCopied] = useState(false);
+  const [copiedDetails, setCopiedDetails] = useState(false);
+  const copyDetails = async () => {
+    const version = (typeof import.meta !== "undefined" && import.meta.env?.VITE_APP_VERSION) || "";
+    try { await navigator.clipboard.writeText(diagnosticText(rows, { version, snomedInfo: list?.search ? list.info : "", medicinesInfo: medList?.search ? medList.info : "" })); setCopiedDetails(true); setTimeout(() => setCopiedDetails(false), 2500); } catch { /* the details are also on each row */ }
+  };
   const copyUnmatched = async () => { try { await navigator.clipboard.writeText(unmatchedText(summary)); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch { /* the list is also shown above */ } };
   const [form, setForm] = useState({ term: "", conceptId: "", descriptionId: "" });
   const [error, setError] = useState("");
@@ -74,6 +79,7 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
             <button type="button" className="cf-top-button" onClick={copyUnmatched}>{copied ? "Copied" : "Copy these words"}</button></>}
         </div></section>
       )}
+      {summary.total > 0 && <p className="cf-muted"><button type="button" className="cf-top-button" onClick={copyDetails}>{copiedDetails ? "Copied" : "Copy the lookup details"}</button> If something is not found, copy these and send them: they show what the letter said, what was searched for and what came back.</p>}
       {!canEdit && <p className="cf-muted">You can see these suggestions, but your role cannot accept or remove them.</p>}
       <ul className="cf-code-list">
         {rows.length === 0 && <li className="cf-code-row"><p>No codes were suggested for this letter.</p></li>}
@@ -82,6 +88,9 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
             <div className="cf-code-main">
               <p><b>{row.term || "No term found"}</b> <small>{row.label}</small></p>
               <p className="cf-code-ids">{row.medicine ? (row.medicineListMissing ? "A medicine: it is looked up in the NHS dm+d list, which is not loaded yet." : row.conceptId ? `dm+d ${row.conceptId}${row.descriptionId ? ` · description ${row.descriptionId}` : " · SNOMED description ID not in this list (build it with the Drug Extension)"}` : "Nothing in the dm+d list matches these words") : <>{row.conceptId ? `SNOMED ${row.conceptId}` : list?.search ? "Nothing in the UK list matches these words" : "No SNOMED code found yet"}{row.descriptionId ? ` · description ${row.descriptionId}` : row.conceptId ? " · description ID still needed" : ""}</>}</p>
+              <details className="cf-code-others"><summary>How this was looked up</summary>
+                <p className="cf-muted">Label: {row.label || "none"}<br />Words found: {row.candidate.sourceValue || row.candidate.searchTerm || "none"}<br />Looked up as: {row.lookedUp ? `“${row.lookedUp}”` : "nothing to look up"}{row.options.length ? <><br />Best matches: {row.options.slice(0, 3).map((o) => `${o.term} (${o.score})`).join("; ")}</> : null}</p>
+              </details>
               {row.quality && <p className={`cf-quality cf-quality--${row.quality.level}`}>{row.quality.label}</p>}
               {row.evidence.found
                 ? <blockquote className="cf-evidence">“{row.evidence.quote}”</blockquote>

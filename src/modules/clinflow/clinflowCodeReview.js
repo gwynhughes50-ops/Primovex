@@ -83,6 +83,21 @@ export function optionsFor(candidate, search) {
   return (known && !list.some((f) => f.conceptId === known.conceptId) ? [...list, known] : list).slice(0, 5);
 }
 
+// Everything about how each finding was looked up, as plain text to copy and send when something is not found: what the letter said, what was
+// searched for, what came back and how well it matched. It holds wording from the letter (never a name or number that identifies a patient), so the
+// person decides whether to send it.
+export function diagnosticText(rows = [], { version = "", snomedInfo = "", medicinesInfo = "" } = {}) {
+  const lines = [`ClinFlow code lookup details${version ? ` (app ${version})` : ""}`, `SNOMED list: ${snomedInfo || "not loaded"}`, `Medicines list: ${medicinesInfo || "not loaded"}`, ""];
+  rows.forEach((r, i) => {
+    lines.push(`${i + 1}. ${r.medicine ? "[medicine] " : ""}label="${r.label}" value="${text(r.candidate.sourceValue || r.candidate.searchTerm)}"`);
+    lines.push(`   looked up as: "${r.lookedUp}"`);
+    lines.push(`   used: ${r.pick ? `${r.pick.term} (${r.pick.conceptId}) - ${r.quality?.label || ""}` : "NOTHING"}`);
+    for (const o of r.options.slice(0, 3)) lines.push(`   option: ${o.term} (${o.conceptId}) score ${o.score}${o.corrected ? " spelling corrected" : ""}`);
+    if (!r.options.length) lines.push("   no options");
+  });
+  return lines.join("\n");
+}
+
 // How many findings found a code, and the words of those that found none, for the line at the top of the review
 export function matchSummary(rows = []) {
   const coded = rows.filter((r) => r.pick);
@@ -260,10 +275,11 @@ export function reviewRows(candidates = [], letter = "", review = null, search =
     const own = !search && !medicine && candidate.conceptId ? { conceptId: candidate.conceptId, term: text(candidate.preferredTerm), descriptionId: candidate.descriptionId || "" } : null;
     // what accepting will use: the code chosen with the decision, else the coder's pick, else the first match, else the reader's own
     const pick = decision?.chosen || review?.choices?.[key] || asPick(options[0]) || own;
+    const lookedUp = medicine ? medicineParts(candidate.sourceValue || candidate.searchTerm).join("  +  ") : lookupText(subjectOf(candidate));
     const source = pick ? options.find((o) => o.conceptId === pick.conceptId) : null;
     const quality = matchQuality(source, Boolean(decision?.chosen || review?.choices?.[key]));
     return {
-      key, candidate, medicine, quality, medicineListMissing: medicine && !medSearch, term: text(pick?.term || shownAs(candidate) || candidate.preferredTerm), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
+      key, candidate, medicine, quality, lookedUp, medicineListMissing: medicine && !medSearch, term: text(pick?.term || shownAs(candidate) || candidate.preferredTerm), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
       descriptionId: pick?.descriptionId || "", pick, options, evidence, state: decision?.decision || "suggested", by: decision?.byName || "", at: decision?.at || "",
     };
   });
