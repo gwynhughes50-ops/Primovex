@@ -14,7 +14,7 @@ export const KEEP_TAGS = ["disorder", "finding", "procedure", "situation", "obse
 const MAX_SYNONYMS = 12;
 
 const clean = (v) => String(v ?? "").replace(/\s+/g, " ").trim();
-const tagOf = (fsn) => { const m = /\(([^()]+)\)\s*$/.exec(clean(fsn)); return m ? m[1].toLowerCase() : ""; };
+export const semanticTag = (fsn) => { const m = /\(([^()]+)\)\s*$/.exec(clean(fsn)); return m ? m[1].toLowerCase() : ""; };
 const withoutTag = (fsn) => clean(fsn).replace(/\s*\([^()]+\)\s*$/, "");
 
 // concepts:     [{ id, active }]
@@ -39,7 +39,7 @@ export function buildIndex({ concepts = [], descriptions = [], language = [], on
   const tags = [];
   const concepts2 = [];
   for (const [conceptId, entry] of byConcept) {
-    const tag = tagOf(entry.fsn);
+    const tag = semanticTag(entry.fsn);
     if (!KEEP_TAGS.includes(tag)) continue;
     if (only && !only.has(conceptId)) continue;
     const seen = new Set();

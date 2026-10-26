@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import zlib from "node:zlib";
-import { buildIndex, describeIndex, parseConceptLine, parseDescriptionLine, parseLanguageLine, parseMemberLine } from "../src/modules/clinflow/snomedIndex.js";
+import { FSN_TYPE, KEEP_TAGS, PREFERRED, SYNONYM_TYPE, buildIndex, describeIndex, parseConceptLine, parseDescriptionLine, parseLanguageLine, parseMemberLine, semanticTag } from "../src/modules/clinflow/snomedIndex.js";
 
 const args = process.argv.slice(2);
 const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : ""; };
@@ -44,25 +44,34 @@ for (const [kind, list] of Object.entries(files)) {
   console.log(`${kind}: ${list.map((f) => path.basename(f)).join(", ")}`);
 }
 
-async function rows(file, parse) {
+// Reads one file a line at a time, keeping only the rows `keep` accepts (the whole release is gigabytes; only a small part is wanted)
+async function rows(file, parse, keep = () => true) {
   const out = [];
   const reader = readline.createInterface({ input: fs.createReadStream(file, "utf8"), crlfDelay: Infinity });
   let first = true;
   for await (const line of reader) {
     if (first) { first = false; continue; }
     const row = parse(line);
-    if (row) out.push(row);
+    if (row && keep(row)) out.push(row);
   }
   return out;
 }
-const all = async (list, parse) => (await Promise.all(list.map((f) => rows(f, parse)))).flat();
+const all = async (list, parse, keep) => { const out = []; for (const f of list) for (const row of await rows(f, parse, keep)) out.push(row); return out; };
 
-const concepts = await all(files.concepts, parseConceptLine);
-const descriptions = await all(files.descriptions, parseDescriptionLine);
-const language = await all(files.language, parseLanguageLine);
+const concepts = await all(files.concepts, parseConceptLine, (c) => c.active);
+console.log(`${concepts.length.toLocaleString("en-GB")} active concepts`);
+const activeIds = new Set(concepts.map((c) => c.id));
+// first pass: which concepts are the kind a letter's codes are made of (from the tag at the end of the full name)
+const wanted = new Set((await all(files.descriptions, parseDescriptionLine, (d) => d.active && d.typeId === FSN_TYPE && activeIds.has(d.conceptId) && KEEP_TAGS.includes(semanticTag(d.term)))).map((d) => d.conceptId));
+console.log(`${wanted.size.toLocaleString("en-GB")} concepts of the wanted kinds`);
+// second pass: their names and synonyms
+const descriptions = await all(files.descriptions, parseDescriptionLine, (d) => d.active && wanted.has(d.conceptId) && (d.typeId === FSN_TYPE || d.typeId === SYNONYM_TYPE));
+const language = await all(files.language, parseLanguageLine, (l) => l.active && l.acceptabilityId === PREFERRED);
+console.log(`${descriptions.length.toLocaleString("en-GB")} terms, ${language.length.toLocaleString("en-GB")} preferred-term marks`);
 let only = null;
 if (flag("--refset")) only = new Set(await rows(flag("--refset"), parseMemberLine));
-const release = (files.concepts[0].match(/_(\d{8})\.txt$/) || [])[1] || "";
+// the newest date among the files (the International part is older than the UK part)
+const release = files.concepts.map((f) => (f.match(/_(\d{8})\.txt$/) || [])[1] || "").sort().pop() || "";
 
 const index = buildIndex({ concepts, descriptions, language, only, release, edition: "UK SNOMED CT" });
 const out = flag("--out") || path.join("work", "snomed-uk-index.json.gz");

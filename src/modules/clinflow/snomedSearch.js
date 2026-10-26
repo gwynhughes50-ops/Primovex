@@ -3,6 +3,9 @@
 
 const STOP = new Set(["the", "a", "an", "of", "and", "or", "with", "for", "to", "in", "on", "at", "is", "was", "has", "had", "due", "mr", "mrs", "dr"]);
 
+// On a tie, what a letter usually means comes first: a disorder or finding before a situation ("history of", "no"), a procedure or a therapy.
+const TAG_BIAS = { disorder: 2, finding: 2, "observable entity": 1, "medicinal product": 1, product: 0, "medicinal product form": 0, procedure: -1, "regime/therapy": -2, situation: -3 };
+
 export const tokens = (value) => String(value ?? "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w && !STOP.has(w));
 
 // Turns a loaded list into something quick to search: each word points at the codes whose terms contain it
@@ -42,7 +45,7 @@ export function createSearch(index) {
       const bonus = t === 0 ? 3 : 0;
       if (score + bonus > best) { best = score + bonus; matched = terms[i][t][0]; }
     });
-    return { score: best, matched };
+    return { score: best ? best + (TAG_BIAS[index.tags[concepts[i][3]]] || 0) : 0, matched };
   }
 
   return {
