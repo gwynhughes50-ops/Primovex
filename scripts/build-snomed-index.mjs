@@ -34,6 +34,11 @@ const files = {
   descriptions: find(folder, (n, f) => snapshot(n, f) && /^sct2_Description_/i.test(n) && /-en/i.test(n)),
   language: find(folder, (n, f) => snapshot(n, f) && /^der2_cRefset_Language/i.test(n) && /-en/i.test(n)),
 };
+const deltaOnly = !files.concepts.length && find(folder, (n, f) => /delta/i.test(f) && /^sct2_Concept_/i.test(n)).length > 0;
+if (deltaOnly) {
+  console.error("This is the Delta package: it only holds what changed in the latest release, not the whole list.\nOn TRUD, download the full release instead (its file name starts uk_sct2cl_ and does not say delta; it is much larger).");
+  process.exit(1);
+}
 for (const [kind, list] of Object.entries(files)) {
   if (!list.length) { console.error(`I could not find the ${kind} files in that folder. Is it the unzipped Clinical Edition (it has a Snapshot folder inside)?`); process.exit(1); }
   console.log(`${kind}: ${list.map((f) => path.basename(f)).join(", ")}`);
