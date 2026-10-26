@@ -248,7 +248,7 @@ t("every row can show how it was looked up, and all of it can be copied to send 
   assert.match(text, /ClinFlow code lookup details \(app 0\.15\.77\)/);
   assert.match(text, /SNOMED list: UK Clinical Edition 14 Oct 2026: 14 codes/);
   assert.match(text, /Medicines list: not loaded/);
-  assert.match(text, /1\. label="Oxygen saturation" value="97%"\n   looked up as: "peripheral oxygen saturation"\n   used: Peripheral oxygen saturation \(431314004\) - Exact match/);
+  assert.match(text, /1\. label="Oxygen saturation" value="97%"\n   looked up as: "peripheral oxygen saturation"\n   used: Peripheral oxygen saturation \(431314004\) - The practice's preferred code for this/);
   assert.match(text, /2\. label="Diagnosis" value="quantum flux"\n   looked up as: "quantum flux"\n   used: NOTHING\n   no options/);
   assert.match(text, /3\. \[medicine\]/);
   const screen = read("src/modules/clinflow/CodeReview.jsx");
@@ -267,7 +267,11 @@ t("where the practice has chosen a code for a finding, that code comes first, ma
   const [row] = reviewRows([m("Observation", "CRP 4 mg/L")], "", null, find);
   assert.equal(row.conceptId, "55235003");
   assert.equal(row.quality.label, "The practice's preferred code for this");
-  assert.ok(!optionsFor(m("Observation", "inflammatory markers: CRP 4 mg/L, normal"), find)[0]?.preferred, "a finding that only mentions it is not forced");
+  for (const value of ["raised CRP", "CRP raised", "inflammatory markers: CRP 4, WCC 7.2"]) assert.equal(optionsFor(m("Investigation", value), find)[0]?.conceptId, "55235003", `${value}: CRP anywhere in the finding`);
+  // oxygen saturation: the practice's code for it, however it is written, but "on room air" can still find its own code
+  for (const [label, value] of [["Observation", "Oxygen saturation"], ["Observation", "SpO2 97%"], ["Observation", "O2 sats 97%"], ["Observation", "Sats 94% RA"], ["Oxygen saturation", "normal on room air"], ["Oxygen saturation", "97%"], ["Observation", "oxygen saturations were 97%"]]) assert.equal(optionsFor(m(label, value), find)[0]?.conceptId, "431314004", `${label} / ${value}`);
+  assert.equal(subjectOf(m("CRP", "raised")), "CRP", "a value that only says how it was (raised, normal) has no name: the label is looked up");
+  assert.equal(subjectOf(m("Observation", "Sats 94% RA")), "Sats 94% room air", "RA after a percentage is room air, not rheumatoid arthritis");
   assert.ok(!optionsFor(m("Diagnosis", "atrial fibrillation"), find).some((o) => o.preferred), "other findings are not affected");
   assert.equal(preferredFor("CRP")?.conceptId, "55235003");
   assert.equal(preferredFor("crp 4")?.conceptId, "55235003");

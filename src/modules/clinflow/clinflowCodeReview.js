@@ -21,10 +21,11 @@ export const candidateKey = (c) => [text(c?.sourceLabel), text(c?.searchTerm || 
 // What a finding is about. A measurement keeps its name in its label and only the number as its value ("Oxygen saturation" / "97%", "Heart rate" / "96"),
 // so when the value has no name in it, the label is what is looked up.
 const isAbbreviation = (value) => { const v = text(value); if (!v || /\d/.test(v)) return false; const e = expandAbbreviations(v); return e.ambiguous.length > 0 || e.text.toLowerCase() !== v.toLowerCase(); };
-const hasName = (value) => isAbbreviation(value) || /[a-z]{3,}/i.test(text(value).replace(/\b\d+(?:[.,]\d+)?\s*(?:mg|mcg|ml|kg|g|l|mmhg|bpm|mmol|iu|u)(?:\/[a-z]+)?\b/gi, " ").replace(/\b(?:celsius|percent|per|min|room|air|ra|on)\b/gi, " "));
+const hasName = (value) => isAbbreviation(value) || /[a-z]{3,}/i.test(text(value).replace(/\b\d+(?:[.,]\d+)?\s*(?:mg|mcg|ml|kg|g|l|mmhg|bpm|mmol|iu|u)(?:\/[a-z]+)?\b/gi, " ").replace(/\b(?:celsius|percent|per|min|room|air|ra|on|normal|abnormal|raised|elevated|high|higher|low|lower|stable|satisfactory|improved|unchanged|borderline|pending|awaited|within|limits|range|reference|was|were|is|are|at|of|and|the|today|recorded|measured|level|levels)\b/gi, " "));
 export function subjectOf(candidate) {
   const value = text(candidate.component ? candidate.preferredTerm : (candidate.sourceValue || candidate.searchTerm));
-  return hasName(value) || !text(candidate.sourceLabel) ? value : text(candidate.sourceLabel);
+  const chosen = hasName(value) || !text(candidate.sourceLabel) ? value : text(candidate.sourceLabel);
+  return chosen.replace(/(\d\s*%\s*(?:on\s+)?)RA\b/g, "$1room air"); // "94% RA" is room air, not rheumatoid arthritis
 }
 // the finding as it is shown: "Oxygen saturation 97%" when the value alone would say nothing
 export const shownAs = (candidate) => { const value = text(candidate.sourceValue || candidate.searchTerm); return !hasName(value) && text(candidate.sourceLabel) ? `${text(candidate.sourceLabel)} ${value}`.trim() : value; };
@@ -35,7 +36,7 @@ export const shownAs = (candidate) => { const value = text(candidate.sourceValue
 const NOISE = /\b\d+(?:\.\d+)?\s*(?:mg|ng|g|mcg|ml|mmol|mol|iu|u)\s*\/\s*(?:l|dl|ml|min|hr|h|kg)\b|\b(?:mg|ng|g|mmol)\s*\/\s*(?:l|dl)\b|\b\d+(?:\.\d+)?\s*(?:mg|mcg|micrograms?|g|ml|mmhg|kg|bpm|mmol\/l|hours?|minutes?|weeks?|days?|months?|years?)\b|\b\d+(?:\.\d+)?\s*%|\b\d+\s*\/\s*\d+\b|\b(?:mmhg|mg|mcg|micrograms?|ml|kg|bpm|once|twice|three times|daily|weekly|monthly|bd|od|tds|qds|nocte|mane|prn|today|tomorrow|repeat|review|continue|increase|decrease|reduce|start|stop|restart|check|please|arrange|book|in|within|for)\b|[^a-z0-9\s-]/gi;
 const QUALIFIERS = /\b(?:mild|mildly|moderate|moderately|severe|severely|slight|slightly|minor|marked|borderline|known|likely|possible|probable|suspected|new|ongoing)\b/gi;
 // Measurement names a letter writes in several ways, read the way the list names them (pulse oximetry, body temperature)
-const MEASUREMENTS = [[/\boxygen saturations?\b/gi, "peripheral oxygen saturation"], [/(?<!body )(?<!core )\btemperature\b/gi, "body temperature"]];
+const MEASUREMENTS = [[/(?<!peripheral )\boxygen saturations?\b/gi, "peripheral oxygen saturation"], [/(?<!body )(?<!core )\btemperature\b/gi, "body temperature"]];
 // Abbreviations with one meaning are written out (see clinicalAbbreviations.js); ones with several are reported, never guessed at.
 export const lookupText = (value) => {
   const named = MEASUREMENTS.reduce((s, [pattern, full]) => s.replace(pattern, ` ${full} `), expandAbbreviations(value).text);

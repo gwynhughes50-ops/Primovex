@@ -28,7 +28,7 @@ export const BUILT_IN_ABBREVIATIONS = [
   one("copd", "chronic obstructive pulmonary disease"), one("sob", "shortness of breath"), one("sobar", "shortness of breath at rest"), one("urti", "upper respiratory tract infection"),
   one("lrti", "lower respiratory tract infection"), one("uti", "urinary tract infection"), one("osa", "obstructive sleep apnoea"), one("cpap", "continuous positive airway pressure"),
   one("ards", "acute respiratory distress syndrome"), one("tb", "tuberculosis"), one("pefr", "peak expiratory flow rate"), one("pef", "peak expiratory flow"), one("fev1", "forced expiratory volume in 1 second"),
-  one("fvc", "forced vital capacity"), one("abg", "arterial blood gas"), one("spo2", "peripheral oxygen saturation"), one("sats", "peripheral oxygen saturation"),
+  one("fvc", "forced vital capacity"), one("abg", "arterial blood gas"), one("o2 sats", "peripheral oxygen saturation"), one("o2 saturation", "peripheral oxygen saturation"), one("o2 saturations", "peripheral oxygen saturation"), one("spo2", "peripheral oxygen saturation"), one("sats", "peripheral oxygen saturation"),
   one("cap", "community acquired pneumonia", true), one("hiv", "human immunodeficiency virus"), one("hbv", "hepatitis b"), one("hcv", "hepatitis c"),
   one("mrsa", "meticillin resistant staphylococcus aureus"), one("sti", "sexually transmitted infection"),
   // kidneys, bladder, prostate
