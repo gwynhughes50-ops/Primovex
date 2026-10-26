@@ -70,7 +70,7 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
           <li key={row.key} className={`cf-code-row cf-code-row--${row.state}`}>
             <div className="cf-code-main">
               <p><b>{row.term || "No term found"}</b> <small>{row.label}</small></p>
-              <p className="cf-code-ids">{row.medicine ? (row.medicineListMissing ? "A medicine: it is looked up in the NHS dm+d list, which is not loaded yet." : row.conceptId ? `dm+d ${row.conceptId} · SNOMED description ID not in dm+d` : "Nothing in the dm+d list matches these words") : <>{row.conceptId ? `SNOMED ${row.conceptId}` : list?.search ? "Nothing in the UK list matches these words" : "No SNOMED code found yet"}{row.descriptionId ? ` · description ${row.descriptionId}` : row.conceptId ? " · description ID still needed" : ""}</>}</p>
+              <p className="cf-code-ids">{row.medicine ? (row.medicineListMissing ? "A medicine: it is looked up in the NHS dm+d list, which is not loaded yet." : row.conceptId ? `dm+d ${row.conceptId}${row.descriptionId ? ` · description ${row.descriptionId}` : " · SNOMED description ID not in this list (build it with the Drug Extension)"}` : "Nothing in the dm+d list matches these words") : <>{row.conceptId ? `SNOMED ${row.conceptId}` : list?.search ? "Nothing in the UK list matches these words" : "No SNOMED code found yet"}{row.descriptionId ? ` · description ${row.descriptionId}` : row.conceptId ? " · description ID still needed" : ""}</>}</p>
               {row.evidence.found
                 ? <blockquote className="cf-evidence">“{row.evidence.quote}”</blockquote>
                 : <p className="cf-evidence cf-evidence--none">No matching words found in the letter. Check the original before accepting.</p>}

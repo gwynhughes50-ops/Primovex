@@ -6,11 +6,15 @@
 //
 // Like the SNOMED release, dm+d is licensed: keep it on your own computers and never commit or publish it (work/ is ignored by git).
 // --release 20261005 says which release it is (it is shown beside the list); --out "<file>" says where to write it.
+// --drug "<folder>" is the unzipped SNOMED CT UK Drug Extension (TRUD, "SNOMED CT UK Drug Extension, RF2: Full, Snapshot & Delta"). dm+d does not
+// carry SNOMED's description IDs, which Docman asks for with every code; the Drug Extension does, so each medicine is given its own.
 
 import fs from "node:fs";
 import path from "node:path";
+import readline from "node:readline";
 import zlib from "node:zlib";
-import { buildDmdIndex, parseAmps, parseVmps, parseVtms } from "../src/modules/clinflow/dmdIndex.js";
+import { buildDmdIndex, chooseDescriptionIds, parseAmps, parseVmps, parseVtms } from "../src/modules/clinflow/dmdIndex.js";
+import { parseDescriptionLine } from "../src/modules/clinflow/snomedIndex.js";
 
 const args = process.argv.slice(2);
 const flag = (name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : ""; };
@@ -36,8 +40,36 @@ const vmps = parseVmps(one(/^f_vmp2_.*\.xml$/i, "generic products (VMP)"));
 const amps = parseAmps(one(/^f_amp2_.*\.xml$/i, "branded products (AMP)"));
 console.log(`${vtms.length.toLocaleString("en-GB")} medicines, ${vmps.length.toLocaleString("en-GB")} generic products, ${amps.length.toLocaleString("en-GB")} branded products`);
 
+// the SNOMED description ID of each medicine's name, from the Drug Extension
+let descriptionIds = new Map();
+if (flag("--drug")) {
+  const drugFolder = flag("--drug");
+  if (!fs.existsSync(drugFolder)) { console.error(`I could not find the Drug Extension folder: ${drugFolder}`); process.exit(1); }
+  const descriptionFiles = find(drugFolder, (n) => /^sct2_Description_.*Snapshot.*-en.*\.txt$/i.test(n));
+  if (!descriptionFiles.length) {
+    const deltaOnly = find(drugFolder, (n) => /^sct2_Description_.*Delta/i.test(n)).length > 0;
+    console.error(deltaOnly ? "That is the Drug Extension Delta (changes only). Download the full release: its file name starts uk_sct2dr_ and does not say delta." : "I could not find the Drug Extension's description files (a Snapshot folder with sct2_Description files). Is it the unzipped Drug Extension?");
+    process.exit(1);
+  }
+  const wanted = new Map([...vtms, ...vmps, ...amps].map((r) => [r.id, r.name]));
+  const rows = [];
+  for (const file of descriptionFiles) {
+    console.log(`descriptions: ${path.basename(file)}`);
+    const reader = readline.createInterface({ input: fs.createReadStream(file, "utf8"), crlfDelay: Infinity });
+    let first = true;
+    for await (const line of reader) {
+      if (first) { first = false; continue; }
+      const row = parseDescriptionLine(line);
+      if (row && row.active && wanted.has(row.conceptId)) rows.push(row);
+    }
+  }
+  const { ids, missing } = chooseDescriptionIds(wanted, rows);
+  descriptionIds = ids;
+  console.log(`${ids.size.toLocaleString("en-GB")} of ${wanted.size.toLocaleString("en-GB")} medicines have a SNOMED description ID${missing.length ? ` (${missing.length.toLocaleString("en-GB")} have none: brands and products not in the Drug Extension, or named differently there)` : ""}`);
+}
+
 const release = flag("--release") || (folder.match(/_(\d{8})/) || [])[1] || "";
-const index = buildDmdIndex({ vtms, vmps, amps, release });
+const index = buildDmdIndex({ vtms, vmps, amps, descriptionIds, release });
 const out = flag("--out") || path.join("work", "dmd-index.json.gz");
 fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
 fs.writeFileSync(out, zlib.gzipSync(JSON.stringify(index), { level: 9 }));

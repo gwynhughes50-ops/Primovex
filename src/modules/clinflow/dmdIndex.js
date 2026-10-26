@@ -22,16 +22,34 @@ export const parseAmps = (xml) => blocks(xml, "AMP").map((b) => ({ id: field(b, 
 
 // vtms / vmps / amps: the parsed rows. Branded products are only kept when the brand has its own name: an AMP named exactly as its generic product
 // (one for every supplier of the generic) adds nothing a coder could use.
-export function buildDmdIndex({ vtms = [], vmps = [], amps = [], release = "", now = new Date() } = {}) {
+// descriptionIds: optional Map of concept ID to the SNOMED description ID of that medicine's name (from the UK Drug Extension), so that the
+// name and its ID can go to Docman together
+export function buildDmdIndex({ vtms = [], vmps = [], amps = [], descriptionIds = new Map(), release = "", now = new Date() } = {}) {
   const genericName = new Map(vmps.map((v) => [v.id, v.name.toLowerCase()]));
   const concepts = [];
   const seen = new Set();
-  const add = (id, name, tagIndex) => { if (seen.has(id)) return; seen.add(id); concepts.push([id, name, "", tagIndex, []]); };
+  const add = (id, name, tagIndex) => { if (seen.has(id)) return; seen.add(id); concepts.push([id, name, descriptionIds.get(id) || "", tagIndex, []]); };
   for (const v of vtms) add(v.id, v.name, 0);
   for (const v of vmps) add(v.id, v.name, 1);
   for (const a of amps) if (a.name.toLowerCase() !== genericName.get(a.vpid)) add(a.id, a.name, 2);
   concepts.sort((a, b) => a[1].localeCompare(b[1], "en", { sensitivity: "base" }));
-  return { format: 1, kind: "dmd", edition: "NHS dm+d", release: clean(release), built: now.toISOString(), tags: DMD_TAGS, concepts };
+  return { format: 1, kind: "dmd", edition: "NHS dm+d", release: clean(release), built: now.toISOString(), tags: DMD_TAGS, withDescriptionIds: descriptionIds.size > 0, concepts };
+}
+
+// The names a medicine goes by must be compared the way a person reads them, not letter for letter
+const sameName = (a, b) => clean(a).toLowerCase().replace(/\s+/g, "") === clean(b).toLowerCase().replace(/\s+/g, "");
+
+// wanted: Map of concept ID to the dm+d name. descriptions: rows from the Drug Extension ({ id, active, conceptId, typeId, term }).
+// A description ID is only taken when the SNOMED term is the dm+d name, so the name sent to Docman and its ID always belong together.
+// Returns { ids: Map(conceptId -> descriptionId), missing: [conceptId] }.
+export function chooseDescriptionIds(wanted, descriptions = []) {
+  const ids = new Map();
+  for (const d of descriptions) {
+    if (!d.active || d.typeId !== "900000000000013009") continue;
+    const name = wanted.get(d.conceptId);
+    if (name && !ids.has(d.conceptId) && sameName(name, d.term)) ids.set(d.conceptId, d.id);
+  }
+  return { ids, missing: [...wanted.keys()].filter((id) => !ids.has(id)) };
 }
 
 // ---- looking a medicine up from the words in a letter ----

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { DMD_TAGS, buildDmdIndex, medicineLookup, medicineName, medicineParts, parseAmps, parseVmps, parseVtms } from "../src/modules/clinflow/dmdIndex.js";
+import { DMD_TAGS, buildDmdIndex, chooseDescriptionIds, medicineLookup, medicineName, medicineParts, parseAmps, parseVmps, parseVtms } from "../src/modules/clinflow/dmdIndex.js";
 import { describeIndex, indexIsOld, indexProblem } from "../src/modules/clinflow/snomedIndex.js";
 import { createSearch } from "../src/modules/clinflow/snomedSearch.js";
+import { buildDocmanPayload } from "../src/modules/clinflow/docmanPayload.js";
 import { codesAfterReview, decide, isMedicine, medicineOptions, reviewCandidates, reviewRows } from "../src/modules/clinflow/clinflowCodeReview.js";
 
 let n = 0;
@@ -130,6 +131,44 @@ t("every medicine in a letter gets a row, once, with two medicines in one line a
   assert.match(read("src/modules/clinflow/ClinFlowWorkspace.jsx"), /candidates=\{reviewCandidates\(analysis\)\}/);
 });
 
+t("a medicine is given its SNOMED description ID from the Drug Extension, only where the term is the dm+d name, so name and ID belong together", () => {
+  const SYN = "900000000000013009";
+  const FSN = "900000000000003001";
+  const wanted = new Map([["42371511000001109", "Bisoprolol 5mg tablets"], ["35936511000001108", "Salbutamol 100micrograms/dose inhaler"], ["372635003", "Bisoprolol"], ["19711000001106", "Cardicor 5mg tablets"]]);
+  const rows = [
+    { id: "9001", active: true, conceptId: "42371511000001109", typeId: FSN, term: "Bisoprolol 5mg tablets (product)" },
+    { id: "9002", active: true, conceptId: "42371511000001109", typeId: SYN, term: "Bisoprolol  5mg  tablets" },
+    { id: "9003", active: false, conceptId: "35936511000001108", typeId: SYN, term: "Salbutamol 100micrograms/dose inhaler" },
+    { id: "9004", active: true, conceptId: "35936511000001108", typeId: SYN, term: "Salbutamol 100micrograms/dose pressurised inhalation" },
+    { id: "9005", active: true, conceptId: "372635003", typeId: SYN, term: "BISOPROLOL" },
+    { id: "9006", active: true, conceptId: "999", typeId: SYN, term: "Not wanted" },
+  ];
+  const { ids, missing } = chooseDescriptionIds(wanted, rows);
+  assert.equal(ids.get("42371511000001109"), "9002", "the synonym with the dm+d name, spacing and capitals aside (not the full name with its tag)");
+  assert.equal(ids.get("372635003"), "9005");
+  assert.ok(!ids.has("35936511000001108"), "a retired description, or one with a different name, is not used");
+  assert.deepEqual(missing.sort(), ["19711000001106", "35936511000001108"]);
+
+  const withIds = buildDmdIndex({ vtms, vmps, amps, descriptionIds: new Map([["42371511000001109", "9002"]]), release: "20261005" });
+  assert.equal(withIds.withDescriptionIds, true);
+  assert.equal(withIds.concepts.find((c) => c[0] === "42371511000001109")[2], "9002");
+  assert.equal(withIds.concepts.find((c) => c[0] === "372635003")[2], "", "a medicine with no ID found has none");
+  assert.equal(index.withDescriptionIds, false);
+
+  // it reaches the record: the medicine accepted from this list is complete for Docman
+  const drug = { sourceLabel: "Medication", sourceValue: "Bisoprolol 5 mg once daily", searchTerm: "Bisoprolol 5 mg once daily", conceptId: null, preferredTerm: null, descriptionId: null, codeSystem: "dm+d" };
+  const [row] = reviewRows([drug], "", null, null, createSearch(withIds));
+  assert.equal(row.descriptionId, "9002");
+  const review = decide(null, drug, "accepted", { uid: "gp-1", name: "Dr Example", pick: row.pick });
+  const result = buildDocmanPayload({
+    captureSource: 2, sender: { odsCode: "W98001", organisation: "H", department: "D", person: "P" }, recipientOdsCode: "W91001",
+    patient: { identifier: "9434765919", familyName: "S", givenNames: "J", gender: 10, birthDate: "1954-06-12" }, document: { description: "Letter", eventDate: "2026-05-14", fileExtension: "pdf" },
+    clinicalCodes: codesAfterReview([drug], review),
+  }, { fileReady: true, now: new Date("2026-10-26T10:00:00Z") });
+  assert.deepEqual(result.payload.ClinicalCodes, [{ Scheme: 2, Code: "42371511000001109", Description: "Bisoprolol 5mg tablets", DescriptionId: "9002" }]);
+  assert.ok(result.ready, JSON.stringify(result.blocking));
+});
+
 t("the screen and the builder: a second list to load, the builder says what to do, and the licence notice is kept", () => {
   const panel = read("src/modules/clinflow/CodeReview.jsx");
   for (const text of ["NHS dm+d medicines list", "Choose the medicines list file", "medList"]) assert.ok(panel.includes(text), text);
@@ -139,6 +178,8 @@ t("the screen and the builder: a second list to load, the builder says what to d
   const script = read("scripts/build-dmd-index.mjs");
   assert.match(script, /npm run dmd:index/);
   assert.match(script, /never commit or publish/);
+  assert.match(script, /--drug/);
+  assert.match(script, /uk_sct2dr_/);
   assert.ok(JSON.parse(read("package.json")).scripts["dmd:index"]);
   assert.match(read("src/modules/clinflow/snomedListStore.js"), /KEYS = \{ snomed: "uk", dmd: "dmd" \}/);
 });
