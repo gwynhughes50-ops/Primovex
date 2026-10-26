@@ -42,6 +42,7 @@ console.log(`${vtms.length.toLocaleString("en-GB")} medicines, ${vmps.length.toL
 
 // the SNOMED description ID of each medicine's name, from the Drug Extension
 let descriptionIds = new Map();
+let descriptionTerms = new Map();
 if (flag("--drug")) {
   const drugFolder = flag("--drug");
   if (!fs.existsSync(drugFolder)) { console.error(`I could not find the Drug Extension folder: ${drugFolder}`); process.exit(1); }
@@ -51,7 +52,8 @@ if (flag("--drug")) {
     console.error(deltaOnly ? "That is the Drug Extension Delta (changes only). Download the full release: its file name starts uk_sct2dr_ and does not say delta." : "I could not find the Drug Extension's description files (a Snapshot folder with sct2_Description files). Is it the unzipped Drug Extension?");
     process.exit(1);
   }
-  const wanted = new Map([...vtms, ...vmps, ...amps].map((r) => [r.id, r.name]));
+  const wanted = new Map([...vtms, ...vmps].map((r) => [r.id, r.name]));
+  for (const a of amps) wanted.set(a.id, [a.name, a.desc].filter(Boolean)); // a brand is written with its supplier in SNOMED
   const rows = [];
   for (const file of descriptionFiles) {
     console.log(`descriptions: ${path.basename(file)}`);
@@ -63,13 +65,14 @@ if (flag("--drug")) {
       if (row && row.active && wanted.has(row.conceptId)) rows.push(row);
     }
   }
-  const { ids, missing } = chooseDescriptionIds(wanted, rows);
+  const { ids, terms, missing } = chooseDescriptionIds(wanted, rows);
   descriptionIds = ids;
+  descriptionTerms = terms;
   console.log(`${ids.size.toLocaleString("en-GB")} of ${wanted.size.toLocaleString("en-GB")} medicines have a SNOMED description ID${missing.length ? ` (${missing.length.toLocaleString("en-GB")} have none: brands and products not in the Drug Extension, or named differently there)` : ""}`);
 }
 
 const release = flag("--release") || (folder.match(/_(\d{8})/) || [])[1] || "";
-const index = buildDmdIndex({ vtms, vmps, amps, descriptionIds, release });
+const index = buildDmdIndex({ vtms, vmps, amps, descriptionIds, descriptionTerms, release });
 const out = flag("--out") || path.join("work", "dmd-index.json.gz");
 fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
 fs.writeFileSync(out, zlib.gzipSync(JSON.stringify(index), { level: 9 }));

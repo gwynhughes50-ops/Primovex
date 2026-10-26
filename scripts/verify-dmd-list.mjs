@@ -169,6 +169,26 @@ t("a medicine is given its SNOMED description ID from the Drug Extension, only w
   assert.ok(result.ready, JSON.stringify(result.blocking));
 });
 
+t("a brand is written with its supplier in SNOMED, so it is matched on that name, shown with it, and the short name still finds it", () => {
+  const SYN = "900000000000013009";
+  const wanted = new Map([["19711000001106", ["Cardicor 5mg tablets", "Cardicor 5mg tablets (Merck Serono Ltd)"]], ["37358811000001102", ["Cardicor 5mg tablets", "Cardicor 5mg tablets (Mawdsley-Brooks & Company Ltd)"]]]);
+  const rows = [
+    { id: "a1", active: true, conceptId: "19711000001106", typeId: SYN, term: "Cardicor 5mg tablets (Merck Pharmaceuticals)" },
+    { id: "a2", active: true, conceptId: "19711000001106", typeId: SYN, term: "Cardicor 5mg tablets (Merck Serono Ltd)" },
+    { id: "b1", active: true, conceptId: "37358811000001102", typeId: SYN, term: "Cardicor 5mg tablets (Mawdsley-Brooks & Company Ltd)" },
+  ];
+  const { ids, terms } = chooseDescriptionIds(wanted, rows);
+  assert.equal(ids.get("19711000001106"), "a2", "the term that is one of the names, not another supplier's");
+  assert.equal(terms.get("19711000001106"), "Cardicor 5mg tablets (Merck Serono Ltd)");
+  const brands = buildDmdIndex({ vtms: [], vmps: [], amps: [{ id: "19711000001106", vpid: "1", name: "Cardicor 5mg tablets", desc: "Cardicor 5mg tablets (Merck Serono Ltd)" }, { id: "37358811000001102", vpid: "1", name: "Cardicor 5mg tablets", desc: "" }], descriptionIds: ids, descriptionTerms: terms });
+  const merck = brands.concepts.find((c) => c[0] === "19711000001106");
+  assert.deepEqual([merck[1], merck[2]], ["Cardicor 5mg tablets (Merck Serono Ltd)", "a2"], "shown with its supplier, and the ID is the one for that exact name");
+  assert.deepEqual(merck[4], [["Cardicor 5mg tablets", ""]], "the short name is kept to search by");
+  const [first] = medicineOptions({ sourceValue: "Cardicor 5 mg" }, createSearch(brands));
+  assert.equal(first.descriptionId, "a2");
+  assert.equal(first.term, "Cardicor 5mg tablets (Merck Serono Ltd)");
+});
+
 t("the screen and the builder: a second list to load, the builder says what to do, and the licence notice is kept", () => {
   const panel = read("src/modules/clinflow/CodeReview.jsx");
   for (const text of ["NHS dm+d medicines list", "Choose the medicines list file", "medList"]) assert.ok(panel.includes(text), text);
