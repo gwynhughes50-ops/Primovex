@@ -40,7 +40,7 @@ SnomedCT_*
 *snomed-uk-index*
 *.rf2
 nhsbsa_dmd*
-*dmd-index*
+dmd-index.json*
 f_vmp2_*
 f_amp2_*
 f_vtm2_*
