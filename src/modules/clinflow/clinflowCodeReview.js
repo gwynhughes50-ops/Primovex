@@ -151,7 +151,7 @@ export function reviewCandidates(analysis, letter = "") {
   const words = (m) => new Set(medicineLookup(m.sourceValue).split(/\s+/).filter(Boolean));
   const kept = medicines.filter((m, i) => { const mine = words(m); return !medicines.some((o, j) => j !== i && (words(o).size > mine.size || (words(o).size === mine.size && j < i)) && [...mine].every((w) => words(o).has(w))); });
   // values the letter implies (BMI from a weight and height, an average of home or ambulatory readings), unless it already states them
-  const worked = (letter ? calculateFindings(letter) : []).filter((f) => f.kind !== "bmi" || !clinical.some((c) => /\bbmi\b|body mass index/i.test(`${c.sourceLabel} ${c.sourceValue}`)));
+  const worked = (letter ? calculateFindings(letter, { birthDate: analysis?.docmanDraft?.patient?.birthDate, gender: analysis?.docmanDraft?.patient?.gender, letterDate: analysis?.docmanDraft?.document?.eventDate }) : []).filter((f) => f.kind !== "bmi" || !clinical.some((c) => /\bbmi\b|body mass index/i.test(`${c.sourceLabel} ${c.sourceValue}`)));
   return [...clinical, ...kept, ...worked.map(calculatedCandidate)];
 }
 
@@ -306,7 +306,9 @@ export function reviewRows(candidates = [], letter = "", review = null, search =
     const pick = decision?.chosen || review?.choices?.[key] || (ambiguity ? null : asPick(options[0]) || own);
     const lookedUp = medicine ? medicineParts(candidate.sourceValue || candidate.searchTerm).join("  +  ") : lookupText(subjectOf(candidate));
     const source = pick ? options.find((o) => o.conceptId === pick.conceptId) : null;
-    const quality = matchQuality(source, Boolean(decision?.chosen || review?.choices?.[key]));
+    const chosenByPerson = Boolean(decision?.chosen || review?.choices?.[key]);
+    // a calculation's own code (BMI, CHA2DS2-VASc, NEWS2...) is known, so it is not a guess from words
+    const quality = calculated && candidate.conceptId && pick?.conceptId === candidate.conceptId && !chosenByPerson ? { level: "exact", label: "The standard code for this calculation" } : matchQuality(source, chosenByPerson);
     return {
       key, candidate, medicine, quality, ambiguity, calculated, lookedUp, medicineListMissing: medicine && !medSearch, term: text(pick?.term || (calculated ? candidate.preferredTerm : shownAs(candidate)) || candidate.preferredTerm), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
       descriptionId: pick?.descriptionId || "", pick, options, evidence, state: decision?.decision || "suggested", by: decision?.byName || "", at: decision?.at || "",

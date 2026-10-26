@@ -7,6 +7,7 @@ import { choose, codesAfterReview, reviewCandidates, reviewOutcome, decide, diag
 import { BUILT_IN_ABBREVIATIONS, abbreviationInfo, expandAbbreviations, parseAbbreviationCsv, setAbbreviationList, withMeaning } from "../src/modules/clinflow/clinicalAbbreviations.js";
 import { createClinFlowSummaryPdfBlob } from "../src/modules/clinflow/clinflowSummaryExportService.js";
 import { analyseClinFlowOcr } from "../src/modules/clinflow/clinflowAnalysisService.js";
+import { runCalculators } from "../src/modules/clinflow/clinflowCalculators.js";
 import { calculateBloodPressureAverage, calculateBmi } from "../src/modules/clinflow/clinflowCalculations.js";
 import { buildDocmanPayload, clinicalCodesFrom } from "../src/modules/clinflow/docmanPayload.js";
 
@@ -498,6 +499,69 @@ t("values the letter implies are worked out: BMI from a weight and height, the a
   assert.equal(reviewOutcome(withWorked, accepted).accepted[0].calculated, true);
   assert.match(read("src/modules/clinflow/CodeReview.jsx"), /How ClinFlow worked this out/);
   assert.match(read("src/modules/clinflow/clinflowSummaryExportService.js"), /calculated by ClinFlow/);
+});
+
+t("clinical calculators: each works only from figures in the letter, shows its working, says 'at least' for scores built from conditions, and is skipped when the letter states its own answer", () => {
+  const run = (text, patient = {}, weight = null) => Object.fromEntries(runCalculators(text, patient, weight).map((r) => [r.kind, r]));
+  // eGFR (CKD-EPI creatinine, no ethnicity adjustment) and Cockcroft-Gault
+  const kidney = run("Mr Smith, 72 year old. Creatinine 120 umol/L, urea 8.2 mmol/L.", {}, { kg: 82, quote: "weight 82 kg" });
+  assert.equal(kidney.egfr.value, "52", "male, 72, creatinine 120");
+  assert.match(kidney.egfr.notes[0], /G3a/);
+  assert.equal(kidney.crcl.value, "57", "(140-72) x 82 x 1.23 / 120");
+  assert.equal(run("Mrs Jones aged 60. Creatinine was 90 µmol/L.").egfr.value, "60", "female");
+  assert.equal(run("Mr Smith aged 72. Creatinine 120. eGFR 55.").egfr, undefined, "the letter's own eGFR is not repeated");
+  assert.equal(run("Creatinine 120 umol/L. Aged 72.").egfr, undefined, "no sex: not worked out, not guessed");
+  assert.equal(run("Mr Smith. Creatinine 120 umol/L.").egfr, undefined, "no age: not worked out");
+  assert.equal(run("Mr Smith aged 72. Creatinine 1.36 mg/dL.").egfr.value, "52", "mg/dL is converted");
+  assert.equal(run("born 1954-06-12 male creatinine 120", { birthDate: "1954-06-12", gender: 10, letterDate: "2026-10-01" }).egfr.value, "52", "age from the record's date of birth, sex from the record");
+  // corrected calcium, FIB-4, MAP
+  assert.equal(run("Calcium 2.45 mmol/L, albumin 32 g/L.")["corrected-calcium"].value, "2.61");
+  assert.equal(run("Adjusted calcium 2.5. Calcium 2.45, albumin 32.")["corrected-calcium"], undefined, "already corrected in the letter");
+  assert.equal(run("Mr X aged 55. AST 48 U/L, ALT 60 U/L, platelets 210.").fib4.value, "1.6");
+  assert.match(run("Mr X aged 55. AST 48 U/L, ALT 60 U/L, platelets 210.").fib4.notes[0], /indeterminate/);
+  assert.equal(run("Mr X aged 55. AST 48, ALT 60.").fib4, undefined, "a missing platelet count means no FIB-4");
+  assert.equal(run("Seen today. BP 172/90.").map.value, "117");
+  assert.equal(run("BP 150/90 and later 140/85.").map, undefined, "two different readings: no single MAP");
+  // CHA2DS2-VASc and HAS-BLED are "at least", and only for atrial fibrillation
+  const af = run("Mrs Brown, 78 year old, with atrial fibrillation, hypertension and type 2 diabetes. Previous TIA in 2019. On apixaban and aspirin. BP 172/90. Creatinine 120.");
+  assert.equal(af.chadsvasc.value, "7", "hypertension 1 + diabetes 1 + TIA 2 + age 78 2 + female 1");
+  assert.match(af.chadsvasc.notes[0], /At least/);
+  assert.equal(af.hasbled.value, "4", "systolic over 160 + previous stroke/TIA + age over 65 + aspirin");
+  const careful = run("Mr Green aged 70 has paroxysmal AF. Anticoagulation reduces the risk of stroke. No diabetes.");
+  assert.equal(careful.chadsvasc.value, "1", "'risk of stroke' is not a stroke, 'no diabetes' is not diabetes: only the age counts");
+  assert.equal(run("Mr Green aged 70 with asthma.").chadsvasc, undefined, "no atrial fibrillation, no CHA2DS2-VASc");
+  assert.equal(run("Mr Green aged 70 with AF. CHA2DS2-VASc 3.").chadsvasc, undefined, "stated score is not repeated");
+  assert.equal(run("Mr Green with AF.").chadsvasc, undefined, "no age: not worked out");
+  assert.match(run("Mr Green aged 70 with AF.").chadsvasc.working, /age 70/);
+  assert.equal(run("A patient aged 70 with AF.").chadsvasc.notes.length, 2, "no sex stated is said");
+  assert.equal(run("Mr Green aged 70 with AF and pulmonary hypertension.").chadsvasc.value, "1", "pulmonary hypertension is not hypertension here");
+  // NEWS2 needs the five measurements; consciousness and oxygen are said when missing
+  const news = run("Emergency: RR 22. SpO2 95% on air. BP 146/88. HR 108. Temp 36.8. Alert.");
+  assert.equal(news.news2.value, "4", "RR 22 = 2, SpO2 95 = 1, pulse 108 = 1");
+  assert.equal(news.news2.notes.length, 1);
+  assert.match(run("Obs: HR 108, 146/88, RR 22, SpO2 95%, temp 36.8.").news2.notes.join(" "), /does not describe consciousness/);
+  assert.match(run("Obs: HR 108, 146/88, RR 22, SpO2 95%, temp 36.8.").news2.notes.join(" "), /on air or oxygen/);
+  assert.equal(run("Obs: HR 108, 146/88, RR 22, SpO2 95%.").news2, undefined, "no temperature: no NEWS2");
+  assert.equal(run("NEWS2 3. HR 108, 146/88, RR 22, SpO2 95%, temp 36.8.").news2, undefined, "the letter's own NEWS2 is not repeated");
+  assert.equal(run("Obs: RR 32, SpO2 90% on air, 100/58, HR 112, temp 38.4, confused.").news2.value, "14");
+  assert.match(run("Obs: RR 32, SpO2 90% on air, 100/58, HR 112, temp 38.4, confused.").news2.notes.join(" "), /scores 3 on its own/);
+  // CURB-65 only for pneumonia
+  const curb = run("Mr Jones aged 81 admitted with community acquired pneumonia. Confused. Urea 9.1 mmol/L. RR 32. BP 100/58.");
+  assert.equal(curb.curb65.value, "5");
+  assert.match(curb.curb65.notes[0], /high risk/);
+  assert.equal(run("Mr Jones aged 81 with asthma. Urea 9.1 mmol/L. RR 32.").curb65, undefined, "not a pneumonia letter");
+  // they become suggestions of their own kind, with their standard codes, and are never accepted for anyone
+  const letter = "Mrs Brown, 78 year old, with atrial fibrillation and hypertension. Creatinine 120 umol/L. Weight 82 kg, height 160 cm.";
+  const worked = reviewCandidates({ terminologyCandidates: [], medicationCandidates: [] }, letter).filter((c) => c.calculated);
+  assert.deepEqual(worked.map((c) => c.calculated.kind).sort(), ["bmi", "chadsvasc", "crcl", "egfr", "hasbled"].sort());
+  assert.ok(worked.every((c) => c.acceptedByUid === null), "nothing is accepted for anyone");
+  const chads = reviewRows(worked, letter, null, find).find((r) => r.calculated.kind === "chadsvasc");
+  assert.equal(chads.candidate.sourceValue, "4 points");
+  assert.equal(chads.state, "suggested");
+  assert.equal(chads.candidate.conceptId, "735259005");
+  const withRecord = reviewCandidates({ terminologyCandidates: [], medicationCandidates: [], docmanDraft: { patient: { birthDate: "1954-06-12", gender: 10 }, document: { eventDate: "2026-10-01" } } }, "Creatinine 120 umol/L.").filter((c) => c.calculated);
+  assert.equal(withRecord[0].calculated.kind, "egfr", "the patient's age and sex come from the record when the letter does not say");
+  assert.ok(!/fetch\(|axios|XMLHttpRequest/.test(read("src/modules/clinflow/clinflowCalculators.js")), "nothing is sent anywhere");
 });
 
 {

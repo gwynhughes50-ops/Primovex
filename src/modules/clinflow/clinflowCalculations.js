@@ -2,6 +2,8 @@
 // of a run of ambulatory or home blood pressure readings. Pure (no screens). Each result carries its working and the words it came from, and is
 // offered to the coder like any other suggestion: nothing here is accepted for anyone.
 
+import { runCalculators } from "./clinflowCalculators.js";
+
 const num = (value) => Number(String(value).replace(",", "."));
 const round1 = (value) => Math.round(value * 10) / 10;
 const clip = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
@@ -100,9 +102,10 @@ export function calculateBloodPressureAverage(text) {
   return results;
 }
 
-// Everything that can be worked out from a letter's text
-export function calculateFindings(text) {
-  return [calculateBmi(text), ...calculateBloodPressureAverage(text)].filter(Boolean);
+// Everything that can be worked out from a letter's text. patient: { birthDate, gender, letterDate } where the record has them.
+export function calculateFindings(text, patient = {}) {
+  const weight = findWeight(text);
+  return [calculateBmi(text), ...calculateBloodPressureAverage(text), ...runCalculators(text, patient, weight)].filter(Boolean);
 }
 
 // A worked-out value as a suggestion in the same shape as the reader's own, so it is reviewed, accepted and filed the same way.
