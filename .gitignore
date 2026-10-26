@@ -39,6 +39,11 @@ src-tauri/gen/android/app/*.jks
 SnomedCT_*
 *snomed-uk-index*
 *.rf2
+nhsbsa_dmd*
+*dmd-index*
+f_vmp2_*
+f_amp2_*
+f_vtm2_*
 
 # Local verification output
 work/

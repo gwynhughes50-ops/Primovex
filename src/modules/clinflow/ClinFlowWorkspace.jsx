@@ -40,7 +40,7 @@ import { createClinFlowDemoPdfBlob, createClinFlowSummaryPdfBlob, downloadClinFl
 import { createDocmanPackZip, downloadBlob, safePackName } from "./clinflowZipService";
 import DocmanReadiness from "./DocmanReadiness";
 import CodeReview from "./CodeReview";
-import { addCode, choose, codesAfterReview, decide, removeAdded } from "./clinflowCodeReview";
+import { addCode, choose, codesAfterReview, decide, removeAdded, reviewCandidates } from "./clinflowCodeReview";
 import { useSnomedList } from "./snomedListStore";
 import { analyzeSyntheticDocument } from "./azureDocumentIntelligenceClient";
 import { normaliseClinFlowPages } from "./clinflowPageService";
@@ -165,7 +165,7 @@ function effectiveTriageFor(document) {
   };
 }
 
-function AzureReviewView({ selected, activeTab, onDownloadSummary, onOpenOriginal, onTriageDecision, onOpenTeaching, canReviewCodes, snomedList, onCodeDecision, onCodeChoose, onCodeAdd, onCodeRemoveAdded }) {
+function AzureReviewView({ selected, activeTab, onDownloadSummary, onOpenOriginal, onTriageDecision, onOpenTeaching, canReviewCodes, snomedList, medicinesList, onCodeDecision, onCodeChoose, onCodeAdd, onCodeRemoveAdded }) {
   const ocr = selected.syntheticOcr;
   const analysis = selected.clinflowAnalysis;
   const confidence = Math.round((ocr.averageConfidence || 0) * 100);
@@ -252,7 +252,7 @@ function AzureReviewView({ selected, activeTab, onDownloadSummary, onOpenOrigina
   if (activeTab === "snomed") return <div className="cf-tab-content">
     <section className="cf-summary-card"><Tag size={18} /><div><b>SNOMED CT candidate review</b><p>Structured observations use governed baseline concepts where available. Every candidate still requires current UK Edition validation, patient matching and trained clinician acceptance before filing.</p></div></section>
     {analysis?.structuredObservations?.length ? <div className="cf-info-grid">{analysis.structuredObservations.map((item) => <section key={`${item.type}-${item.sourceValue}`}><h3>{item.preferredTerm}</h3>{item.type === "blood_pressure" ? <p><b>{item.systolic.value}/{item.diastolic.value} {item.unit.display}</b><br />Blood pressure: {item.conceptId}<br />Systolic: {item.systolic.conceptId}<br />Diastolic: {item.diastolic.conceptId}<br />Unit: {item.unit.ucumCode}<br />Status: clinician review required</p> : <p><b>{item.value} {item.unit.display}</b><br />Concept ID: {item.conceptId}<br />Unit: {item.unit.ucumCode}<br />Status: clinician review required</p>}</section>)}</div> : null}
-    <CodeReview candidates={analysis?.terminologyCandidates || []} letter={ocr?.content || ""} review={selected.codeReview} canEdit={canReviewCodes} list={snomedList} onDecide={onCodeDecision} onChoose={onCodeChoose} onAdd={onCodeAdd} onRemoveAdded={onCodeRemoveAdded} />
+    <CodeReview candidates={reviewCandidates(analysis)} letter={ocr?.content || ""} review={selected.codeReview} canEdit={canReviewCodes} list={snomedList} medList={medicinesList} onDecide={onCodeDecision} onChoose={onCodeChoose} onAdd={onCodeAdd} onRemoveAdded={onCodeRemoveAdded} />
   </div>;
   if (activeTab === "quality") return <div className="cf-tab-content"><section className="cf-summary-card"><ShieldCheck size={18} /><div><b>Wales and England quality/register review</b><p>A hospital letter cannot establish a QAIF, Unified Contract or QOF opportunity by itself. ClinFlow therefore produces governed record-check prompts—not confirmed opportunities.</p></div></section><div className="cf-info-grid"><section><h3>Confirmed opportunities</h3><p><b>{analysis?.qaifOpportunities?.length || 0}</b><br />None are confirmed from this letter alone.<br />Awareness: {analysis?.qualityAwareness?.relevance || "Low"}</p></section>{analysis?.qualityPrompts?.map((item) => <section key={`${item.domain}-${item.title}`}><h3>{item.title}</h3><p><b>{item.domain}</b>{item.priority === "high" ? " · High-priority review" : ""}<br />{item.rationale}<br /><br />Next: {item.nextStep}<br /><small>{item.framework}</small></p></section>)}</div></div>;
   if (activeTab === "outflow") return <div className="cf-tab-content"><section className="cf-summary-card"><FileText size={18} /><div><b>Docman companion summary</b><p>Download this summary, have a trained clinician compare and sign it against the untouched original, then drag both PDFs into Docman. Primovex does not transmit or file either document automatically.</p></div></section><div className="cf-info-grid"><section><h3>Document</h3><p>{analysis?.documentType}<br />Source: {ocr.fileName}</p></section><section><h3>Patient identity</h3><p>{analysis?.patient?.givenNames} {analysis?.patient?.familyName}<br /><b>Unverified</b> · NHS number and DOB must be checked</p></section><section><h3>Review status</h3><p>{analysis?.missing?.length || 0} required verification item{analysis?.missing?.length === 1 ? "" : "s"}<br />Not ready for automated transfer</p></section><section><h3>Output</h3><p><button type="button" className="cf-top-button cf-top-button--primary" onClick={onDownloadSummary}><Download size={14} /> Download summary PDF</button></p></section></div><DocmanReadiness analysis={analysis} fileReady={Boolean(ocr?.fileName)} /></div>;
@@ -261,7 +261,8 @@ function AzureReviewView({ selected, activeTab, onDownloadSummary, onOpenOrigina
 
 export default function ClinFlowWorkspace() {
   const { user, displayName, profile, can } = useAuth();
-  const snomedList = useSnomedList();
+  const snomedList = useSnomedList("snomed");
+  const medicinesList = useSnomedList("dmd");
   const [documents, setDocuments] = useState(SAMPLE_DOCUMENTS);
   const [selectedId, setSelectedId] = useState(SAMPLE_DOCUMENTS[0].id);
   const [query, setQuery] = useState("");
@@ -378,7 +379,7 @@ export default function ClinFlowWorkspace() {
   async function saveCodeReview(review, action, summary, metadata = {}) {
     if (!can("clinflow.workflow")) return notify("Your role cannot change the codes on a ClinFlow letter");
     await runAction(async () => {
-      const updated = { ...selected, codeReview: review, clinflowAnalysis: { ...selected.clinflowAnalysis, docmanDraft: { ...selected.clinflowAnalysis?.docmanDraft, clinicalCodes: codesAfterReview(selected.clinflowAnalysis?.terminologyCandidates || [], review) } } };
+      const updated = { ...selected, codeReview: review, clinflowAnalysis: { ...selected.clinflowAnalysis, docmanDraft: { ...selected.clinflowAnalysis?.docmanDraft, clinicalCodes: codesAfterReview(reviewCandidates(selected.clinflowAnalysis), review) } } };
       setDocuments((items) => items.map((item) => item.id === selected.id ? updated : item));
       if (selected.dataMode === "synthetic") await cacheClinFlowDocuments([updated]);
       await record(action, summary, { ...metadata, automatedTransmission: false });
@@ -840,7 +841,7 @@ export default function ClinFlowWorkspace() {
           </section>}
           <nav className="cf-tabs">{tabs.map(([key, label]) => { const tabKey = selected.syntheticOcr ? `synthetic-${key}` : key; return <button type="button" key={key} className={activeTab === tabKey ? "active" : ""} onClick={() => setActiveTab(tabKey)}>{label}</button>; })}</nav>
           <section className="cf-viewer">
-            {selected.syntheticOcr && <AzureReviewView selected={selected} activeTab={activeTab.replace(/^synthetic-/, "")} onDownloadSummary={downloadSummary} onOpenOriginal={openOriginal} onTriageDecision={confirmTriageDecision} onOpenTeaching={openTeaching} canReviewCodes={can("clinflow.workflow")} snomedList={snomedList} onCodeDecision={decideCode} onCodeChoose={chooseCode} onCodeAdd={addCodeByCoder} onCodeRemoveAdded={removeAddedCode} />}
+            {selected.syntheticOcr && <AzureReviewView selected={selected} activeTab={activeTab.replace(/^synthetic-/, "")} onDownloadSummary={downloadSummary} onOpenOriginal={openOriginal} onTriageDecision={confirmTriageDecision} onOpenTeaching={openTeaching} canReviewCodes={can("clinflow.workflow")} snomedList={snomedList} medicinesList={medicinesList} onCodeDecision={decideCode} onCodeChoose={chooseCode} onCodeAdd={addCodeByCoder} onCodeRemoveAdded={removeAddedCode} />}
             {!selected.syntheticOcr && activeTab === "document" && <>
               <div className="cf-viewer-toolbar"><button type="button">−</button><b>100%</b><button type="button">+</button><button type="button"><Download size={14} /></button><span>Page 1 of 2</span></div>
               <div className="cf-viewer-body"><aside className="cf-thumbnails"><div className="active">Page 1</div><small>1</small><div>Page 2</div><small>2</small></aside><div className="cf-paper-stage"><article className="cf-paper"><div className="cf-letterhead"><strong>Glan Clwyd Hospital<br /><small>Cardiology Department</small></strong><strong>Date: 14 May 2026</strong></div><p>Dr A N Other<br />Greenfield Surgery<br />123 High Street<br />Mold<br />CH7 1AB</p><p>Dear Dr Other</p><p><b>Re: {selected.patient} · DOB: {selected.dob} · NHS: {selected.nhs}</b></p><p>Thank you for referring Mr Smith to the Cardiology Clinic.</p><h3>Assessment</h3><p>Mr Smith was reviewed today for atrial fibrillation. He remains symptomatic with exertional dyspnoea. Echocardiogram shows mild left ventricular dysfunction.</p><h3>Plan</h3><ul><li>Increase Bisoprolol to 5 mg once daily</li><li>Continue Apixaban 5 mg twice daily</li><li>Repeat U&Es in 2 weeks</li><li>Review in 3 months</li></ul><p>Yours sincerely</p><p><b>Dr B Consultant<br />Consultant Cardiologist</b></p></article></div></div>
@@ -871,7 +872,7 @@ export default function ClinFlowWorkspace() {
               </div>
               <div className="cf-list-row cf-list-row--action">
                 <span>SNOMED Candidates</span>
-                <small>{selected?.syntheticOcr ? selected.clinflowAnalysis?.terminologyCandidates?.length || 0 : CODING.length} candidate(s)</small>
+                <small>{selected?.syntheticOcr ? reviewCandidates(selected.clinflowAnalysis).length : CODING.length} candidate(s)</small>
                 <button type="button" onClick={() => selected?.syntheticOcr ? setActiveTab("synthetic-snomed") : notify("Coding review opened")}>Review</button>
               </div>
             </section>

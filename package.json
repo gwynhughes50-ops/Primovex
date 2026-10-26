@@ -1,6 +1,6 @@
 {
   "name": "primovex",
-  "version": "0.15.73",
+  "version": "0.15.74",
   "private": true,
   "scripts": {
     "dev": "vite",
@@ -110,6 +110,8 @@
     "test:clinflow-code-review": "esbuild scripts/verify-clinflow-code-review.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-clinflow-code-review.bundle.mjs && node work/verify-clinflow-code-review.bundle.mjs",
     "test:snomed-list": "esbuild scripts/verify-snomed-list.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-snomed-list.bundle.mjs && node work/verify-snomed-list.bundle.mjs",
     "snomed:index": "esbuild scripts/build-snomed-index.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/build-snomed-index.bundle.mjs --log-level=warning && node work/build-snomed-index.bundle.mjs",
+    "dmd:index": "esbuild scripts/build-dmd-index.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/build-dmd-index.bundle.mjs --log-level=warning && node work/build-dmd-index.bundle.mjs",
+    "test:dmd-list": "esbuild scripts/verify-dmd-list.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-dmd-list.bundle.mjs && node work/verify-dmd-list.bundle.mjs",
     "test:mileage": "esbuild scripts/verify-mileage.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-mileage.bundle.mjs && node work/verify-mileage.bundle.mjs",
     "test:timesheet-flow": "esbuild scripts/verify-timesheet-flow.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-timesheet-flow.bundle.mjs && node work/verify-timesheet-flow.bundle.mjs",
     "test:training-import": "esbuild scripts/verify-training-import.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-training-import.bundle.mjs && node work/verify-training-import.bundle.mjs",

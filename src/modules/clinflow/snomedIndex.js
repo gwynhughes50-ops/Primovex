@@ -51,7 +51,7 @@ export function buildIndex({ concepts = [], descriptions = [], language = [], on
     concepts2.push([conceptId, lead.term, lead.id, tagIndex, terms.filter((s) => s !== lead).slice(0, MAX_SYNONYMS).map((s) => [s.term, s.id])]);
   }
   concepts2.sort((a, b) => a[1].localeCompare(b[1], "en", { sensitivity: "base" }));
-  return { format: 1, edition, release: clean(release), built: now.toISOString(), tags, concepts: concepts2 };
+  return { format: 1, kind: "snomed", edition, release: clean(release), built: now.toISOString(), tags, concepts: concepts2 };
 }
 
 // The licence (SNOMED CT UK National Release Affiliate Licence, clause 8.3) requires this notice, word for word, wherever the product is
@@ -74,11 +74,16 @@ export function describeIndex(index) {
   const r = /^(\d{4})(\d{2})(\d{2})$/.exec(index.release || "");
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const when = r ? ` ${Number(r[3])} ${months[Number(r[2]) - 1]} ${r[1]}` : "";
-  return `${index.edition || "UK SNOMED"}${when}: ${index.concepts.length.toLocaleString("en-GB")} codes`;
+  return `${index.edition || "UK SNOMED"}${when}: ${index.concepts.length.toLocaleString("en-GB")} ${index.kind === "dmd" ? "medicines" : "codes"}`;
 }
 
 // Is this a list this version of ClinFlow can use?
-export const indexProblem = (index) => (!index || index.format !== 1 || !Array.isArray(index.concepts) || !Array.isArray(index.tags) ? "That is not a ClinFlow SNOMED list. Build one with the SNOMED list builder from the TRUD download." : index.concepts.length < 1 ? "That list has no codes in it." : "");
+// kind: "snomed" (the clinical codes) or "dmd" (the medicines). A list built before lists had a kind is a SNOMED one.
+export const indexProblem = (index, kind = "snomed") => {
+  if (!index || index.format !== 1 || !Array.isArray(index.concepts) || !Array.isArray(index.tags)) return kind === "dmd" ? "That is not a ClinFlow medicines list. Build one with the dm+d list builder from the TRUD download." : "That is not a ClinFlow SNOMED list. Build one with the SNOMED list builder from the TRUD download.";
+  if ((index.kind || "snomed") !== kind) return kind === "dmd" ? "That is the SNOMED clinical list. Choose it under the SNOMED list, and choose the medicines list here." : "That is the medicines (dm+d) list. Choose it under the dm+d medicines list, and choose the SNOMED list here.";
+  return index.concepts.length < 1 ? "That list has no codes in it." : "";
+};
 
 // ---- reading the release's files ----
 // Each RF2 file is tab-separated with a header row. These turn lines into the rows buildIndex wants (null for a line to skip).

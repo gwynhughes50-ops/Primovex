@@ -8,6 +8,10 @@ const TAG_BIAS = { disorder: 2, finding: 2, "observable entity": 1, "medicinal p
 
 const UNLESS_ASKED = new Set(["fetal", "foetal", "neonatal", "congenital", "paediatric", "pediatric", "juvenile", "maternal", "antenatal", "postnatal", "perinatal"]);
 
+// The start of a word that a different ending still shares ("fibrillating" / "fibrillation"). Short words must match closely, so a brand name
+// ("cardicor") does not find a different one that happens to start the same ("cardioace").
+const stemOf = (w) => w.slice(0, w.length >= 9 ? w.length - 3 : Math.max(5, w.length - 2));
+
 export const tokens = (value) => String(value ?? "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w && !STOP.has(w));
 
 // Turns a loaded list into something quick to search: each word points at the codes whose terms contain it
@@ -25,8 +29,8 @@ export function createSearch(index) {
 
   // codes with a word starting with `w` (for words long enough that a different ending is likely: "fibrillating" / "fibrillation")
   function withPrefix(w) {
-    if (w.length < 5) return postings.get(w) || [];
-    const stem = w.slice(0, Math.max(5, w.length - 3));
+    if (w.length < 6) return postings.get(w) || [];
+    const stem = stemOf(w);
     let lo = 0; let hi = sortedWords.length;
     while (lo < hi) { const mid = (lo + hi) >> 1; if (sortedWords[mid] < stem) lo = mid + 1; else hi = mid; }
     const out = new Set(postings.get(w) || []);
@@ -38,7 +42,7 @@ export function createSearch(index) {
     let best = 0;
     let matched = terms[i][0][0];
     words[i].forEach((termWords, t) => {
-      const has = queryTokens.filter((q) => termWords.includes(q) || termWords.some((w) => w.length > 4 && q.length > 4 && (w.startsWith(q.slice(0, Math.max(5, q.length - 3))) || q.startsWith(w.slice(0, Math.max(5, w.length - 3)))))).length;
+      const has = queryTokens.filter((q) => termWords.includes(q) || termWords.some((w) => w.length > 5 && q.length > 5 && (w.startsWith(stemOf(q)) || q.startsWith(stemOf(w))))).length;
       if (!has) return;
       const coverage = has / queryTokens.length;
       const tidy = termWords.length ? Math.min(1, queryTokens.length / termWords.length) : 0;

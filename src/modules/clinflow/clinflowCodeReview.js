@@ -1,3 +1,5 @@
+import { medicineName, medicineParts } from "./dmdIndex.js";
+
 // The coder's part of a ClinFlow letter: each suggested SNOMED code is shown with the words in the letter that led to it, and the clinician
 // accepts it, removes it, or adds one the reader missed. Pure (no screens, no storage) so it can be tested.
 //
@@ -52,7 +54,41 @@ export function optionsFor(candidate, search) {
 }
 
 // Medicines are coded from the NHS dm+d list (a different list), not from the clinical SNOMED list
-export const isMedicine = (candidate) => /medic|drug|prescri/i.test(`${candidate?.sourceLabel || ""} ${candidate?.kind || ""}`);
+export const isMedicine = (candidate) => candidate?.codeSystem === "dm+d" || /medic|drug|prescri/i.test(`${candidate?.sourceLabel || ""} ${candidate?.kind || ""}`);
+
+// Everything on a letter to be coded: the clinical findings the reader coded, and every medicine it found (the reader only coded the few medicines
+// it already knew, so the full list of medicines is used instead, once each).
+export function reviewCandidates(analysis) {
+  const clinical = (analysis?.terminologyCandidates || []).filter((c) => !isMedicine(c));
+  const seen = new Set();
+  const medicines = [];
+  for (const m of analysis?.medicationCandidates || []) {
+    // a line naming two medicines ("amoxicillin 500 mg, doxycycline 100 mg") is two rows, one for each
+    for (const value of text(m.sourceValue || m.searchTerm).split(/\s*[;,+]\s*|\s+and\s+/i).map(text).filter(Boolean)) {
+      const key = medicineParts(value).join("|") || value.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      medicines.push({ sourceLabel: "Medication", sourceValue: value, searchTerm: value, conceptId: null, preferredTerm: null, descriptionId: null, scheme: 2, codeSystem: "dm+d", status: "terminology_lookup_required", acceptedByUid: null });
+    }
+  }
+  return [...clinical, ...medicines];
+}
+
+// The medicines the dm+d list offers for a finding ("Bisoprolol 5 mg once daily" -> Bisoprolol 5mg tablets). Each medicine named is looked up on its own;
+// if the strength finds nothing close, the medicine's name alone is tried.
+export function medicineOptions(candidate, medSearch) {
+  if (!medSearch) return [];
+  const merge = (lists) => { const best = new Map(); for (const r of lists.flat()) if (!best.has(r.conceptId) || best.get(r.conceptId).score < r.score) best.set(r.conceptId, r); return [...best.values()].sort((a, b) => b.score - a.score); };
+  const perPart = medicineParts(candidate.sourceValue || candidate.searchTerm).map((part) => {
+    let found = medSearch.search(part, { limit: 5 });
+    const name = medicineName(part);
+    if ((!found.length || found[0].score < 60) && name && name !== part) found = merge([found, medSearch.search(name, { limit: 5 }).map((r) => ({ ...r, score: r.score - 10 }))]);
+    return found;
+  });
+  const out = [];
+  for (let i = 0; out.length < 5 && perPart.some((p) => i < p.length); i += 1) for (const p of perPart) if (p[i] && !out.some((o) => o.conceptId === p[i].conceptId) && out.length < 5) out.push(p[i]);
+  return out;
+}
 const asPick = (o) => (o ? { conceptId: o.conceptId, term: o.term, descriptionId: o.descriptionId || "" } : null);
 
 // ---- the words in the letter behind a suggestion ----
@@ -162,19 +198,19 @@ export function removeAdded(review, id, { uid = "", name = "", now = new Date() 
 
 // Each suggestion with the words behind it and where the coder has got to: [{ key, candidate, term, evidence, state, by, at }]
 // `search` (the loaded SNOMED list) is optional: with it each row also has the codes the list offers and the one that will be used if accepted.
-export function reviewRows(candidates = [], letter = "", review = null, search = null) {
+export function reviewRows(candidates = [], letter = "", review = null, search = null, medSearch = null) {
   return candidates.map((candidate) => {
     const key = candidateKey(candidate);
     const decision = review?.decisions?.[key];
     const evidence = findEvidence(letter, candidate.sourceValue || candidate.searchTerm || candidate.preferredTerm);
     const medicine = isMedicine(candidate);
-    const options = medicine ? [] : optionsFor(candidate, search);
+    const options = medicine ? medicineOptions(candidate, medSearch) : optionsFor(candidate, search);
     // the reader's own first guess is only used when no list is loaded: with the list, a code that is not in it is not offered
     const own = !search && !medicine && candidate.conceptId ? { conceptId: candidate.conceptId, term: text(candidate.preferredTerm), descriptionId: candidate.descriptionId || "" } : null;
     // what accepting will use: the code chosen with the decision, else the coder's pick, else the first match, else the reader's own
-    const pick = medicine ? null : decision?.chosen || review?.choices?.[key] || asPick(options[0]) || own;
+    const pick = decision?.chosen || review?.choices?.[key] || asPick(options[0]) || own;
     return {
-      key, candidate, medicine, term: text(pick?.term || candidate.searchTerm || candidate.sourceValue || candidate.preferredTerm), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
+      key, candidate, medicine, medicineListMissing: medicine && !medSearch, term: text(pick?.term || candidate.searchTerm || candidate.sourceValue || candidate.preferredTerm), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
       descriptionId: pick?.descriptionId || "", pick, options, evidence, state: decision?.decision || "suggested", by: decision?.byName || "", at: decision?.at || "",
     };
   });
