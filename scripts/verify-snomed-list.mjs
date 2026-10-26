@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { REPLACE_AFTER_DAYS, SNOMED_NOTICE, buildIndex, describeIndex, indexAgeDays, indexIsOld, indexProblem, parseConceptLine, parseDescriptionLine, parseLanguageLine, parseMemberLine } from "../src/modules/clinflow/snomedIndex.js";
 import { createSearch, tokens } from "../src/modules/clinflow/snomedSearch.js";
-import { choose, codesAfterReview, decide, isMedicine, lookupText, matchSummary, optionsFor, reviewRows, unmatchedText, withoutQualifiers } from "../src/modules/clinflow/clinflowCodeReview.js";
+import { choose, codesAfterReview, decide, isMedicine, lookupText, matchSummary, optionsFor, reviewRows, shownAs, subjectOf, unmatchedText, withoutQualifiers } from "../src/modules/clinflow/clinflowCodeReview.js";
 import { buildDocmanPayload } from "../src/modules/clinflow/docmanPayload.js";
 
 let n = 0;
@@ -18,6 +18,7 @@ const concepts = [
   { id: "49436004", active: true }, { id: "195967001", active: true }, { id: "267036007", active: true }, { id: "134401001", active: true },
   { id: "60621009", active: true }, { id: "271649006", active: true }, { id: "80891009", active: true }, { id: "999000001", active: false }, { id: "60845006", active: true },
   { id: "472775000", active: true }, { id: "252167001", active: true },
+  { id: "431314004", active: true }, { id: "364075005", active: true }, { id: "386725007", active: true },
 ];
 const d = (id, conceptId, typeId, term, active = true) => ({ id, active, conceptId, typeId, term });
 const descriptions = [
@@ -33,6 +34,9 @@ const descriptions = [
   d("309999", "195967001", SYN, "Retired asthma term", false),
   d("501000", "472775000", FSN, "Fetal left ventricular dysfunction (disorder)"), d("501001", "472775000", SYN, "Fetal left ventricular dysfunction"),
   d("502000", "252167001", FSN, "Urea and electrolytes (procedure)"), d("502001", "252167001", SYN, "Urea and electrolytes"),
+  d("503000", "431314004", FSN, "Peripheral oxygen saturation (observable entity)"), d("503001", "431314004", SYN, "Peripheral oxygen saturation"),
+  d("504000", "364075005", FSN, "Heart rate (observable entity)"), d("504001", "364075005", SYN, "Heart rate"),
+  d("505000", "386725007", FSN, "Body temperature (observable entity)"), d("505001", "386725007", SYN, "Body temperature"),
 ];
 const GB = "900000000000508004";
 const language = [
@@ -43,6 +47,7 @@ const language = [
   { refsetId: GB, active: true, descriptionId: "304001", acceptabilityId: PREF }, { refsetId: GB, active: true, descriptionId: "305001", acceptabilityId: PREF },
   { refsetId: GB, active: true, descriptionId: "308001", acceptabilityId: PREF },
   { refsetId: GB, active: true, descriptionId: "501001", acceptabilityId: PREF }, { refsetId: GB, active: true, descriptionId: "502001", acceptabilityId: PREF },
+  { refsetId: GB, active: true, descriptionId: "503001", acceptabilityId: PREF }, { refsetId: GB, active: true, descriptionId: "504001", acceptabilityId: PREF }, { refsetId: GB, active: true, descriptionId: "505001", acceptabilityId: PREF },
 ];
 const index = buildIndex({ concepts, descriptions, language, release: "20261014", now: new Date("2026-10-26T10:00:00Z") });
 const find = createSearch(index);
@@ -58,7 +63,7 @@ t("the release's own files are read: concepts, descriptions and the language lis
 });
 
 t("the list keeps what a letter's codes are made of, with the preferred term and its description ID, and leaves the rest out", () => {
-  assert.equal(index.concepts.length, 9, "inactive and body-structure concepts are out");
+  assert.equal(index.concepts.length, 12, "inactive and body-structure concepts are out");
   const af = index.concepts.find((c) => c[0] === "49436004");
   assert.deepEqual([af[1], af[2]], ["Atrial fibrillation", "80004015"], "the preferred synonym, with its own description ID");
   assert.deepEqual(af[4], [["AF - Atrial fibrillation", "80005016"], ["Auricular fibrillation", "80006017"]]);
@@ -67,7 +72,7 @@ t("the list keeps what a letter's codes are made of, with the preferred term and
   assert.ok(!index.concepts.some((c) => c[0] === "999000001"), "a retired concept is not offered");
   assert.ok(!JSON.stringify(index).includes("Retired asthma term"), "nor a retired term");
   assert.deepEqual([...index.tags].sort(), ["disorder", "finding", "observable entity", "procedure"]);
-  assert.equal(describeIndex(index), "UK Clinical Edition 14 Oct 2026: 9 codes");
+  assert.equal(describeIndex(index), "UK Clinical Edition 14 Oct 2026: 12 codes");
   assert.equal(indexProblem(index), "");
   assert.match(indexProblem({ format: 2 }), /not a ClinFlow SNOMED list/);
   assert.match(indexProblem({ format: 1, tags: [], concepts: [] }), /no codes/);
@@ -79,7 +84,7 @@ t("a reference set can limit the list to the codes a practice actually uses", ()
 });
 
 t("the search finds a code from the words in a letter, by its name or a synonym", () => {
-  assert.equal(find.size, 9);
+  assert.equal(find.size, 12);
   const af = find.search("atrial fibrillation");
   assert.equal(af[0].conceptId, "49436004");
   assert.equal(af[0].term, "Atrial fibrillation");
@@ -128,9 +133,12 @@ t("each finding in a letter gets the codes the list offers, and the first is wha
   assert.equal(rows[0].descriptionId, "80004015");
   assert.equal(rows[3].pick, null, "nothing in the list: nothing to accept");
   assert.ok(rows[2].options.length >= 1);
-  const known = optionsFor(finding("heart rate", { conceptId: "60621009", preferredTerm: "Body mass index" }), find);
-  assert.equal(known[0].conceptId, "60621009", "a code the reader already knew comes first, with its description ID");
+  const known = optionsFor(finding("quantum flux", { conceptId: "60621009", preferredTerm: "Body mass index" }), find);
+  assert.equal(known[0].conceptId, "60621009", "a code the reader already knew, and that is in the list, is kept, with its description ID");
   assert.equal(known[0].descriptionId, "304001");
+  const better = optionsFor(finding("heart rate", { conceptId: "60621009", preferredTerm: "Body mass index" }), find).map((o) => o.conceptId);
+  assert.equal(better[0], "364075005", "when the search finds a better one it comes first");
+  assert.ok(better.includes("60621009"), "and the reader's own is still offered");
   assert.deepEqual(optionsFor(finding("atrial fibrillation"), null), [], "no list loaded: nothing offered");
 });
 
@@ -187,7 +195,7 @@ t("what a letter says around a finding is taken off before it is looked up: dose
   assert.equal(lookupText("known CKD, T2DM"), "known chronic kidney disease type 2 diabetes mellitus");
   assert.equal(lookupText("Type 2 diabetes mellitus"), "Type 2 diabetes mellitus", "a number that is part of a name stays");
   assert.equal(lookupText("CKD stage 3"), "chronic kidney disease stage 3", "a stage stays");
-  assert.equal(lookupText("oxygen saturation 97%"), "oxygen saturation");
+  assert.equal(lookupText("oxygen saturation 97%"), "peripheral oxygen saturation", "pulse oximetry is what a letter means");
   assert.equal(withoutQualifiers("mild left ventricular dysfunction"), "left ventricular dysfunction");
   assert.equal(withoutQualifiers("suspected atrial fibrillation"), "atrial fibrillation");
   assert.equal(withoutQualifiers("persistent atrial fibrillation"), "persistent atrial fibrillation", "a word that is part of a name stays");
@@ -202,6 +210,28 @@ t("a finding with doses or severity words still finds its code, and the qualifie
   assert.equal(top("atrial fibrillation")[0], "49436004");
   assert.equal(top("AF")[0], "49436004", "an abbreviation in a letter");
   assert.equal(top("exertional dyspnoea")[0], "60845006");
+});
+
+t("a measurement whose name is in its label, with only the number as its value, is looked up by the label", () => {
+  const m = (label, value) => ({ sourceLabel: label, sourceValue: value, searchTerm: value, conceptId: null, preferredTerm: null, descriptionId: null });
+  assert.equal(subjectOf(m("Oxygen saturation", "97%")), "Oxygen saturation");
+  assert.equal(subjectOf(m("Heart rate", "96")), "Heart rate");
+  assert.equal(subjectOf(m("Temperature", "36.8")), "Temperature");
+  assert.equal(subjectOf(m("CRP", "4 mg/L")), "CRP");
+  assert.equal(subjectOf(m("Observation", "CRP 4 mg/L")), "CRP 4 mg/L", "a value with a name in it is used as it is");
+  assert.equal(subjectOf(m("Diagnosis", "atrial fibrillation")), "atrial fibrillation");
+  assert.equal(subjectOf({ sourceLabel: "Systolic blood pressure", sourceValue: "132 mmHg", component: "systolic", preferredTerm: "Systolic blood pressure" }), "Systolic blood pressure");
+  assert.equal(shownAs(m("Oxygen saturation", "97%")), "Oxygen saturation 97%", "and it is shown with both, not as '97%' alone");
+  assert.equal(shownAs(m("Diagnosis", "atrial fibrillation")), "atrial fibrillation");
+  const top = (label, value) => optionsFor(m(label, value), find).map((o) => o.conceptId)[0];
+  assert.equal(top("Oxygen saturation", "97%"), "431314004", "oxygen saturation by pulse oximeter: the peripheral one");
+  assert.equal(top("Heart rate", "96"), "364075005");
+  assert.equal(top("Temperature", "36.8"), "386725007", "temperature means body temperature");
+  assert.equal(top("Observation", "sats 94% on room air"), "431314004");
+  assert.equal(top("Observation", "SpO2 97%"), "431314004");
+  assert.equal(lookupText("CRP 4 mg/L"), "c-reactive protein", "a unit like mg/L goes whole, not just its first letters");
+  assert.equal(lookupText("eGFR 45 mmol/L"), "eGFR", "mmol/L too");
+  assert.equal(lookupText("MI"), "MI", "an abbreviation with more than one meaning is left alone");
 });
 
 t("a long phrase that is not a code's name still finds the code for a shorter stretch of it, and nonsense still finds nothing", () => {

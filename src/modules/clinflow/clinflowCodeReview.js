@@ -16,19 +16,29 @@ export const candidateKey = (c) => [text(c?.sourceLabel), text(c?.searchTerm || 
 
 // ---- the codes the loaded SNOMED list offers for a finding ----
 // search: a createSearch() of the loaded list, or null when none is loaded. A code the reader already knew comes first, then the best matches.
+// What a finding is about. A measurement keeps its name in its label and only the number as its value ("Oxygen saturation" / "97%", "Heart rate" / "96"),
+// so when the value has no name in it, the label is what is looked up.
+const hasName = (value) => /[a-z]{3,}/i.test(text(value).replace(/\b\d+(?:[.,]\d+)?\s*(?:mg|mcg|ml|kg|g|l|mmhg|bpm|mmol|iu|u)(?:\/[a-z]+)?\b/gi, " ").replace(/\b(?:celsius|percent|per|min|room|air|ra|on)\b/gi, " "));
+export function subjectOf(candidate) {
+  const value = text(candidate.component ? candidate.preferredTerm : (candidate.sourceValue || candidate.searchTerm));
+  return hasName(value) || !text(candidate.sourceLabel) ? value : text(candidate.sourceLabel);
+}
+// the finding as it is shown: "Oxygen saturation 97%" when the value alone would say nothing
+export const shownAs = (candidate) => { const value = text(candidate.sourceValue || candidate.searchTerm); return !hasName(value) && text(candidate.sourceLabel) ? `${text(candidate.sourceLabel)} ${value}`.trim() : value; };
+
 // What a letter says about a finding is often more than the finding: "Bisoprolol 5 mg once daily", "Blood pressure 132/84 mmHg", "Repeat U&Es in 2
 // weeks", "mild left ventricular dysfunction". Doses, numbers, timings and the words around them are taken off, so what is looked up is the thing itself.
 // Only numbers that are doses, readings or durations go ("5 mg", "132/84", "97%", "in 2 weeks"); a number that is part of a name stays ("type 2 diabetes").
-const NOISE = /\b\d+(?:\.\d+)?\s*(?:mg|mcg|micrograms?|g|ml|mmhg|kg|bpm|mmol\/l|hours?|minutes?|weeks?|days?|months?|years?)\b|\b\d+(?:\.\d+)?\s*%|\b\d+\s*\/\s*\d+\b|\b(?:mmhg|mg|mcg|micrograms?|ml|kg|bpm|once|twice|three times|daily|weekly|monthly|bd|od|tds|qds|nocte|mane|prn|today|tomorrow|repeat|review|continue|increase|decrease|reduce|start|stop|restart|check|please|arrange|book|in|within|for)\b|[^a-z0-9\s-]/gi;
+const NOISE = /\b\d+(?:\.\d+)?\s*(?:mg|ng|g|mcg|ml|mmol|mol|iu|u)\s*\/\s*(?:l|dl|ml|min|hr|h|kg)\b|\b(?:mg|ng|g|mmol)\s*\/\s*(?:l|dl)\b|\b\d+(?:\.\d+)?\s*(?:mg|mcg|micrograms?|g|ml|mmhg|kg|bpm|mmol\/l|hours?|minutes?|weeks?|days?|months?|years?)\b|\b\d+(?:\.\d+)?\s*%|\b\d+\s*\/\s*\d+\b|\b(?:mmhg|mg|mcg|micrograms?|ml|kg|bpm|once|twice|three times|daily|weekly|monthly|bd|od|tds|qds|nocte|mane|prn|today|tomorrow|repeat|review|continue|increase|decrease|reduce|start|stop|restart|check|please|arrange|book|in|within|for)\b|[^a-z0-9\s-]/gi;
 const QUALIFIERS = /\b(?:mild|mildly|moderate|moderately|severe|severely|slight|slightly|minor|marked|borderline|known|likely|possible|probable|suspected|new|ongoing)\b/gi;
 // Abbreviations a letter uses, written out so the list can find them (the list knows some, not all)
 const ABBREVIATIONS = [
   [/\bu\s*&\s*es?\b/gi, "urea and electrolytes"], [/\bfbc\b/gi, "full blood count"], [/\blfts?\b/gi, "liver function test"], [/\btfts?\b/gi, "thyroid function test"],
   [/\bcxr\b/gi, "chest x-ray"], [/\bcrp\b/gi, "c-reactive protein"], [/\bhba1c\b/gi, "haemoglobin a1c"], [/\bsob\b/gi, "shortness of breath"], [/\bbp\b/gi, "blood pressure"],
-  [/\baf\b/gi, "atrial fibrillation"], [/\bmi\b/gi, "myocardial infarction"], [/\bhf\b/gi, "heart failure"], [/\bcopd\b/gi, "chronic obstructive pulmonary disease"],
+  [/\baf\b/gi, "atrial fibrillation"], [/\bhf\b/gi, "heart failure"], [/\bcopd\b/gi, "chronic obstructive pulmonary disease"],
   [/\bckd\b/gi, "chronic kidney disease"], [/\bt2dm\b/gi, "type 2 diabetes mellitus"], [/\bt1dm\b/gi, "type 1 diabetes mellitus"], [/\buti\b/gi, "urinary tract infection"],
-  [/\bdvt\b/gi, "deep vein thrombosis"], [/\bpe\b/gi, "pulmonary embolism"], [/\btia\b/gi, "transient ischaemic attack"], [/\bcva\b/gi, "cerebrovascular accident"],
-  [/\bgord\b|\bgerd\b/gi, "gastro-oesophageal reflux disease"], [/\bbmi\b/gi, "body mass index"], [/\becg\b/gi, "electrocardiogram"], [/\becho\b/gi, "echocardiogram"],
+  [/\bdvt\b/gi, "deep vein thrombosis"], [/\btia\b/gi, "transient ischaemic attack"], [/\bcva\b/gi, "cerebrovascular accident"],
+  [/\b(?:spo2|sats|oxygen saturations?)\b/gi, "peripheral oxygen saturation"], [/(?<!body )(?<!core )\btemperature\b/gi, "body temperature"], [/\bgord\b|\bgerd\b/gi, "gastro-oesophageal reflux disease"], [/\bbmi\b/gi, "body mass index"], [/\becg\b/gi, "electrocardiogram"], [/\becho\b/gi, "echocardiogram"],
 ];
 export const lookupText = (value) => text(ABBREVIATIONS.reduce((s, [pattern, full]) => s.replace(pattern, ` ${full} `), String(value ?? "")).replace(NOISE, " "));
 export const withoutQualifiers = (value) => text(String(value ?? "").replace(QUALIFIERS, " "));
@@ -38,7 +48,7 @@ export const withoutQualifiers = (value) => text(String(value ?? "").replace(QUA
 export function optionsFor(candidate, search) {
   if (!search) return [];
   const known = candidate.conceptId ? search.byConcept(candidate.conceptId) : null;
-  const query = lookupText(candidate.component ? candidate.preferredTerm : (candidate.sourceValue || candidate.searchTerm));
+  const query = lookupText(subjectOf(candidate));
   let found = query ? search.search(query, { limit: 6 }) : [];
   if (query && (!found.length || found[0].score < 90)) {
     const plain = withoutQualifiers(query);
@@ -241,7 +251,7 @@ export function reviewRows(candidates = [], letter = "", review = null, search =
     // what accepting will use: the code chosen with the decision, else the coder's pick, else the first match, else the reader's own
     const pick = decision?.chosen || review?.choices?.[key] || asPick(options[0]) || own;
     return {
-      key, candidate, medicine, medicineListMissing: medicine && !medSearch, term: text(pick?.term || candidate.searchTerm || candidate.sourceValue || candidate.preferredTerm), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
+      key, candidate, medicine, medicineListMissing: medicine && !medSearch, term: text(pick?.term || shownAs(candidate) || candidate.preferredTerm), label: text(candidate.sourceLabel), conceptId: pick?.conceptId || "",
       descriptionId: pick?.descriptionId || "", pick, options, evidence, state: decision?.decision || "suggested", by: decision?.byName || "", at: decision?.at || "",
     };
   });
