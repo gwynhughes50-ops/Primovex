@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import useNotifications from "@/hooks/useNotifications";
@@ -24,9 +25,18 @@ export default function Layout() {
   const { unreadCount } = useNotifications(user?.uid);
   const showDeveloperCentre = developerAccessAllowed(role);
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === "true");
+  // ClinFlow takes the whole screen: the menu is put away behind a small arrow tab on the left edge, and slides over the top when it is wanted
+  const [menuOver, setMenuOver] = useState(false);
   const [legacyNavigation, setLegacyNavigation] = useState(() => localStorage.getItem(LEGACY_NAV_KEY) === "true");
 
   useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(collapsed)), [collapsed]);
+  useEffect(() => { setMenuOver(false); }, [location.pathname]);
+  useEffect(() => {
+    if (!menuOver) return undefined;
+    const onKey = (event) => { if (event.key === "Escape") setMenuOver(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [menuOver]);
   useEffect(() => {
     const handleMode = (event) => {
       const legacy = Boolean(event.detail?.legacy);
@@ -49,6 +59,19 @@ export default function Layout() {
   const signedInLabel = displayName || user?.email || "Signed in";
   const immersiveModule = location.pathname.startsWith("/clinflow");
 
+  const sidebar = (
+    <DesktopSidebar
+      collapsed={collapsed}
+      onToggle={() => setCollapsed((value) => !value)}
+      isAdmin={isAdmin}
+      capabilities={capabilities}
+      developer={showDeveloperCentre}
+      displayName={signedInLabel}
+      role={role}
+      onSignOut={handleSignOut}
+    />
+  );
+
   if (legacyNavigation) return <LegacyDesktopLayout />;
 
   return (
@@ -60,16 +83,7 @@ export default function Layout() {
       </div>
 
       <div className="flex min-h-screen w-full">
-        <DesktopSidebar
-          collapsed={collapsed}
-          onToggle={() => setCollapsed((value) => !value)}
-          isAdmin={isAdmin}
-          capabilities={capabilities}
-          developer={showDeveloperCentre}
-          displayName={signedInLabel}
-          role={role}
-          onSignOut={handleSignOut}
-        />
+        {!immersiveModule && sidebar}
 
         <div className={`min-w-0 flex-1 ${immersiveModule ? "h-screen overflow-hidden" : ""}`}>
           <ViewAsBanner />
@@ -100,6 +114,18 @@ export default function Layout() {
           )}
         </div>
       </div>
+
+      {immersiveModule && !menuOver && (
+        <button type="button" onClick={() => setMenuOver(true)} aria-label="Show the menu" title="Show the menu" className="fixed left-0 top-6 z-40 grid h-10 w-5 place-items-center rounded-r-lg border border-l-0 border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] text-[var(--medtrak-muted)] shadow-md hover:text-[var(--medtrak-accent)]">
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </button>
+      )}
+      {immersiveModule && menuOver && (
+        <>
+          <button type="button" aria-label="Close the menu" className="fixed inset-0 z-40 cursor-default bg-black/30" onClick={() => setMenuOver(false)} />
+          <div className="fixed inset-y-0 left-0 z-50 shadow-2xl">{sidebar}</div>
+        </>
+      )}
 
       <PhonePreview />
       {!immersiveModule && <PulseWidget />}
