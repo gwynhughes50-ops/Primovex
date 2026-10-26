@@ -36,9 +36,16 @@ const run = async (mode, work) => {
   } finally { db.close(); }
 };
 export const loadSavedRecord = (kind = "snomed") => run("readonly", (store) => store.get(FILES[kind]));
-export const saveRecord = (record, kind = "snomed") => run("readwrite", (store) => store.put(record, FILES[kind]));
+// Asks the browser not to clear what is kept (it may refuse; the list is then kept only as long as the browser allows)
+const keepSafe = () => { try { globalThis.navigator?.storage?.persist?.()?.catch?.(() => {}); } catch { /* not available */ } };
+// A note of when each list was last loaded here, so a list that has gone missing can be told apart from one never loaded on this computer
+const noteKey = (name) => `clinflow-loaded-${name}`;
+const noteLoaded = (name) => { try { globalThis.localStorage?.setItem(noteKey(name), new Date().toISOString()); } catch { /* not available */ } };
+const forgetLoaded = (name) => { try { globalThis.localStorage?.removeItem(noteKey(name)); } catch { /* not available */ } };
+export const loadedBefore = (name) => { try { return globalThis.localStorage?.getItem(noteKey(name)) || ""; } catch { return ""; } };
+export const saveRecord = async (record, kind = "snomed") => { keepSafe(); await run("readwrite", (store) => store.put(record, FILES[kind])); noteLoaded(kind); };
 export const loadSavedList = (kind = "snomed") => run("readonly", (store) => store.get(KEYS[kind]));
-export const clearList = async (kind = "snomed") => { await run("readwrite", (store) => store.delete(FILES[kind])); await run("readwrite", (store) => store.delete(KEYS[kind])); };
+export const clearList = async (kind = "snomed") => { forgetLoaded(kind); await run("readwrite", (store) => store.delete(FILES[kind])); await run("readwrite", (store) => store.delete(KEYS[kind])); };
 
 // Opens a list from the bytes of its file (a .json.gz made by `npm run snomed:index` or `npm run dmd:index`, or the .json inside it)
 export async function parseListBytes(bytes, gz, kind = "snomed") {
@@ -92,13 +99,13 @@ export function useSnomedList(kind = "snomed") {
   }, [kind]);
   const remove = useCallback(async () => { await clearList(kind).catch(() => {}); setState({ index: null, loading: false, error: "", kept: null }); }, [kind]);
   const search = useMemo(() => (state.index ? createSearch(state.index) : null), [state.index]);
-  return { kind, search, info: describeIndex(state.index), old: indexIsOld(state.index), loading: state.loading, error: state.error, kept: state.kept, load, remove };
+  return { kind, search, lostSince: !state.loading && !state.index ? loadedBefore(kind) : "", info: describeIndex(state.index), old: indexIsOld(state.index), loading: state.loading, error: state.error, kept: state.kept, load, remove };
 }
 
 // ---- the practice's own list of abbreviations (a plain file; see clinicalAbbreviations.js) ----
 const ABBREVIATIONS_KEY = "abbreviations-file";
 export const loadSavedAbbreviations = () => run("readonly", (store) => store.get(ABBREVIATIONS_KEY));
-export const saveAbbreviations = (record) => run("readwrite", (store) => store.put(record, ABBREVIATIONS_KEY));
+export const saveAbbreviations = async (record) => { keepSafe(); await run("readwrite", (store) => store.put(record, ABBREVIATIONS_KEY)); };
 export const clearAbbreviations = () => run("readwrite", (store) => store.delete(ABBREVIATIONS_KEY));
 
 export function useAbbreviations() {

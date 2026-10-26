@@ -16,6 +16,8 @@ function ListStatus({ list, canLoad }) {
       {list.loading ? <p>Opening…</p> : list.search
         ? <p>{list.info}. {meds ? "Medicines" : "Codes"} are looked up here, on this computer; nothing from the letter is sent anywhere to find them.{list.kept === true ? " It is kept on this computer, so it is ready each time ClinFlow opens." : ""}</p>
         : <p>{meds ? "The dm+d medicines list is not loaded on this computer, so medicines cannot be looked up yet. It is made from the dm+d download on NHS TRUD." : "The UK SNOMED list is not loaded on this computer, so codes cannot be looked up yet. It is made from the SNOMED CT download on NHS TRUD (see the note on the builder)."}</p>}
+      {!list.loading && !list.search && list.lostSince && <p className="cf-code-error" role="status">This list was loaded here on {new Date(list.lostSince).toLocaleDateString("en-GB")}, but this computer has since cleared it. Load it again, and if it keeps happening tell us.</p>}
+      {!list.loading && !list.search && !list.lostSince && <p className="cf-muted"><small>The desktop app and each web browser keep their own copy. If you loaded the list somewhere else, load it here too.</small></p>}
       {list.old && <p className="cf-code-error" role="status">{meds ? "This list is more than four months old. Download the newest dm+d from TRUD and load it." : "This list is more than four months old. Download the newest SNOMED CT UK Clinical Edition from TRUD and load it: the licence asks for a new version to be taken up within 180 days."}</p>}
       {list.error && <p className="cf-code-error" role="alert">{list.error}</p>}
       {canLoad && (
