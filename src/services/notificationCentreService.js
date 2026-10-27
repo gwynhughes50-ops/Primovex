@@ -86,6 +86,7 @@ export function getModuleLabel(module) {
     estates: "Estates",
     workforce: "Workforce",
     sar: "Subject Access Requests",
+    quality: "Quality",
     general: "General",
   };
   return labels[key] || key.charAt(0).toUpperCase() + key.slice(1);

@@ -61,7 +61,7 @@ t("My work holds the four personal pages, first in the menu, for anyone signed i
   assert.equal(SIDEBAR_SECTIONS[0].label, "My work");
   const staff = getVisibleRouteManifest({ isAdmin: false, capabilities: [] });
   const mine = staff.filter((r) => r.section === "mywork").map((r) => r.label);
-  assert.deepEqual(mine, ["Timesheet", "Annual leave", "My training", "Mileage"]);
+  assert.deepEqual(mine, ["Timesheet", "Annual leave", "My training", "Mileage", "Quality opportunities"]);
   const operations = staff.filter((r) => r.section === "operations").map((r) => r.label);
   for (const label of mine) assert.ok(!operations.includes(label), `${label} is no longer under Operations`);
   assert.ok(staff.every((r) => SIDEBAR_SECTIONS.some((s) => s.key === r.section) || r.section === "developer"), "every visible page is in a group the menu shows");

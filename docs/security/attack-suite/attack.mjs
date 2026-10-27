@@ -1683,6 +1683,36 @@ async function main() {
     await assertFails(b.commit());
   });
 
+  console.log("\n=== 28c. Quality opportunities passed between colleagues (quality_opportunities) ===");
+  await seed(async (db) => {
+    await setDoc(doc(db, "quality_opportunities", "q-1"), { groupId: "g1", senderUid: "nurse-uid", recipientUid: "reception-uid", title: "Asthma prompt", status: "new", patient: { initials: "DJ", birthDate: "1954-06-12", nhsNumber: "9434765919" } });
+  });
+  await check("Only the person who sent an opportunity and the person it was sent to can read it", async () => {
+    await assertSucceeds(getDoc(doc(nurse, "quality_opportunities", "q-1")));
+    await assertSucceeds(getDoc(doc(reception, "quality_opportunities", "q-1")));
+    await assertSucceeds(getDocs(query(collection(nurse, "quality_opportunities"), where("senderUid", "==", "nurse-uid"))));
+    await assertSucceeds(getDocs(query(collection(reception, "quality_opportunities"), where("recipientUid", "==", "reception-uid"))));
+  });
+  await check("Nobody else can read one, because it holds the patient's initials, date of birth and NHS number: not another member of staff, an administrator, the practice manager, or someone signed out", async () => {
+    for (const who of [cleaner, partner, pm, tsAdmin, anon]) await assertFails(getDoc(doc(who, "quality_opportunities", "q-1")));
+    await assertFails(getDocs(collection(cleaner, "quality_opportunities")));
+    await assertFails(getDocs(query(collection(cleaner, "quality_opportunities"), where("recipientUid", "==", "reception-uid"))));
+  });
+  await check("An opportunity cannot be made, changed (not even its status) or deleted from a client, by anyone: only the server writes them", async () => {
+    for (const who of [nurse, reception, pm, tsAdmin, cleaner]) {
+      await assertFails(setDoc(doc(who, "quality_opportunities", "forged"), { senderUid: "nurse-uid", recipientUid: "reception-uid", title: "Forged", status: "new" }));
+      await assertFails(updateDoc(doc(who, "quality_opportunities", "q-1"), { status: "actioned" }));
+      await assertFails(updateDoc(doc(who, "quality_opportunities", "q-1"), { "patient.nhsNumber": "0000000000" }));
+      await assertFails(deleteDoc(doc(who, "quality_opportunities", "q-1")));
+    }
+  });
+  await check("The send-rate counters are the server's alone", async () => {
+    for (const who of [nurse, pm, tsAdmin]) {
+      await assertFails(getDoc(doc(who, "quality_opportunity_limits", "nurse-uid_2026102710")));
+      await assertFails(setDoc(doc(who, "quality_opportunity_limits", "nurse-uid_2026102710"), { count: 0 }));
+    }
+  });
+
   console.log("\n=== 29. Changing an original role's permissions (role_overrides) ===");
   await seed(async (db) => {
     await setDoc(doc(db, "users", "hca-ovr-uid"), { role: "HCA", displayName: "HCA Override" });

@@ -14,6 +14,7 @@ import Training from "@/pages/Training";
 import WasteNotes from "@/pages/WasteNotes";
 import Timesheets from "@/pages/Timesheets";
 import Mileage from "@/pages/Mileage";
+import QualityOpportunities from "@/pages/QualityOpportunities";
 import MyTimesheet from "@/pages/MyTimesheet";
 import AnnualLeave from "@/pages/AnnualLeave";
 import MyTrainingPage from "@/pages/MyTrainingPage";
@@ -93,6 +94,7 @@ export default function DesktopApp() {
         <Route path="annual-leave" element={<AnnualLeave />} />
         <Route path="my-training" element={<MyTrainingPage />} />
         <Route path="mileage" element={<Mileage />} />
+        <Route path="quality-opportunities" element={<QualityOpportunities />} />
         <Route path="timesheets" element={<PermissionGate capability="timesheets.manage"><Timesheets /></PermissionGate>} />
         <Route path="waste" element={<PermissionGate anyOf={["waste.read", "waste.manage"]}><WasteNotes /></PermissionGate>} />
         <Route path="training" element={<PermissionGate anyOf={["training.manage", "training.manageClinical", "training.view"]}><Training /></PermissionGate>} />

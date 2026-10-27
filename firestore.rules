@@ -1292,6 +1292,17 @@ match /subject_access_requests/{requestId} {
       allow create, update, delete: if hasPermission("connect", "manageDevices") || isAdmin();
     }
 
+    // Quality opportunities passed from one colleague to another (functions/services/qualityOpportunityService.js). They hold the patient's initials,
+    // date of birth and NHS number so the person following one up can find the patient, so only the person who sent it and the person it was sent to can read
+    // a record: not other staff, and not administrators or audit readers. Nobody writes one from a client: the server does, and the server records every change.
+    match /quality_opportunities/{opportunityId} {
+      allow get, list: if signedIn() && (resource.data.recipientUid == request.auth.uid || resource.data.senderUid == request.auth.uid);
+      allow create, update, delete: if false;
+    }
+    match /quality_opportunity_limits/{limitId} {
+      allow read, write: if false;
+    }
+
     match /audit_events/{eventId} {
       allow get, list: if signedIn()
         && (hasPermission("audit", "read") || isAdmin())

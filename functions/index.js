@@ -26,6 +26,7 @@ const { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink,
 const { applyExceptions, getEffectiveCapabilities, hasCapability } = require("./services/roleCapabilities");
 const { notifySarAssignment } = require("./services/notificationService");
 const { listStaffDirectory } = require("./services/staffDirectoryService");
+const { listRecipients, sendQualityOpportunity, updateQualityOpportunity } = require("./services/qualityOpportunityService");
 const { sendDueNotifications } = require("./services/dueNotificationService");
 const { sendKitNotification, replaceKitItemBatch } = require("./services/kitCheckService");
 const { recordUsage } = require("./services/usageService");
@@ -791,6 +792,61 @@ exports.replaceKitItemBatch = onCall({ region: "europe-west2" }, async (request)
     console.error("Kit replacement audit event failed", { message: error?.message });
   }
   return result;
+});
+
+// Passing a quality or register opportunity found in a ClinFlow letter to a colleague, or to everyone with a role such as the business team. The records and
+// notifications are written here because clients can never create them; the notification carries no patient details (the record, which only the sender and
+// the recipient can read, does). The audit trail names the kind of opportunity, the role and the count, never the patient.
+async function opportunityCaller(request) {
+  assertSignedIn(request);
+  const snapshot = await db.collection("users").doc(request.auth.uid).get();
+  if (!snapshot.exists) throw new HttpsError("failed-precondition", "A Primovex user profile is required.");
+  const profile = snapshot.data() || {};
+  if (profile.active === false) throw new HttpsError("permission-denied", "This account is not active.");
+  const capabilities = await getEffectiveCapabilities(db, profile.role, profile);
+  return { profile, capabilities };
+}
+
+exports.listOpportunityRecipients = onCall({ region: "europe-west2", timeoutSeconds: 20 }, async (request) => {
+  const { capabilities } = await opportunityCaller(request);
+  return listRecipients({ db, callerUid: request.auth.uid, capabilities });
+});
+
+exports.sendQualityOpportunity = onCall({ region: "europe-west2", timeoutSeconds: 30 }, async (request) => {
+  const { profile, capabilities } = await opportunityCaller(request);
+  const result = await sendQualityOpportunity({ db, callerUid: request.auth.uid, callerName: profile.displayName || profile.email || "A colleague", capabilities, data: request.data || {} });
+  try {
+    await appendGovernedAuditEvent({
+      db, auth: request.auth, profile,
+      data: {
+        action: "clinflow.opportunity.send", module: "clinflow", targetType: "quality_opportunity", targetId: result.groupId,
+        summary: result.toName ? "A quality opportunity was sent to a colleague" : `A quality opportunity was sent to the ${result.role} team`,
+        classification: "operational",
+        metadata: { recipients: result.sent, role: result.role || "", domain: result.domain || "", withDetails: Boolean(result.hadPatient), automatedTransmission: false },
+      },
+    });
+  } catch (error) {
+    console.error("Quality opportunity audit event failed", { message: error?.message });
+  }
+  return { sent: result.sent, role: result.role, toName: result.toName || null };
+});
+
+exports.updateQualityOpportunity = onCall({ region: "europe-west2", timeoutSeconds: 20 }, async (request) => {
+  const { profile } = await opportunityCaller(request);
+  const result = await updateQualityOpportunity({ db, callerUid: request.auth.uid, data: request.data || {} });
+  try {
+    await appendGovernedAuditEvent({
+      db, auth: request.auth, profile,
+      data: {
+        action: "clinflow.opportunity.update", module: "clinflow", targetType: "quality_opportunity", targetId: result.id,
+        summary: `A quality opportunity was marked ${result.status}`, classification: "operational",
+        metadata: { status: result.status, domain: result.domain || "", automatedTransmission: false },
+      },
+    });
+  } catch (error) {
+    console.error("Quality opportunity update audit event failed", { message: error?.message });
+  }
+  return { id: result.id, status: result.status };
 });
 
 exports.setUserActive = onCall({ region: "europe-west2" }, async (request) => {
