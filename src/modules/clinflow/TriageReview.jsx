@@ -39,6 +39,13 @@ export default function TriageReview({ analysis, review, canSend, canConfirm, on
         </div>
       </section>
 
+      {decision === "no_workflow" && !confirmed && (
+        <section className="cf-t-noaction" aria-label="Why ClinFlow thinks no action is needed">
+          <b>ClinFlow suggests nothing here is asked of the practice.</b>
+          <span>It found no request, no medicine change, no result still awaited and nothing urgent. This is a suggestion only: skim the letter, and the words it relied on below, before you confirm.</span>
+        </section>
+      )}
+
       <div className="cf-q-tiles">
         <section className="cf-q-tile cf-qtone--blue"><small>Suggested destination</small><b>{destination}</b><span>Where ClinFlow would route this letter</span></section>
         <section className={`cf-q-tile cf-qtone--${/^yes/i.test(workflow.stillNeedsWorkflow || "") ? "amber" : /^no/i.test(workflow.stillNeedsWorkflow || "") ? "teal" : "slate"}`}><small>Still needs workflow?</small><b>{workflow.stillNeedsWorkflow || "Maybe"}</b><span>{workflow.category || "Human review required"}{workflow.suggestedDestination ? ` · ${workflow.suggestedDestination}` : ""}</span></section>

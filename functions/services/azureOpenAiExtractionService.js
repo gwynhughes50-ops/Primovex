@@ -21,7 +21,7 @@ const SYSTEM_PROMPT = [
   "You will be given raw OCR text extracted from a scanned letter. Extract only what is explicitly stated in the text — never infer, guess, or add clinical information that is not written down.",
   "Never phrase anything more diagnostically assertive than the source text. If the letter is uncertain, tentative or lists a possible cause among others, your wording must carry the same uncertainty — do not upgrade a suspicion into a stated fact.",
   "Respond with a single JSON object and nothing else, matching exactly this shape:",
-  '{"patientName": string or null, "diagnoses": string[], "currentMedications": string[], "medicationInstructions": string[], "actions": string[], "observations": string[], "clinicalConclusion": string or null, "documentUrgent": boolean, "medicationChangePresent": boolean, "safetyNettingAdvice": string or null}',
+  '{"patientName": string or null, "diagnoses": string[], "currentMedications": string[], "medicationInstructions": string[], "actions": string[], "observations": string[], "clinicalConclusion": string or null, "documentUrgent": boolean, "medicationChangePresent": boolean, "safetyNettingAdvice": string or null, "requestsOfPractice": string[], "noActionRequired": boolean, "noActionQuote": string or null}',
   "- patientName: the patient's full name if stated, else null. Never invent a name.",
   "- diagnoses: confirmed or suspected diagnoses/conditions named in the letter, as short phrases. If the letter questions or is investigating a diagnosis rather than confirming it (e.g. 'query SIADH'), keep the questioning wording — do not state it as if confirmed.",
   "- currentMedications: medicines mentioned as the patient's existing or ongoing medication, given for context (dose/frequency where stated) — whether or not they are also mentioned elsewhere as being investigated as a contributing cause, paused for a test, or otherwise discussed.",
@@ -32,6 +32,9 @@ const SYSTEM_PROMPT = [
   "- documentUrgent: true ONLY if the letter itself says the CURRENT situation needs prompt, same-day, or immediate action right now (e.g. 'please see urgently', 'requires same-day assessment', an actively dangerous result needing immediate escalation). This must be false if the only urgent-sounding wording is conditional safety-netting about what to do IF something worsens in future (e.g. 'attend hospital urgently if severe symptoms develop') — that kind of advice belongs in safetyNettingAdvice instead and does NOT make the document itself urgent. Read the whole sentence's condition before deciding, don't just pattern-match the word 'urgent'.",
   "- medicationChangePresent: true ONLY if a medicine is being started, stopped, increased, reduced, or restarted as a lasting change to the patient's regular regimen. This must be false if the only medication instruction is a TEMPORARY hold purely for test preparation (e.g. stopping an inhaler for a few days before a test, then presumably resuming) — that still belongs in medicationInstructions, just don't set this flag for it.",
   "- safetyNettingAdvice: any conditional escalation advice given for future deterioration (e.g. 'attend hospital if severe symptoms of hyponatraemia develop'), reproduced closely, or null if none is given.",
+  "- requestsOfPractice: EVERY sentence in which the letter asks, advises, suggests or expects anything of the patient's GP or practice, copied word for word. Include soft wording ('would be grateful if', 'please consider', 'GP to monitor', 'please update her record', 'we suggest the GP', 'ongoing prescribing by the GP'), requests to repeat a test or book a review, to start, change or stop a medicine, to refer, to record a diagnosis or allergy, and a patient discharged back to the practice's care. Do NOT include things the hospital or clinic says it will do itself (its own scans, reviews and bookings). Return an empty array only if the letter asks nothing at all of the GP or practice.",
+  "- noActionRequired: true ONLY if the letter makes clear that nothing is needed from the GP or practice: it is for information or the records, or it says no action or nothing further is needed, or it reports a normal or reassuring result with the patient discharged or the hospital arranging any follow-up itself. This must be false if requestsOfPractice is not empty, if a medicine is started, stopped or changed, if a result is still awaited, if the patient did not attend, if there is a new diagnosis for the practice to record, if the patient has died, or if you are unsure. When in doubt, false.",
+  "- noActionQuote: when noActionRequired is true, the single sentence from the letter, copied exactly, that shows nothing is needed from the practice (for example 'No further action is required from the GP.'). If the letter has no such sentence, copy the sentence that comes closest. Use null when noActionRequired is false. Never write a sentence that is not in the letter.",
   "The OCR text may contain scanning artefacts: stray characters, words broken across a line break, doubled or missing spaces, or misread letters (e.g. 'rn' read as 'm', '0' read as 'O'). When you reproduce text, normalise these obvious typographical artefacts so it reads as a real word or phrase, but never change what it clinically means, substitute a different condition or drug, or invent a correction you are not confident of — if you are not sure what the correct word is, reproduce the OCR text exactly as it appears rather than guessing.",
   "If an array field has nothing to report, return an empty array (never null, never omit the key). Keep every string under 300 characters.",
 ].join("\n");
@@ -77,6 +80,7 @@ async function extractClinicalFacts({ endpoint, key, deployment, ocrText, fetchI
     return {
       patientName: null, diagnoses: [], currentMedications: [], medicationInstructions: [], actions: [], observations: [],
       clinicalConclusion: null, documentUrgent: false, medicationChangePresent: false, safetyNettingAdvice: null,
+      requestsOfPractice: [], noActionRequired: false, noActionQuote: null,
     };
   }
 
@@ -96,7 +100,7 @@ async function extractClinicalFacts({ endpoint, key, deployment, ocrText, fetchI
         input: `Extract the clinical facts as JSON from this letter's OCR text:\n\n${text}`,
         text: { format: { type: "json_object" } },
         temperature: 0,
-        max_output_tokens: 1300,
+        max_output_tokens: 1900,
       }),
     });
     if (response.status !== 429) break;
@@ -129,6 +133,10 @@ async function extractClinicalFacts({ endpoint, key, deployment, ocrText, fetchI
     documentUrgent: Boolean(parsed?.documentUrgent),
     medicationChangePresent: Boolean(parsed?.medicationChangePresent),
     safetyNettingAdvice: cleanNullableString(parsed?.safetyNettingAdvice, 300),
+    requestsOfPractice: cleanStringArray(parsed?.requestsOfPractice, 8, 300),
+    // Only ever true when the model says so AND names no request of the practice; the app then checks the quote really is in the letter.
+    noActionRequired: parsed?.noActionRequired === true && cleanStringArray(parsed?.requestsOfPractice, 8, 300).length === 0,
+    noActionQuote: parsed?.noActionRequired === true && cleanStringArray(parsed?.requestsOfPractice, 8, 300).length === 0 ? cleanNullableString(parsed?.noActionQuote, 300) : null,
   };
 }
 

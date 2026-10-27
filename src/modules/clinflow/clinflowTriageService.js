@@ -7,6 +7,9 @@ const ROUTES = {
   review_required: { label: "Human review required", destination: "Workflow review", priority: "routine" },
 };
 
+// How many characters of a letter the AI reads (MAX_INPUT_CHARS in functions/services/azureOpenAiExtractionService.js: keep the two the same).
+const AI_READ_LIMIT = 12000;
+
 const INFORMATION_ONLY_SIGNALS = [
   ["for information only", 35], ["no action required", 45], ["no further action", 45],
   ["no gp action", 45], ["copy letter", 16], ["no change in treatment", 22],
@@ -35,7 +38,7 @@ const WORKFLOW_SIGNALS = [
 ];
 
 const URGENT_SIGNALS = [
-  ["call 999", "Emergency instruction"], ["emergency department", "Emergency-department escalation"],
+  ["call 999", "Emergency instruction"],
   ["immediate escalation", "Immediate escalation instruction"], ["escalate immediately", "Immediate escalation instruction"],
   ["same-day assessment", "Same-day assessment requested"], ["same day assessment", "Same-day assessment requested"],
   ["same-day review", "Same-day review requested"], ["same day review", "Same-day review requested"],
@@ -44,7 +47,73 @@ const URGENT_SIGNALS = [
   ["child protection", "Child-protection concern"],
 ];
 
-const MEDICATION_CHANGE_PATTERN = /\b(start(?:ed)?|commenc(?:ed)?|initiated|newly prescribed|stop(?:ped)?|discontinued|ceased|restart(?:ed)?|increas(?:ed)?|decreas(?:ed)?|reduc(?:ed)?|dose changed|changed from|changed to)\b/i;
+// Wording that shows nothing is left for the practice to do. The phrase lists above are exact words; these catch the ordinary ways a clinician says it
+// ("nothing further is required from your practice", "the study was normal", "I will not be arranging a further review"). Each is [pattern, points].
+const INFORMATION_PATTERNS = [
+  [/\bnothing (?:further|more)\b/, 45], [/\bno need for (?:any )?further\b/, 40], [/\bno further (?:investigations?|follow.?up|review|treatment)\b/, 35],
+  [/\bno follow.?up (?:is |was )?(?:arranged|required|needed|planned)(?: or (?:required|needed))?\b/, 40],
+  [/\bfor your (?:records|information|files)\b/, 35], [/\bfor information\b/, 30],
+  [/\bno abnormalit(?:y|ies)\b/, 30], [/\b(?:was|were|is|are) (?:all )?normal\b/, 20], [/\bbenign\b/, 25], [/\breassur(?:ed|ing)\b/, 15], [/\bnegative\b/, 15],
+  [/\b(?:no|not made any) changes? (?:in|to) (?:his |her |their |the )?(?:treatment|medication|medicines?)\b/, 25],
+  [/\bnot be arranging\b/, 30], [/\b(?:we|i) will (?:arrange|review|see|contact|book|write|send)\b/, 25], [/\bhas been booked with (?:the )?(?:clinic|hospital|team)\b/, 25],
+  [/\bdischarged (?:him |her |them )?(?:from|home)\b/, 15], [/\bscreening (?:service|programme)\b/, 20], [/\brecall in \d+ years?\b/, 30],
+];
+
+// Things that mean the letter is not simply "no action", whatever else it says. Each is [pattern, label]; none of these is a request, so they are checked separately.
+const OPEN_ITEM_PATTERNS = [
+  [/\b(?:did not attend|failed to attend|non.?attendance|dna)\b/, "Missed appointment"], [/\bdischarged back to (?:your|the gp|primary)/, "Discharged back to the practice"],
+  [/\b(?:passed away|has died|died on|deceased)\b/, "A death is reported"], [/\b(?:awaiting|awaited|pending result|will write again)\b/, "A result is still awaited"],
+  [/\b(?:newly diagnosed|new diagnosis)\b/, "A new diagnosis to record"],
+];
+
+// Sentences that ask, advise or expect something of the GP or practice, including the soft ones ("consider", "I would be grateful", "GP to monitor").
+// A "no action" frame is removed from a sentence first, so "No action needed from the hospital, but please could the GP repeat it" still counts as a request.
+const NO_ACTION_FRAME = /\b(?:no|nothing|not)\b[^.;]{0,40}?\b(?:needed|required|necessary|arranged|planned)\b|\bno need for\b[^.;]*|\bno (?:gp |practice )?action\b/g;
+const REQUEST_PATTERNS = [
+  /\bplease\b(?! (?:note|find|see|accept|do not|don't|contact|be advised))/, /\b(?:could|can|would|will) you\b/, /\b(?:would be|be) (?:very )?(?:grateful|appreciated|helpful)\b/, /\bgrateful if\b/,
+  /\b(?:we|i) would (?:ask|suggest|recommend|advise|request)\b/, /\b(?:gp|practice|surgery|primary care|your team)\b[^.]{0,25}\b(?:to|should|must|may wish|could|can|needs? to|will need to)\b/,
+  /\bconsider (?:starting|referring|stopping|adding|increasing|reducing|checking|repeating|changing|switching|restarting|a|an|the|further)\b/,
+  /\bshould (?:be )?(?:reviewed|checked|monitored|repeated|referred|recalled|added|updated)\b/, /\bupdate (?:her|his|their|the) (?:record|records|notes|medication|medicines|problem list|allergy)\b/,
+  /\b(?:continue|ongoing|take over|taken over) (?:prescribing|monitoring|supply)\b/, /\bshared care\b/, /\b(?:needs?|requires?) (?:to be )?(?:repeated|rechecked|monitored|checked)\b/,
+];
+const HOSPITAL_OWNED = /\b(?:we|i|our|hospital|clinic|department|team|service|consultant|specialist|anticoagulation)\b|\bwill be (?:arranged|booked|sent|seen)\b|\bhas been (?:booked|arranged)\b/;
+const PRACTICE_MENTION = /\b(?:gp|practice|surgery|primary care|your)\b|\bplease\b/;
+
+function sentencesOf(raw) {
+  return String(raw || "").replace(/\s*\n\s*/g, " ").split(/(?<=[.!?:])\s+/).map((s) => s.trim()).filter(Boolean);
+}
+
+// The sentences in the letter that ask something of the practice: [{ sentence, label }]. Exported so the tests and the screen can show the exact words.
+export function findPracticeRequests(raw) {
+  const found = [];
+  sentencesOf(raw).forEach((sentence) => {
+    const lower = normalise(sentence).replace(NO_ACTION_FRAME, " ");
+    if (REQUEST_PATTERNS.some((pattern) => pattern.test(lower))) found.push({ sentence: sentence.slice(0, 200), label: "Asks something of the practice" });
+  });
+  return found;
+}
+
+// "Attend the Emergency Department" is an instruction; "attended the Emergency Department" (it happened) and "go to the Emergency Department if it gets worse" (advice
+// for later) are not, so neither makes the letter urgent. The AI's own urgent flag still decides the real cases.
+function emergencyInstruction(raw) {
+  return sentencesOf(raw).some((sentence) => {
+    const lower = normalise(sentence);
+    return /\b(?:emergency department|a&e)\b/.test(lower) && /\b(?:go|attend|send|sent|take|taken|refer|referred|admit|call|dial)\b/.test(lower)
+      && !/\b(?:attended|presented|seen in|brought|admitted|discharged from|was seen|were seen)\b/.test(lower) && !/\b(?:if|should|unless|in case|were to|whenever)\b/.test(lower);
+  });
+}
+
+function matchPatterns(text, patterns) {
+  return patterns.map(([pattern, value]) => [text.match(pattern)?.[0], value]).filter(([found]) => found);
+}
+
+// Is this quoted sentence really in the letter? The AI is asked for a word-for-word quote, so a made-up one is ignored.
+function quoteIsInLetter(quote, content) {
+  const wanted = normalise(quote).replace(/[“”"']/g, "");
+  return wanted.length >= 12 && normalise(content).replace(/[“”"']/g, "").includes(wanted);
+}
+
+const MEDICATION_CHANGE_PATTERN =/\b(start(?:ed)?|commenc(?:ed)?|initiated|newly prescribed|stop(?:ped)?|discontinued|ceased|restart(?:ed)?|increas(?:ed)?|decreas(?:ed)?|reduc(?:ed)?|dose changed|changed from|changed to)\b/i;
 
 function normalise(value) {
   return String(value || "").toLowerCase().replace(/[–—]/g, "-").replace(/\s+/g, " ").trim();
@@ -82,7 +151,12 @@ function recommendedDestination({ text, urgentHits, medicationChanged, actions, 
 }
 
 export function createClinFlowTriage({ ocr, actions = [], medicines = [], diagnoses = [], observations = [], urgent = false, medicationChanged = false }) {
+  const rawContent = String(ocr?.content || "");
   const content = normalise(ocr?.content);
+  // The AI's reading of whether anything is asked of the practice. Present only for letters read by the AI; the curated sample letters rely on the rules alone.
+  const extraction = ocr?.llmExtraction;
+  const aiReadNoAction = typeof extraction?.noActionRequired === "boolean";
+  const aiRequests = Array.isArray(extraction?.requestsOfPractice) ? extraction.requestsOfPractice : [];
   const documentId = normalise(ocr?.document?.id);
   const actionText = actions.map((item) => normalise(item?.value || item)).join(" ");
   const medicineText = medicines.map((item) => normalise(item?.value || item)).join(" ");
@@ -90,10 +164,15 @@ export function createClinFlowTriage({ ocr, actions = [], medicines = [], diagno
   const reasons = [];
   const clinicalTriggers = [];
 
-  const urgentHits = matchSignals(text, URGENT_SIGNALS);
+  const urgentHits = [...matchSignals(text, URGENT_SIGNALS), ...(emergencyInstruction(rawContent) ? [["emergency department", "Emergency-department escalation"]] : [])];
   const workflowHits = matchSignals(text, WORKFLOW_SIGNALS);
-  const informationHits = matchSignals(text, INFORMATION_ONLY_SIGNALS);
+  const quoteVerified = aiReadNoAction && extraction.noActionRequired && quoteIsInLetter(extraction.noActionQuote, content);
+  const informationHits = [...matchSignals(text, INFORMATION_ONLY_SIGNALS), ...matchPatterns(text, INFORMATION_PATTERNS), ...(quoteVerified ? [[`the AI read “${String(extraction.noActionQuote).slice(0, 140)}”`, 40]] : [])];
   const completedHits = matchSignals(text, COMPLETED_ACTION_SIGNALS);
+  const requestHits = [...findPracticeRequests(rawContent), ...aiRequests.slice(0, 4).map((sentence) => ({ sentence: String(sentence).slice(0, 200), label: "The AI found a request of the practice" }))];
+  const openItems = OPEN_ITEM_PATTERNS.filter(([pattern]) => pattern.test(content)).map(([, label]) => label);
+  // When the AI has read the letter, an action it lists only blocks "no action" if it could be the practice's: one the hospital or clinic says it is doing itself does not.
+  const practiceActions = aiReadNoAction ? actions.filter((item) => { const value = normalise(item?.value || item); return !HOSPITAL_OWNED.test(value) || PRACTICE_MENTION.test(value); }) : actions;
   // Real letters trust the caller's already-refined medicationChanged flag
   // (from the LLM's medicationChangePresent, which distinguishes a lasting
   // change from a temporary test-prep hold) rather than re-deriving it with
@@ -117,8 +196,15 @@ export function createClinFlowTriage({ ocr, actions = [], medicines = [], diagno
   informationHits.forEach(([phrase, points]) => { nfwfScore += points; nfwfReasons.push(`Information-only signal: ${phrase}`); });
   completedHits.forEach(([phrase, points]) => { nfwfScore += points; nfwfReasons.push(`Completed-action signal: ${phrase}`); });
   workflowHits.forEach(([, label]) => { nfwfScore -= 35; nfwfBlockers.push(label); });
-  if (actions.length) { nfwfScore -= 35; nfwfBlockers.push("Extracted actions require review"); }
+  if (practiceActions.length) { nfwfScore -= 35; nfwfBlockers.push("Extracted actions require review"); }
+  requestHits.slice(0, 3).forEach(({ sentence, label }) => { nfwfScore -= 40; nfwfBlockers.push(`${label}: “${sentence}”`); });
+  openItems.forEach((label) => { nfwfScore -= 30; nfwfBlockers.push(label); });
+  // The AI is only sent the first part of a long letter, so for one longer than that it cannot vouch that nothing further down asks for something.
+  if (aiReadNoAction && rawContent.length > AI_READ_LIMIT) { nfwfScore -= 30; nfwfBlockers.push("The letter is longer than the part the AI read"); }
+  if (aiReadNoAction && !extraction.noActionRequired) { nfwfScore -= 20; nfwfBlockers.push("The AI could not confirm that nothing is needed"); }
   if (detectedMedicationChange) { nfwfScore -= 40; nfwfBlockers.push("Possible medication change"); }
+  // Whatever the AI decided, medication-change wording in the letter itself stops "no action": it costs a person a quick look, and a missed change costs far more.
+  else if (MEDICATION_CHANGE_PATTERN.test(content)) { nfwfScore -= 40; nfwfBlockers.push("Medication-change wording in the letter"); }
   if (urgent || documentId.includes("emergency") || urgentHits.length) { nfwfScore = 0; nfwfBlockers.push("Urgent or safety-critical context"); }
   nfwfScore = Math.max(0, Math.min(99, nfwfScore));
   const blockers = unique(nfwfBlockers);
@@ -142,13 +228,14 @@ export function createClinFlowTriage({ ocr, actions = [], medicines = [], diagno
     destination = recommendedDestination({ text, urgentHits, medicationChanged: detectedMedicationChange, actions, diagnoses, observations });
     priority = "high";
     reasons.push(evidence("urgent_context", "Urgent or safety-critical context", urgentHits.map(([, label]) => label).join("; ") || "Governed emergency document profile.", 1));
-  } else if (actions.length || workflowHits.length || detectedMedicationChange) {
+  } else if (practiceActions.length || workflowHits.length || requestHits.length || detectedMedicationChange) {
     decision = "workflow_required";
-    confidence = Math.min(0.96, 0.74 + Math.min(actions.length, 3) * 0.04 + (detectedMedicationChange ? 0.08 : 0) + Math.min(workflowHits.length, 2) * 0.03);
+    confidence = Math.min(0.96, 0.74 + Math.min(practiceActions.length + requestHits.length, 3) * 0.04 + (detectedMedicationChange ? 0.08 : 0) + Math.min(workflowHits.length, 2) * 0.03);
     destination = recommendedDestination({ text, urgentHits, medicationChanged: detectedMedicationChange, actions, diagnoses, observations });
     reasons.push(evidence("outstanding_work", "Outstanding workflow detected", unique([
       ...workflowHits.map(([, label]) => label),
-      actions.length ? `${actions.length} extracted action(s) require confirmation` : "",
+      requestHits.length ? `The letter asks something of the practice: “${requestHits[0].sentence}”` : "",
+      practiceActions.length ? `${practiceActions.length} extracted action(s) require confirmation` : "",
       detectedMedicationChange ? "Possible medication change requires reconciliation" : "",
     ]).join("; "), 0.9));
   } else if (nfwfScore >= 70 && !blockers.length && (informationHits.length || completedHits.length)) {

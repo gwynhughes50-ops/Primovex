@@ -236,3 +236,7 @@
 .cf-insights{overflow-y:auto}
 .cf-insight-scroll{flex:0 0 auto;overflow:visible}
 .clinflow-shell--panel-collapsed .cf-insights{overflow:visible}
+
+/* A suggested "no action needed" letter: say what was checked, and that a person confirms it */
+.cf-t-noaction{display:grid;gap:3px;margin:10px 0;padding:10px 12px;border:1px solid #9dd9cf;border-radius:10px;background:#effaf7;color:#0f4f46;font-size:12.5px;line-height:1.4}
+.cf-t-noaction b{font-size:13px}
