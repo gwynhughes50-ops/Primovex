@@ -88,7 +88,7 @@ t("a triage outcome is sent as its own kind, with ClinFlow's reasons only and th
   assert.equal(confirmed.toUid, "u1");
   assert.equal(triagePayload({ analysis: {}, letterRef: "x", role: "GP" }).rationale, "ClinFlow found no reliable evidence for this suggestion.");
   assert.deepEqual(Object.keys(TRIAGE_WORDS), ["urgent", "workflow_required", "no_workflow", "review_required"]);
-  assert.deepEqual(Object.keys(KIND_WORDS), ["quality", "triage"]);
+  assert.deepEqual(Object.keys(KIND_WORDS), ["quality", "triage", "task"]);
   assert.equal(opportunityPayload({ prompt, letterRef: "x", analysis: analysis(), role: "GP" }).kind, undefined, "a quality prompt is a quality opportunity by default");
 });
 
