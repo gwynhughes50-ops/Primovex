@@ -257,3 +257,8 @@
 .cf-dm-folder span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#35506b}.cf-dm-folder.is-target{border-color:#4fa595;background:#effaf7}
 .cf-dm-folder button{padding:5px 10px;border:1px solid var(--cf-border);border-radius:8px;background:#fff;font-weight:700;font-size:12px;cursor:pointer}
 .cf-spot-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.cf-spot-actions button,.cf-spot-actions select{padding:5px 10px;border:1px solid var(--cf-border);border-radius:8px;background:#fff;font-size:12px;font-weight:700}
+
+/* The letters list tabs: High, Medium, Low, NFW (six tabs, so they wrap rather than run off the panel) and the small tab name on each card */
+.cf-queue-tabs{height:auto;flex-wrap:wrap;align-items:flex-end;gap:4px 11px;padding:10px 13px 0}
+.cf-queue-tabs button{padding:0 0 8px}
+.cf-document-card em.cf-lane--medium{background:#fff4e0;color:#9a5a00}.cf-document-card em.cf-lane--low{background:#eef2f7;color:#56667e}.cf-document-card em.cf-lane--nfw{background:#e5f6f2;color:#0f6a5a}

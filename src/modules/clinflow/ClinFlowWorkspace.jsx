@@ -48,6 +48,7 @@ import { createClinFlowDemoPdfBlob, createClinFlowSummaryPdfBlob, downloadClinFl
 import { createDocmanPackZip, downloadBlob, safePackName } from "./clinflowZipService";
 import DocmanReadiness from "./DocmanReadiness";
 import { canSpotCheck, folderKindFor, needsSpotCheck } from "./clinflowNfwf";
+import { LANES, LANE_WORDS, inLane, lanesFor } from "./clinflowLanes";
 import { chooseFolder, deliverDocmanPdf, desktopFoldersAvailable, loadFolders } from "./docmanFolders";
 import NextSteps from "./NextSteps";
 import { buildNextSteps } from "./clinflowNextSteps";
@@ -101,8 +102,9 @@ function createAzureQueueDocument(response, index) {
   const clinflowAnalysis = analyseClinFlowOcr(syntheticOcr);
   return {
     id: `cf-azure-${response.analysisId}`,
-    title: result.document?.title || response.fileName || "Azure analysed document",
-    patient: expectedValue(result, "Patient"),
+    // an uploaded letter that is not one of the known test documents has no title of its own, so the file name tells the letters apart; the patient is the name the AI read
+    title: (result.document?.id === "attested-upload" ? String(response.fileName || "").replace(/\.pdf$/i, "") : "") || result.document?.title || response.fileName || "Azure analysed document",
+    patient: result.llmExtraction?.patientName || expectedValue(result, "Patient"),
     nhs: "Synthetic · not matched",
     dob: "Verification required",
     source: "Azure Document Intelligence",
@@ -403,17 +405,15 @@ export default function ClinFlowWorkspace() {
     return updated;
   }
 
+  const lanes = useMemo(() => lanesFor(documents), [documents]);
   const visibleDocuments = useMemo(() => {
     const q = query.trim().toLowerCase();
     return documents.filter((item) => {
-      if (filter === "finished" && item.status !== "completed") return false;
-      if (filter !== "finished" && item.status === "completed") return false;
-      if (filter === "high" && item.priority !== "high") return false;
-      if (filter === "gp" && item.destination !== "GP") return false;
+      if (!inLane(lanes.byId.get(item.id), filter)) return false;
       if (q && ![item.title, item.patient, item.source, item.specialty, item.nhs].join(" ").toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [documents, filter, query]);
+  }, [documents, lanes, filter, query]);
 
   const completedDocuments = useMemo(() => documents.filter((item) => item.status === "completed"), [documents]);
 
@@ -949,8 +949,8 @@ export default function ClinFlowWorkspace() {
       <aside className="cf-queue">
         <button type="button" className="cf-rail" onClick={() => setLayout(false, panelCollapsed)} aria-label="Show the letters list" title="Show the letters list"><PanelLeftOpen size={16} /><span>Letters ({visibleDocuments.length})</span></button>
         <div className="cf-queue-tabs">
-          {[['all', `Active (${documents.filter((item) => item.status !== 'completed').length})`], ['high', `High (${documents.filter((item) => item.status !== 'completed' && item.priority === 'high').length})`], ['gp', `GP (${documents.filter((item) => item.status !== 'completed' && item.destination === 'GP').length})`], ['finished', `Finished (${documents.filter((item) => item.status === 'completed').length})`]].map(([key, label]) => (
-            <button type="button" key={key} className={filter === key ? "active" : ""} onClick={() => setFilter(key)}>{label}</button>
+          {LANES.map(([key, label]) => (
+            <button type="button" key={key} className={filter === key ? "active" : ""} onClick={() => setFilter(key)}>{label} ({lanes.counts[key]})</button>
           ))}
         </div>
         <div className="cf-sort-row"><span>Sort by: Received (Newest)</span><Filter size={15} /></div>
@@ -962,7 +962,7 @@ export default function ClinFlowWorkspace() {
               <strong>{item.title}</strong>
               <span>{item.patient}</span>
               <small>{item.source}</small>
-              <small>{item.received}{item.priority === "high" && <em>High Priority</em>}</small>
+              <small>{item.received}{lanes.byId.get(item.id) !== "finished" && <em className={`cf-lane cf-lane--${lanes.byId.get(item.id)}`}>{LANE_WORDS[lanes.byId.get(item.id)]}</em>}</small>
             </button>
           ))}
         </div>
