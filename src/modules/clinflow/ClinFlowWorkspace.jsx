@@ -921,11 +921,12 @@ export default function ClinFlowWorkspace() {
     }).catch(() => {});
   }
 
+  // the working tabs first, what is only for reference at the end
   const tabs = [
     ["document", "Document"],
     ["summary", "AI Summary"],
+    ...(selected?.syntheticOcr ? [["snomed", "SNOMED Review"], ["triage", "Triage"], ["quality", "Quality / QAIF"], ["outflow", "Docman Summary"]] : []),
     ["data", "Extracted Data"],
-    ...(selected?.syntheticOcr ? [["triage", "Triage"], ["snomed", "SNOMED Review"], ["quality", "Quality / QAIF"], ["outflow", "Docman Summary"]] : []),
     ["timeline", "Timeline"],
   ];
 

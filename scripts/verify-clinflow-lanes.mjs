@@ -61,4 +61,12 @@ t("the letters list uses the tabs, works them out once per change, and there is 
   assert.ok(source.indexOf("const [documents, setDocuments]") < source.indexOf("const lanes = useMemo"), "documents exist before the tabs use them");
 });
 
+t("the letter's tabs put the working ones first and the reference ones (Extracted Data, Timeline) last", () => {
+  const source = readFileSync(new URL("../src/modules/clinflow/ClinFlowWorkspace.jsx", import.meta.url), "utf8");
+  const start = source.indexOf("  const tabs = [");
+  const block = source.slice(start, source.indexOf("  ];", start));
+  const order = [...block.matchAll(/\["(\w+)", "([^"]+)"\]/g)].map((m) => m[2]);
+  assert.deepEqual(order, ["Document", "AI Summary", "SNOMED Review", "Triage", "Quality / QAIF", "Docman Summary", "Extracted Data", "Timeline"]);
+});
+
 console.log(`\n${n} passed`);
