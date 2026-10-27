@@ -1,20 +1,25 @@
 import { useMemo, useState } from "react";
-import { CheckCircle2, ClipboardList, Copy, Download } from "lucide-react";
-import { buildDocmanPayload, readinessSummary } from "./docmanPayload";
+import { AlertTriangle, CheckCircle2, Copy, Download } from "lucide-react";
+import { buildDocmanPayload } from "./docmanPayload";
 import { copyText } from "./copyText";
-import { handoverCodes, handoverFields, handoverSteps, handoverText } from "./docmanHandover";
+import { handoverCodes, handoverFields, handoverText } from "./docmanHandover";
 
-// Getting a coded letter into Docman 10X: the steps in order, the details Docman asks for with a Copy button on each, and the one PDF to drag in.
-// Nothing is sent from here: the clinician still files the letter in Docman themselves. This is the checklist for that, and the exact record that
-// would be posted if Docman's API is ever used.
-export default function DocmanReadiness({ analysis, fileReady, outcome, onDownload, onCopy }) {
-  const [showRecord, setShowRecord] = useState(false);
+// Getting a coded letter into Docman 10X by hand: one banner that says whether it is ready, the one PDF to download and drag in, the details Docman asks for with
+// a Copy button on each, and the codes a clinician accepted. Nothing is sent from here. What only matters to filing through the Docman Connect interface (sender and
+// recipient organisation codes), which the practice does not use today, is kept under "Technical details" so it does not look like a problem.
+const CONNECT_ONLY = /^(?:Sender\.|RecipientOdsCode|CaptureSource)/;
+
+export default function DocmanReadiness({ analysis, fileReady, outcome, onDownload, onCopy, onOpenCodes }) {
   const [copied, setCopied] = useState("");
+  const [showRecord, setShowRecord] = useState(false);
   const result = useMemo(() => buildDocmanPayload(analysis?.docmanDraft || {}, { fileReady: Boolean(fileReady) }), [analysis, fileReady]);
   const fields = useMemo(() => handoverFields(result), [result]);
   const codes = useMemo(() => handoverCodes(result), [result]);
-  const steps = useMemo(() => handoverSteps(result, outcome), [result, outcome]);
+  const todo = result.blocking.filter((p) => !CONNECT_ONLY.test(p.field));
+  const connectOnly = result.blocking.filter((p) => CONNECT_ONLY.test(p.field));
   const notes = result.problems.filter((p) => p.severity !== "blocks");
+  const waiting = outcome?.waiting?.length || 0;
+  const ready = todo.length === 0;
   const copy = async (key, value) => {
     const done = await copyText(value);
     setCopied(done ? key : `!${key}`);
@@ -22,55 +27,55 @@ export default function DocmanReadiness({ analysis, fileReady, outcome, onDownlo
     if (done) onCopy?.(key === "all" ? "all the details" : /^\d/.test(key) ? "a SNOMED code" : key);
   };
   return (
-    <section className="cf-summary-card cf-docman-ready" aria-label="What Docman needs">
-      <ClipboardList size={18} />
-      <div className="cf-handover">
-        <b>Getting this letter into Docman 10X</b>
-        <p role="status" className={result.ready ? "cf-docman-ok" : ""}>{result.ready && <CheckCircle2 size={14} style={{ verticalAlign: "-2px", marginRight: 4 }} />}{readinessSummary(result)}</p>
-        <ol className="cf-steps">
-          {steps.map((step, i) => (
-            <li key={step.id} className={step.done ? "cf-step cf-step--done" : "cf-step"}>
-              <span className="cf-step-no">{step.done ? <CheckCircle2 size={15} /> : i + 1}</span>
-              <span><b>{step.text}</b><small>{step.detail}</small></span>
-            </li>
-          ))}
-        </ol>
-        {onDownload && <p><button type="button" className="cf-top-button cf-top-button--primary" onClick={onDownload}><Download size={14} /> Download the Docman PDF</button></p>}
+    <div className="cf-dm" aria-label="Filing this letter in Docman">
+      <section className={`cf-dm-banner ${ready ? "cf-dm-banner--ready" : "cf-dm-banner--todo"}`}>
+        <div className="cf-dm-banner-main">
+          {ready ? <CheckCircle2 size={26} aria-hidden="true" /> : <AlertTriangle size={26} aria-hidden="true" />}
+          <div>
+            <h3>{ready ? "Ready to file in Docman" : `${todo.length} thing${todo.length === 1 ? "" : "s"} to put right before filing`}</h3>
+            <p>{ready ? "Download the PDF, drag it into Docman, then enter the details underneath." : todo.map((p) => p.label).join(" · ")}</p>
+          </div>
+        </div>
+        {onDownload && <button type="button" className="cf-dm-download" onClick={onDownload}><Download size={16} /> Download the Docman PDF</button>}
+      </section>
 
-        <h4 className="cf-handover-title">Details to fill in on Docman</h4>
-        <ul className="cf-fields">
-          {fields.map((f) => (
-            <li key={f.label} className={f.missing ? "cf-field cf-field--missing" : "cf-field"}>
-              <span><small>{f.label}</small><b>{f.value || "Not available"}</b></span>
-              {!f.missing && <button type="button" className="cf-copy" onClick={() => copy(f.label, f.copy)} aria-label={`Copy ${f.label}`}>{copied === f.label ? "Copied" : copied === `!${f.label}` ? "Not copied" : <Copy size={13} />}</button>}
+      <h4 className="cf-handover-title">Details to enter in Docman</h4>
+      <ul className="cf-fields">
+        {fields.map((f) => (
+          <li key={f.label} className={f.missing ? "cf-field cf-field--missing" : "cf-field"}>
+            <span><small>{f.label}</small><b>{f.value || "Not on the letter"}</b></span>
+            {!f.missing && <button type="button" className="cf-copy" onClick={() => copy(f.label, f.copy)} aria-label={`Copy ${f.label}`}>{copied === f.label ? "Copied" : copied === `!${f.label}` ? "Not copied" : <Copy size={13} />}</button>}
+          </li>
+        ))}
+      </ul>
+      <p><button type="button" className="cf-top-button" onClick={() => copy("all", handoverText(result))}>{copied === "all" ? "Copied everything" : copied === "!all" ? "Could not copy: select and copy by hand" : "Copy all the details"}</button></p>
+
+      <h4 className="cf-handover-title">SNOMED codes accepted ({codes.length})</h4>
+      {codes.length > 0 ? (
+        <ul className="cf-fields cf-fields--codes">
+          {codes.map((c) => (
+            <li key={`${c.code}-${c.descriptionId}`} className="cf-field">
+              <span><small>SNOMED {c.code} · description {c.descriptionId}</small><b>{c.description}</b></span>
+              <button type="button" className="cf-copy" onClick={() => copy(c.code, c.code)} aria-label={`Copy code ${c.code}`}>{copied === c.code ? "Copied" : copied === `!${c.code}` ? "Not copied" : <Copy size={13} />}</button>
             </li>
           ))}
         </ul>
-        {codes.length > 0 && (
+      ) : <p className="cf-muted">No codes have been accepted yet.</p>}
+      {waiting > 0 && <p className="cf-dm-waiting">{waiting} suggested code{waiting === 1 ? " is" : "s are"} not checked yet. {onOpenCodes && <button type="button" onClick={onOpenCodes}>Open the codes</button>}</p>}
+
+      <details className="cf-dm-tech">
+        <summary>Technical details</summary>
+        {notes.length > 0 && <ul className="cf-docman-list cf-docman-notes">{notes.map((p) => <li key={`${p.field}-${p.message}`}>{p.message}</li>)}</ul>}
+        {connectOnly.length > 0 && (
           <>
-            <h4 className="cf-handover-title">SNOMED codes accepted by the coder</h4>
-            <ul className="cf-fields cf-fields--codes">
-              {codes.map((c) => (
-                <li key={`${c.code}-${c.descriptionId}`} className="cf-field">
-                  <span><small>SNOMED {c.code} · description {c.descriptionId}</small><b>{c.description}</b></span>
-                  <button type="button" className="cf-copy" onClick={() => copy(c.code, c.code)} aria-label={`Copy code ${c.code}`}>{copied === c.code ? "Copied" : copied === `!${c.code}` ? "Not copied" : <Copy size={13} />}</button>
-                </li>
-              ))}
-            </ul>
+            <p className="cf-muted"><small>Only needed if letters are ever filed through Docman Connect (the interface), which the practice does not use today:</small></p>
+            <ul className="cf-docman-list cf-docman-notes">{connectOnly.map((p) => <li key={`${p.field}-${p.message}`}>{p.message}</li>)}</ul>
           </>
         )}
-        <p><button type="button" className="cf-top-button" onClick={() => copy("all", handoverText(result))}>{copied === "all" ? "Copied everything" : copied === "!all" ? "Could not copy: select and copy by hand" : "Copy all the details"}</button></p>
-
-        {result.blocking.length > 0 && (
-          <ul className="cf-docman-list">{result.blocking.map((p) => <li key={`${p.field}-${p.message}`}>{p.message}</li>)}</ul>
-        )}
-        {notes.length > 0 && (
-          <ul className="cf-docman-list cf-docman-notes">{notes.map((p) => <li key={`${p.field}-${p.message}`}>{p.message}</li>)}</ul>
-        )}
-        <p>Nothing is sent to Docman from here. These are the details Docman asks for when a letter is posted to it, so each can be checked now and the letter filed the usual way.</p>
-        <button type="button" className="cf-top-button" onClick={() => setShowRecord(!showRecord)} aria-expanded={showRecord}>{showRecord ? "Hide" : "Show"} the record Docman would receive</button>
+        <p className="cf-muted"><small>Nothing is sent to Docman from here: a person downloads the PDF and files it.</small></p>
+        <button type="button" className="cf-top-button" onClick={() => setShowRecord(!showRecord)} aria-expanded={showRecord}>{showRecord ? "Hide" : "Show"} the record Docman Connect would receive</button>
         {showRecord && <pre className="cf-docman-record" tabIndex={0}>{JSON.stringify(result.payload, null, 2)}</pre>}
-      </div>
-    </section>
+      </details>
+    </div>
   );
 }

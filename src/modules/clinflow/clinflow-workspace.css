@@ -215,3 +215,19 @@
 .cf-next-step--done,.cf-next-step--none{opacity:.75}.cf-next-step--done .cf-next-state{background:#e6f7ef;color:#0b6a46;border-color:#16a06a}
 .cf-next-step--sent .cf-next-state{background:#f1ebff;color:#51299f;border-color:#7b4fd8}
 .cf-next-owner{font-weight:700!important}
+
+/* The actions panel, in order of what is used: claim, urgent, route, note, the two PDFs, then Confirm and Finish; the rest sit under More options */
+.cf-glance-row{display:grid;grid-template-columns:1fr auto 16px;align-items:center;gap:8px;width:100%;padding:8px 10px;margin:4px 0;border:1px solid var(--cf-border);border-radius:9px;background:#fff;color:#243750;font-size:12.5px;font-weight:700;text-align:left;cursor:pointer}
+.cf-glance-row small{color:var(--cf-muted);font-weight:600}.cf-glance-row:hover:not(:disabled){background:#eef5ff;border-color:#9dbfe6}.cf-glance-row:disabled{opacity:.55;cursor:default}
+.cf-route{display:grid;gap:3px;margin:8px 0;font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#52647d}
+.cf-route select{border:1.5px solid #9dbfe6;border-radius:9px;padding:8px 10px;background:#fff;color:#0c2037;font-size:13px;font-weight:700;letter-spacing:0;text-transform:none}
+.cf-more-toggle{display:flex;align-items:center;gap:6px;width:100%;margin-top:8px;padding:7px 10px;border:0;border-radius:8px;background:transparent;color:#075eae;font-size:12px;font-weight:700;cursor:pointer}.cf-more-toggle:hover{background:#eef5ff}
+.cf-more{margin-top:4px;padding-top:8px;border-top:1px solid var(--cf-border)}.cf-more-danger{margin:10px 0 4px;font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#9a251c}
+
+/* The Docman page: one banner that says whether it is ready, then the details and the codes */
+.cf-dm-banner{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:center;margin-bottom:12px;padding:16px 20px;border-radius:16px;color:#fff}
+.cf-dm-banner--ready{background:#16966a}.cf-dm-banner--todo{background:#c77a00}
+.cf-dm-banner-main{display:flex;gap:12px;align-items:center;min-width:0;flex:1}.cf-dm-banner h3{margin:0 0 2px;font-size:20px;color:#fff}.cf-dm-banner p{margin:0;font-size:13px;color:rgba(255,255,255,.95)}
+.cf-dm-download{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:10px;padding:11px 18px;background:#fff;color:#09294a;font-size:14px;font-weight:800;cursor:pointer}.cf-dm-download:hover{background:#f4f8ff}
+.cf-dm-waiting{margin:6px 0;font-size:12.5px;color:#8a5200}.cf-dm-waiting button{border:0;background:transparent;color:#075eae;font-weight:800;text-decoration:underline;cursor:pointer}
+.cf-dm-tech{margin-top:14px;font-size:12.5px}.cf-dm-tech summary{cursor:pointer;color:#075eae;font-weight:700}

@@ -83,23 +83,6 @@ async function loadCachedWithoutSamples() {
   return cached.filter((item) => !SAMPLE_DOCUMENT_IDS.has(item.id));
 }
 
-const CLINICAL_INSIGHTS = [
-  { tone: "danger", title: "Medication change", detail: "Bisoprolol increased to 5 mg once daily." },
-  { tone: "info", title: "Diagnosis", detail: "Atrial fibrillation with mild LV dysfunction." },
-  { tone: "warning", title: "Follow-up required", detail: "Repeat U&Es in 2 weeks and review in 3 months." },
-];
-
-const QAIF = [
-  { label: "Atrial Fibrillation Register", impact: "High impact" },
-  { label: "Heart Failure Register", impact: "Medium impact" },
-];
-
-const CODING = [
-  { code: "49436004", label: "Atrial fibrillation", confidence: "High" },
-  { code: "84114007", label: "Heart failure", confidence: "Medium" },
-  { code: "182754009", label: "Anticoagulant therapy", confidence: "Low" },
-];
-
 function expectedValue(result, label) {
   return result?.groundTruth?.find((item) => item.label.toLowerCase() === label.toLowerCase())?.expected || "Not extracted";
 }
@@ -183,7 +166,7 @@ function effectiveTriageFor(document) {
   };
 }
 
-function AzureReviewView({ selected, activeTab, onStepDecide, onDocmanCopy, onCodeCopy, onQualityOpen, onQualitySent, onTriageOpen, onTriageSent, onDownloadSummary, onOpenOriginal, onTriageDecision, onOpenTeaching, canReviewCodes, snomedList, medicinesList, abbreviations, onCodeDecision, onCodeChoose, onCodeAdd, onCodeRemoveAdded }) {
+function AzureReviewView({ selected, activeTab, onOpenTab, onStepDecide, onDocmanCopy, onCodeCopy, onQualityOpen, onQualitySent, onTriageOpen, onTriageSent, onDownloadSummary, onOpenOriginal, onTriageDecision, onOpenTeaching, canReviewCodes, snomedList, medicinesList, abbreviations, onCodeDecision, onCodeChoose, onCodeAdd, onCodeRemoveAdded }) {
   const ocr = selected.syntheticOcr;
   const analysis = selected.clinflowAnalysis;
   const confidence = Math.round((ocr.averageConfidence || 0) * 100);
@@ -268,7 +251,7 @@ function AzureReviewView({ selected, activeTab, onStepDecide, onDocmanCopy, onCo
     <CodeReview onCopy={onCodeCopy} candidates={reviewCandidates(analysis, ocr?.content)} letter={ocr?.content || ""} review={selected.codeReview} canEdit={canReviewCodes} list={snomedList} medList={medicinesList} abbreviations={abbreviations} onDecide={onCodeDecision} onChoose={onCodeChoose} onAdd={onCodeAdd} onRemoveAdded={onCodeRemoveAdded} />
   </div>;
   if (activeTab === "quality") return <QualityReview analysis={analysis} letterRef={selected.id} canSend={canReviewCodes} onOpenSend={onQualityOpen} onSent={onQualitySent} />;
-  if (activeTab === "outflow") return <div className="cf-tab-content"><section className="cf-summary-card"><FileText size={18} /><div><b>Docman companion summary</b><p>Download this summary, have a trained clinician compare and sign it against the untouched original, then drag both PDFs into Docman. Primovex does not transmit or file either document automatically.</p></div></section><div className="cf-info-grid"><section><h3>Document</h3><p>{analysis?.documentType}<br />Source: {ocr.fileName}</p></section><section><h3>Patient identity</h3><p>{analysis?.patient?.givenNames} {analysis?.patient?.familyName}<br /><b>Unverified</b> · NHS number and DOB must be checked</p></section><section><h3>Review status</h3><p>{analysis?.missing?.length || 0} required verification item{analysis?.missing?.length === 1 ? "" : "s"}<br />Not ready for automated transfer</p></section><section><h3>Output</h3><p><button type="button" className="cf-top-button cf-top-button--primary" onClick={onDownloadSummary}><Download size={14} /> Download summary PDF</button></p></section></div><DocmanReadiness analysis={analysis} fileReady={Boolean(ocr?.fileName)} outcome={reviewOutcome(reviewCandidates(analysis, ocr?.content), selected.codeReview)} onDownload={onDownloadSummary} onCopy={onDocmanCopy} /></div>;
+  if (activeTab === "outflow") return <div className="cf-tab-content"><DocmanReadiness analysis={analysis} fileReady={Boolean(ocr?.fileName)} outcome={reviewOutcome(reviewCandidates(analysis, ocr?.content), selected.codeReview)} onDownload={onDownloadSummary} onCopy={onDocmanCopy} onOpenCodes={() => onOpenTab?.("snomed")} /></div>;
   return <div className="cf-timeline">{[["Document accepted", "Approved synthetic fingerprint verified"], ["OCR completed", `Azure Document Intelligence · ${confidence}% average word confidence`], ["Added to ClinFlow", "Session-only OCR evidence added to the review queue"], ["Awaiting human review", "No patient match, route or clinical action has been confirmed"]].map(([title, detail]) => <div key={title}><span /><strong>{title}</strong><p>{detail}</p></div>)}</div>;
 }
 
@@ -950,7 +933,7 @@ export default function ClinFlowWorkspace() {
           </section>}
           <nav className="cf-tabs">{tabs.map(([key, label]) => { const tabKey = selected.syntheticOcr ? `synthetic-${key}` : key; return <button type="button" key={key} className={activeTab === tabKey ? "active" : ""} onClick={() => setActiveTab(tabKey)}>{label}</button>; })}</nav>
           <section className="cf-viewer">
-            {selected.syntheticOcr && <AzureReviewView onStepDecide={decideStep} onTriageOpen={() => track("clinflow.opportunity.open", "Send a triage item opened", { domain: "Triage" })} onTriageSent={(info) => track("clinflow.opportunity.sent", "A triage item was sent to a colleague", { recipients: info.sent, withDetails: info.withDetails, kind: "triage" })} onQualityOpen={(item) => track("clinflow.opportunity.open", "Send a quality opportunity opened", { domain: item.domain })} onQualitySent={(info) => track("clinflow.opportunity.sent", "A quality opportunity was sent to a colleague", { recipients: info.sent, withDetails: info.withDetails })} onCodeCopy={(what) => track("clinflow.codes.copy", "Coding details copied", { what })} onDocmanCopy={(field) => record("clinflow.docman.copy", "A detail was copied for Docman", { field, automatedTransmission: false }).catch(() => {})} selected={selected} activeTab={activeTab.replace(/^synthetic-/, "")} onDownloadSummary={downloadSummary} onOpenOriginal={openOriginal} onTriageDecision={confirmTriageDecision} onOpenTeaching={openTeaching} canReviewCodes={can("clinflow.workflow")} snomedList={auditedList(snomedList, "snomed")} medicinesList={auditedList(medicinesList, "dmd")} abbreviations={auditedAbbreviations} onCodeDecision={decideCode} onCodeChoose={chooseCode} onCodeAdd={addCodeByCoder} onCodeRemoveAdded={removeAddedCode} />}
+            {selected.syntheticOcr && <AzureReviewView onOpenTab={(tab) => setActiveTab(`synthetic-${tab}`)} onStepDecide={decideStep} onTriageOpen={() => track("clinflow.opportunity.open", "Send a triage item opened", { domain: "Triage" })} onTriageSent={(info) => track("clinflow.opportunity.sent", "A triage item was sent to a colleague", { recipients: info.sent, withDetails: info.withDetails, kind: "triage" })} onQualityOpen={(item) => track("clinflow.opportunity.open", "Send a quality opportunity opened", { domain: item.domain })} onQualitySent={(info) => track("clinflow.opportunity.sent", "A quality opportunity was sent to a colleague", { recipients: info.sent, withDetails: info.withDetails })} onCodeCopy={(what) => track("clinflow.codes.copy", "Coding details copied", { what })} onDocmanCopy={(field) => record("clinflow.docman.copy", "A detail was copied for Docman", { field, automatedTransmission: false }).catch(() => {})} selected={selected} activeTab={activeTab.replace(/^synthetic-/, "")} onDownloadSummary={downloadSummary} onOpenOriginal={openOriginal} onTriageDecision={confirmTriageDecision} onOpenTeaching={openTeaching} canReviewCodes={can("clinflow.workflow")} snomedList={auditedList(snomedList, "snomed")} medicinesList={auditedList(medicinesList, "dmd")} abbreviations={auditedAbbreviations} onCodeDecision={decideCode} onCodeChoose={chooseCode} onCodeAdd={addCodeByCoder} onCodeRemoveAdded={removeAddedCode} />}
             {!selected.syntheticOcr && activeTab === "document" && <>
               <div className="cf-viewer-toolbar"><button type="button" onClick={() => setSampleZoom((zoom) => Math.max(50, zoom - 10))} disabled={sampleZoom <= 50} aria-label="Zoom out" title="Zoom out">−</button><b>{sampleZoom}%</b><button type="button" onClick={() => setSampleZoom((zoom) => Math.min(200, zoom + 10))} disabled={sampleZoom >= 200} aria-label="Zoom in" title="Zoom in">+</button><button type="button" onClick={downloadDocument} aria-label="Download this letter as a PDF" title="Download this letter as a PDF"><Download size={14} /></button><span>Page 1 of 2</span></div>
               <div className="cf-viewer-body"><aside className="cf-thumbnails"><div className="active">Page 1</div><small>1</small><div>Page 2</div><small>2</small></aside><div className="cf-paper-stage" style={{ zoom: sampleZoom / 100 }}><article className="cf-paper"><div className="cf-letterhead"><strong>Glan Clwyd Hospital<br /><small>Cardiology Department</small></strong><strong>Date: 14 May 2026</strong></div><p>Dr A N Other<br />Greenfield Surgery<br />123 High Street<br />Mold<br />CH7 1AB</p><p>Dear Dr Other</p><p><b>Re: {selected.patient} · DOB: {selected.dob} · NHS: {selected.nhs}</b></p><p>Thank you for referring Mr Smith to the Cardiology Clinic.</p><h3>Assessment</h3><p>Mr Smith was reviewed today for atrial fibrillation. He remains symptomatic with exertional dyspnoea. Echocardiogram shows mild left ventricular dysfunction.</p><h3>Plan</h3><ul><li>Increase Bisoprolol to 5 mg once daily</li><li>Continue Apixaban 5 mg twice daily</li><li>Repeat U&Es in 2 weeks</li><li>Review in 3 months</li></ul><p>Yours sincerely</p><p><b>Dr B Consultant<br />Consultant Cardiologist</b></p></article></div></div>
@@ -968,49 +951,56 @@ export default function ClinFlowWorkspace() {
         {!panelCollapsed && <>
           <div className="cf-insight-scroll">
             <section className="cf-side-card">
-              <h3><Stethoscope size={16} />Review checklist</h3>
-              <div className="cf-list-row cf-list-row--action">
-                <span>Clinical Insights</span>
-                <small>{selected?.syntheticOcr ? [...(selected.clinflowAnalysis?.diagnoses || []), ...(selected.clinflowAnalysis?.medicines || []), ...(selected.clinflowAnalysis?.actions || [])].length : CLINICAL_INSIGHTS.length} item(s)</small>
-                <button type="button" onClick={() => setActiveTab(selected?.syntheticOcr ? "synthetic-summary" : "summary")}>Review</button>
-              </div>
-              <div className="cf-list-row cf-list-row--action">
-                <span>Quality / QAIF</span>
-                <small>{selected?.syntheticOcr ? selected.clinflowAnalysis?.qualityPrompts?.length || 0 : QAIF.length} prompt(s)</small>
-                <button type="button" disabled={!selected?.syntheticOcr} title={selected?.syntheticOcr ? "Open the quality review" : "Only available on letters that ClinFlow has analysed"} onClick={() => setActiveTab("synthetic-quality")}>Review</button>
-              </div>
-              <div className="cf-list-row cf-list-row--action">
-                <span>SNOMED Candidates</span>
-                <small>{selected?.syntheticOcr ? reviewCandidates(selected.clinflowAnalysis, selected.syntheticOcr.content).length : CODING.length} candidate(s)</small>
-                <button type="button" disabled={!selected?.syntheticOcr} title={selected?.syntheticOcr ? "Open the coding review" : "Only available on letters that ClinFlow has analysed"} onClick={() => setActiveTab("synthetic-snomed")}>Review</button>
-              </div>
+              <h3><Stethoscope size={16} />This letter</h3>
+              {[
+                ["Findings", selected?.syntheticOcr ? [...(selected.clinflowAnalysis?.diagnoses || []), ...(selected.clinflowAnalysis?.medicines || []), ...(selected.clinflowAnalysis?.actions || [])].length : 0, "item(s)", "synthetic-summary"],
+                ["Quality prompts", selected?.clinflowAnalysis?.qualityPrompts?.length || 0, "prompt(s)", "synthetic-quality"],
+                ["SNOMED candidates", selected?.syntheticOcr ? reviewCandidates(selected.clinflowAnalysis, selected.syntheticOcr.content).length : 0, "candidate(s)", "synthetic-snomed"],
+              ].map(([label, count, unit, tab]) => (
+                <button key={label} type="button" className="cf-glance-row" disabled={!selected?.syntheticOcr} onClick={() => setActiveTab(tab)}>
+                  <span>{label}</span><small>{count} {unit}</small><ChevronRight size={14} aria-hidden="true" />
+                </button>
+              ))}
             </section>
-            <section className="cf-side-card"><h3><FileSearch size={16} />Destination Suggestion</h3><div className="cf-destination"><b>{selected?.destination || "Workflow"}</b><span>Routine · Requires human review</span></div></section>
           </div>
           <section className="cf-actions-card">
-            <h3>Workflow Actions</h3>
-            <p>ROUTE DOCUMENT</p><div className="cf-action-grid">
-              {[["GP", "primary"], ["Nurse / HCA", "teal"], ["Pharmacist", "default"], ["Admin", "default"], ["Workflow Team", "default"], ["NFWF", "purple"]].map(([destination, tone]) => <ActionButton key={destination} tone={tone} active={selected?.destination === destination} disabled={busy || !selected} onClick={() => routeDocument(destination)}>{destination}</ActionButton>)}
+            <h3>Actions</h3>
+            <div className="cf-action-grid">
+              <ActionButton active={selected?.status === "in_review" || Boolean(selected?.claimedByUid)} disabled={busy || !selected || selected?.status === "completed"} onClick={claimDocument}><UserCheck size={14} />{selected?.status === "in_review" || selected?.claimedByUid ? "Claimed by you" : "Claim this letter"}</ActionButton>
+              <ActionButton tone="danger" active={selected?.priority === "high"} disabled={busy || !selected || selected?.priority === "high"} onClick={setPriority}><AlertTriangle size={14} />{selected?.priority === "high" ? "Marked urgent" : "Mark urgent"}</ActionButton>
             </div>
-            <hr /><p>DOCUMENT</p><div className="cf-action-grid">
-              <ActionButton tone="danger" active={selected?.priority === "high"} disabled={busy || !selected || selected?.priority === "high"} onClick={setPriority}><AlertTriangle size={14} />{selected?.priority === "high" ? "High priority set" : "High priority"}</ActionButton>
+            <label className="cf-route">Route to
+              <select value={selected?.destination || ""} disabled={busy || !selected} onChange={(event) => routeDocument(event.target.value)}>
+                {!["GP", "Nurse / HCA", "Pharmacist", "Admin", "Workflow Team", "NFWF"].includes(selected?.destination) && <option value={selected?.destination || ""}>{selected?.destination || "Choose where it goes"}</option>}
+                {["GP", "Nurse / HCA", "Pharmacist", "Admin", "Workflow Team", "NFWF"].map((destination) => <option key={destination} value={destination}>{destination}</option>)}
+              </select>
+            </label>
+            <div className="cf-action-grid">
               <ActionButton tone="purple" disabled={busy || !selected} onClick={() => setNoteOpen(true)}>Add note{selected?.noteCount ? ` (${selected.noteCount})` : ""}</ActionButton>
-              {selected?.syntheticOcr ? <><ActionButton tone="primary" disabled={busy} onClick={downloadSummary}><Download size={14} />Summary PDF</ActionButton><ActionButton disabled={busy} onClick={downloadOriginal}><Download size={14} />Original PDF</ActionButton></> : <ActionButton disabled={busy || !selected} onClick={downloadDocument}><Download size={14} />Download</ActionButton>}
+              {selected?.syntheticOcr
+                ? <><ActionButton disabled={busy} onClick={downloadSummary}><Download size={14} />Summary PDF</ActionButton><ActionButton disabled={busy} onClick={downloadOriginal}><Download size={14} />Original PDF</ActionButton></>
+                : <ActionButton disabled={busy || !selected} onClick={downloadDocument}><Download size={14} />Download PDF</ActionButton>}
               {selected?.status === "completed" && <ActionButton tone="primary" wide disabled={busy} onClick={downloadSelectedFinishedPack}><FolderCheck size={14} />Download Docman PDF</ActionButton>}
-              <ActionButton wide disabled={busy || !selected} onClick={() => setShowMoreActions((value) => !value)}><MoreHorizontal size={14} />{showMoreActions ? "Fewer actions" : "More actions"}</ActionButton>
-              {showMoreActions && <>
-                <ActionButton tone="warning" disabled={busy || !selected} onClick={reprocessOcr} title={selected?.syntheticOcr?.sourceFileAvailable || selected?.syntheticOcr?.sourceFile instanceof Blob ? "Reprocess the protected original synthetic PDF" : "Choose the original approved synthetic PDF"}><RefreshCw size={14} />Reprocess OCR</ActionButton>
-                <ActionButton disabled={busy || !selected} onClick={printDocument}><Printer size={14} />Print / PDF</ActionButton>
-                <ActionButton tone="danger" disabled={busy || !selected} onClick={requestArchiveDocument}><Trash2 size={14} />Archive</ActionButton>
-                <ActionButton tone="danger" disabled={busy || !selected} onClick={requestPermanentDeleteDocument}><Trash size={14} />Delete permanently</ActionButton>
-              </>}
             </div>
-            <hr /><p>FINALISE</p><div className="cf-action-grid">
-              <ActionButton active={selected?.status === "in_review" || Boolean(selected?.claimedByUid)} disabled={busy || !selected || selected?.status === "completed"} onClick={claimDocument}><UserCheck size={14} />{selected?.status === "in_review" || selected?.claimedByUid ? "Claimed" : "Claim"}</ActionButton>
-              <ActionButton disabled={busy || !selected} onClick={openTeaching}><GraduationCap size={14} />Score / Teach</ActionButton>
-              <ActionButton onClick={() => { setScorecardOpen(true); track("clinflow.scorecard.open", "ClinFlow scorecard opened", {}); }}><BarChart3 size={14} />Scorecard</ActionButton>
+            <div className="cf-action-grid">
               <ActionButton tone="success" wide active={selected?.status === "completed"} disabled={busy || !selected || selected?.status === "completed"} onClick={requestFinishDocument}><CheckCircle2 size={15} />{selected?.status === "completed" ? "Finished · ready for Docman" : "Confirm & Finish"}</ActionButton>
             </div>
+            <button type="button" className="cf-more-toggle" onClick={() => setShowMoreActions((value) => !value)} aria-expanded={showMoreActions}><MoreHorizontal size={14} /> {showMoreActions ? "Fewer options" : "More options"}</button>
+            {showMoreActions && (
+              <div className="cf-more">
+                <div className="cf-action-grid">
+                  <ActionButton disabled={busy || !selected} onClick={openTeaching}><GraduationCap size={14} />Score / Teach</ActionButton>
+                  <ActionButton onClick={() => { setScorecardOpen(true); track("clinflow.scorecard.open", "ClinFlow scorecard opened", {}); }}><BarChart3 size={14} />Scorecard</ActionButton>
+                  <ActionButton disabled={busy || !selected} onClick={printDocument}><Printer size={14} />Print</ActionButton>
+                  <ActionButton tone="warning" disabled={busy || !selected} onClick={reprocessOcr} title={selected?.syntheticOcr?.sourceFileAvailable || selected?.syntheticOcr?.sourceFile instanceof Blob ? "Read the original again" : "Choose the original PDF"}><RefreshCw size={14} />Read again</ActionButton>
+                </div>
+                <p className="cf-more-danger">Removing a letter</p>
+                <div className="cf-action-grid">
+                  <ActionButton tone="danger" disabled={busy || !selected} onClick={requestArchiveDocument}><Trash2 size={14} />Archive</ActionButton>
+                  <ActionButton tone="danger" disabled={busy || !selected} onClick={requestPermanentDeleteDocument}><Trash size={14} />Delete for good</ActionButton>
+                </div>
+              </div>
+            )}
           </section>
         </>}
       </aside>

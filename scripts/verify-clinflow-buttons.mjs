@@ -71,5 +71,21 @@ t("ClinFlow starts empty: no made-up demonstration letters, and any copy an earl
   assert.match(source, /useState\(SAMPLE_DOCUMENTS\[0\]\?\.id \|\| ""\)/, "an empty list cannot crash the screen");
 });
 
+t("the actions panel puts what is used first and tucks the rest away, and the Docman page leads with whether it is ready", () => {
+  const source = readFileSync(new URL("ClinFlowWorkspace.jsx", dir), "utf8");
+  const start = source.indexOf('<section className="cf-actions-card">');
+  const panel = source.slice(start, source.indexOf("</aside>", start));
+  const beforeMore = panel.slice(0, panel.indexOf("showMoreActions && ("));
+  for (const label of ["Claim this letter", "Mark urgent", "Route to", "Add note", "Summary PDF", "Original PDF", "Confirm & Finish", "More options"]) assert.ok(beforeMore.includes(label), `${label} is on show`);
+  for (const label of ["Score / Teach", "Scorecard", "Print", "Read again", "Archive", "Delete for good"]) assert.ok(!beforeMore.includes(label), `${label} is under More options`);
+  assert.ok(panel.indexOf("Delete for good") > panel.indexOf("Removing a letter"), "the destructive ones are last, under their own heading");
+  assert.match(source, /<select value=\{selected\?\.destination/, "routing is one choice, not six buttons");
+  const docman = readFileSync(new URL("DocmanReadiness.jsx", dir), "utf8");
+  assert.match(docman, /Ready to file in Docman/);
+  assert.match(docman, /CONNECT_ONLY/, "what only the Connect interface needs is not shown as a problem");
+  assert.match(docman, /<details className="cf-dm-tech">/, "technical detail is folded away");
+  assert.ok(!source.includes("Docman companion summary"), "the four duplicate boxes are gone from the Docman page");
+});
+
 console.log(`
 ${n} passed`);
