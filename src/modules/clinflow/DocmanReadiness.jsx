@@ -10,7 +10,7 @@ import { handoverCodes, handoverFields, handoverText } from "./docmanHandover";
 // recipient organisation codes), which the practice does not use today, is kept under "Technical details" so it does not look like a problem.
 const CONNECT_ONLY = /^(?:Sender\.|RecipientOdsCode|CaptureSource)/;
 
-export default function DocmanReadiness({ analysis, fileReady, outcome, onDownload, onCopy, onOpenCodes, folderKind, folders = {}, canChooseFolders, onChooseFolder, savedFolder }) {
+export default function DocmanReadiness({ analysis, fileReady, outcome, onDownload, onDownloadFull, onCopy, onOpenCodes, folderKind, folders = {}, canChooseFolders, onChooseFolder, savedFolder }) {
   const [copied, setCopied] = useState("");
   const [showRecord, setShowRecord] = useState(false);
   const result = useMemo(() => buildDocmanPayload(analysis?.docmanDraft || {}, { fileReady: Boolean(fileReady) }), [analysis, fileReady]);
@@ -39,6 +39,7 @@ export default function DocmanReadiness({ analysis, fileReady, outcome, onDownlo
         </div>
         {onDownload && <button type="button" className="cf-dm-download" onClick={onDownload}><Download size={16} /> {folderKind ? (folders[folderKind] && canChooseFolders ? `Save into the ${FOLDER_WORDS[folderKind]} folder` : `Download the Docman PDF (${folderKind === "nfw" ? "NFW" : "Action needed"})`) : "Confirm the outcome, then save the PDF"}</button>}
       </section>
+      {onDownloadFull && <p className="cf-dm-folder-note">The PDF filed in Docman has a clean one-page summary, then the original letter. <button type="button" className="cf-dm-link" onClick={onDownloadFull}>Download the full evidence PDF instead</button> (every suggestion and the reasoning; not for the patient's record).</p>}
       {!folderKind && <p className="cf-dm-folder-note">The PDF goes in the <b>NFW</b> folder or the <b>Action needed</b> folder, so a person has to confirm which on the Triage tab first.</p>}
       {savedFolder && <p className="cf-dm-folder-note cf-dm-folder-note--done"><CheckCircle2 size={14} aria-hidden="true" /> Saved for the {FOLDER_WORDS[savedFolder]} folder.</p>}
       {canChooseFolders && (

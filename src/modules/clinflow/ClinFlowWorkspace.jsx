@@ -44,7 +44,7 @@ import { analyseClinFlowOcr, buildReviewerBrief } from "./clinflowAnalysisServic
 import { AI_OUTPUT_FOOTER, HIGH_RISK_BANNER } from "./clinflowDisclaimers";
 import { cacheClinFlowDocuments, loadCachedClinFlowDocuments, loadClinFlowSourceFile, loadFinishedClinFlowPacks, removeCachedClinFlowDocument, saveClinFlowTeachingFeedback, saveFinishedClinFlowPack } from "./clinflowDocumentCache";
 import { triageLabel } from "./clinflowTriageService";
-import { createClinFlowDemoPdfBlob, createClinFlowSummaryPdfBlob, downloadClinFlowDemoPdf, downloadClinFlowSummaryPdf } from "./clinflowSummaryExportService";
+import { createClinFlowDemoPdfBlob, createClinFlowDocmanPdfBlob, downloadClinFlowDemoPdf, downloadClinFlowSummaryPdf } from "./clinflowSummaryExportService";
 import { createDocmanPackZip, downloadBlob, safePackName } from "./clinflowZipService";
 import DocmanReadiness from "./DocmanReadiness";
 import { canSpotCheck, folderKindFor, needsSpotCheck } from "./clinflowNfwf";
@@ -255,7 +255,7 @@ function AzureReviewView({ folders, onChooseFolder, onFileToDocman, selected, ac
     <CodeReview onCopy={onCodeCopy} candidates={reviewCandidates(analysis, ocr?.content)} letter={ocr?.content || ""} review={selected.codeReview} canEdit={canReviewCodes} list={snomedList} medList={medicinesList} abbreviations={abbreviations} onDecide={onCodeDecision} onChoose={onCodeChoose} onAdd={onCodeAdd} onRemoveAdded={onCodeRemoveAdded} />
   </div>;
   if (activeTab === "quality") return <QualityReview analysis={analysis} letterRef={selected.id} canSend={canReviewCodes} onOpenSend={onQualityOpen} onSent={onQualitySent} />;
-  if (activeTab === "outflow") return <div className="cf-tab-content"><DocmanReadiness analysis={analysis} fileReady={Boolean(ocr?.fileName)} outcome={reviewOutcome(reviewCandidates(analysis, ocr?.content), selected.codeReview)} onDownload={onFileToDocman} folderKind={folderKindFor(selected.triageReview)} folders={folders} canChooseFolders={desktopFoldersAvailable()} onChooseFolder={onChooseFolder} savedFolder={selected.triageReview?.savedFolder || ""} onCopy={onDocmanCopy} onOpenCodes={() => onOpenTab?.("snomed")} /></div>;
+  if (activeTab === "outflow") return <div className="cf-tab-content"><DocmanReadiness analysis={analysis} fileReady={Boolean(ocr?.fileName)} outcome={reviewOutcome(reviewCandidates(analysis, ocr?.content), selected.codeReview)} onDownload={onFileToDocman} onDownloadFull={onDownloadSummary} folderKind={folderKindFor(selected.triageReview)} folders={folders} canChooseFolders={desktopFoldersAvailable()} onChooseFolder={onChooseFolder} savedFolder={selected.triageReview?.savedFolder || ""} onCopy={onDocmanCopy} onOpenCodes={() => onOpenTab?.("snomed")} /></div>;
   return <div className="cf-timeline">{[["Document accepted", "Approved synthetic fingerprint verified"], ["OCR completed", `Azure Document Intelligence · ${confidence}% average word confidence`], ["Added to ClinFlow", "Session-only OCR evidence added to the review queue"], ["Awaiting human review", "No patient match, route or clinical action has been confirmed"]].map(([title, detail]) => <div key={title}><span /><strong>{title}</strong><p>{detail}</p></div>)}</div>;
 }
 
@@ -517,7 +517,7 @@ export default function ClinFlowWorkspace() {
       if (selected.syntheticOcr) {
         originalBlob = await resolveOriginalFile(selected);
         if (!(originalBlob instanceof Blob)) throw new Error("The untouched original PDF is unavailable. Re-import it before finishing this document.");
-        summary = await createClinFlowSummaryPdfBlob(selected, originalBlob);
+        summary = await createClinFlowDocmanPdfBlob(selected, originalBlob);
       } else {
         const synthetic = createClinFlowDemoPdfBlob(selected);
         originalBlob = synthetic.blob;
@@ -539,7 +539,7 @@ export default function ClinFlowWorkspace() {
         completedAt,
         completedByUid: updated.completedByUid,
         originalUnchanged: true,
-        contains: ["untouched-original-pdf", "clinflow-clinician-review-summary-pdf"],
+        contains: ["untouched-original-pdf", "clinflow-clean-docman-summary-pdf"],
         transferMethod: "manual-docman-import",
         automatedTransmission: false,
       };
@@ -713,7 +713,7 @@ export default function ClinFlowWorkspace() {
     const kindWord = kind === "nfw" ? "NFW" : "Action needed";
     try {
       const originalBlob = await resolveOriginalFile(selected).catch(() => null);
-      const built = await createClinFlowSummaryPdfBlob(selected, originalBlob);
+      const built = await createClinFlowDocmanPdfBlob(selected, originalBlob);
       const result = await deliverDocmanPdf({ blob: built.blob, fileName: built.fileName, kind, folders: docmanFolders });
       const updated = { ...selected, triageReview: { ...selected.triageReview, savedFolder: kind, savedAt: new Date().toISOString() } };
       setDocuments((items) => items.map((item) => item.id === selected.id ? updated : item));

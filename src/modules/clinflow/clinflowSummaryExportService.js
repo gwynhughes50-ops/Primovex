@@ -384,6 +384,97 @@ function downloadBlob(blob, fileName) {
   globalThis.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// The clean version of the summary that is filed in Docman with the letter. It is written to be read by a person or by Docman's own reader: plain facts under fixed
+// headings, the codes a person accepted one per line in the same shape every time, and none of ClinFlow's working, scores, caveats or codes that were not accepted.
+// The full evidence version (every candidate, the reasoning, the checks) is a separate download and stays out of the patient's record.
+const oneLine = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
+
+export function docmanSummaryLines(document) {
+  const analysis = document?.clinflowAnalysis;
+  const ocr = document?.syntheticOcr;
+  if (!analysis || !ocr) throw new Error("No ClinFlow analysis is available for this document.");
+  const coding = reviewOutcome(reviewCandidates(analysis, ocr?.content), document.codeReview);
+  const patient = analysis.patient || {};
+  const confirmed = document.triageReview?.status === "human_confirmed" ? document.triageReview.confirmedDecision : null;
+  const urgent = Boolean(analysis.docmanDraft?.urgent) || confirmed === "urgent";
+  const findings = [...(analysis.diagnoses || []), ...(analysis.observations || [])].slice(0, 3).map((item) => oneLine(item.value)).filter(Boolean);
+  const actions = (analysis.actions || []).filter((item) => item.kind !== "safety-net").map((item) => oneLine(item.value)).filter(Boolean);
+  const meds = (analysis.currentMedications?.length ? analysis.currentMedications : analysis.medicines || []).map((item) => oneLine(item.value)).filter(Boolean);
+  const instructions = (analysis.medicationInstructions?.length ? analysis.medicationInstructions : analysis.medicines || []).map((item) => oneLine(item.value)).filter(Boolean);
+  const draftPatient = analysis.docmanDraft?.patient || {};
+  const facts = [
+    ["Patient", [patient.givenNames, patient.familyName].filter(Boolean).join(" ") || "Not stated on the letter"],
+    ...(draftPatient.birthDate ? [["Date of birth", draftPatient.birthDate]] : []),
+    ...(draftPatient.identifier ? [["NHS number", draftPatient.identifier]] : []),
+    ["Letter type", analysis.documentType || "Correspondence"],
+    ...(analysis.specialty && analysis.specialty !== analysis.documentType ? [["Specialty", analysis.specialty]] : []),
+    ...(analysis.docmanDraft?.document?.eventDate ? [["Letter date", analysis.docmanDraft.document.eventDate]] : []),
+  ];
+  const actionText = confirmed === "no_workflow" ? ["No action needed from the practice."]
+    : actions.length ? actions
+      : confirmed === "workflow_required" || analysis.docmanDraft?.actionRequired ? ["Action is needed: see the letter."]
+        : ["No action listed."];
+  const codes = coding.accepted.map((c) => `SNOMED ${c.conceptId || "no code"} - ${oneLine(c.term)}${c.value ? ` - ${oneLine(c.value)}` : ""}`);
+  return {
+    urgent,
+    facts,
+    summary: analysis.clinicalConclusion ? oneLine(analysis.clinicalConclusion) : findings.length ? `${findings.join("; ")}.` : "See the letter.",
+    actions: actionText,
+    medicineChange: analysis.docmanDraft?.medicationChanged ? instructions : [],
+    medicines: meds,
+    safetyNet: oneLine(analysis.safetyNettingAdvice || ""),
+    codes,
+    codesNote: codes.length ? "" : coding.touched ? "No codes to add." : "Codes have not been checked.",
+  };
+}
+
+function buildClinFlowDocmanPdf(document) {
+  const content = docmanSummaryLines(document);
+  const pdf = new jsPDF({ unit: "mm", format: "a4" });
+  const margin = 18;
+  const width = 210 - margin * 2;
+  let y = 20;
+  const write = (text, { size = 10.5, bold = false, after = 1.5 } = {}) => {
+    pdf.setFont("helvetica", bold ? "bold" : "normal");
+    pdf.setFontSize(size);
+    pdf.setTextColor(0, 0, 0);
+    const rows = pdf.splitTextToSize(String(text || ""), width);
+    if (y + rows.length * (size * 0.42 + 1.4) > 276) { pdf.addPage(); y = 20; }
+    pdf.text(rows, margin, y);
+    y += rows.length * (size * 0.42 + 1.4) + after;
+  };
+  const heading = (text) => { y += 3; write(text, { size: 11, bold: true, after: 2 }); };
+  const list = (items) => items.forEach((item) => write(`- ${item}`));
+
+  write("LETTER SUMMARY", { size: 16, bold: true, after: 4 });
+  if (content.urgent) write("MARKED URGENT", { size: 12, bold: true, after: 3 });
+  content.facts.forEach(([label, value]) => write(`${label}: ${value}`));
+  heading("SUMMARY");
+  write(content.summary);
+  heading("ACTION NEEDED");
+  list(content.actions);
+  heading("MEDICINES");
+  if (content.medicineChange.length) { write("Medicine change:", { bold: true }); list(content.medicineChange); } else write("No medicine change.");
+  if (content.medicines.length) { write("Current medicines:", { bold: true }); list(content.medicines); }
+  if (content.safetyNet) { heading("SAFETY-NET ADVICE"); write(content.safetyNet); }
+  heading("CODES TO ADD");
+  if (content.codes.length) list(content.codes); else write(content.codesNote);
+  y += 6;
+  write(`Prepared with ClinFlow and checked by a person on ${new Date().toLocaleDateString("en-GB")}. The original letter follows.`, { size: 8.5 });
+  return {
+    bytes: pdf.output("arraybuffer"),
+    fileName: `${cleanFileName(ocrNameOf(document))}-clinflow-docman.pdf`,
+  };
+}
+
+const ocrNameOf = (document) => String(document?.syntheticOcr?.fileName || document?.title || "letter").replace(/\.pdf$/i, "");
+
+export async function createClinFlowDocmanPdfBlob(document, originalBlob) {
+  const built = buildClinFlowDocmanPdf(document);
+  const merged = await mergeOriginalCopy(built.bytes, originalBlob);
+  return { blob: merged.blob, fileName: built.fileName, appendedOriginal: merged.appended };
+}
+
 export async function createClinFlowSummaryPdfBlob(document, originalBlob) {
   const built = buildClinFlowSummaryPdf(document);
   const merged = await mergeOriginalCopy(built.bytes, originalBlob);

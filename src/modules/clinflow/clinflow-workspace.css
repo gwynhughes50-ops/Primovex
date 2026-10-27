@@ -262,3 +262,4 @@
 .cf-queue-tabs{height:auto;flex-wrap:wrap;align-items:flex-end;gap:4px 11px;padding:10px 13px 0}
 .cf-queue-tabs button{padding:0 0 8px}
 .cf-document-card em.cf-lane--medium{background:#fff4e0;color:#9a5a00}.cf-document-card em.cf-lane--low{background:#eef2f7;color:#56667e}.cf-document-card em.cf-lane--nfw{background:#e5f6f2;color:#0f6a5a}
+.cf-dm-link{padding:0;border:0;background:none;color:#075eae;font-weight:700;font-size:inherit;text-decoration:underline;cursor:pointer}
