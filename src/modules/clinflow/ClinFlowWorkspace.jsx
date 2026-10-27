@@ -47,6 +47,8 @@ import { triageLabel } from "./clinflowTriageService";
 import { createClinFlowDemoPdfBlob, createClinFlowSummaryPdfBlob, downloadClinFlowDemoPdf, downloadClinFlowSummaryPdf } from "./clinflowSummaryExportService";
 import { createDocmanPackZip, downloadBlob, safePackName } from "./clinflowZipService";
 import DocmanReadiness from "./DocmanReadiness";
+import { canSpotCheck, folderKindFor, needsSpotCheck } from "./clinflowNfwf";
+import { chooseFolder, deliverDocmanPdf, desktopFoldersAvailable, loadFolders } from "./docmanFolders";
 import NextSteps from "./NextSteps";
 import { buildNextSteps } from "./clinflowNextSteps";
 import { CHOICES, applyDecision, decisionCounts, makeDecision, stepKey } from "./clinflowStepDecisions";
@@ -166,7 +168,7 @@ function effectiveTriageFor(document) {
   };
 }
 
-function AzureReviewView({ selected, activeTab, onOpenTab, onStepDecide, onDocmanCopy, onCodeCopy, onQualityOpen, onQualitySent, onTriageOpen, onTriageSent, onDownloadSummary, onOpenOriginal, onTriageDecision, onOpenTeaching, canReviewCodes, snomedList, medicinesList, abbreviations, onCodeDecision, onCodeChoose, onCodeAdd, onCodeRemoveAdded }) {
+function AzureReviewView({ folders, onChooseFolder, onFileToDocman, selected, activeTab, onOpenTab, onStepDecide, onDocmanCopy, onCodeCopy, onQualityOpen, onQualitySent, onTriageOpen, onTriageSent, onDownloadSummary, onOpenOriginal, onTriageDecision, onOpenTeaching, canReviewCodes, snomedList, medicinesList, abbreviations, onCodeDecision, onCodeChoose, onCodeAdd, onCodeRemoveAdded }) {
   const ocr = selected.syntheticOcr;
   const analysis = selected.clinflowAnalysis;
   const confidence = Math.round((ocr.averageConfidence || 0) * 100);
@@ -231,7 +233,7 @@ function AzureReviewView({ selected, activeTab, onOpenTab, onStepDecide, onDocma
       </div>
     </div>;
   }
-  if (activeTab === "triage") return <TriageReview analysis={analysis} review={selected.triageReview} letterRef={selected.id} canSend={canReviewCodes} canConfirm={canReviewCodes} onDecision={onTriageDecision} onOpenTeaching={onOpenTeaching} onOpenSend={onTriageOpen} onSent={onTriageSent} />;
+  if (activeTab === "triage") return <TriageReview analysis={analysis} review={selected.triageReview} letterRef={selected.id} canSend={canReviewCodes} canConfirm={canReviewCodes} onDecision={onTriageDecision} onOpenTeaching={onOpenTeaching} onOpenSend={onTriageOpen} onSent={onTriageSent} letterText={ocr?.content} destinations={CLINFLOW_DESTINATIONS} />;
   if (activeTab === "data") {
     const extractedFields = [
       ...(analysis?.diagnoses || []).map((item) => ({ group: "Diagnosis", value: item.value, source: item.source })),
@@ -251,7 +253,7 @@ function AzureReviewView({ selected, activeTab, onOpenTab, onStepDecide, onDocma
     <CodeReview onCopy={onCodeCopy} candidates={reviewCandidates(analysis, ocr?.content)} letter={ocr?.content || ""} review={selected.codeReview} canEdit={canReviewCodes} list={snomedList} medList={medicinesList} abbreviations={abbreviations} onDecide={onCodeDecision} onChoose={onCodeChoose} onAdd={onCodeAdd} onRemoveAdded={onCodeRemoveAdded} />
   </div>;
   if (activeTab === "quality") return <QualityReview analysis={analysis} letterRef={selected.id} canSend={canReviewCodes} onOpenSend={onQualityOpen} onSent={onQualitySent} />;
-  if (activeTab === "outflow") return <div className="cf-tab-content"><DocmanReadiness analysis={analysis} fileReady={Boolean(ocr?.fileName)} outcome={reviewOutcome(reviewCandidates(analysis, ocr?.content), selected.codeReview)} onDownload={onDownloadSummary} onCopy={onDocmanCopy} onOpenCodes={() => onOpenTab?.("snomed")} /></div>;
+  if (activeTab === "outflow") return <div className="cf-tab-content"><DocmanReadiness analysis={analysis} fileReady={Boolean(ocr?.fileName)} outcome={reviewOutcome(reviewCandidates(analysis, ocr?.content), selected.codeReview)} onDownload={onFileToDocman} folderKind={folderKindFor(selected.triageReview)} folders={folders} canChooseFolders={desktopFoldersAvailable()} onChooseFolder={onChooseFolder} savedFolder={selected.triageReview?.savedFolder || ""} onCopy={onDocmanCopy} onOpenCodes={() => onOpenTab?.("snomed")} /></div>;
   return <div className="cf-timeline">{[["Document accepted", "Approved synthetic fingerprint verified"], ["OCR completed", `Azure Document Intelligence · ${confidence}% average word confidence`], ["Added to ClinFlow", "Session-only OCR evidence added to the review queue"], ["Awaiting human review", "No patient match, route or clinical action has been confirmed"]].map(([title, detail]) => <div key={title}><span /><strong>{title}</strong><p>{detail}</p></div>)}</div>;
 }
 
@@ -330,6 +332,8 @@ export default function ClinFlowWorkspace() {
   const [azureTestOpen, setAzureTestOpen] = useState(false);
   const [teachingOpen, setTeachingOpen] = useState(false);
   const [scorecardOpen, setScorecardOpen] = useState(false);
+  const [docmanFolders, setDocmanFolders] = useState({ nfw: "", action: "" });
+  useEffect(() => { let live = true; loadFolders().then((folders) => { if (live) setDocmanFolders(folders); }); return () => { live = false; }; }, []);
   const [teachingForm, setTeachingForm] = useState(teachingFormFor());
   const [finishedPacks, setFinishedPacks] = useState([]);
   const [finishOpen, setFinishOpen] = useState(false);
@@ -489,6 +493,10 @@ export default function ClinFlowWorkspace() {
 
   function requestFinishDocument() {
     if (!can("clinflow.workflow")) return denied("clinflow.workflow", "Your role cannot finish ClinFlow documents");
+    if (!folderKindFor(selected?.triageReview)) {
+      setActiveTab("synthetic-triage");
+      return notify("Confirm the outcome first (is any action needed?) so the finished PDF goes in the right Docman folder");
+    }
     setFinishChecks({ original: false, identity: false, review: false });
     setFinishOpen(true);
     track("clinflow.finish.open", "Finish dialog opened", { codesWaiting: codingOf(selected).codesWaiting ?? 0 });
@@ -655,11 +663,12 @@ export default function ClinFlowWorkspace() {
       const destination = feedback.confirmedDestination || (decision === "no_workflow" ? "NFWF" : decision === "review_required" ? "Workflow review" : decision === triage.decision ? triage.destination : decision === "urgent" ? "GP" : "Workflow Team");
       await saveClinFlowTeachingFeedback({ document: selected, suggestedDecision: triage.decision, confirmedDecision: decision, actorUid: user?.uid, feedback: { ...feedback, confirmedDestination: destination } });
       if (context.cloudEnabled) await applyClinFlowAction(selected, { type: "triage", decision, rulesetVersion: triage.rulesetVersion, summary: `ClinFlow triage confirmed as ${triageLabel(decision)}`, metadata: { suggestedDecision: triage.decision, confirmedDecision: decision, confirmedDestination: destination, nfwfCategory: feedback.nfwfCategory || "", rulesetVersion: triage.rulesetVersion } }, context);
-      const triageReview = { confirmedDecision: decision, suggestedDecision: triage.decision, confirmedDestination: destination, nfwfCategory: feedback.nfwfCategory || "", correctionReason: feedback.correctionReason || "", status: "human_confirmed", reviewedAt: new Date().toISOString(), rulesetVersion: triage.rulesetVersion };
+      const spotCheck = decision === "no_workflow" && triage.decision === "no_workflow" && needsSpotCheck({ id: selected.id, category: triage.nfwf?.category }) ? { status: "pending", requestedAt: new Date().toISOString() } : null;
+      const triageReview = { confirmedDecision: decision, suggestedDecision: triage.decision, confirmedDestination: destination, nfwfCategory: feedback.nfwfCategory || "", correctionReason: feedback.correctionReason || "", reasonCode: feedback.reasonCode || "", confirmedByUid: user?.uid || "", spotCheck, status: "human_confirmed", reviewedAt: new Date().toISOString(), rulesetVersion: triage.rulesetVersion };
       const updated = { ...selected, destination, priority: decision === "urgent" ? "high" : selected.priority, triageReview, persisted: context.cloudEnabled || selected.persisted };
       setDocuments((items) => items.map((item) => item.id === selected.id ? updated : item));
       await cacheClinFlowDocuments([updated]);
-      await record("clinflow.triage_confirm", `ClinFlow triage confirmed as ${triageLabel(decision)}`, { suggestedDecision: triage.decision, confirmedDecision: decision, confirmedDestination: destination, nfwfCategory: feedback.nfwfCategory || "", rulesetVersion: triage.rulesetVersion });
+      await record("clinflow.triage_confirm", `ClinFlow triage confirmed as ${triageLabel(decision)}`, { suggestedDecision: triage.decision, confirmedDecision: decision, confirmedDestination: destination, nfwfCategory: feedback.nfwfCategory || "", reasonCode: feedback.reasonCode || "", docmanFolder: decision === "no_workflow" ? "nfw" : "action", spotCheckRequested: Boolean(spotCheck), rulesetVersion: triage.rulesetVersion });
       notify(`Triage confirmed: ${triageLabel(decision)}`);
       saved = true;
     });
@@ -680,6 +689,61 @@ export default function ClinFlowWorkspace() {
     }
     const saved = await confirmTriageDecision(teachingForm.confirmedDecision, teachingForm);
     if (saved) setTeachingOpen(false);
+  }
+
+  async function chooseDocmanFolder(kind) {
+    try {
+      const path = await chooseFolder(kind);
+      if (!path) return;
+      setDocmanFolders(await loadFolders());
+      await record("clinflow.docman.folder_set", `The ${kind === "nfw" ? "NFW" : "Action needed"} Docman folder was chosen on this computer`, { docmanFolder: kind });
+      notify(`The ${kind === "nfw" ? "NFW" : "Action needed"} folder is set`);
+    } catch (error) {
+      notify(error?.message || "The folder could not be chosen");
+    }
+  }
+
+  // The Docman PDF goes into the NFW folder if a person confirmed "no action needed", otherwise into the Action needed folder. Nothing is filed until a person has confirmed.
+  async function fileToDocman() {
+    const kind = folderKindFor(selected?.triageReview);
+    if (!kind) {
+      setActiveTab("synthetic-triage");
+      return notify("Confirm the outcome first (is any action needed?) so the PDF goes in the right Docman folder");
+    }
+    const kindWord = kind === "nfw" ? "NFW" : "Action needed";
+    try {
+      const originalBlob = await resolveOriginalFile(selected).catch(() => null);
+      const built = await createClinFlowSummaryPdfBlob(selected, originalBlob);
+      const result = await deliverDocmanPdf({ blob: built.blob, fileName: built.fileName, kind, folders: docmanFolders });
+      const updated = { ...selected, triageReview: { ...selected.triageReview, savedFolder: kind, savedAt: new Date().toISOString() } };
+      setDocuments((items) => items.map((item) => item.id === selected.id ? updated : item));
+      await cacheClinFlowDocuments([updated]);
+      await record("clinflow.docman.filed", `Docman PDF ${result.saved ? "saved into" : "downloaded for"} the ${kindWord} folder`, { docmanFolder: kind, savedToFolder: result.saved, appendedOriginal: built.appendedOriginal, ...codingOf(selected), ...stepsOf(selected), ...versionsInUse(), automatedTransmission: false });
+      notify(result.saved ? `Saved in the ${kindWord} folder` : `Downloaded for the ${kindWord} folder${desktopFoldersAvailable() ? ". Choose the two folders on this tab to save straight into them" : ""}`);
+    } catch (error) {
+      console.error("ClinFlow Docman filing failed", error);
+      notify(error?.message || "The Docman PDF could not be saved");
+    }
+  }
+
+  // A clinician's second look at a letter someone confirmed as "no action needed". It must be a different person. Agreeing is recorded; disagreeing moves the letter to
+  // the Action needed folder and records why, so ClinFlow's mistake is counted.
+  async function resolveSpotCheck(document, agree, reasonCode = "") {
+    if (!can("clinflow.workflow")) return denied("clinflow.workflow", "Your role cannot check ClinFlow letters");
+    const review = document?.triageReview;
+    if (review?.spotCheck?.status !== "pending") return notify("That letter is not waiting for a check");
+    if (!canSpotCheck({ checkerUid: user?.uid, confirmedByUid: review.confirmedByUid })) return notify("A different person from the one who confirmed it has to check it");
+    if (!agree && !reasonCode) return notify("Say what needs action first");
+    await runAction(async () => {
+      await saveClinFlowTeachingFeedback({ document, suggestedDecision: "no_workflow", confirmedDecision: agree ? "no_workflow" : "workflow_required", actorUid: user?.uid, feedback: { source: "spot_check", reasonCode: agree ? "confirmed_right" : reasonCode, confirmedDestination: agree ? "NFWF" : "Workflow Team", nfwfCategory: agree ? review.nfwfCategory : "Not NFWF" } });
+      const checkedAt = new Date().toISOString();
+      const triageReview = { ...review, spotCheck: { ...review.spotCheck, status: agree ? "agree" : "disagree", byUid: user?.uid || "", checkedAt, reasonCode: agree ? "" : reasonCode }, ...(agree ? {} : { confirmedDecision: "workflow_required", confirmedDestination: "Workflow Team" }) };
+      const updated = { ...document, ...(agree ? {} : { destination: "Workflow Team" }), triageReview };
+      setDocuments((items) => items.map((item) => item.id === document.id ? updated : item));
+      await cacheClinFlowDocuments([updated]);
+      await record("clinflow.nfw.spot_check", agree ? "A clinician agreed a letter needs no action" : "A clinician said a 'no action needed' letter needs action", { agreed: agree, reasonCode: agree ? "" : reasonCode, alreadySavedInNfwFolder: !agree && review.savedFolder === "nfw" }, document.id);
+      notify(agree ? "Check recorded: no action needed" : review.savedFolder === "nfw" ? "Recorded. The PDF was already saved in the NFW folder: move it to the Action needed folder" : "Recorded. It now belongs in the Action needed folder");
+    });
   }
 
   async function downloadSummary() {
@@ -785,7 +849,7 @@ export default function ClinFlowWorkspace() {
         : "There are no completed ClinFlow packs to download");
     }
     try {
-      const zip = await createDocmanPackZip(packs);
+      const zip = await createDocmanPackZip(packs, (pack) => { const kind = folderKindFor(documents.find((doc) => doc.id === pack.documentId)?.triageReview); return kind === "nfw" ? "NFW" : kind === "action" ? "Action needed" : ""; });
       const date = new Date().toISOString().slice(0, 10);
       downloadBlob(zip, `Primovex-ClinFlow-Docman-${scope}-${date}.zip`);
       await record("clinflow.finished.bulk_download", `${packs.length} finished ClinFlow pack${packs.length === 1 ? "" : "s"} downloaded for manual Docman transfer`, { count: packs.length, scope, format: "zip", automatedTransmission: false }, scope === "all-finished" ? "finished-queue" : packs[0].documentId);
@@ -810,9 +874,12 @@ export default function ClinFlowWorkspace() {
     // already a single self-contained PDF — the ClinFlow review summary with
     // a genuine copy of the original letter's pages appended — so that one
     // file is what gets handed to Docman, not a zip of several files.
-    downloadBlob(pack.summaryBlob, pack.summaryFileName);
-    record("clinflow.finished.download", "Finished ClinFlow document (summary + original copy) downloaded for Docman upload", { format: "pdf", automatedTransmission: false }, pack.documentId).catch(() => {});
-    notify("Docman-ready PDF downloaded (ClinFlow summary + copy of the original letter)");
+    const kind = folderKindFor(selected?.triageReview);
+    if (!kind) return notify("Confirm the outcome on the Triage tab first (is any action needed?) so the PDF goes in the right Docman folder");
+    deliverDocmanPdf({ blob: pack.summaryBlob, fileName: pack.summaryFileName, kind, folders: docmanFolders }).then((result) => {
+      record("clinflow.finished.download", `Finished ClinFlow document (summary + original copy) ${result.saved ? "saved into" : "downloaded for"} the ${kind === "nfw" ? "NFW" : "Action needed"} Docman folder`, { format: "pdf", docmanFolder: kind, savedToFolder: result.saved, automatedTransmission: false }, pack.documentId).catch(() => {});
+      notify(result.saved ? `Saved in the ${kind === "nfw" ? "NFW" : "Action needed"} folder` : "Docman-ready PDF downloaded (ClinFlow summary + copy of the original letter)");
+    }).catch((error) => notify(error?.message || "The Docman PDF could not be saved"));
   }
 
   async function refreshWorkflow() {
@@ -933,7 +1000,7 @@ export default function ClinFlowWorkspace() {
           </section>}
           <nav className="cf-tabs">{tabs.map(([key, label]) => { const tabKey = selected.syntheticOcr ? `synthetic-${key}` : key; return <button type="button" key={key} className={activeTab === tabKey ? "active" : ""} onClick={() => setActiveTab(tabKey)}>{label}</button>; })}</nav>
           <section className="cf-viewer">
-            {selected.syntheticOcr && <AzureReviewView onOpenTab={(tab) => setActiveTab(`synthetic-${tab}`)} onStepDecide={decideStep} onTriageOpen={() => track("clinflow.opportunity.open", "Send a triage item opened", { domain: "Triage" })} onTriageSent={(info) => track("clinflow.opportunity.sent", "A triage item was sent to a colleague", { recipients: info.sent, withDetails: info.withDetails, kind: "triage" })} onQualityOpen={(item) => track("clinflow.opportunity.open", "Send a quality opportunity opened", { domain: item.domain })} onQualitySent={(info) => track("clinflow.opportunity.sent", "A quality opportunity was sent to a colleague", { recipients: info.sent, withDetails: info.withDetails })} onCodeCopy={(what) => track("clinflow.codes.copy", "Coding details copied", { what })} onDocmanCopy={(field) => record("clinflow.docman.copy", "A detail was copied for Docman", { field, automatedTransmission: false }).catch(() => {})} selected={selected} activeTab={activeTab.replace(/^synthetic-/, "")} onDownloadSummary={downloadSummary} onOpenOriginal={openOriginal} onTriageDecision={confirmTriageDecision} onOpenTeaching={openTeaching} canReviewCodes={can("clinflow.workflow")} snomedList={auditedList(snomedList, "snomed")} medicinesList={auditedList(medicinesList, "dmd")} abbreviations={auditedAbbreviations} onCodeDecision={decideCode} onCodeChoose={chooseCode} onCodeAdd={addCodeByCoder} onCodeRemoveAdded={removeAddedCode} />}
+            {selected.syntheticOcr && <AzureReviewView folders={docmanFolders} onChooseFolder={chooseDocmanFolder} onFileToDocman={fileToDocman} onOpenTab={(tab) => setActiveTab(`synthetic-${tab}`)} onStepDecide={decideStep} onTriageOpen={() => track("clinflow.opportunity.open", "Send a triage item opened", { domain: "Triage" })} onTriageSent={(info) => track("clinflow.opportunity.sent", "A triage item was sent to a colleague", { recipients: info.sent, withDetails: info.withDetails, kind: "triage" })} onQualityOpen={(item) => track("clinflow.opportunity.open", "Send a quality opportunity opened", { domain: item.domain })} onQualitySent={(info) => track("clinflow.opportunity.sent", "A quality opportunity was sent to a colleague", { recipients: info.sent, withDetails: info.withDetails })} onCodeCopy={(what) => track("clinflow.codes.copy", "Coding details copied", { what })} onDocmanCopy={(field) => record("clinflow.docman.copy", "A detail was copied for Docman", { field, automatedTransmission: false }).catch(() => {})} selected={selected} activeTab={activeTab.replace(/^synthetic-/, "")} onDownloadSummary={downloadSummary} onOpenOriginal={openOriginal} onTriageDecision={confirmTriageDecision} onOpenTeaching={openTeaching} canReviewCodes={can("clinflow.workflow")} snomedList={auditedList(snomedList, "snomed")} medicinesList={auditedList(medicinesList, "dmd")} abbreviations={auditedAbbreviations} onCodeDecision={decideCode} onCodeChoose={chooseCode} onCodeAdd={addCodeByCoder} onCodeRemoveAdded={removeAddedCode} />}
             {!selected.syntheticOcr && activeTab === "document" && <>
               <div className="cf-viewer-toolbar"><button type="button" onClick={() => setSampleZoom((zoom) => Math.max(50, zoom - 10))} disabled={sampleZoom <= 50} aria-label="Zoom out" title="Zoom out">−</button><b>{sampleZoom}%</b><button type="button" onClick={() => setSampleZoom((zoom) => Math.min(200, zoom + 10))} disabled={sampleZoom >= 200} aria-label="Zoom in" title="Zoom in">+</button><button type="button" onClick={downloadDocument} aria-label="Download this letter as a PDF" title="Download this letter as a PDF"><Download size={14} /></button><span>Page 1 of 2</span></div>
               <div className="cf-viewer-body"><aside className="cf-thumbnails"><div className="active">Page 1</div><small>1</small><div>Page 2</div><small>2</small></aside><div className="cf-paper-stage" style={{ zoom: sampleZoom / 100 }}><article className="cf-paper"><div className="cf-letterhead"><strong>Glan Clwyd Hospital<br /><small>Cardiology Department</small></strong><strong>Date: 14 May 2026</strong></div><p>Dr A N Other<br />Greenfield Surgery<br />123 High Street<br />Mold<br />CH7 1AB</p><p>Dear Dr Other</p><p><b>Re: {selected.patient} · DOB: {selected.dob} · NHS: {selected.nhs}</b></p><p>Thank you for referring Mr Smith to the Cardiology Clinic.</p><h3>Assessment</h3><p>Mr Smith was reviewed today for atrial fibrillation. He remains symptomatic with exertional dyspnoea. Echocardiogram shows mild left ventricular dysfunction.</p><h3>Plan</h3><ul><li>Increase Bisoprolol to 5 mg once daily</li><li>Continue Apixaban 5 mg twice daily</li><li>Repeat U&Es in 2 weeks</li><li>Review in 3 months</li></ul><p>Yours sincerely</p><p><b>Dr B Consultant<br />Consultant Cardiologist</b></p></article></div></div>
@@ -1031,7 +1098,7 @@ export default function ClinFlowWorkspace() {
         <fieldset className="cf-accuracy-checks"><legend>What was accurate?</legend>{Object.entries({ identity: "Patient identity", summary: "Summary", medicines: "Medicines", actions: "Actions", urgency: "Urgency", coding: "Coding prompts" }).map(([key, label]) => <label key={key}><input type="checkbox" checked={teachingForm.accuracyChecks[key]} onChange={(event) => setTeachingForm((current) => ({ ...current, accuracyChecks: { ...current.accuracyChecks, [key]: event.target.checked } }))} />{label}</label>)}</fieldset>
         <footer><button type="button" onClick={() => setTeachingOpen(false)}>Cancel</button><button type="button" className="primary" onClick={saveTeaching} disabled={busy}>Save governed evidence</button></footer>
       </div></div>}
-      {scorecardOpen && <Scorecard documents={documents} canExport={can("clinflow.workflow")} onClose={() => setScorecardOpen(false)} onExported={(card) => record("clinflow.scorecard.export", "ClinFlow scorecard downloaded for the rule reviewer", { corrections: card.corrections.length, triageConfirmed: card.triage.total, automatedTransmission: false }).catch(() => {})} />}
+      {scorecardOpen && <Scorecard documents={documents} checkerUid={user?.uid} canCheck={can("clinflow.workflow")} onSpotCheck={resolveSpotCheck} onOpenDocument={(id) => { setSelectedId(id); setActiveTab("synthetic-triage"); setScorecardOpen(false); }} canExport={can("clinflow.workflow")} onClose={() => setScorecardOpen(false)} onExported={(card) => record("clinflow.scorecard.export", "ClinFlow scorecard downloaded for the rule reviewer", { corrections: card.corrections.length, triageConfirmed: card.triage.total, automatedTransmission: false }).catch(() => {})} />}
       {azureTestOpen && <SyntheticDocumentBatchPanel onClose={() => setAzureTestOpen(false)} onImport={importAzureResults} />}
       {toast && <div className="cf-toast">{toast}</div>}
     </section>

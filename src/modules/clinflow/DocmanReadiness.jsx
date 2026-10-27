@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Copy, Download } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Copy, Download, FolderOpen } from "lucide-react";
+import { FOLDER_KINDS, FOLDER_WORDS } from "./clinflowNfwf";
 import { buildDocmanPayload } from "./docmanPayload";
 import { copyText } from "./copyText";
 import { handoverCodes, handoverFields, handoverText } from "./docmanHandover";
@@ -9,7 +10,7 @@ import { handoverCodes, handoverFields, handoverText } from "./docmanHandover";
 // recipient organisation codes), which the practice does not use today, is kept under "Technical details" so it does not look like a problem.
 const CONNECT_ONLY = /^(?:Sender\.|RecipientOdsCode|CaptureSource)/;
 
-export default function DocmanReadiness({ analysis, fileReady, outcome, onDownload, onCopy, onOpenCodes }) {
+export default function DocmanReadiness({ analysis, fileReady, outcome, onDownload, onCopy, onOpenCodes, folderKind, folders = {}, canChooseFolders, onChooseFolder, savedFolder }) {
   const [copied, setCopied] = useState("");
   const [showRecord, setShowRecord] = useState(false);
   const result = useMemo(() => buildDocmanPayload(analysis?.docmanDraft || {}, { fileReady: Boolean(fileReady) }), [analysis, fileReady]);
@@ -36,8 +37,23 @@ export default function DocmanReadiness({ analysis, fileReady, outcome, onDownlo
             <p>{ready ? "Download the PDF, drag it into Docman, then enter the details underneath." : todo.map((p) => p.label).join(" · ")}</p>
           </div>
         </div>
-        {onDownload && <button type="button" className="cf-dm-download" onClick={onDownload}><Download size={16} /> Download the Docman PDF</button>}
+        {onDownload && <button type="button" className="cf-dm-download" onClick={onDownload}><Download size={16} /> {folderKind ? (folders[folderKind] && canChooseFolders ? `Save into the ${FOLDER_WORDS[folderKind]} folder` : `Download the Docman PDF (${folderKind === "nfw" ? "NFW" : "Action needed"})`) : "Confirm the outcome, then save the PDF"}</button>}
       </section>
+      {!folderKind && <p className="cf-dm-folder-note">The PDF goes in the <b>NFW</b> folder or the <b>Action needed</b> folder, so a person has to confirm which on the Triage tab first.</p>}
+      {savedFolder && <p className="cf-dm-folder-note cf-dm-folder-note--done"><CheckCircle2 size={14} aria-hidden="true" /> Saved for the {FOLDER_WORDS[savedFolder]} folder.</p>}
+      {canChooseFolders && (
+        <section className="cf-dm-folders" aria-label="Docman upload folders">
+          <h4><FolderOpen size={15} aria-hidden="true" /> Docman upload folders on this computer</h4>
+          {FOLDER_KINDS.map((kind) => (
+            <div key={kind} className={`cf-dm-folder${folderKind === kind ? " is-target" : ""}`}>
+              <b>{FOLDER_WORDS[kind]}{folderKind === kind ? " · this letter" : ""}</b>
+              <span title={folders[kind] || ""}>{folders[kind] || "Not chosen yet"}</span>
+              <button type="button" onClick={() => onChooseFolder?.(kind)}>{folders[kind] ? "Change" : "Choose folder"}</button>
+            </div>
+          ))}
+          <small>Once both are chosen, saving a letter puts its PDF straight into the right one.</small>
+        </section>
+      )}
 
       <h4 className="cf-handover-title">Details to enter in Docman</h4>
       <ul className="cf-fields">

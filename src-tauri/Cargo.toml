@@ -30,6 +30,8 @@ tauri-plugin-opener = "2"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-updater = "2"
+# The system folder picker, to choose the two Docman upload folders (NFW and Action needed); see choose_docman_folder in lib.rs.
+tauri-plugin-dialog = "2"
 # One Primovex at a time: opening it again (or an update starting it) brings the running one forward instead of starting a
 # second copy, which used to be left behind in the tray with its own orb on the desktop.
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }

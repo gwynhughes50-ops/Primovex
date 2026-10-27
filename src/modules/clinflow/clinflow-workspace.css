@@ -240,3 +240,20 @@
 /* A suggested "no action needed" letter: say what was checked, and that a person confirms it */
 .cf-t-noaction{display:grid;gap:3px;margin:10px 0;padding:10px 12px;border:1px solid #9dd9cf;border-radius:10px;background:#effaf7;color:#0f4f46;font-size:12.5px;line-height:1.4}
 .cf-t-noaction b{font-size:13px}
+
+/* "Is this letter really no action needed?", the Docman folder panel and the clinician spot-check list */
+.cf-nfw{display:grid;gap:8px;margin:10px 0;padding:12px 14px;border:2px solid #7cc9bb;border-radius:12px;background:#fff}
+.cf-nfw h3{margin:0;font-size:15px;color:#0f4f46}.cf-nfw p{margin:0;font-size:12.5px;color:#35506b}
+.cf-nfw-buttons{display:flex;flex-wrap:wrap;gap:8px}.cf-nfw-buttons button{display:inline-flex;align-items:center;gap:6px;padding:9px 14px;border:1px solid var(--cf-border);border-radius:9px;background:#fff;font-weight:800;font-size:13px;cursor:pointer}
+.cf-nfw-yes{background:#e8f8f1!important;border-color:#7cc9bb!important;color:#0f5f4a}.cf-nfw-no{background:#fff3e6!important;border-color:#f0b982!important;color:#8a4a07}.cf-nfw-buttons button:disabled{opacity:.55;cursor:default}
+.cf-nfw fieldset{margin:0;padding:8px 10px;border:1px solid var(--cf-border);border-radius:9px;display:grid;gap:5px}.cf-nfw legend{padding:0 4px;font-size:12px;font-weight:800;color:#243750}
+.cf-nfw label{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;color:#243750}.cf-nfw-words label{font-size:12px}
+.cf-nfw-note,.cf-nfw-dest{display:grid!important;gap:3px}.cf-nfw-note input,.cf-nfw-dest select{padding:6px 8px;border:1px solid var(--cf-border);border-radius:8px;font-size:12.5px}
+.cf-nfw-state{display:grid;gap:2px;margin:10px 0;padding:9px 12px;border:1px solid #b9d3ee;border-radius:10px;background:#f2f7fd;font-size:12.5px;color:#243750}
+.cf-dm-folder-note{margin:6px 0;font-size:12.5px;color:#35506b}.cf-dm-folder-note--done{display:flex;gap:6px;align-items:center;color:#0f5f4a;font-weight:700}
+.cf-dm-folders{display:grid;gap:6px;margin:10px 0;padding:10px 12px;border:1px solid var(--cf-border);border-radius:10px;background:#fbfcfe}
+.cf-dm-folders h4{display:flex;align-items:center;gap:6px;margin:0;font-size:12.5px}.cf-dm-folders small{color:var(--cf-muted)}
+.cf-dm-folder{display:grid;grid-template-columns:minmax(150px,auto) 1fr auto;gap:8px;align-items:center;padding:6px 8px;border:1px solid var(--cf-border);border-radius:8px;background:#fff;font-size:12.5px}
+.cf-dm-folder span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#35506b}.cf-dm-folder.is-target{border-color:#4fa595;background:#effaf7}
+.cf-dm-folder button{padding:5px 10px;border:1px solid var(--cf-border);border-radius:8px;background:#fff;font-weight:700;font-size:12px;cursor:pointer}
+.cf-spot-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.cf-spot-actions button,.cf-spot-actions select{padding:5px 10px;border:1px solid var(--cf-border);border-radius:8px;background:#fff;font-size:12px;font-weight:700}

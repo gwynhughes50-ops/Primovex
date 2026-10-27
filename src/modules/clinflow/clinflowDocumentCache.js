@@ -173,6 +173,11 @@ export async function saveClinFlowTeachingFeedback({ document, suggestedDecision
     confirmedDestination: String(feedback.confirmedDestination || "").trim(),
     nfwfCategory: String(feedback.nfwfCategory || "").trim(),
     correctionReason: String(feedback.correctionReason || "").trim(),
+    // why a "no action needed" suggestion was wrong (a picked reason, the letter's own sentences that needed action) and whether this is a clinician's spot-check
+    reasonCode: String(feedback.reasonCode || "").trim(),
+    reasonSentences: (Array.isArray(feedback.reasonSentences) ? feedback.reasonSentences : []).slice(0, 3).map((s) => String(s).trim().slice(0, 220)).filter(Boolean),
+    source: feedback.source === "spot_check" ? "spot_check" : "triage",
+    suggestedNfwfScore: Number.isFinite(triage.nfwf?.score) ? triage.nfwf.score : null,
     correctedSummary: String(feedback.correctedSummary || "").trim(),
     learningNotes: String(feedback.learningNotes || "").trim(),
     accuracyChecks: feedback.accuracyChecks || {},

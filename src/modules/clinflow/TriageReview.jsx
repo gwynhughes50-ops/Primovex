@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { AlertTriangle, BrainCircuit, CheckCircle2, GraduationCap, Send } from "lucide-react";
 import SendToColleague from "./SendToColleague";
+import NfwConfirm from "./NfwConfirm";
+import { FOLDER_WORDS, folderKindFor } from "./clinflowNfwf";
 import { TRIAGE_WORDS, triagePayload } from "./qualityOpportunityPayload";
 
 // The triage page of a letter: what ClinFlow suggests, why, and where it should go, in a banner coloured by the outcome; the workflow and NFWF assessments; the
@@ -8,7 +10,7 @@ import { TRIAGE_WORDS, triagePayload } from "./qualityOpportunityPayload";
 const TONE = { urgent: "rose", workflow_required: "amber", no_workflow: "teal", review_required: "blue" };
 const CHOICES = [["urgent", "Urgent"], ["workflow_required", "Workflow required"], ["no_workflow", "NFWF"], ["review_required", "Needs review"]];
 
-export default function TriageReview({ analysis, review, canSend, canConfirm, onDecision, onOpenTeaching, onOpenSend, onSent, letterRef }) {
+export default function TriageReview({ analysis, review, canSend, canConfirm, onDecision, onOpenTeaching, onOpenSend, onSent, letterRef, letterText, destinations }) {
   const triage = analysis?.triage || {};
   const workflow = analysis?.workflowDecision || {};
   const nfwf = analysis?.nfwfAssessment || {};
@@ -43,6 +45,23 @@ export default function TriageReview({ analysis, review, canSend, canConfirm, on
         <section className="cf-t-noaction" aria-label="Why ClinFlow thinks no action is needed">
           <b>ClinFlow suggests nothing here is asked of the practice.</b>
           <span>It found no request, no medicine change, no result still awaited and nothing urgent. This is a suggestion only: skim the letter, and the words it relied on below, before you confirm.</span>
+        </section>
+      )}
+
+      {decision === "no_workflow" && !confirmed && canConfirm && (
+        <NfwConfirm
+          letterText={letterText}
+          destinations={(destinations || []).filter((d) => d !== "NFWF")}
+          onRight={() => onDecision("no_workflow", { nfwfCategory: nfwf.category || "No GP/practice action requested", reasonCode: "confirmed_right" })}
+          onWrong={({ reasonCode, sentences, note, destination }) => onDecision("workflow_required", { confirmedDestination: destination, nfwfCategory: "Not NFWF", reasonCode, reasonSentences: sentences, correctionReason: note ? `${reasonCode}: ${note}` : reasonCode })}
+        />
+      )}
+      {confirmed && (
+        <section className="cf-nfw-state">
+          <b>Docman folder: {FOLDER_WORDS[folderKindFor(review)]}</b>
+          {review.spotCheck?.status === "pending" && <span>A clinician will double-check this one. It stays in the NFW folder unless they disagree.</span>}
+          {review.spotCheck?.status === "agree" && <span>A clinician checked it and agreed.</span>}
+          {review.spotCheck?.status === "disagree" && <span>A clinician checked it and said action is needed, so it now belongs in the Action needed folder.{review.savedFolder === "nfw" ? " Its PDF was already saved in the NFW folder: please move it." : ""}</span>}
         </section>
       )}
 

@@ -28,12 +28,105 @@ fn sanitise_file_name(file_name: &str) -> String {
 }
 
 // Writes a ClinFlow-approved synthetic PDF to a dedicated, scoped temp folder and opens it
-// with the OS default viewer. This is the only filesystem write exposed to the frontend:
-// it always targets this one subfolder and is used solely for transient human review of
-// documents already held in the app's own local ClinFlow cache, never for arbitrary paths.
+// with the OS default viewer. This write always targets this one subfolder and is used solely
+// for transient human review of documents already held in the app's own local ClinFlow cache,
+// never for arbitrary paths. (The only other write is save_docman_pdf below, which can only
+// reach the two folders the person chose with the system folder picker.)
 #[tauri::command]
 fn open_clinflow_pdf(app: tauri::AppHandle, bytes: Vec<u8>, file_name: String) -> Result<(), String> {
   write_and_open_pdf(&app, &bytes, &file_name)
+}
+
+// The two Docman upload folders: "nfw" (letters needing no action) and "action". The person chooses each with the system folder picker and the choice is kept in this
+// computer's app settings. The web page never names a folder: it can only say "nfw" or "action", so it cannot make the app write anywhere else.
+#[cfg(desktop)]
+fn docman_folders_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+  let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+  fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+  Ok(dir.join("docman-folders.json"))
+}
+
+#[cfg(desktop)]
+fn read_docman_folders(app: &tauri::AppHandle) -> serde_json::Value {
+  let saved = docman_folders_file(app).ok()
+    .and_then(|file| fs::read_to_string(file).ok())
+    .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok());
+  match saved {
+    Some(value) if value.is_object() => value,
+    _ => serde_json::json!({}),
+  }
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn docman_folders(app: tauri::AppHandle) -> serde_json::Value {
+  let saved = read_docman_folders(&app);
+  serde_json::json!({ "nfw": saved["nfw"].as_str().unwrap_or(""), "action": saved["action"].as_str().unwrap_or("") })
+}
+
+// Async so the picker is not opened from the main thread. Resolves the chosen folder, or nothing if the person cancelled.
+#[cfg(desktop)]
+#[tauri::command]
+async fn choose_docman_folder(app: tauri::AppHandle, kind: String, title: String) -> Result<Option<String>, String> {
+  use tauri_plugin_dialog::DialogExt;
+  if kind != "nfw" && kind != "action" {
+    return Err("That is not one of the Docman folders.".to_string());
+  }
+  let Some(picked) = app.dialog().file().set_title(title).blocking_pick_folder() else { return Ok(None) };
+  let path = picked.into_path().map_err(|e| e.to_string())?;
+  let chosen = path.to_string_lossy().to_string();
+  let mut saved = read_docman_folders(&app);
+  saved[kind.as_str()] = serde_json::Value::String(chosen.clone());
+  let text = serde_json::to_string_pretty(&saved).map_err(|e| e.to_string())?;
+  fs::write(docman_folders_file(&app)?, text).map_err(|e| e.to_string())?;
+  Ok(Some(chosen))
+}
+
+// Saves a Docman PDF into the chosen folder for "nfw" or "action". Only a PDF, a plain file name (no folders in it), a size cap, and it never overwrites: a second
+// letter with the same name is saved as "name (2).pdf". Resolves the full path it was saved to.
+#[cfg(desktop)]
+#[tauri::command]
+fn save_docman_pdf(app: tauri::AppHandle, kind: String, file_name: String, bytes: Vec<u8>) -> Result<String, String> {
+  use std::io::Write;
+  if kind != "nfw" && kind != "action" {
+    return Err("That is not one of the Docman folders.".to_string());
+  }
+  let saved = read_docman_folders(&app);
+  let folder = saved[kind.as_str()].as_str().unwrap_or("");
+  if folder.is_empty() {
+    return Err("Choose this folder first.".to_string());
+  }
+  let dir = PathBuf::from(folder);
+  if !dir.is_dir() {
+    return Err("That folder cannot be found. Choose it again.".to_string());
+  }
+  if bytes.len() < 5 || &bytes[..5] != b"%PDF-" {
+    return Err("Only a PDF can be saved here.".to_string());
+  }
+  if bytes.len() > 25 * 1024 * 1024 {
+    return Err("That PDF is too large to save.".to_string());
+  }
+  let mut stem: String = file_name.chars().take(120)
+    .map(|c| if c.is_alphanumeric() || " -_().,&".contains(c) { c } else { '_' })
+    .collect();
+  if stem.len() >= 4 && stem.is_char_boundary(stem.len() - 4) && stem[stem.len() - 4..].eq_ignore_ascii_case(".pdf") {
+    stem.truncate(stem.len() - 4);
+  }
+  let stem = stem.trim_matches(|c: char| c == '.' || c == ' ').to_string();
+  let stem = if stem.is_empty() { "letter".to_string() } else { stem };
+  for attempt in 1..=200u32 {
+    let name = if attempt == 1 { format!("{stem}.pdf") } else { format!("{stem} ({attempt}).pdf") };
+    let target = dir.join(&name);
+    match fs::OpenOptions::new().write(true).create_new(true).open(&target) {
+      Ok(mut file) => {
+        file.write_all(&bytes).map_err(|e| format!("The PDF could not be saved: {e}"))?;
+        return Ok(target.to_string_lossy().to_string());
+      }
+      Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+      Err(e) => return Err(format!("The PDF could not be saved there: {e}")),
+    }
+  }
+  Err("Too many files with that name are already in the folder.".to_string())
 }
 
 // Downloads a practice document (a COSHH sheet, a certificate, a waste consignment note) from the practice's own Firebase
@@ -577,6 +670,12 @@ pub fn run() {
     .plugin(tauri_plugin_opener::init())
     .invoke_handler(tauri::generate_handler![
       open_clinflow_pdf,
+      #[cfg(desktop)]
+      docman_folders,
+      #[cfg(desktop)]
+      choose_docman_folder,
+      #[cfg(desktop)]
+      save_docman_pdf,
       #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
       open_storage_pdf,
       #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
@@ -608,6 +707,10 @@ pub fn run() {
   // checks for a newer signed release of the desktop app (see src/release/updateService.js); not on the phone
   #[cfg(desktop)]
   let builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+
+  // the system folder picker, used only to choose the two Docman upload folders (see choose_docman_folder)
+  #[cfg(desktop)]
+  let builder = builder.plugin(tauri_plugin_dialog::init());
 
   #[cfg(desktop)]
   let builder = builder.manage(AlertState::default()).manage(OrbState::default());

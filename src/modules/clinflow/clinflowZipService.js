@@ -93,9 +93,10 @@ export function downloadBlob(blob, fileName) {
 // Docman, not a folder of several files. The untouched original and the
 // governance manifest stay available separately (Original PDF download,
 // local device cache) rather than being bundled into what gets uploaded.
-export async function createDocmanPackZip(packs) {
+// folderOf(pack) names the folder inside the zip a letter belongs in ("NFW" or "Action needed"), so unzipping gives the two Docman upload folders.
+export async function createDocmanPackZip(packs, folderOf = () => "") {
   const entries = packs.map((pack) => ({
-    name: safePackName(`${pack.title}-${pack.documentId}`) + ".pdf",
+    name: `${folderOf(pack) ? `${folderOf(pack)}/` : ""}${safePackName(`${pack.title}-${pack.documentId}`)}.pdf`,
     data: pack.summaryBlob,
   }));
   return createZipBlob(entries);
