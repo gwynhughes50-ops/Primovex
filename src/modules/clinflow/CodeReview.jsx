@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { CheckCircle2, Database, Plus, RotateCcw, Tag, Trash2, XCircle } from "lucide-react";
 import { addProblem, diagnosticText, matchSummary, reviewRows, reviewStats, statsLine, unmatchedText } from "./clinflowCodeReview";
 import { SNOMED_NOTICE } from "./snomedIndex";
+import { copyText } from "./copyText";
 
 // What sort of finding it is, so each kind has its own colour and name on the screen
 const KINDS = { calculated: "Calculated by ClinFlow", diagnosis: "Diagnosis", symptom: "Symptom", test: "Test or measurement", medicine: "Medicine", other: "Finding" };
@@ -120,9 +121,10 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
   const [copiedDetails, setCopiedDetails] = useState(false);
   const copyDetails = async () => {
     const version = (typeof import.meta !== "undefined" && import.meta.env?.VITE_APP_VERSION) || "";
-    try { await navigator.clipboard.writeText(diagnosticText(rows, { version, snomedInfo: list?.search ? list.info : "", medicinesInfo: medList?.search ? medList.info : "" })); setCopiedDetails(true); onCopy?.("lookup details"); setTimeout(() => setCopiedDetails(false), 2500); } catch { /* the details are also on each row */ }
+    const done = await copyText(diagnosticText(rows, { version, snomedInfo: list?.search ? list.info : "", medicinesInfo: medList?.search ? medList.info : "" }));
+    setCopiedDetails(done ? true : "failed"); if (done) onCopy?.("lookup details"); setTimeout(() => setCopiedDetails(false), 3000);
   };
-  const copyUnmatched = async () => { try { await navigator.clipboard.writeText(unmatchedText(summary)); setCopied(true); onCopy?.("words with no code"); setTimeout(() => setCopied(false), 2500); } catch { /* the list is also shown above */ } };
+  const copyUnmatched = async () => { const done = await copyText(unmatchedText(summary)); setCopied(done ? true : "failed"); if (done) onCopy?.("words with no code"); setTimeout(() => setCopied(false), 3000); };
   const [form, setForm] = useState({ term: "", conceptId: "", descriptionId: "" });
   const [error, setError] = useState("");
   const [open, setOpen] = useState(false);
@@ -142,10 +144,10 @@ export default function CodeReview({ candidates, letter, review, canEdit, list, 
         <section className="cf-summary-card cf-match-summary" role="status"><div>
           <b>{summary.matched} of {summary.total} found a code in the lists.</b>
           {summary.unmatched.length > 0 && <><p>Nothing in the lists matched: {summary.unmatched.map((u) => `“${u.words}”`).join(", ")}. Check the original letter, remove them, or add the right code below.</p>
-            <button type="button" className="cf-top-button" onClick={copyUnmatched}>{copied ? "Copied" : "Copy these words"}</button></>}
+            <button type="button" className="cf-top-button" onClick={copyUnmatched}>{copied === "failed" ? "Could not copy: select the words above" : copied ? "Copied" : "Copy these words"}</button></>}
         </div></section>
       )}
-      {summary.total > 0 && <p className="cf-muted"><button type="button" className="cf-top-button" onClick={copyDetails}>{copiedDetails ? "Copied" : "Copy the lookup details"}</button> If something is not found, copy these and send them: they show what the letter said, what was searched for and what came back.</p>}
+      {summary.total > 0 && <p className="cf-muted"><button type="button" className="cf-top-button" onClick={copyDetails}>{copiedDetails === "failed" ? "Could not copy: open each row's details instead" : copiedDetails ? "Copied" : "Copy the lookup details"}</button> If something is not found, copy these and send them: they show what the letter said, what was searched for and what came back.</p>}
       {!canEdit && <p className="cf-muted">You can see these suggestions, but your role cannot accept or remove them.</p>}
       <ul className="cf-code-list">
         {rows.length === 0 && <li className="cf-code-row"><p>No codes were suggested for this letter.</p></li>}

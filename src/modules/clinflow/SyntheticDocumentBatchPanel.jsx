@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { copyText as copyToClipboard } from "./copyText";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -122,8 +123,11 @@ export default function SyntheticDocumentBatchPanel({ onClose, onImport }) {
     setInputKey((value) => value + 1);
   }
 
+  const [copyState, setCopyState] = useState("");
   async function copyText() {
-    if (result?.content) await navigator.clipboard.writeText(result.content);
+    if (!result?.content) return;
+    setCopyState((await copyToClipboard(result.content)) ? "copied" : "failed");
+    setTimeout(() => setCopyState(""), 2500);
   }
 
   function importSuccessful() {
@@ -187,7 +191,7 @@ export default function SyntheticDocumentBatchPanel({ onClose, onImport }) {
                 <section className="cf-azure-result-summary"><div><span>Document</span><strong>{result.document?.title}</strong><small>{selectedJob.response.fileName}</small></div><div><span>Pages</span><strong>{result.pageCount}</strong><small>{result.wordCount} words</small></div><div><span>OCR confidence</span><strong>{asPercent(result.averageConfidence)}</strong><small>Azure word confidence</small></div><div><span>Ground truth</span><strong>{matched}/{result.groundTruth?.length || 0}</strong><small>{asPercent(result.groundTruthScore)}</small></div></section>
                 <nav className="cf-azure-tabs"><button type="button" className={tab === "extraction" ? "active" : ""} onClick={() => setTab("extraction")}><FileText />Extracted text</button><button type="button" className={tab === "validation" ? "active" : ""} onClick={() => setTab("validation")}><ShieldCheck />Ground truth</button><button type="button" className={tab === "tables" ? "active" : ""} onClick={() => setTab("tables")}><Table2 />Tables ({result.tables?.length || 0})</button></nav>
                 <section className="cf-azure-result-body">
-                  {tab === "extraction" && <div className="cf-azure-text"><div><h3>Azure OCR output</h3><button type="button" onClick={copyText}><ClipboardCopy />Copy synthetic text</button></div><pre>{result.content || "Azure returned no text."}</pre></div>}
+                  {tab === "extraction" && <div className="cf-azure-text"><div><h3>Azure OCR output</h3><button type="button" onClick={copyText}><ClipboardCopy />{copyState === "copied" ? "Copied" : copyState === "failed" ? "Could not copy" : "Copy synthetic text"}</button></div><pre>{result.content || "Azure returned no text."}</pre></div>}
                   {tab === "validation" && <div className="cf-azure-validation"><h3>Controlled comparison</h3><p>Known synthetic values are test evidence, not a clinical accuracy score.</p>{result.groundTruth?.map((item) => <div key={`${item.label}-${item.expected}`} className={item.matched ? "matched" : "missed"}>{item.matched ? <CheckCircle2 /> : <XCircle />}<span>{item.label}</span><strong>{item.expected}</strong><em>{item.matched ? "Detected" : "Review OCR"}</em></div>)}</div>}
                   {tab === "tables" && <div className="cf-azure-tables">{result.tables?.length ? result.tables.map((table) => <section key={table.index}><h3>Table {table.index} · {table.rows} × {table.columns}</h3><div>{table.cells.map((cell, index) => <span key={`${table.index}-${cell.row}-${cell.column}-${index}`}><small>R{cell.row + 1} C{cell.column + 1}</small>{cell.content || "—"}</span>)}</div></section>) : <p>No table structure was returned.</p>}</div>}
                 </section>
