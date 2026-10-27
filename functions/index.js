@@ -820,9 +820,9 @@ exports.sendQualityOpportunity = onCall({ region: "europe-west2", timeoutSeconds
       db, auth: request.auth, profile,
       data: {
         action: "clinflow.opportunity.send", module: "clinflow", targetType: "quality_opportunity", targetId: result.groupId,
-        summary: result.toName ? "A quality opportunity was sent to a colleague" : `A quality opportunity was sent to the ${result.role} team`,
+        summary: `${result.kind === "triage" ? "A triage item" : "A quality opportunity"} was sent to ${result.toName ? "a colleague" : `the ${result.role} team`}`,
         classification: "operational",
-        metadata: { recipients: result.sent, role: result.role || "", domain: result.domain || "", withDetails: Boolean(result.hadPatient), automatedTransmission: false },
+        metadata: { kind: result.kind || "quality", recipients: result.sent, role: result.role || "", domain: result.domain || "", withDetails: Boolean(result.hadPatient), automatedTransmission: false },
       },
     });
   } catch (error) {
@@ -839,8 +839,8 @@ exports.updateQualityOpportunity = onCall({ region: "europe-west2", timeoutSecon
       db, auth: request.auth, profile,
       data: {
         action: "clinflow.opportunity.update", module: "clinflow", targetType: "quality_opportunity", targetId: result.id,
-        summary: `A quality opportunity was marked ${result.status}`, classification: "operational",
-        metadata: { status: result.status, domain: result.domain || "", automatedTransmission: false },
+        summary: `${result.kind === "triage" ? "A triage item" : "A quality opportunity"} was marked ${result.status}`, classification: "operational",
+        metadata: { kind: result.kind || "quality", status: result.status, domain: result.domain || "", automatedTransmission: false },
       },
     });
   } catch (error) {

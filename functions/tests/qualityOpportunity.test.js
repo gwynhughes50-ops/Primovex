@@ -144,3 +144,28 @@ test("the notification is built without any patient information even if it is pa
   assert.equal(n.message, "T");
   assert.ok(!JSON.stringify(n).includes("9434765919"));
 });
+
+test("a triage item goes the same way, with its own kind, an urgent flag, and a notification that names no patient", async () => {
+  const db = fakeDb(staff());
+  const result = await send({ kind: "triage", title: "Triage: Urgent, route to GP", domain: "Triage", rationale: "Urgent or safety-critical context", nextStep: "Route to GP", urgent: true, patient: { initials: "DJ", birthDate: "1954-06-12", nhsNumber: "9434765919" } }, db);
+  assert.equal(result.kind, "triage");
+  const record = db.written.find((w) => w.path.startsWith("quality_opportunities/")).data;
+  assert.equal(record.kind, "triage");
+  assert.equal(record.urgent, true);
+  const notification = db.written.find((w) => w.path.includes("/notifications/")).data;
+  assert.equal(notification.kind, "triage-item");
+  assert.equal(notification.module, "clinflow");
+  assert.equal(notification.priority, "high", "an urgent triage item is a high-priority notification");
+  assert.match(notification.title, /Ann Admin sent you a letter to look at/);
+  assert.equal(notification.message, "Triage: Urgent, route to GP");
+  assert.ok(!/1954|9434765919|DJ/.test(JSON.stringify(notification)));
+});
+
+test("an unknown kind is treated as a quality opportunity, and only a real true makes it urgent", () => {
+  const clean = cleanOpportunity({ title: "T", kind: "something-else", urgent: "yes" });
+  assert.equal(clean.kind, "quality");
+  assert.equal(clean.urgent, false);
+  const notification = buildOpportunityNotification({ sender: { uid: "me", name: "Ann" }, recipientUid: "b1", opportunity: clean });
+  assert.equal(notification.kind, "quality-opportunity");
+  assert.equal(notification.priority, "normal");
+});

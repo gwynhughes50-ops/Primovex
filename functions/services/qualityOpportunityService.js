@@ -10,6 +10,7 @@ const { hasCapability } = require("./roleCapabilities");
 // number when the letter has them. That is kept in the record only. The NOTIFICATION that goes to a phone or the desktop never carries it: it names the
 // opportunity and nothing else. The audit trail records who sent what kind of opportunity to whom (by role and count), never the patient.
 
+const KINDS = ["quality", "triage"];
 const STATUSES = ["new", "seen", "actioned", "declined"];
 const RECIPIENT_MAX = 25;
 const HOURLY_LIMIT = 40;
@@ -57,6 +58,8 @@ function cleanOpportunity(data = {}) {
     letterRef: tidy(data.letterRef, MAX.letterRef),
     note: tidy(data.note, MAX.note),
     patient: cleanPatient(data.patient),
+    kind: KINDS.includes(data.kind) ? data.kind : "quality",
+    urgent: data.urgent === true,
   };
 }
 
@@ -76,15 +79,16 @@ function buildOpportunityRecord({ groupId, sender, recipient, opportunity }) {
   };
 }
 
-// What goes to the person's notifications: the kind of opportunity and who sent it. No patient details, ever.
+// What goes to the person's notifications: what kind of thing it is and who sent it. No patient details, ever.
 function buildOpportunityNotification({ sender, recipientUid, opportunity }) {
+  const triage = opportunity.kind === "triage";
   return {
     recipientUid,
-    module: "quality",
-    kind: "quality-opportunity",
-    title: `${tidy(sender.name, 80) || "A colleague"} sent you a quality opportunity`,
-    message: opportunity.domain ? `${opportunity.title} (${opportunity.domain})` : opportunity.title,
-    priority: "normal",
+    module: triage ? "clinflow" : "quality",
+    kind: triage ? "triage-item" : "quality-opportunity",
+    title: `${tidy(sender.name, 80) || "A colleague"} ${triage ? "sent you a letter to look at" : "sent you a quality opportunity"}`,
+    message: !triage && opportunity.domain ? `${opportunity.title} (${opportunity.domain})` : opportunity.title,
+    priority: opportunity.urgent ? "high" : "normal",
     read: false,
     status: "open",
     actionUrl: "/quality-opportunities",
@@ -151,8 +155,8 @@ async function sendQualityOpportunity({ db, callerUid, callerName, capabilities,
   });
   await batch.commit();
   return toUid
-    ? { sent: recipients.length, role: null, toName: tidy(recipients[0].data()?.displayName, 80), groupId, domain: opportunity.domain, hadPatient: Boolean(opportunity.patient) }
-    : { sent: recipients.length, role, groupId, domain: opportunity.domain, hadPatient: Boolean(opportunity.patient) };
+    ? { sent: recipients.length, role: null, toName: tidy(recipients[0].data()?.displayName, 80), groupId, domain: opportunity.domain, kind: opportunity.kind, hadPatient: Boolean(opportunity.patient) }
+    : { sent: recipients.length, role, groupId, domain: opportunity.domain, kind: opportunity.kind, hadPatient: Boolean(opportunity.patient) };
 }
 
 // The person it was sent to says what happened: seen, actioned, or declined (with a note). Nobody else can, and the patient details are not touched.
@@ -169,7 +173,7 @@ async function updateQualityOpportunity({ db, callerUid, data = {}, now = new Da
   const statusNote = tidy(data.note, MAX.statusNote);
   if (status === "declined" && !statusNote) throw new HttpsError("invalid-argument", "Say briefly why it is being declined.");
   await ref.update({ status, statusNote, statusByUid: callerUid, statusAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(), statusAtMs: now.getTime() });
-  return { id, status, senderUid: record.senderUid, domain: record.domain || "" };
+  return { id, status, senderUid: record.senderUid, domain: record.domain || "", kind: record.kind || "quality" };
 }
 
-module.exports = { STATUSES, RECIPIENT_MAX, HOURLY_LIMIT, MAX, nhsNumberValid, cleanPatient, cleanOpportunity, buildOpportunityRecord, buildOpportunityNotification, listRecipients, sendQualityOpportunity, updateQualityOpportunity };
+module.exports = { KINDS, STATUSES, RECIPIENT_MAX, HOURLY_LIMIT, MAX, nhsNumberValid, cleanPatient, cleanOpportunity, buildOpportunityRecord, buildOpportunityNotification, listRecipients, sendQualityOpportunity, updateQualityOpportunity };

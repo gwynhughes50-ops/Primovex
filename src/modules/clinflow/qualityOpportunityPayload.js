@@ -41,3 +41,25 @@ const TONES = [
 ];
 // the colour a prompt's card is given, from its domain
 export const toneOf = (domain) => (TONES.find(([re]) => re.test(String(domain || ""))) || [null, "blue"])[1];
+
+// The triage outcome ClinFlow suggests (or a person has confirmed) as something to send: what it is, why, and where it should go. Only ClinFlow's own
+// reasons are included, never quotes from the letter, so nothing about the patient travels in the words (the patient's details are a separate choice).
+export const TRIAGE_WORDS = { urgent: "Urgent", workflow_required: "Workflow required", no_workflow: "NFWF (no action needed)", review_required: "Needs human review" };
+export function triagePayload({ analysis, decision, destination, letterRef, includePatient = true, note = "", toUid = "", role = "" }) {
+  const triage = analysis?.triage || {};
+  const chosen = decision || triage.decision || "review_required";
+  const place = text(destination || triage.destination || analysis?.workflowDecision?.suggestedDestination);
+  const reasons = (triage.reasons || []).map((r) => `${text(r.label)}${r.detail ? `: ${text(r.detail)}` : ""}`).filter(Boolean).join("; ");
+  const workflow = text(analysis?.workflowDecision?.category);
+  return {
+    title: `Triage: ${TRIAGE_WORDS[chosen] || chosen}${place ? `, route to ${place}` : ""}`,
+    domain: "Triage",
+    rationale: reasons || "ClinFlow found no reliable evidence for this suggestion.",
+    nextStep: [place && `Route to ${place}.`, workflow && `${workflow}.`, "A person must confirm this before it is acted on."].filter(Boolean).join(" "),
+    source: "ClinFlow letter", letterRef: text(letterRef), note: text(note),
+    kind: "triage", urgent: chosen === "urgent",
+    patient: includePatient ? patientDetailsFor(analysis) : null,
+    ...(toUid ? { toUid } : { role }),
+  };
+}
+export const KIND_WORDS = { quality: "Quality opportunity", triage: "Triage" };

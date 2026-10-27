@@ -187,3 +187,19 @@
 .cf-qsend label{display:grid;gap:3px;margin:8px 0;font-size:11.5px;font-weight:700;color:#41536b}.cf-qsend select,.cf-qsend textarea{border:1px solid var(--cf-border);border-radius:8px;padding:7px 9px;font-size:13px;font-weight:400;font-family:inherit}
 .cf-qsend .cf-qsend-check{display:flex;gap:9px;align-items:flex-start;padding:9px 11px;border:1px solid #f1d98f;border-radius:10px;background:#fff9e8}.cf-qsend-check span{display:grid;gap:2px}.cf-qsend-check small{font-weight:600;color:#6b4300}
 .cf-qsend textarea{min-height:0;height:64px;resize:vertical}
+
+/* Triage: a banner coloured by the outcome, the assessments, the evidence, and the buttons that confirm it */
+.cf-t-hero{display:flex;flex-wrap:wrap;justify-content:space-between;gap:14px;align-items:center;margin-bottom:12px;padding:18px 22px;border-radius:16px;background:var(--q-edge);color:#fff;box-shadow:0 2px 6px rgba(9,41,74,.15)}
+.cf-t-hero-main{display:flex;gap:14px;align-items:center}
+.cf-t-hero h3{margin:2px 0 4px;font-size:28px;line-height:1.1;color:#fff}.cf-t-hero p{margin:0;font-size:14px;color:rgba(255,255,255,.95)}
+.cf-t-kicker{font-size:11px!important;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:rgba(255,255,255,.85)!important}
+.cf-t-hero-side{display:grid;gap:8px;justify-items:end}
+.cf-t-status{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:4px 12px;font-size:12px;font-weight:800;background:rgba(255,255,255,.95);color:var(--q-ink)}
+.cf-t-send{display:inline-flex;align-items:center;gap:6px;border:0;border-radius:9px;padding:8px 14px;background:#fff;color:var(--q-ink);font-size:12.5px;font-weight:800;cursor:pointer}.cf-t-send:hover{background:#f4f8ff}
+.cf-t-sent{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:#fff}
+.cf-t-evidence{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px;margin:6px 0 10px}
+.cf-t-reason{display:grid;gap:2px;padding:9px 12px;border-radius:10px;border:1px solid var(--q-soft);border-left:6px solid var(--q-edge);background:var(--q-bg)}.cf-t-reason b{font-size:13px;color:#0c2037}.cf-t-reason span{font-size:12.5px;color:#1d2f49}
+.cf-t-nfwf{margin:6px 0 10px;padding:10px 14px;border-radius:10px;background:#f1ebff;border-left:6px solid #7b4fd8}.cf-t-nfwf p{margin:2px 0;font-size:12.5px;color:#2c1a5e}
+.cf-t-choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:6px 0 10px}
+.cf-t-choice{padding:12px 14px;border:2px solid var(--q-edge);border-radius:12px;background:var(--q-bg);color:var(--q-ink);font-size:14px;font-weight:800;cursor:pointer}.cf-t-choice:hover:not(:disabled){background:var(--q-edge);color:#fff}
+.cf-t-choice.on{background:var(--q-edge);color:#fff;box-shadow:0 0 0 3px var(--q-soft)}.cf-t-choice:disabled{opacity:.5;cursor:not-allowed}
