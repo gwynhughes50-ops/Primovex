@@ -103,7 +103,7 @@ t("the triage page and the From ClinFlow list are wired in, and both tabs use th
   assert.match(read("src/modules/clinflow/QualityReview.jsx"), /<SendToColleague/);
   assert.match(read("src/config/routeManifest.js"), /label: "From ClinFlow"/);
   assert.match(read("src/pages/QualityOpportunities.jsx"), /<h1[^>]*>From ClinFlow<\/h1>/);
-  assert.match(read("functions/services/qualityOpportunityService.js"), /KINDS = \["quality", "triage"\]/);
+  assert.match(read("functions/services/qualityOpportunityService.js"), /KINDS = \["quality", "triage", "task"\]/);
 });
 
 console.log(`
