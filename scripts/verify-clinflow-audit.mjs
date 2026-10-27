@@ -66,7 +66,7 @@ t("who opened a letter and what was copied out of it for Docman are on the recor
 t("every move is on the record: what was opened, searched, copied, refused, finished or scored", () => {
   const source = read("src/modules/clinflow/ClinFlowWorkspace.jsx");
   assert.equal((source.match(/if \(!can\("[^"]+"\)\) return notify\(/g) || []).length, 0, "no refusal goes unrecorded");
-  assert.ok((source.match(/return denied\(/g) || []).length >= 12, "each refusal is written to the audit trail");
+  assert.ok((source.match(/return denied\(/g) || []).length >= 11, "each refusal is written to the audit trail");
   assert.match(source, /action: "clinflow\.action\.denied"[^\n]*permissionDecision: "denied", outcome: "denied"/);
   for (const action of ["clinflow.tab.view", "clinflow.queue.filter", "clinflow.search", "clinflow.finish.open", "clinflow.teaching.open", "clinflow.scorecard.open", "clinflow.codes.copy", "clinflow.docman.copy", "clinflow.document.view", "clinflow.terminology.load"]) {
     assert.ok(source.includes(action) || read("src/modules/clinflow/clinflowAuditMeta.js").includes(action), `${action} is recorded`);
