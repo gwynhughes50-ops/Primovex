@@ -59,4 +59,17 @@ t("the sample letter's zoom and download buttons do what they say", () => {
   assert.match(source, /zoom: sampleZoom \/ 100/);
 });
 
-console.log(`\n${n} passed`);
+t("ClinFlow starts empty: no made-up demonstration letters, and any copy an earlier version saved is cleared away", () => {
+  const source = readFileSync(new URL("ClinFlowWorkspace.jsx", dir), "utf8");
+  assert.match(source, /const SAMPLE_DOCUMENTS = \[\];/, "no demonstration letters are built in");
+  assert.ok(!/Mr John Smith|Mrs Mary Jones|Mr Robert Williams|Mrs Susan Brown|Miss Emily Wilson|Mr Peter Thomas|Mr Alan Johnson/.test(source), "none of the demonstration patients remain");
+  assert.match(source, /RETIRED_SAMPLE_IDS = \["cf-001", "cf-002", "cf-003", "cf-004", "cf-005", "cf-006", "cf-007", "cf-008"\]/);
+  assert.match(source, /removeCachedClinFlowDocument\(item\.id\)/, "a saved copy is removed as it is found");
+  assert.ok((source.match(/loadCachedWithoutSamples\(\)/g) || []).length >= 2, "both the first load and Refresh use it");
+  assert.ok(!/saveDemoQueue|saveSyntheticWorkflowQueue/.test(source), "the 'save the demonstration queue' button is gone");
+  assert.match(source, /There are no letters in ClinFlow yet/, "the empty screen says what to do");
+  assert.match(source, /useState\(SAMPLE_DOCUMENTS\[0\]\?\.id \|\| ""\)/, "an empty list cannot crash the screen");
+});
+
+console.log(`
+${n} passed`);

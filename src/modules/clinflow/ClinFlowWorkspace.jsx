@@ -38,7 +38,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { writeAuditEvent } from "@/core/identity/auditService";
-import { applyClinFlowAction, createClinFlowContext, recordClinFlowNoteMarker, saveSyntheticWorkflowQueue, subscribeClinFlowWorkflow } from "./clinflowService";
+import { applyClinFlowAction, createClinFlowContext, recordClinFlowNoteMarker, subscribeClinFlowWorkflow } from "./clinflowService";
 import SyntheticDocumentBatchPanel from "./SyntheticDocumentBatchPanel";
 import { analyseClinFlowOcr, buildReviewerBrief } from "./clinflowAnalysisService";
 import { AI_OUTPUT_FOOTER, HIGH_RISK_BANNER } from "./clinflowDisclaimers";
@@ -61,23 +61,25 @@ import { normaliseClinFlowPages } from "./clinflowPageService";
 import "./clinflow-workspace.css";
 import "./clinflow-azure-button.css";
 
-const SAMPLE_DOCUMENTS = [
-  { id: "cf-001", title: "Cardiology Outpatient Letter", patient: "Mr John Smith", nhs: "987 654 3210", dob: "12/06/1954", source: "Glan Clwyd Hospital", received: "14 May 2026 · 10:24", priority: "high", destination: "GP", specialty: "Cardiology", icon: "heart" },
-  { id: "cf-002", title: "Biochemistry Results", patient: "Mrs Mary Jones", nhs: "456 771 2390", dob: "04/02/1968", source: "Countess of Chester", received: "14 May 2026 · 09:15", priority: "routine", destination: "GP", specialty: "Pathology", icon: "results" },
-  { id: "cf-003", title: "Orthopaedics Letter", patient: "Mr Robert Williams", nhs: "221 673 9901", dob: "21/08/1961", source: "Wrexham Maelor Hospital", received: "14 May 2026 · 08:42", priority: "high", destination: "GP", specialty: "Orthopaedics", icon: "bone" },
-  { id: "cf-004", title: "Discharge Summary", patient: "Mrs Susan Brown", nhs: "778 564 1123", dob: "19/03/1949", source: "Ysbyty Gwynedd", received: "13 May 2026 · 16:30", priority: "routine", destination: "Workflow", specialty: "General Medicine", icon: "discharge" },
-  { id: "cf-005", title: "Respiratory Clinic Letter", patient: "Mr David Evans", nhs: "609 221 7845", dob: "30/11/1957", source: "Glan Clwyd Hospital", received: "13 May 2026 · 14:05", priority: "routine", destination: "Nurse / HCA", specialty: "Respiratory", icon: "lungs" },
-  { id: "cf-006", title: "Referral Letter", patient: "Miss Emily Wilson", nhs: "134 901 7255", dob: "08/09/1993", source: "GP Surgery", received: "13 May 2026 · 11:22", priority: "routine", destination: "Admin", specialty: "Referral", icon: "referral" },
-  { id: "cf-007", title: "Neurology Letter", patient: "Mr Peter Thomas", nhs: "314 882 1097", dob: "17/01/1970", source: "Alder Hey Hospital", received: "13 May 2026 · 09:10", priority: "high", destination: "GP", specialty: "Neurology", icon: "neuro" },
-  { id: "cf-008", title: "Haematology Results", patient: "Mr Alan Johnson", nhs: "902 448 1136", dob: "03/07/1955", source: "Countess of Chester", received: "12 May 2026 · 17:45", priority: "routine", destination: "NFWF", specialty: "Haematology", icon: "results" },
-].map((item) => ({ ...item, dataMode: "synthetic", status: "awaiting_review" }));
+// ClinFlow starts empty: the eight made-up demonstration letters it used to open with are gone. Only their ids are kept, so a copy that an earlier version saved
+// on this computer is cleared away rather than coming back.
+const SAMPLE_DOCUMENTS = [];
+const RETIRED_SAMPLE_IDS = ["cf-001", "cf-002", "cf-003", "cf-004", "cf-005", "cf-006", "cf-007", "cf-008"];
 
 // Used to tell "one of the built-in demo letters" apart from a real imported
 // document when merging Firestore's workflow sync into local state (see the
 // subscribeClinFlowWorkflow effect below) — explicit id membership, not an
 // indirect field check, so a real document is never mistaken for a stale
 // sample and dropped when the sync fires.
-const SAMPLE_DOCUMENT_IDS = new Set(SAMPLE_DOCUMENTS.map((item) => item.id));
+const SAMPLE_DOCUMENT_IDS = new Set(RETIRED_SAMPLE_IDS);
+
+// the letters saved on this computer, without any of the retired demonstration ones (which are removed as they are found)
+async function loadCachedWithoutSamples() {
+  const cached = await loadCachedClinFlowDocuments();
+  const retired = cached.filter((item) => SAMPLE_DOCUMENT_IDS.has(item.id));
+  retired.forEach((item) => removeCachedClinFlowDocument(item.id).catch(() => {}));
+  return cached.filter((item) => !SAMPLE_DOCUMENT_IDS.has(item.id));
+}
 
 const CLINICAL_INSIGHTS = [
   { tone: "danger", title: "Medication change", detail: "Bisoprolol increased to 5 mg once daily." },
@@ -294,7 +296,7 @@ export default function ClinFlowWorkspace() {
   const versionsInUse = () => termVersions({ snomed: snomedList.search ? snomedList.info : "", medicines: medicinesList.search ? medicinesList.info : "", abbreviations: abbreviations.info.builtIn ? "built-in list" : abbreviations.info.label });
   const codingOf = (doc) => (doc?.clinflowAnalysis ? codingAuditMeta(reviewCandidates(doc.clinflowAnalysis, doc.syntheticOcr?.content), doc.codeReview) : {});
   const [documents, setDocuments] = useState(SAMPLE_DOCUMENTS);
-  const [selectedId, setSelectedId] = useState(SAMPLE_DOCUMENTS[0].id);
+  const [selectedId, setSelectedId] = useState(SAMPLE_DOCUMENTS[0]?.id || "");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [activeTab, setActiveTab] = useState("document");
@@ -336,7 +338,7 @@ export default function ClinFlowWorkspace() {
 
   useEffect(() => {
     let active = true;
-    loadCachedClinFlowDocuments().then((cached) => {
+    loadCachedWithoutSamples().then((cached) => {
       if (!active || !cached.length) return;
       setDocuments((current) => {
         const cachedById = new Map(cached.map((item) => [item.id, item]));
@@ -608,10 +610,6 @@ export default function ClinFlowWorkspace() {
     finally { setBusy(false); }
   }
 
-  async function saveDemoQueue() {
-    if (!can("clinflow.capture")) return denied("clinflow.capture", "ClinFlow capture permission is required");
-    await runAction(async () => { await saveSyntheticWorkflowQueue(SAMPLE_DOCUMENTS, context); notify("Non-identifying demonstration workflow saved"); });
-  }
 
   async function setPriority() {
     if (!can("clinflow.workflow")) return denied("clinflow.workflow", "Your role cannot change workflow priority");
@@ -818,7 +816,7 @@ export default function ClinFlowWorkspace() {
 
   async function refreshWorkflow() {
     try {
-      const [cached, packs] = await Promise.all([loadCachedClinFlowDocuments(), loadFinishedClinFlowPacks()]);
+      const [cached, packs] = await Promise.all([loadCachedWithoutSamples(), loadFinishedClinFlowPacks()]);
       if (cached.length) {
         setDocuments((current) => [...cached, ...current.filter((item) => !cached.some((row) => row.id === item.id))]);
       }
@@ -875,7 +873,6 @@ export default function ClinFlowWorkspace() {
           <span className={`cf-data-state cf-data-state--${syncState}`}>Synthetic only · {syncState === "synced" ? "Workflow synced" : syncState === "error" ? "Sync unavailable" : "Local preview"}</span>
           {completedDocuments.length > 0 && <button className="cf-top-button cf-top-button--finished" type="button" onClick={downloadAllFinishedPacks} disabled={busy}><FolderCheck size={15} /> Download finished ({completedDocuments.length})</button>}
           {can("clinflow.capture") && <button className="cf-top-button cf-top-button--azure" type="button" onClick={() => setAzureTestOpen(true)}><UploadCloud size={15} /> Test Azure OCR</button>}
-          {syncState === "local" && context.cloudEnabled && can("clinflow.capture") && <button className="cf-top-button cf-top-button--primary" type="button" onClick={saveDemoQueue} disabled={busy}>Save demo workflow</button>}
           <button className="cf-top-button" type="button" onClick={refreshWorkflow} disabled={busy}><RefreshCw size={15} /> Refresh</button>
           <span className="cf-user-chip"><UserRound size={16} /> {displayName || "Workflow user"}</span>
         </div>
@@ -905,7 +902,7 @@ export default function ClinFlowWorkspace() {
       </aside>
 
       <main className="cf-workspace">
-        {!selected ? <div className="cf-empty">No document selected.</div> : <>
+        {!selected ? <div className="cf-empty">{documents.length ? "No document selected." : "There are no letters in ClinFlow yet. Choose “Test Azure OCR” at the top to analyse one."}</div> : <>
           <div className="cf-document-heading">
             <div>
               <button type="button" className="cf-pane-button" onClick={() => setLayout(!queueCollapsed, panelCollapsed)} aria-pressed={queueCollapsed} aria-label={queueCollapsed ? "Show the letters list" : "Hide the letters list"} title={queueCollapsed ? "Show the letters list" : "Hide the letters list"}>{queueCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button>
