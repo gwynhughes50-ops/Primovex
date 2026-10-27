@@ -231,3 +231,8 @@
 .cf-dm-download{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:10px;padding:11px 18px;background:#fff;color:#09294a;font-size:14px;font-weight:800;cursor:pointer}.cf-dm-download:hover{background:#f4f8ff}
 .cf-dm-waiting{margin:6px 0;font-size:12.5px;color:#8a5200}.cf-dm-waiting button{border:0;background:transparent;color:#075eae;font-weight:800;text-decoration:underline;cursor:pointer}
 .cf-dm-tech{margin-top:14px;font-size:12.5px}.cf-dm-tech summary{cursor:pointer;color:#075eae;font-weight:700}
+
+/* Right panel: the two cards sit together at the top; the panel scrolls as a whole when it is taller than the window (no empty gap between them) */
+.cf-insights{overflow-y:auto}
+.cf-insight-scroll{flex:0 0 auto;overflow:visible}
+.clinflow-shell--panel-collapsed .cf-insights{overflow:visible}
