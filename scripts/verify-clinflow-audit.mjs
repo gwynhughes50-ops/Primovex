@@ -14,8 +14,8 @@ t("every code decision and filing records which terminology was in use", () => {
   });
   const source = read("src/modules/clinflow/ClinFlowWorkspace.jsx");
   assert.match(source, /\{ \.\.\.metadata, \.\.\.versionsInUse\(\), automatedTransmission: false \}/, "code review events carry the versions");
-  assert.match(source, /"clinflow\.summary\.download"[^\n]*\.\.\.codingOf\(selected\), \.\.\.versionsInUse\(\)/, "the Docman download records where the coding stood");
-  assert.match(source, /"clinflow\.finished\.pack_created"[^\n]*\.\.\.codingOf\(updated\), \.\.\.versionsInUse\(\)/, "finishing records where the coding stood");
+  assert.match(source, /"clinflow\.summary\.download"[^\n]*\.\.\.codingOf\(selected\), \.\.\.stepsOf\(selected\), \.\.\.versionsInUse\(\)/, "the Docman download records where the coding stood");
+  assert.match(source, /"clinflow\.finished\.pack_created"[^\n]*\.\.\.codingOf\(updated\), \.\.\.stepsOf\(updated\), \.\.\.versionsInUse\(\)/, "finishing records where the coding stood");
   assert.match(source, /calculated: candidate\.calculated\?\.kind/, "a worked-out value is marked as such when it is accepted");
 });
 
@@ -46,7 +46,7 @@ t("loading or removing a terminology list is written to the audit trail with its
 
 t("no key we add is one the audit service would silently drop, and none carries the letter's words", () => {
   const keys = new Set([
-    ...Object.keys(termVersions()), ...Object.keys(codingAuditMeta([], null)), ...Object.keys(terminologyEvent("snomed", "load").metadata), "calculated", "decision", "conceptId",
+    ...Object.keys(termVersions()), ...Object.keys(codingAuditMeta([], null)), ...Object.keys(terminologyEvent("snomed", "load").metadata), "calculated", "decision", "conceptId", "kind", "choice", "suggestedFor", "reason", "sentTo", "withDetails", "recipients", "stepsTotal", "stepsUndecided", "stepsSelf", "stepsDone", "stepsSent", "stepsNoAction",
   ]);
   for (const key of keys) assert.ok(!BLOCKED.test(key), `${key} would be dropped by the audit service`);
   assert.ok(Object.keys(codingAuditMeta([], null)).length + Object.keys(termVersions()).length + 4 <= 24, "within the 24 keys the service keeps");

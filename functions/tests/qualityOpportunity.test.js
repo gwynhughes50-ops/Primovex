@@ -169,3 +169,17 @@ test("an unknown kind is treated as a quality opportunity, and only a real true 
   assert.equal(notification.kind, "quality-opportunity");
   assert.equal(notification.priority, "normal");
 });
+
+test("a task from a letter's next steps goes the same way as its own kind", async () => {
+  const db = fakeDb(staff());
+  const result = await send({ kind: "task", title: "Book a blood test in 2 weeks", domain: "Task", rationale: "The letter says: repeat U&Es in 2 weeks", nextStep: "Book with the nurse", urgent: false }, db);
+  assert.equal(result.kind, "task");
+  const record = db.written.find((w) => w.path.startsWith("quality_opportunities/")).data;
+  assert.equal(record.kind, "task");
+  const notification = db.written.find((w) => w.path.includes("/notifications/")).data;
+  assert.equal(notification.kind, "task-item");
+  assert.equal(notification.module, "clinflow");
+  assert.match(notification.title, /Ann Admin sent you a task/);
+  assert.equal(notification.message, "Book a blood test in 2 weeks");
+  assert.equal(notification.priority, "normal");
+});

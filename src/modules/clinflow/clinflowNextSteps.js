@@ -38,26 +38,35 @@ const APPT = /\b(?:appointment|review|see (?:him|her|them|the patient)|follow[\s
 const GP_TASK = /\b(?:GP|general practitioner|your practice|primary care)\b/i;
 const HOSPITAL_DOES = /\b(?:we will|i will|will be seen|will see|will arrange|we have arranged|has been arranged|will be contacted|will be sent|waiting list)\b/i;
 
+// care the hospital gives or a limit to watch for, not a job for the practice ("continue oral antibiotics", "encourage fluids", "below 92%")
+const WARD_CARE = /\b(?:continue|maintain|encourage|fluid chart|physio\w*|mobilis\w*|nursing|observations?|obs\b|oral antibiotics|iv antibiotics|oxygen|nebulis\w*)\b/i;
+const THRESHOLD = /\b(?:below|above|under|over|less than|more than|falls?|drops?|rises?)\b[^.]{0,30}\d/i;
+
 export function classifyAction(value) {
   const s = text(value);
+  if (THRESHOLD.test(s) && !/\b(?:book|arrange|refer|repeat|check|review)\b/i.test(s)) return { kind: "threshold", owner: OWNERS.admin, tone: "admin" };
+  if (BLOODS.test(s) && s.length <= 20 && !/\b(?:stop|start|continue|maintain)\b/i.test(s) && !/\b(?:repeat|recheck|re-check|check|monitor|measure|test|follow)\b/i.test(s)) return { kind: "bloods", owner: OWNERS.nurse, tone: "nurse" };
   if (REFER.test(s)) return { kind: "referral", owner: OWNERS.gp, tone: "gp" };
   if (BLOODS.test(s) && /\b(?:repeat|recheck|re-check|check|monitor|measure|test|follow)\b/i.test(s)) return { kind: "bloods", owner: OWNERS.nurse, tone: "nurse" };
   if (TESTS.test(s)) return { kind: "test", owner: OWNERS.admin, tone: "admin" };
   if (MEDS.test(s) && /\b(?:start|stop|restart|increase|reduce|switch|change|withhold|hold|titrate|prescri\w+)\b/i.test(s)) return { kind: "medicine", owner: OWNERS.pharmacist, tone: "pharmacist" };
   if (HOSPITAL_DOES.test(s) && APPT.test(s) && !GP_TASK.test(s)) return { kind: "hospital", owner: OWNERS.admin, tone: "admin" };
   if (APPT.test(s) && !GP_TASK.test(s)) return { kind: "appointment", owner: OWNERS.admin, tone: "admin" };
+  if (WARD_CARE.test(s) && !GP_TASK.test(s)) return { kind: "info", owner: OWNERS.admin, tone: "admin" };
   return { kind: "clinical", owner: OWNERS.gp, tone: "gp" };
 }
 
-// The instruction for each kind, in the words an administrator can act on
+// The instruction for each kind, in the words the person who opens the letter can act on. The owner shown is only a suggestion: they choose who deals with each step.
 const DIRECTIONS = {
   bloods: (what, when) => ({ title: `Book a blood test${when ? ` ${when.label}` : ""}`, detail: `The letter asks for: ${what}. Book the patient with the nurse or healthcare assistant, and set a recall so it is not missed. If the result will need a decision, tell a GP when it comes back.` }),
   test: (what, when) => ({ title: `Arrange the test${when ? ` ${when.label}` : ""}`, detail: `The letter asks for: ${what}. If the practice does this test, book it. If it does not, pass the letter to a GP to request it. Do not book anything the letter does not ask for.` }),
   appointment: (what, when) => ({ title: `Book an appointment${when ? ` ${when.label}` : ""}`, detail: `The letter says: ${what}. Book it with the right clinician for the patient, and tell the patient.` }),
   hospital: (what) => ({ title: "Nothing to book: the hospital will arrange this", detail: `The letter says: ${what}. Put a note on the record. If the patient has not heard from the hospital by the date given, tell a GP.` }),
-  medicine: (what) => ({ title: "Medicine change: pass to a GP or pharmacist", detail: `The letter says: ${what}. Do not change anything on the patient's record or prescription yourself. A GP or the practice pharmacist must decide and update it.` }),
-  referral: (what) => ({ title: "Referral: pass to a GP to decide", detail: `The letter says: ${what}. Only a GP can decide whether to refer. Put it in the GP's tasks and mark it for their attention.` }),
-  clinical: (what) => ({ title: "Pass to a GP to decide", detail: `The letter says: ${what}. This needs a clinical decision, so it goes to a GP. Do not act on it yourself.` }),
+  medicine: (what) => ({ title: "Medicine change", detail: `The letter says: ${what}. A medicine change is usually made by a prescriber. Choose who deals with it: you, or a colleague such as a GP, nurse or pharmacist.` }),
+  referral: (what) => ({ title: "Referral", detail: `The letter says: ${what}. A referral is usually decided by a GP. Choose who should look at it, or deal with it yourself if that is how your practice works.` }),
+  clinical: (what) => ({ title: "Decide who deals with this", detail: `The letter says: ${what}. Choose who deals with it: you, or a colleague such as a GP, nurse or pharmacist.` }),
+  info: (what) => ({ title: "Care the hospital is giving: nothing for the practice to do?", detail: `The letter says: ${what}. This reads as care the hospital is giving, not a job for the practice. If you agree, mark it as no action needed.` }),
+  threshold: (what) => ({ title: "Safety advice to keep with the letter", detail: `The letter says: ${what}. It tells whoever sees the patient what to watch for. Keep it with the letter; no booking is needed.` }),
 };
 
 // analysis: ClinFlow's analysis of the letter. coding: { waiting, accepted } counts from the code review (optional).
@@ -71,14 +80,14 @@ export function buildNextSteps(analysis, coding = {}, letter = "") {
   const add = (step) => steps.push({ when: "", due: "", because: "", ...step });
 
   if (urgent) {
-    add({ owner: OWNERS.gp, tone: "gp", title: "Take it to a GP today", detail: "The letter says this is urgent. Do not leave it in the queue: hand it to the duty doctor now, then carry on with the steps below.", when: "today", because: analysis.triage?.reasons?.[0]?.detail || "" });
+    add({ kind: "urgent", owner: OWNERS.gp, tone: "gp", title: "Take it to a GP today", detail: "The letter says this is urgent. Do not leave it in the queue: hand it to the duty doctor now, then carry on with the steps below.", when: "today", because: analysis.triage?.reasons?.[0]?.detail || "" });
   }
   const identity = identityChecks({
     givenNames: analysis.patient?.givenNames, familyName: analysis.patient?.familyName, nhsNumber: analysis.docmanDraft?.patient?.identifier,
     birthDate: analysis.docmanDraft?.patient?.birthDate, letterDate: analysis.docmanDraft?.document?.eventDate,
   }, letter);
   add({
-    owner: OWNERS.admin, tone: "admin", title: "Check it is the right patient", when: identity.level === "high" ? "check carefully" : "",
+    kind: "identity", owner: OWNERS.admin, tone: "admin", title: "Check it is the right patient", when: identity.level === "high" ? "check carefully" : "",
     detail: "Match the name, date of birth and NHS number on the letter with the practice record. If they do not match, stop and ask the practice manager.",
     points: identity.reasons,
   });
@@ -94,21 +103,21 @@ export function buildNextSteps(analysis, coding = {}, letter = "") {
     const kind = classifyAction(what);
     const when = whenFrom(what, base);
     const direction = DIRECTIONS[kind.kind](what, when);
-    add({ owner: kind.owner, tone: kind.tone, title: direction.title, detail: direction.detail, when: when?.label || "", due: when?.due || "", because: what });
+    add({ kind: kind.kind, owner: kind.owner, tone: kind.tone, title: direction.title, detail: direction.detail, when: when?.label || "", due: when?.due || "", because: what });
   }
   if (analysis.docmanDraft?.medicationChanged && !steps.some((s) => s.owner === OWNERS.pharmacist)) {
-    add({ owner: OWNERS.pharmacist, tone: "pharmacist", title: "Medicine change: pass to a GP or pharmacist", detail: "The letter changes a medicine. Do not change the record yourself: a GP or the practice pharmacist must decide and update it." });
+    add({ kind: "medicine", owner: OWNERS.pharmacist, tone: "pharmacist", title: "Medicine change", detail: "The letter changes a medicine. A medicine change is usually made by a prescriber. Choose who deals with it: you, or a colleague such as a GP, nurse or pharmacist." });
   }
   if (analysis.safetyNettingAdvice) {
-    add({ owner: OWNERS.admin, tone: "admin", title: "Keep the safety advice with the letter", detail: "The hospital told the patient what to do if they get worse. No booking is needed. If the patient rings with those symptoms, the clinician must see this advice straight away.", because: text(analysis.safetyNettingAdvice) });
+    add({ kind: "safety", owner: OWNERS.admin, tone: "admin", title: "Keep the safety advice with the letter", detail: "The hospital told the patient what to do if they get worse. No booking is needed. If the patient rings with those symptoms, the clinician must see this advice straight away.", because: text(analysis.safetyNettingAdvice) });
   }
   const signals = letterSignals(letter);
   for (const signal of signals) {
-    if (signal.id === "referral-needed" && steps.some((x) => x.title.startsWith("Referral: pass to a GP"))) continue; // the letter's own action already says it
-    add({ owner: signal.owner, tone: signal.owner === OWNERS.manager ? "manager" : signal.owner === OWNERS.safeguarding ? "safeguarding" : signal.tone, title: signal.title, detail: signal.detail, because: signal.because, signal: signal.id, rank: signal.rank });
+    if (signal.id === "referral-needed" && steps.some((x) => x.kind === "referral")) continue; // the letter's own action already says it
+    add({ kind: signal.id, owner: signal.owner, tone: signal.owner === OWNERS.manager ? "manager" : signal.owner === OWNERS.safeguarding ? "safeguarding" : signal.tone, title: signal.title, detail: signal.detail, because: signal.because, signal: signal.id, rank: signal.rank });
   }
   const waiting = Number(coding.waiting) || 0;
-  if (waiting > 0) add({ owner: OWNERS.admin, tone: "admin", title: `Check the clinical codes (${waiting} not checked)`, detail: "Open the Codes tab. Accept the codes that match the letter, remove the ones that do not. If you are not sure, leave it for a clinician." });
+  if (waiting > 0) add({ kind: "codes", owner: OWNERS.admin, tone: "admin", title: `Check the clinical codes (${waiting} not checked)`, detail: "Open the Codes tab. Accept the codes that match the letter, remove the ones that do not. If you are not sure, leave it for a clinician." });
   // the order a person does them in: urgent first, the patient check, what a clinician must decide (so it is started early), the bookings, then the tidying up
   const RANK = { urgent: 0, identity: 1, clinician: 2, booking: 3, safety: 4, codes: 5, file: 6 };
   steps.forEach((step) => {
@@ -120,7 +129,7 @@ export function buildNextSteps(analysis, coding = {}, letter = "") {
             : step.title.startsWith("Check the clinical codes") ? RANK.codes
               : RANK.booking;
   });
-  add({ owner: OWNERS.admin, tone: "admin", title: "File it", detail: "Download the Docman PDF from the Docman tab, drag it into Docman, then press Confirm and Finish.", rank: RANK.file });
+  add({ kind: "file", owner: OWNERS.admin, tone: "admin", title: "File it", detail: "Download the Docman PDF from the Docman tab, drag it into Docman, then press Confirm and Finish.", rank: RANK.file });
   steps.sort((a, b) => a.rank - b.rank);
   steps.forEach((step, i) => { step.id = `s${i + 1}`; step.number = i + 1; delete step.rank; });
 
@@ -139,7 +148,7 @@ export function buildNextSteps(analysis, coding = {}, letter = "") {
           : sig("cancer")
             ? { tone: "danger", title: "Suspected-cancer pathway: pass to a GP today", detail: "Do this first so that nothing is delayed." }
             : needsClinician
-              ? { tone: "warning", title: `Needs a ${clinician === OWNERS.nurse ? "nurse" : clinician}: pass this letter on`, detail: "A clinician must decide part of this. You can do the admin steps below at the same time." }
+              ? { tone: "warning", title: `Part of this probably needs a ${clinician === OWNERS.nurse ? "nurse" : clinician}`, detail: "Choose who deals with each step below: you, or a colleague. Every choice is recorded." }
               : steps.length > 3
                 ? { tone: "info", title: "Admin can action this", detail: "Do the steps in order, then file it." }
                 : { tone: "success", title: "No action needed from the letter", detail: "Check the patient, check the codes, then file it." };

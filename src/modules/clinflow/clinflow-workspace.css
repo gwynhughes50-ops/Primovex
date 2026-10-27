@@ -203,3 +203,15 @@
 .cf-t-choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:6px 0 10px}
 .cf-t-choice{padding:12px 14px;border:2px solid var(--q-edge);border-radius:12px;background:var(--q-bg);color:var(--q-ink);font-size:14px;font-weight:800;cursor:pointer}.cf-t-choice:hover:not(:disabled){background:var(--q-edge);color:#fff}
 .cf-t-choice.on{background:var(--q-edge);color:#fff;box-shadow:0 0 0 3px var(--q-soft)}.cf-t-choice:disabled{opacity:.5;cursor:not-allowed}
+
+/* Each next step is the person's own choice: do it, send it, or no action needed */
+.cf-next-progress{margin:0;padding:8px 20px 0;font-size:12px;color:#4b5f7a}.cf-next-progress b{color:#0c2037}
+.cf-next-actions{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+.cf-next-actions button{display:inline-flex;align-items:center;gap:5px;border:1.5px solid var(--s-edge);border-radius:8px;padding:5px 11px;background:#fff;color:var(--s-ink);font-size:12px;font-weight:700;cursor:pointer}
+.cf-next-actions button:hover{background:var(--s-edge);color:#fff}.cf-next-actions button.primary{background:var(--s-edge);color:#fff}
+.cf-next-actions .cf-next-undo{border-color:#cdd6e3;color:#52647d}
+.cf-next-reason{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--s-ink)}.cf-next-reason select{border:1px solid var(--cf-border);border-radius:7px;padding:4px 8px;font-size:12px}
+.cf-next-state{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 11px;font-size:12px;font-weight:800;background:#fff;color:var(--s-ink);border:1.5px solid var(--s-edge)}
+.cf-next-step--done,.cf-next-step--none{opacity:.75}.cf-next-step--done .cf-next-state{background:#e6f7ef;color:#0b6a46;border-color:#16a06a}
+.cf-next-step--sent .cf-next-state{background:#f1ebff;color:#51299f;border-color:#7b4fd8}
+.cf-next-owner{font-weight:700!important}

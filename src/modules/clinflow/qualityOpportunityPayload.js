@@ -62,4 +62,18 @@ export function triagePayload({ analysis, decision, destination, letterRef, incl
     ...(toUid ? { toUid } : { role }),
   };
 }
-export const KIND_WORDS = { quality: "Quality opportunity", triage: "Triage" };
+export const KIND_WORDS = { quality: "Quality opportunity", triage: "Triage", task: "Task" };
+
+// A step from "What to do with this letter" as a task for a colleague: the step, what the letter says, and when it is wanted
+export function taskPayload({ step, analysis, letterRef, includePatient = true, note = "", toUid = "", role = "" }) {
+  return {
+    title: text(step?.title) + (step?.when && !String(step?.title || "").includes(step.when) ? ` (${step.when})` : ""),
+    domain: "Task",
+    rationale: text(step?.because ? `The letter says: ${step.because}` : step?.detail),
+    nextStep: text(step?.detail),
+    source: "ClinFlow letter", letterRef: text(letterRef), note: text(note),
+    kind: "task", urgent: step?.kind === "urgent" || step?.when === "today",
+    patient: includePatient ? patientDetailsFor(analysis) : null,
+    ...(toUid ? { toUid } : { role }),
+  };
+}

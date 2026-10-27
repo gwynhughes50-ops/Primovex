@@ -48,6 +48,8 @@ import { createClinFlowDemoPdfBlob, createClinFlowSummaryPdfBlob, downloadClinFl
 import { createDocmanPackZip, downloadBlob, safePackName } from "./clinflowZipService";
 import DocmanReadiness from "./DocmanReadiness";
 import NextSteps from "./NextSteps";
+import { buildNextSteps } from "./clinflowNextSteps";
+import { CHOICES, applyDecision, decisionCounts, makeDecision, stepKey } from "./clinflowStepDecisions";
 import Scorecard from "./Scorecard";
 import QualityReview from "./QualityReview";
 import TriageReview from "./TriageReview";
@@ -181,7 +183,7 @@ function effectiveTriageFor(document) {
   };
 }
 
-function AzureReviewView({ selected, activeTab, onDocmanCopy, onCodeCopy, onQualityOpen, onQualitySent, onTriageOpen, onTriageSent, onDownloadSummary, onOpenOriginal, onTriageDecision, onOpenTeaching, canReviewCodes, snomedList, medicinesList, abbreviations, onCodeDecision, onCodeChoose, onCodeAdd, onCodeRemoveAdded }) {
+function AzureReviewView({ selected, activeTab, onStepDecide, onDocmanCopy, onCodeCopy, onQualityOpen, onQualitySent, onTriageOpen, onTriageSent, onDownloadSummary, onOpenOriginal, onTriageDecision, onOpenTeaching, canReviewCodes, snomedList, medicinesList, abbreviations, onCodeDecision, onCodeChoose, onCodeAdd, onCodeRemoveAdded }) {
   const ocr = selected.syntheticOcr;
   const analysis = selected.clinflowAnalysis;
   const confidence = Math.round((ocr.averageConfidence || 0) * 100);
@@ -208,7 +210,7 @@ function AzureReviewView({ selected, activeTab, onDocmanCopy, onCodeCopy, onQual
     const calculatedValues = reviewCandidates(analysis, ocr?.content).filter((c) => c.calculated).map((candidate) => ({ key: candidateKey(candidate), candidate }));
     const codingState = reviewOutcome(reviewCandidates(analysis, ocr?.content), selected.codeReview);
     return <div className="cf-tab-content cf-glance">
-      <NextSteps analysis={analysis} letter={ocr?.content || ""} coding={{ waiting: codingState.waiting.length, accepted: codingState.accepted.length }} />
+      <NextSteps analysis={analysis} letter={ocr?.content || ""} letterRef={selected.id} decisions={selected.nextStepDecisions || {}} canDecide={canReviewCodes} onDecide={onStepDecide} coding={{ waiting: codingState.waiting.length, accepted: codingState.accepted.length }} />
       <section className="cf-glance-facts">
         <div><span>Patient</span><strong>{selected.patient}</strong></div>
         <div><span>Date of birth</span><strong>{selected.dob}</strong></div>
@@ -293,6 +295,22 @@ export default function ClinFlowWorkspace() {
   useEffect(() => { if (pendingLoad.current.snomed && snomedList.search) { recordTerminology(terminologyEvent("snomed", "load", { info: snomedList.info, fileLabel: pendingLoad.current.snomed })); pendingLoad.current.snomed = ""; } }, [snomedList.search]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (pendingLoad.current.dmd && medicinesList.search) { recordTerminology(terminologyEvent("dmd", "load", { info: medicinesList.info, fileLabel: pendingLoad.current.dmd })); pendingLoad.current.dmd = ""; } }, [medicinesList.search]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (pendingLoad.current.abbreviations && abbreviations.version) { recordTerminology(terminologyEvent("abbreviations", "load", { info: `${abbreviations.info.label}: ${abbreviations.info.count} abbreviations`, fileLabel: pendingLoad.current.abbreviations })); pendingLoad.current.abbreviations = ""; } }, [abbreviations.version]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Each next step on a letter is the person's own decision: they do it, send it to a colleague, or say no action is needed (with a reason). The choice is kept on the
+  // letter and written to the audit trail with who made it; the suggested owner (GP, nurse...) is only a suggestion.
+  async function decideStep(step, choice, extra = {}) {
+    if (!can("clinflow.workflow")) return denied("clinflow.workflow", "Your role cannot decide the next steps on a ClinFlow letter");
+    const decision = choice ? makeDecision(choice, { byUid: user?.uid, byName: displayName || user?.email, to: extra.to, reason: extra.reason }) : null;
+    if (choice && !decision) return notify("Choose a reason first");
+    const updated = { ...selected, nextStepDecisions: applyDecision(selected.nextStepDecisions, stepKey(step), decision) };
+    setDocuments((items) => items.map((item) => item.id === selected.id ? updated : item));
+    if (selected.dataMode === "synthetic") await cacheClinFlowDocuments([updated]).catch(() => {});
+    track("clinflow.step.decide", choice ? `A next step was marked: ${CHOICES[choice]}` : "A next-step decision was put back to undecided", { kind: step.kind || "step", choice: choice || "reopened", suggestedFor: step.owner, reason: extra.reason || "", sentTo: extra.to || "", withDetails: Boolean(extra.withDetails), recipients: extra.sent || 0 });
+  }
+  const stepsOf = (doc) => {
+    if (!doc?.clinflowAnalysis) return {};
+    const c = decisionCounts(buildNextSteps(doc.clinflowAnalysis, {}, doc.syntheticOcr?.content).steps, doc.nextStepDecisions || {});
+    return { stepsTotal: c.steps, stepsUndecided: c.undecided, stepsSelf: c.self, stepsDone: c.done, stepsSent: c.sent, stepsNoAction: c.none };
+  };
   const versionsInUse = () => termVersions({ snomed: snomedList.search ? snomedList.info : "", medicines: medicinesList.search ? medicinesList.info : "", abbreviations: abbreviations.info.builtIn ? "built-in list" : abbreviations.info.label });
   const codingOf = (doc) => (doc?.clinflowAnalysis ? codingAuditMeta(reviewCandidates(doc.clinflowAnalysis, doc.syntheticOcr?.content), doc.codeReview) : {});
   const [documents, setDocuments] = useState(SAMPLE_DOCUMENTS);
@@ -554,7 +572,7 @@ export default function ClinFlowWorkspace() {
       setFinishedPacks((packs) => [pack, ...packs.filter((item) => item.id !== pack.id)]);
       setFinishOpen(false);
       setFilter("finished");
-      await record("clinflow.finished.pack_created", "ClinFlow reviewed document moved to Finished and Docman pack prepared", { destination: updated.destination, originalUnchanged: true, automatedTransmission: false, ...codingOf(updated), ...versionsInUse() });
+      await record("clinflow.finished.pack_created", "ClinFlow reviewed document moved to Finished and Docman pack prepared", { destination: updated.destination, originalUnchanged: true, automatedTransmission: false, ...codingOf(updated), ...stepsOf(updated), ...versionsInUse() });
       notify("Finished pack created with the original and ClinFlow summary");
     });
   }
@@ -685,7 +703,7 @@ export default function ClinFlowWorkspace() {
     try {
       const originalBlob = await resolveOriginalFile(selected).catch(() => null);
       const result = await downloadClinFlowSummaryPdf(selected, originalBlob);
-      await record("clinflow.summary.download", "ClinFlow clinician-review summary downloaded", { format: "pdf", appendedOriginal: result.appendedOriginal, ...codingOf(selected), ...versionsInUse() });
+      await record("clinflow.summary.download", "ClinFlow clinician-review summary downloaded", { format: "pdf", appendedOriginal: result.appendedOriginal, ...codingOf(selected), ...stepsOf(selected), ...versionsInUse() });
       notify(result.appendedOriginal ? "ClinFlow review summary downloaded (original letter attached)" : "ClinFlow review summary downloaded");
     } catch (error) {
       console.error("ClinFlow summary export failed", error);
@@ -932,7 +950,7 @@ export default function ClinFlowWorkspace() {
           </section>}
           <nav className="cf-tabs">{tabs.map(([key, label]) => { const tabKey = selected.syntheticOcr ? `synthetic-${key}` : key; return <button type="button" key={key} className={activeTab === tabKey ? "active" : ""} onClick={() => setActiveTab(tabKey)}>{label}</button>; })}</nav>
           <section className="cf-viewer">
-            {selected.syntheticOcr && <AzureReviewView onTriageOpen={() => track("clinflow.opportunity.open", "Send a triage item opened", { domain: "Triage" })} onTriageSent={(info) => track("clinflow.opportunity.sent", "A triage item was sent to a colleague", { recipients: info.sent, withDetails: info.withDetails, kind: "triage" })} onQualityOpen={(item) => track("clinflow.opportunity.open", "Send a quality opportunity opened", { domain: item.domain })} onQualitySent={(info) => track("clinflow.opportunity.sent", "A quality opportunity was sent to a colleague", { recipients: info.sent, withDetails: info.withDetails })} onCodeCopy={(what) => track("clinflow.codes.copy", "Coding details copied", { what })} onDocmanCopy={(field) => record("clinflow.docman.copy", "A detail was copied for Docman", { field, automatedTransmission: false }).catch(() => {})} selected={selected} activeTab={activeTab.replace(/^synthetic-/, "")} onDownloadSummary={downloadSummary} onOpenOriginal={openOriginal} onTriageDecision={confirmTriageDecision} onOpenTeaching={openTeaching} canReviewCodes={can("clinflow.workflow")} snomedList={auditedList(snomedList, "snomed")} medicinesList={auditedList(medicinesList, "dmd")} abbreviations={auditedAbbreviations} onCodeDecision={decideCode} onCodeChoose={chooseCode} onCodeAdd={addCodeByCoder} onCodeRemoveAdded={removeAddedCode} />}
+            {selected.syntheticOcr && <AzureReviewView onStepDecide={decideStep} onTriageOpen={() => track("clinflow.opportunity.open", "Send a triage item opened", { domain: "Triage" })} onTriageSent={(info) => track("clinflow.opportunity.sent", "A triage item was sent to a colleague", { recipients: info.sent, withDetails: info.withDetails, kind: "triage" })} onQualityOpen={(item) => track("clinflow.opportunity.open", "Send a quality opportunity opened", { domain: item.domain })} onQualitySent={(info) => track("clinflow.opportunity.sent", "A quality opportunity was sent to a colleague", { recipients: info.sent, withDetails: info.withDetails })} onCodeCopy={(what) => track("clinflow.codes.copy", "Coding details copied", { what })} onDocmanCopy={(field) => record("clinflow.docman.copy", "A detail was copied for Docman", { field, automatedTransmission: false }).catch(() => {})} selected={selected} activeTab={activeTab.replace(/^synthetic-/, "")} onDownloadSummary={downloadSummary} onOpenOriginal={openOriginal} onTriageDecision={confirmTriageDecision} onOpenTeaching={openTeaching} canReviewCodes={can("clinflow.workflow")} snomedList={auditedList(snomedList, "snomed")} medicinesList={auditedList(medicinesList, "dmd")} abbreviations={auditedAbbreviations} onCodeDecision={decideCode} onCodeChoose={chooseCode} onCodeAdd={addCodeByCoder} onCodeRemoveAdded={removeAddedCode} />}
             {!selected.syntheticOcr && activeTab === "document" && <>
               <div className="cf-viewer-toolbar"><button type="button" onClick={() => setSampleZoom((zoom) => Math.max(50, zoom - 10))} disabled={sampleZoom <= 50} aria-label="Zoom out" title="Zoom out">−</button><b>{sampleZoom}%</b><button type="button" onClick={() => setSampleZoom((zoom) => Math.min(200, zoom + 10))} disabled={sampleZoom >= 200} aria-label="Zoom in" title="Zoom in">+</button><button type="button" onClick={downloadDocument} aria-label="Download this letter as a PDF" title="Download this letter as a PDF"><Download size={14} /></button><span>Page 1 of 2</span></div>
               <div className="cf-viewer-body"><aside className="cf-thumbnails"><div className="active">Page 1</div><small>1</small><div>Page 2</div><small>2</small></aside><div className="cf-paper-stage" style={{ zoom: sampleZoom / 100 }}><article className="cf-paper"><div className="cf-letterhead"><strong>Glan Clwyd Hospital<br /><small>Cardiology Department</small></strong><strong>Date: 14 May 2026</strong></div><p>Dr A N Other<br />Greenfield Surgery<br />123 High Street<br />Mold<br />CH7 1AB</p><p>Dear Dr Other</p><p><b>Re: {selected.patient} · DOB: {selected.dob} · NHS: {selected.nhs}</b></p><p>Thank you for referring Mr Smith to the Cardiology Clinic.</p><h3>Assessment</h3><p>Mr Smith was reviewed today for atrial fibrillation. He remains symptomatic with exertional dyspnoea. Echocardiogram shows mild left ventricular dysfunction.</p><h3>Plan</h3><ul><li>Increase Bisoprolol to 5 mg once daily</li><li>Continue Apixaban 5 mg twice daily</li><li>Repeat U&Es in 2 weeks</li><li>Review in 3 months</li></ul><p>Yours sincerely</p><p><b>Dr B Consultant<br />Consultant Cardiologist</b></p></article></div></div>

@@ -10,7 +10,7 @@ const { hasCapability } = require("./roleCapabilities");
 // number when the letter has them. That is kept in the record only. The NOTIFICATION that goes to a phone or the desktop never carries it: it names the
 // opportunity and nothing else. The audit trail records who sent what kind of opportunity to whom (by role and count), never the patient.
 
-const KINDS = ["quality", "triage"];
+const KINDS = ["quality", "triage", "task"];
 const STATUSES = ["new", "seen", "actioned", "declined"];
 const RECIPIENT_MAX = 25;
 const HOURLY_LIMIT = 40;
@@ -82,12 +82,13 @@ function buildOpportunityRecord({ groupId, sender, recipient, opportunity }) {
 // What goes to the person's notifications: what kind of thing it is and who sent it. No patient details, ever.
 function buildOpportunityNotification({ sender, recipientUid, opportunity }) {
   const triage = opportunity.kind === "triage";
+  const task = opportunity.kind === "task";
   return {
     recipientUid,
-    module: triage ? "clinflow" : "quality",
-    kind: triage ? "triage-item" : "quality-opportunity",
-    title: `${tidy(sender.name, 80) || "A colleague"} ${triage ? "sent you a letter to look at" : "sent you a quality opportunity"}`,
-    message: !triage && opportunity.domain ? `${opportunity.title} (${opportunity.domain})` : opportunity.title,
+    module: triage || task ? "clinflow" : "quality",
+    kind: triage ? "triage-item" : task ? "task-item" : "quality-opportunity",
+    title: `${tidy(sender.name, 80) || "A colleague"} ${triage ? "sent you a letter to look at" : task ? "sent you a task" : "sent you a quality opportunity"}`,
+    message: !triage && !task && opportunity.domain ? `${opportunity.title} (${opportunity.domain})` : opportunity.title,
     priority: opportunity.urgent ? "high" : "normal",
     read: false,
     status: "open",

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { OWNERS, buildNextSteps, classifyAction, whenFrom } from "../src/modules/clinflow/clinflowNextSteps.js";
+import { CHOICES, NO_ACTION_REASONS, applyDecision, decisionCounts, describeDecision, makeDecision, stepKey } from "../src/modules/clinflow/clinflowStepDecisions.js";
+import { taskPayload } from "../src/modules/clinflow/qualityOpportunityPayload.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
@@ -46,8 +48,8 @@ t("the plan says who, when and why, in order: urgent, the patient check, clinici
   }), { waiting: 3, accepted: 0 });
   assert.deepEqual(titles(plan), [
     "Check it is the right patient",
-    "Referral: pass to a GP to decide",
-    "Medicine change: pass to a GP or pharmacist",
+    "Referral",
+    "Medicine change",
     "Book a blood test in 2 weeks",
     "Arrange the test in 6 weeks",
     "Keep the safety advice with the letter",
@@ -59,7 +61,7 @@ t("the plan says who, when and why, in order: urgent, the patient check, clinici
   assert.equal(bloods.due, "28 May 2026");
   assert.equal(bloods.because, "GP to repeat U&Es in 2 weeks", "the letter's own words are shown as the reason");
   assert.equal(plan.headline.tone, "warning");
-  assert.match(plan.headline.title, /Needs a GP/);
+  assert.match(plan.headline.title, /Part of this probably needs a GP/);
   assert.match(plan.note, /do not make clinical decisions/);
 });
 
@@ -97,4 +99,73 @@ t("nothing clinical is ever given to admin, and the screen is wired in", () => {
   assert.match(read("src/modules/clinflow/NextSteps.jsx"), /What to do with this letter/);
 });
 
-console.log(`\n${n} passed`);
+t("not everything goes to a GP: care the hospital gives and limits to watch are not jobs, and the wording no longer tells anyone what they may not do", () => {
+  assert.equal(classifyAction("Continue oral antibiotics").kind, "info");
+  assert.equal(classifyAction("Encourage fluids and maintain fluid chart").kind, "info");
+  assert.equal(classifyAction("below 92%").kind, "threshold");
+  assert.equal(classifyAction("U&E").kind, "bloods", "a bare test name is a repeat of that test");
+  assert.equal(classifyAction("Review blood pressure at the practice").kind, "appointment");
+  const plan = buildNextSteps(analysis({ actions: [item("Continue oral antibiotics"), item("below 92%"), item("Stop ramipril and start losartan")] }));
+  const text = plan.steps.map((x) => x.detail).join(" ");
+  assert.ok(!/Do not act on it yourself|must decide|Only a GP can/.test(text), "nothing says a person may not deal with it themselves");
+  assert.match(text, /Choose who deals with it/);
+  assert.ok(plan.steps.every((x) => x.kind), "every step says what kind it is, for the audit");
+  assert.deepEqual(plan.steps.map((x) => x.kind).slice(0, 2), ["identity", "medicine"]);
+});
+
+t("the person decides each step: do it, send it, or no action with a reason; every choice is dated and signed, and can be changed with the earlier one kept", () => {
+  const step = { kind: "bloods", because: "Repeat U&Es in 2 weeks", title: "Book a blood test in 2 weeks", owner: OWNERS.nurse };
+  const key = stepKey(step);
+  assert.equal(key, "bloods|repeat u&es in 2 weeks");
+  assert.equal(stepKey({ kind: "bloods", because: "REPEAT  U&Es   in 2 weeks" }), key, "the same step, however it is spaced");
+  const at = new Date("2026-10-27T10:00:00Z");
+  const self = makeDecision("self", { byUid: "u1", byName: "Ann Admin", at });
+  assert.deepEqual([self.choice, self.byName, self.at], ["self", "Ann Admin", "2026-10-27T10:00:00.000Z"]);
+  assert.equal(describeDecision(self), "You are doing this by Ann Admin");
+  assert.equal(makeDecision("none", { byUid: "u1", reason: "" }), null, "no action needs a reason");
+  assert.equal(makeDecision("none", { byUid: "u1", reason: "because I said so" }), null, "a reason from the list");
+  assert.equal(describeDecision(makeDecision("none", { byName: "Ann", reason: NO_ACTION_REASONS[2], at })), "No action needed: The hospital is arranging it by Ann");
+  assert.equal(describeDecision(makeDecision("sent", { byName: "Ann", to: "the Nurse / HCA team (2 people)", at })), "Sent to the Nurse / HCA team (2 people) by Ann");
+  assert.equal(makeDecision("explode"), null);
+  let decisions = applyDecision({}, key, self);
+  decisions = applyDecision(decisions, key, makeDecision("done", { byUid: "u1", byName: "Ann Admin", at }));
+  assert.equal(decisions[key].choice, "done");
+  assert.equal(decisions[key].history[0].choice, "self", "the earlier choice is kept");
+  assert.deepEqual(applyDecision(decisions, key, null), {}, "changing puts it back to undecided");
+  assert.deepEqual(Object.keys(CHOICES), ["self", "done", "sent", "none"]);
+});
+
+t("the counts for the audit say how many steps were decided and how, never the words", () => {
+  const plan = buildNextSteps(analysis({ actions: [item("Repeat spirometry in 6 weeks"), item("Urgent referral to cardiology")] }), { waiting: 2 });
+  const [first, second, third] = plan.steps;
+  let decisions = applyDecision({}, stepKey(first), makeDecision("self", { byUid: "u" }));
+  decisions = applyDecision(decisions, stepKey(second), makeDecision("sent", { byUid: "u", to: "Gwen GP" }));
+  decisions = applyDecision(decisions, stepKey(third), makeDecision("none", { byUid: "u", reason: NO_ACTION_REASONS[0] }));
+  const counts = decisionCounts(plan.steps, decisions);
+  assert.deepEqual([counts.steps, counts.self, counts.sent, counts.none, counts.done], [plan.steps.length, 1, 1, 1, 0]);
+  assert.equal(counts.undecided, plan.steps.length - 3);
+  assert.ok(!JSON.stringify(counts).includes("spirometry"));
+});
+
+t("a step can be sent as a task, and the screen and the audit are wired", () => {
+  const step = { kind: "bloods", title: "Book a blood test in 2 weeks", because: "Repeat U&Es in 2 weeks", detail: "Book the patient with the nurse.", when: "in 2 weeks", owner: OWNERS.nurse };
+  const payload = taskPayload({ step, analysis: { patient: { givenNames: "David", familyName: "Jones" }, docmanDraft: { patient: { identifier: "9434765919", birthDate: "1954-06-12" } } }, letterRef: "cf-1", role: "Nurse / HCA" });
+  assert.equal(payload.kind, "task");
+  assert.equal(payload.title, "Book a blood test in 2 weeks");
+  assert.equal(payload.rationale, "The letter says: Repeat U&Es in 2 weeks");
+  assert.equal(payload.urgent, false);
+  assert.equal(payload.role, "Nurse / HCA");
+  assert.equal(payload.patient.initials, "DJ");
+  assert.equal(taskPayload({ step: { kind: "urgent", title: "Take it to a GP today", when: "today" }, analysis: {}, letterRef: "x", toUid: "u1", includePatient: false }).urgent, true);
+  const workspace = read("src/modules/clinflow/ClinFlowWorkspace.jsx");
+  assert.match(workspace, /track\("clinflow\.step\.decide"/);
+  assert.match(workspace, /\.\.\.stepsOf\(selected\), \.\.\.versionsInUse\(\)/, "the Docman download records how many steps were decided");
+  assert.match(workspace, /\.\.\.stepsOf\(updated\), \.\.\.versionsInUse\(\)/, "so does finishing the letter");
+  const screen = read("src/modules/clinflow/NextSteps.jsx");
+  for (const words of ["I'll do this", "Send to a colleague", "No action needed", "Mark done", "Only a suggestion"]) assert.ok(screen.includes(words), words);
+  assert.match(screen, /Suggested: \{step\.owner\}/);
+  assert.match(read("functions/services/qualityOpportunityService.js"), /KINDS = \["quality", "triage", "task"\]/);
+});
+
+console.log(`
+${n} passed`);

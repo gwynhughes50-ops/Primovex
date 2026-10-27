@@ -820,7 +820,7 @@ exports.sendQualityOpportunity = onCall({ region: "europe-west2", timeoutSeconds
       db, auth: request.auth, profile,
       data: {
         action: "clinflow.opportunity.send", module: "clinflow", targetType: "quality_opportunity", targetId: result.groupId,
-        summary: `${result.kind === "triage" ? "A triage item" : "A quality opportunity"} was sent to ${result.toName ? "a colleague" : `the ${result.role} team`}`,
+        summary: `${result.kind === "triage" ? "A triage item" : result.kind === "task" ? "A task" : "A quality opportunity"} was sent to ${result.toName ? "a colleague" : `the ${result.role} team`}`,
         classification: "operational",
         metadata: { kind: result.kind || "quality", recipients: result.sent, role: result.role || "", domain: result.domain || "", withDetails: Boolean(result.hadPatient), automatedTransmission: false },
       },
@@ -839,7 +839,7 @@ exports.updateQualityOpportunity = onCall({ region: "europe-west2", timeoutSecon
       db, auth: request.auth, profile,
       data: {
         action: "clinflow.opportunity.update", module: "clinflow", targetType: "quality_opportunity", targetId: result.id,
-        summary: `${result.kind === "triage" ? "A triage item" : "A quality opportunity"} was marked ${result.status}`, classification: "operational",
+        summary: `${result.kind === "triage" ? "A triage item" : result.kind === "task" ? "A task" : "A quality opportunity"} was marked ${result.status}`, classification: "operational",
         metadata: { kind: result.kind || "quality", status: result.status, domain: result.domain || "", automatedTransmission: false },
       },
     });
