@@ -3,6 +3,7 @@
 // offered to the coder like any other suggestion: nothing here is accepted for anyone.
 
 import { calculatorGaps, runCalculators } from "./clinflowCalculators.js";
+import { ENTERED } from "./clinflowEnteredFigures.js";
 
 const num = (value) => Number(String(value).replace(",", "."));
 const round1 = (value) => Math.round(value * 10) / 10;
@@ -103,9 +104,9 @@ export function calculateBloodPressureAverage(text) {
 }
 
 // Everything that can be worked out from a letter's text. patient: { birthDate, gender, letterDate } where the record has them.
-export function calculateFindings(text, patient = {}) {
-  const weight = findWeight(text);
-  return [calculateBmi(text), ...calculateBloodPressureAverage(text), ...runCalculators(text, patient, weight)].filter(Boolean);
+export function calculateFindings(text, patient = {}, entered = {}) {
+  const weight = findWeight(text) || (entered.weightKg ? { kg: Number(entered.weightKg), quote: `weight ${Number(entered.weightKg)} kg${ENTERED}` } : null);
+  return [calculateBmi(text), ...calculateBloodPressureAverage(text), ...runCalculators(text, patient, weight, entered)].filter(Boolean);
 }
 
 // A letter that mentions home or ambulatory blood pressure and gives some readings, but not a run of four or more, gets no average: the person is told.
@@ -117,8 +118,8 @@ export function bloodPressureAverageGap(text) {
 }
 
 // Every calculation the letter points at but does not give enough for: [{ kind, label, needs }]. See calculatorGaps.
-export function calculationGaps(text, patient = {}) {
-  const gaps = calculatorGaps(text, patient, findWeight(text));
+export function calculationGaps(text, patient = {}, entered = {}) {
+  const gaps = calculatorGaps(text, patient, findWeight(text), entered);
   const average = bloodPressureAverageGap(text);
   return average ? [...gaps, average] : gaps;
 }

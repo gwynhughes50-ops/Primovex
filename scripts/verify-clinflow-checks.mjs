@@ -75,7 +75,7 @@ t("the warnings are on the screen, can be put away like the other notices, and a
   const ws = readFileSync(new URL("../src/modules/clinflow/ClinFlowWorkspace.jsx", import.meta.url), "utf8");
   assert.match(ws, /const checks = useMemo\(\(\) => readingChecks\(selected\), \[selected\]\);/);
   assert.ok(ws.indexOf("const selected = documents.find(") < ws.indexOf("const checks = useMemo"), "the letter exists before the checks use it");
-  assert.match(ws, /checks\.length > 0 && !noticesFor\(selected\.id\)\.includes\("checks"\)/);
+  assert.match(ws, /\(checks\.length > 0 \|\| selected\.clinflowAnalysis\?\.recordFigures\) && !noticesFor\(selected\.id\)\.includes\("checks"\)/);
   assert.match(ws, /dismissNotice\("checks"\)/);
   assert.match(ws, /readingChecks: checks\.map\(\(c\) => c\.id\)\.join\(","\)/);
   assert.match(ws, /Check this letter yourself/);

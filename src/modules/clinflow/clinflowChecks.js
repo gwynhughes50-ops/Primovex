@@ -34,10 +34,10 @@ export function readingChecks(document) {
   }
 
   const patient = { birthDate: analysis.docmanDraft?.patient?.birthDate, gender: analysis.docmanDraft?.patient?.gender, letterDate: analysis.docmanDraft?.document?.eventDate };
-  const gaps = calculationGaps(content, patient);
+  const gaps = calculationGaps(content, patient, analysis.recordFigures?.values || {});
   if (gaps.length) {
     checks.push({
-      id: "calculation-gap", title: "Some figures could not be worked out",
+      id: "calculation-gap", gaps, title: "Some figures could not be worked out",
       detail: `${gaps.map((g) => `${g.label}: the letter does not give ${list(g.needs)}`).join(". ")}. A missing figure is not a normal one: check the letter and the patient's record.`,
     });
   }

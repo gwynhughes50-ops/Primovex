@@ -268,3 +268,13 @@
 .cf-check-this{position:relative;margin:8px 0;padding:10px 38px 10px 14px;border:1px solid #f0b982;border-left:5px solid #e08a1e;border-radius:10px;background:#fff7ec;color:#5a3400}
 .cf-check-this h3{display:flex;align-items:center;gap:6px;margin:0 0 4px;font-size:13px;color:#8a4a07}
 .cf-check-this ul{display:grid;gap:4px;margin:0;padding-left:18px;font-size:12.5px;line-height:1.4}.cf-check-this li b{color:#5a3400}
+
+/* Figures typed in from the clinical record to finish a calculation (inside the "Check this letter yourself" notice) */
+.cf-figures{display:grid;gap:8px;margin-top:8px}.cf-figures p{margin:0;font-size:12.5px}
+.cf-figures-open{justify-self:start;display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid #e0a35c;border-radius:9px;background:#fff;color:#7a4300;font-weight:800;font-size:12.5px;cursor:pointer}
+.cf-figures-form{display:grid;gap:8px;padding:10px 12px;border:1px solid #e8c79a;border-radius:10px;background:#fff}
+.cf-figures-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px}
+.cf-figures-grid label{display:grid;gap:3px;font-size:11.5px;font-weight:700;color:#5a3400}.cf-figures-grid input,.cf-figures-grid select{padding:6px 8px;border:1px solid var(--cf-border);border-radius:8px;font-size:13px;background:#fff;color:#13233d}
+.cf-figure-optional span{font-weight:600;color:#7a6a55}
+.cf-figures-problem{color:#b3261e;font-weight:700}.cf-figures-buttons{display:flex;gap:8px}.cf-figures-buttons button{padding:6px 12px;border:1px solid var(--cf-border);border-radius:8px;background:#fff;font-weight:700;font-size:12.5px;cursor:pointer}
+.cf-figures-entered{padding:6px 10px;border-radius:8px;background:#fff;border:1px solid #e8c79a}

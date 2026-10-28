@@ -50,6 +50,8 @@ import DocmanReadiness from "./DocmanReadiness";
 import { canSpotCheck, folderKindFor, needsSpotCheck } from "./clinflowNfwf";
 import { LANES, LANE_WORDS, inLane, lanesFor } from "./clinflowLanes";
 import { readingChecks } from "./clinflowChecks";
+import { cleanEnteredFigures } from "./clinflowEnteredFigures";
+import RecordFigures from "./RecordFigures";
 import { chooseFolder, deliverDocmanPdf, desktopFoldersAvailable, loadFolders } from "./docmanFolders";
 import NextSteps from "./NextSteps";
 import { buildNextSteps } from "./clinflowNextSteps";
@@ -749,6 +751,35 @@ export default function ClinFlowWorkspace() {
     });
   }
 
+  // Figures a person types in from the clinical record to fill what the letter does not give. They fill gaps only, are kept on the letter with who entered them and when,
+  // and are on the audit trail (which figures, never their values).
+  async function saveRecordFigures(values) {
+    if (!can("clinflow.workflow")) return denied("clinflow.workflow", "Your role cannot add figures to a ClinFlow letter");
+    const merged = cleanEnteredFigures({ ...(selected?.clinflowAnalysis?.recordFigures?.values || {}), ...values });
+    if (merged.problems.length) return notify(merged.problems[0]);
+    if (!Object.keys(merged.values).length) return notify("Enter at least one figure first");
+    await runAction(async () => {
+      const recordFigures = { values: merged.values, byUid: user?.uid || "", byName: displayName || user?.email || "", at: new Date().toISOString() };
+      const updated = { ...selected, clinflowAnalysis: { ...selected.clinflowAnalysis, recordFigures } };
+      setDocuments((items) => items.map((item) => item.id === selected.id ? updated : item));
+      await cacheClinFlowDocuments([updated]);
+      await record("clinflow.figures.entered", "Figures from the clinical record were entered on a letter", { kinds: Object.keys(values).join(","), count: Object.keys(merged.values).length });
+      notify("Figures saved. ClinFlow has worked out what it can from them");
+    });
+  }
+
+  async function clearRecordFigures() {
+    if (!can("clinflow.workflow")) return denied("clinflow.workflow", "Your role cannot change figures on a ClinFlow letter");
+    await runAction(async () => {
+      const { recordFigures: removed, ...analysis } = selected.clinflowAnalysis || {};
+      const updated = { ...selected, clinflowAnalysis: analysis };
+      setDocuments((items) => items.map((item) => item.id === selected.id ? updated : item));
+      await cacheClinFlowDocuments([updated]);
+      await record("clinflow.figures.removed", "Figures entered from the clinical record were removed from a letter", { count: Object.keys(removed?.values || {}).length });
+      notify("The entered figures were removed");
+    });
+  }
+
   async function downloadSummary() {
     try {
       const originalBlob = await resolveOriginalFile(selected).catch(() => null);
@@ -993,11 +1024,12 @@ export default function ClinFlowWorkspace() {
             <button type="button" onClick={verifyPatientRequest}>{selected.syntheticOcr ? "Verify patient" : "View patient"}</button>
           </div>
           {identityNote && !noticesFor(selected.id).includes("identity") && <div className="cf-identity-note" role="status"><AlertTriangle size={16} /><div><b>{identityNote.commonName ? "Common name: double-check this patient" : "Double-check this patient"}</b><span>{identityNote.reasons[0]}{identityNote.reasons.length > 2 ? ` (and ${identityNote.reasons.length - 2} more in What to do with this letter)` : ""}</span></div><button type="button" className="cf-notice-close" onClick={() => dismissNotice("identity")} aria-label="Put this notice away" title="Put this notice away"><X size={14} /></button></div>}
-          {checks.length > 0 && !noticesFor(selected.id).includes("checks") && (
-            <section className="cf-check-this" role="alert" aria-label="Check before you rely on this">
+          {(checks.length > 0 || selected.clinflowAnalysis?.recordFigures) && !noticesFor(selected.id).includes("checks") && (
+            <section className="cf-check-this" role={checks.length ? "alert" : "status"} aria-label="Check before you rely on this">
               <button type="button" className="cf-notice-close" onClick={() => dismissNotice("checks")} aria-label="Put this notice away" title="Put this notice away"><X size={14} /></button>
-              <h3><AlertTriangle size={16} aria-hidden="true" /> Check this letter yourself</h3>
-              <ul>{checks.map((check) => <li key={check.id}><b>{check.title}.</b> {check.detail}</li>)}</ul>
+              <h3><AlertTriangle size={16} aria-hidden="true" /> {checks.length ? "Check this letter yourself" : "Figures from the clinical record"}</h3>
+              {checks.length > 0 && <ul>{checks.map((check) => <li key={check.id}><b>{check.title}.</b> {check.detail}</li>)}</ul>}
+              <RecordFigures gaps={checks.find((check) => check.id === "calculation-gap")?.gaps || []} entered={selected.clinflowAnalysis?.recordFigures} disabled={busy} onSave={saveRecordFigures} onClear={clearRecordFigures} />
             </section>
           )}
           {noticesFor(selected.id).length > 0 && <button type="button" className="cf-notices-show" onClick={showNotices}>Show {noticesFor(selected.id).length} notice{noticesFor(selected.id).length === 1 ? "" : "s"} put away</button>}

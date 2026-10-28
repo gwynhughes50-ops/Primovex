@@ -4,6 +4,8 @@
 //
 // The scores and equations are the published ones, stated plainly in each function; they are decision support, not a replacement for the record.
 
+import { ENTERED, fillFromRecord } from "./clinflowEnteredFigures.js";
+
 const num = (value) => Number(String(value).replace(",", "."));
 const round1 = (value) => Math.round(value * 10) / 10;
 const clip = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
@@ -285,37 +287,46 @@ export function calculateCurb65(ctx) {
 export const CALCULATORS = [calculateEgfr, calculateCockcroftGault, calculateCorrectedCalcium, calculateFib4, calculateMap, calculateChadsVasc, calculateHasBled, calculateNews2, calculateCurb65];
 
 // What the letter says, gathered once for every calculator. patient: { birthDate, gender, letterDate } where known.
-export function gatherFacts(text, patient = {}, weight = null) {
-  return { text: String(text ?? ""), age: findAge(text, patient), sex: findSex(text, patient), labs: findLabs(text), vitals: findVitals(text), weight };
+export function gatherFacts(text, patient = {}, weight = null, entered = {}) {
+  return fillFromRecord({ text: String(text ?? ""), age: findAge(text, patient), sex: findSex(text, patient), labs: findLabs(text), vitals: findVitals(text), weight }, entered);
 }
 
 // What a letter hints at but does not give enough for: a calculation that has its first ingredient in the letter and is missing the rest is NOT worked out, and the person is
 // told, so a missing result is never mistaken for a normal one. Only where the letter clearly points at the calculation (a creatinine, atrial fibrillation, pneumonia,
 // liver enzymes, calcium, three or more of the five observations); a letter that never mentions the ingredients is not told anything.
-// Returns [{ kind, label, needs: [what is missing] }].
-export function calculatorGaps(text, patient = {}, weight = null) {
-  const ctx = gatherFacts(text, patient, weight);
+// A person can fill the gap from the clinical record (see clinflowEnteredFigures.js). Returns [{ kind, label, needs: [what is missing], inputs: [names], optionalInputs: [names] }].
+export function calculatorGaps(text, patient = {}, weight = null, entered = {}) {
+  const letter = gatherFacts(text, patient, weight); // what the letter itself says decides whether a calculation is pointed at
+  const ctx = gatherFacts(text, patient, weight, entered); // with the figures a person has entered, what is still missing
   const t = ctx.text;
   const gaps = [];
-  const missing = (...pairs) => pairs.filter(([have]) => !have).map(([, what]) => what);
-  const add = (kind, label, needs) => { if (needs.length) gaps.push({ kind, label, needs }); };
-  if (ctx.labs.creatinine && !/\be?GFR\b[^\d\n]{0,12}\d/i.test(t)) add("egfr", "eGFR", missing([ctx.age, "the patient's age"], [ctx.sex, "the patient's sex"]));
-  if (ctx.labs.calcium && !ctx.labs.statedCorrectedCalcium) add("corrected-calcium", "Corrected calcium", missing([ctx.labs.albumin, "an albumin result"]));
-  const liver = [ctx.labs.ast, ctx.labs.alt, ctx.labs.platelets].filter(Boolean).length;
-  if (liver >= 2 && !/\bFIB-?4\b[^\d\n]{0,10}\d/i.test(t)) add("fib4", "FIB-4 index", missing([ctx.labs.ast, "an AST result"], [ctx.labs.alt, "an ALT result"], [ctx.labs.platelets, "a platelet count"], [ctx.age, "the patient's age"]));
-  if (mentions(t, /\batrial fibrillation\b|\bAF\b|\batrial flutter\b/i) && !ctx.age) {
-    if (!/\bCHA2?DS2?[-\s]?VASc\b[^\d\n]{0,12}\d/i.test(t)) add("chadsvasc", "CHA2DS2-VASc score", ["the patient's age"]);
-    if (!/\bHAS-?BLED\b[^\d\n]{0,12}\d/i.test(t)) add("hasbled", "HAS-BLED score", ["the patient's age"]);
+  // each ingredient is [have, what to call it, the input that supplies it]
+  const add = (kind, label, ingredients, optionalInputs = []) => {
+    const miss = ingredients.filter(([have]) => !have);
+    if (miss.length) gaps.push({ kind, label, needs: miss.map(([, what]) => what), inputs: miss.map(([, , input]) => input), optionalInputs });
+  };
+  const AGE = [ctx.age, "the patient's age", "age"];
+  if (letter.labs.creatinine && !/\be?GFR\b[^\d\n]{0,12}\d/i.test(t)) add("egfr", "eGFR", [AGE, [ctx.sex, "the patient's sex", "sex"]]);
+  if (letter.labs.calcium && !letter.labs.statedCorrectedCalcium) add("corrected-calcium", "Corrected calcium", [[ctx.labs.albumin, "an albumin result", "albumin"]]);
+  const liver = [letter.labs.ast, letter.labs.alt, letter.labs.platelets].filter(Boolean).length;
+  if (liver >= 2 && !/\bFIB-?4\b[^\d\n]{0,10}\d/i.test(t)) add("fib4", "FIB-4 index", [[ctx.labs.ast, "an AST result", "ast"], [ctx.labs.alt, "an ALT result", "alt"], [ctx.labs.platelets, "a platelet count", "platelets"], AGE]);
+  if (mentions(t, /\batrial fibrillation\b|\bAF\b|\batrial flutter\b/i)) {
+    if (!/\bCHA2?DS2?[-\s]?VASc\b[^\d\n]{0,12}\d/i.test(t)) add("chadsvasc", "CHA2DS2-VASc score", [AGE], ctx.sex ? [] : ["sex"]);
+    if (!/\bHAS-?BLED\b[^\d\n]{0,12}\d/i.test(t)) add("hasbled", "HAS-BLED score", [AGE]);
   }
-  if (mentions(t, /pneumonia|lower respiratory tract infection|\bLRTI\b|chest infection/i) && !ctx.age && !/\bCURB-?65\b[^\d\n]{0,12}\d/i.test(t)) add("curb65", "CURB-65 score", ["the patient's age"]);
-  const v = ctx.vitals;
+  if (mentions(t, /pneumonia|lower respiratory tract infection|\bLRTI\b|chest infection/i) && !/\bCURB-?65\b[^\d\n]{0,12}\d/i.test(t)) add("curb65", "CURB-65 score", [AGE]);
+  const v = letter.vitals;
   const found = [v.bp, v.pulse, v.respiratoryRate, v.spo2, v.temperature].filter(Boolean).length;
-  if (found >= 3 && found < 5 && !/\bNEWS\s?2?\b[^\d\n]{0,12}\d/i.test(t)) add("news2", "NEWS2 score", missing([v.bp, "a blood pressure"], [v.pulse, "a pulse"], [v.respiratoryRate, "a respiratory rate"], [v.spo2, "an oxygen saturation"], [v.temperature, "a temperature"]));
+  if (found >= 3 && found < 5 && !/\bNEWS\s?2?\b[^\d\n]{0,12}\d/i.test(t)) {
+    const now = ctx.vitals;
+    add("news2", "NEWS2 score", [[now.bp, "a blood pressure", "bp"], [now.pulse, "a pulse", "pulse"], [now.respiratoryRate, "a respiratory rate", "respiratoryRate"], [now.spo2, "an oxygen saturation", "spo2"], [now.temperature, "a temperature", "temperature"]], [...(now.oxygen ? [] : ["oxygen"]), ...(now.consciousness ? [] : ["consciousness"])]);
+  }
   return gaps;
 }
 
 // Every calculation the letter supports: [{ kind, label, term, searchTerm, value, unit, display, working, from, notes }]
-export function runCalculators(text, patient = {}, weight = null) {
-  const ctx = gatherFacts(text, patient, weight);
-  return CALCULATORS.map((calculator) => { try { return calculator(ctx); } catch { return null; } }).filter(Boolean);
+export function runCalculators(text, patient = {}, weight = null, entered = {}) {
+  const ctx = gatherFacts(text, patient, weight, entered);
+  return CALCULATORS.map((calculator) => { try { return calculator(ctx); } catch { return null; } }).filter(Boolean)
+    .map((r) => (r.from.some((quote) => String(quote).includes(ENTERED)) ? { ...r, notes: [...r.notes, "This uses figures entered from the clinical record, not given in the letter. Check them."] } : r));
 }
