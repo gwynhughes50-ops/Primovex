@@ -49,6 +49,7 @@ import { createDocmanPackZip, downloadBlob, safePackName } from "./clinflowZipSe
 import DocmanReadiness from "./DocmanReadiness";
 import { canSpotCheck, folderKindFor, needsSpotCheck } from "./clinflowNfwf";
 import { LANES, LANE_WORDS, inLane, lanesFor } from "./clinflowLanes";
+import { readingChecks } from "./clinflowChecks";
 import { chooseFolder, deliverDocmanPdf, desktopFoldersAvailable, loadFolders } from "./docmanFolders";
 import NextSteps from "./NextSteps";
 import { buildNextSteps } from "./clinflowNextSteps";
@@ -379,12 +380,14 @@ export default function ClinFlowWorkspace() {
     const checks = identityChecks({ givenNames: analysis.patient?.givenNames, familyName: analysis.patient?.familyName, nhsNumber: analysis.docmanDraft?.patient?.identifier, birthDate: analysis.docmanDraft?.patient?.birthDate, letterDate: analysis.docmanDraft?.document?.eventDate }, selected.syntheticOcr.content);
     return checks.level === "high" || checks.commonName ? checks : null;
   }, [selected]);
+  // what ClinFlow could not read or work out on this letter, so a gap is never silent
+  const checks = useMemo(() => readingChecks(selected), [selected]);
   // who opened which letter: once per letter per session, so reading a letter is on the record without a line for every click
   const viewedLetters = useRef(new Set());
   useEffect(() => {
     if (!selected?.id || viewedLetters.current.has(selected.id)) return;
     viewedLetters.current.add(selected.id);
-    record("clinflow.document.view", "ClinFlow letter opened for review", { dataMode: selected.dataMode || "synthetic" }).catch(() => {});
+    record("clinflow.document.view", "ClinFlow letter opened for review", { dataMode: selected.dataMode || "synthetic", readingChecks: checks.map((c) => c.id).join(",") }).catch(() => {});
   }, [selected?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // which tab of a letter was opened, which queue was looked at, and that a search was made (how long, never what for)
   const trackedTab = useRef(activeTab);
@@ -990,6 +993,13 @@ export default function ClinFlowWorkspace() {
             <button type="button" onClick={verifyPatientRequest}>{selected.syntheticOcr ? "Verify patient" : "View patient"}</button>
           </div>
           {identityNote && !noticesFor(selected.id).includes("identity") && <div className="cf-identity-note" role="status"><AlertTriangle size={16} /><div><b>{identityNote.commonName ? "Common name: double-check this patient" : "Double-check this patient"}</b><span>{identityNote.reasons[0]}{identityNote.reasons.length > 2 ? ` (and ${identityNote.reasons.length - 2} more in What to do with this letter)` : ""}</span></div><button type="button" className="cf-notice-close" onClick={() => dismissNotice("identity")} aria-label="Put this notice away" title="Put this notice away"><X size={14} /></button></div>}
+          {checks.length > 0 && !noticesFor(selected.id).includes("checks") && (
+            <section className="cf-check-this" role="alert" aria-label="Check before you rely on this">
+              <button type="button" className="cf-notice-close" onClick={() => dismissNotice("checks")} aria-label="Put this notice away" title="Put this notice away"><X size={14} /></button>
+              <h3><AlertTriangle size={16} aria-hidden="true" /> Check this letter yourself</h3>
+              <ul>{checks.map((check) => <li key={check.id}><b>{check.title}.</b> {check.detail}</li>)}</ul>
+            </section>
+          )}
           {noticesFor(selected.id).length > 0 && <button type="button" className="cf-notices-show" onClick={showNotices}>Show {noticesFor(selected.id).length} notice{noticesFor(selected.id).length === 1 ? "" : "s"} put away</button>}
           {(selected.clinflowAnalysis?.docmanDraft?.urgent || selected.clinflowAnalysis?.docmanDraft?.medicationChanged) && !noticesFor(selected.id).includes("risk") && (
             <div className="cf-high-risk-banner"><AlertTriangle size={16} />{HIGH_RISK_BANNER}<button type="button" className="cf-notice-close" onClick={() => dismissNotice("risk")} aria-label="Put this notice away" title="Put this notice away"><X size={14} /></button></div>

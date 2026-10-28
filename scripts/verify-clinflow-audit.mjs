@@ -93,8 +93,8 @@ t("the side panels fold away, the choice is remembered, and folding is on the re
 
 t("notices above the letter can be put away with a small x, come back for the next letter, can be shown again, and each is on the record", () => {
   const source = read("src/modules/clinflow/ClinFlowWorkspace.jsx");
-  for (const notice of ["identity", "risk", "brief"]) assert.match(source, new RegExp(`dismissNotice\\("${notice}"\\)`), `${notice} notice has its x`);
-  assert.ok((source.match(/aria-label="Put this notice away"/g) || []).length === 3);
+  for (const notice of ["identity", "risk", "brief", "checks"]) assert.match(source, new RegExp(`dismissNotice\\("${notice}"\\)`), `${notice} notice has its x`);
+  assert.ok((source.match(/aria-label="Put this notice away"/g) || []).length === 4);
   assert.match(source, /track\("clinflow\.notice\.dismiss"/);
   assert.match(source, /track\("clinflow\.notice\.show"/);
   assert.match(source, /\[selected\.id\]: \[\.\.\.\(current\[selected\.id\] \|\| \[\]\)/, "put away per letter, so the next letter shows its own notices");

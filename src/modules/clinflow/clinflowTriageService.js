@@ -1,3 +1,5 @@
+import { AI_READ_LIMIT } from "./clinflowChecks.js";
+
 const RULESET_VERSION = "clinflow-triage-2026.08-cf43-governed";
 
 const ROUTES = {
@@ -6,9 +8,6 @@ const ROUTES = {
   no_workflow: { label: "NFWF", destination: "NFWF", priority: "routine" },
   review_required: { label: "Human review required", destination: "Workflow review", priority: "routine" },
 };
-
-// How many characters of a letter the AI reads (MAX_INPUT_CHARS in functions/services/azureOpenAiExtractionService.js: keep the two the same).
-const AI_READ_LIMIT = 12000;
 
 const INFORMATION_ONLY_SIGNALS = [
   ["for information only", 35], ["no action required", 45], ["no further action", 45],

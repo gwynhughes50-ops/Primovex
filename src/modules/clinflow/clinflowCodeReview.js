@@ -151,7 +151,7 @@ export function reviewCandidates(analysis, letter = "") {
   const words = (m) => new Set(medicineLookup(m.sourceValue).split(/\s+/).filter(Boolean));
   const kept = medicines.filter((m, i) => { const mine = words(m); return !medicines.some((o, j) => j !== i && (words(o).size > mine.size || (words(o).size === mine.size && j < i)) && [...mine].every((w) => words(o).has(w))); });
   // values the letter implies (BMI from a weight and height, an average of home or ambulatory readings), unless it already states them
-  const worked = (letter ? calculateFindings(letter, { birthDate: analysis?.docmanDraft?.patient?.birthDate, gender: analysis?.docmanDraft?.patient?.gender, letterDate: analysis?.docmanDraft?.document?.eventDate }) : []).filter((f) => f.kind !== "bmi" || !clinical.some((c) => /\bbmi\b|body mass index/i.test(`${c.sourceLabel} ${c.sourceValue}`)));
+  const worked = (letter ? calculateFindings(letter, { birthDate: analysis?.docmanDraft?.patient?.birthDate, gender: analysis?.docmanDraft?.patient?.gender, letterDate: analysis?.docmanDraft?.document?.eventDate }) : []).filter((f) => f.kind !== "bmi" || !clinical.some((c) => /\bbmi\b|body mass index/i.test(`${c.sourceLabel} ${c.sourceValue}`)) || f.notes.some((note) => /does not match/.test(note))); // a stated BMI that disagrees with the weight and height is never hidden
   return [...clinical, ...kept, ...worked.map(calculatedCandidate)];
 }
 

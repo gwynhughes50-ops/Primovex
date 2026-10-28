@@ -263,3 +263,8 @@
 .cf-queue-tabs button{padding:0 0 8px}
 .cf-document-card em.cf-lane--medium{background:#fff4e0;color:#9a5a00}.cf-document-card em.cf-lane--low{background:#eef2f7;color:#56667e}.cf-document-card em.cf-lane--nfw{background:#e5f6f2;color:#0f6a5a}
 .cf-dm-link{padding:0;border:0;background:none;color:#075eae;font-weight:700;font-size:inherit;text-decoration:underline;cursor:pointer}
+
+/* "Check this letter yourself": what ClinFlow could not read or work out */
+.cf-check-this{position:relative;margin:8px 0;padding:10px 38px 10px 14px;border:1px solid #f0b982;border-left:5px solid #e08a1e;border-radius:10px;background:#fff7ec;color:#5a3400}
+.cf-check-this h3{display:flex;align-items:center;gap:6px;margin:0 0 4px;font-size:13px;color:#8a4a07}
+.cf-check-this ul{display:grid;gap:4px;margin:0;padding-left:18px;font-size:12.5px;line-height:1.4}.cf-check-this li b{color:#5a3400}

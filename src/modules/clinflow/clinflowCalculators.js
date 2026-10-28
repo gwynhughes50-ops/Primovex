@@ -289,6 +289,31 @@ export function gatherFacts(text, patient = {}, weight = null) {
   return { text: String(text ?? ""), age: findAge(text, patient), sex: findSex(text, patient), labs: findLabs(text), vitals: findVitals(text), weight };
 }
 
+// What a letter hints at but does not give enough for: a calculation that has its first ingredient in the letter and is missing the rest is NOT worked out, and the person is
+// told, so a missing result is never mistaken for a normal one. Only where the letter clearly points at the calculation (a creatinine, atrial fibrillation, pneumonia,
+// liver enzymes, calcium, three or more of the five observations); a letter that never mentions the ingredients is not told anything.
+// Returns [{ kind, label, needs: [what is missing] }].
+export function calculatorGaps(text, patient = {}, weight = null) {
+  const ctx = gatherFacts(text, patient, weight);
+  const t = ctx.text;
+  const gaps = [];
+  const missing = (...pairs) => pairs.filter(([have]) => !have).map(([, what]) => what);
+  const add = (kind, label, needs) => { if (needs.length) gaps.push({ kind, label, needs }); };
+  if (ctx.labs.creatinine && !/\be?GFR\b[^\d\n]{0,12}\d/i.test(t)) add("egfr", "eGFR", missing([ctx.age, "the patient's age"], [ctx.sex, "the patient's sex"]));
+  if (ctx.labs.calcium && !ctx.labs.statedCorrectedCalcium) add("corrected-calcium", "Corrected calcium", missing([ctx.labs.albumin, "an albumin result"]));
+  const liver = [ctx.labs.ast, ctx.labs.alt, ctx.labs.platelets].filter(Boolean).length;
+  if (liver >= 2 && !/\bFIB-?4\b[^\d\n]{0,10}\d/i.test(t)) add("fib4", "FIB-4 index", missing([ctx.labs.ast, "an AST result"], [ctx.labs.alt, "an ALT result"], [ctx.labs.platelets, "a platelet count"], [ctx.age, "the patient's age"]));
+  if (mentions(t, /\batrial fibrillation\b|\bAF\b|\batrial flutter\b/i) && !ctx.age) {
+    if (!/\bCHA2?DS2?[-\s]?VASc\b[^\d\n]{0,12}\d/i.test(t)) add("chadsvasc", "CHA2DS2-VASc score", ["the patient's age"]);
+    if (!/\bHAS-?BLED\b[^\d\n]{0,12}\d/i.test(t)) add("hasbled", "HAS-BLED score", ["the patient's age"]);
+  }
+  if (mentions(t, /pneumonia|lower respiratory tract infection|\bLRTI\b|chest infection/i) && !ctx.age && !/\bCURB-?65\b[^\d\n]{0,12}\d/i.test(t)) add("curb65", "CURB-65 score", ["the patient's age"]);
+  const v = ctx.vitals;
+  const found = [v.bp, v.pulse, v.respiratoryRate, v.spo2, v.temperature].filter(Boolean).length;
+  if (found >= 3 && found < 5 && !/\bNEWS\s?2?\b[^\d\n]{0,12}\d/i.test(t)) add("news2", "NEWS2 score", missing([v.bp, "a blood pressure"], [v.pulse, "a pulse"], [v.respiratoryRate, "a respiratory rate"], [v.spo2, "an oxygen saturation"], [v.temperature, "a temperature"]));
+  return gaps;
+}
+
 // Every calculation the letter supports: [{ kind, label, term, searchTerm, value, unit, display, working, from, notes }]
 export function runCalculators(text, patient = {}, weight = null) {
   const ctx = gatherFacts(text, patient, weight);

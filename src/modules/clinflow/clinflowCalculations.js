@@ -2,7 +2,7 @@
 // of a run of ambulatory or home blood pressure readings. Pure (no screens). Each result carries its working and the words it came from, and is
 // offered to the coder like any other suggestion: nothing here is accepted for anyone.
 
-import { runCalculators } from "./clinflowCalculators.js";
+import { calculatorGaps, runCalculators } from "./clinflowCalculators.js";
 
 const num = (value) => Number(String(value).replace(",", "."));
 const round1 = (value) => Math.round(value * 10) / 10;
@@ -106,6 +106,21 @@ export function calculateBloodPressureAverage(text) {
 export function calculateFindings(text, patient = {}) {
   const weight = findWeight(text);
   return [calculateBmi(text), ...calculateBloodPressureAverage(text), ...runCalculators(text, patient, weight)].filter(Boolean);
+}
+
+// A letter that mentions home or ambulatory blood pressure and gives some readings, but not a run of four or more, gets no average: the person is told.
+export function bloodPressureAverageGap(text) {
+  const source = String(text ?? "");
+  if (!SERIES_WORDS.test(source) || calculateBloodPressureAverage(source).length) return null;
+  const any = [...source.matchAll(READINGS)].some((m) => believable(Number(m[1]), Number(m[2])));
+  return any ? { kind: "bp-average", label: "Average blood pressure", needs: ["four or more readings written one after another"] } : null;
+}
+
+// Every calculation the letter points at but does not give enough for: [{ kind, label, needs }]. See calculatorGaps.
+export function calculationGaps(text, patient = {}) {
+  const gaps = calculatorGaps(text, patient, findWeight(text));
+  const average = bloodPressureAverageGap(text);
+  return average ? [...gaps, average] : gaps;
 }
 
 // A worked-out value as a suggestion in the same shape as the reader's own, so it is reviewed, accepted and filed the same way.
