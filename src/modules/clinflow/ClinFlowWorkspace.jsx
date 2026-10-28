@@ -50,6 +50,7 @@ import DocmanReadiness from "./DocmanReadiness";
 import { canSpotCheck, folderKindFor, needsSpotCheck } from "./clinflowNfwf";
 import { LANES, LANE_WORDS, inLane, lanesFor } from "./clinflowLanes";
 import { readingChecks } from "./clinflowChecks";
+import ScanInbox from "./ScanInbox";
 import { cleanEnteredFigures } from "./clinflowEnteredFigures";
 import RecordFigures from "./RecordFigures";
 import { chooseFolder, deliverDocmanPdf, desktopFoldersAvailable, loadFolders } from "./docmanFolders";
@@ -93,7 +94,7 @@ function expectedValue(result, label) {
   return result?.groundTruth?.find((item) => item.label.toLowerCase() === label.toLowerCase())?.expected || "Not extracted";
 }
 
-function createAzureQueueDocument(response, index) {
+function createAzureQueueDocument(response, index, source = "Azure Document Intelligence") {
   const result = response?.result || {};
   const syntheticOcr = { analysisId: response.analysisId, fileName: response.fileName, fileSha256: response.fileSha256, sourceFile: response.sourceFile, ...result };
   const documentId = result.document?.id || `document-${index + 1}`;
@@ -110,7 +111,7 @@ function createAzureQueueDocument(response, index) {
     patient: result.llmExtraction?.patientName || expectedValue(result, "Patient"),
     nhs: "Synthetic · not matched",
     dob: "Verification required",
-    source: "Azure Document Intelligence",
+    source,
     received: new Date().toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" }),
     priority: clinflowAnalysis.triage?.priority || "routine",
     destination: clinflowAnalysis.triage?.destination || "Workflow review",
@@ -428,12 +429,12 @@ export default function ClinFlowWorkspace() {
     window.__clinflowToastTimer = window.setTimeout(() => setToast(""), durationMs);
   }
 
-  function importAzureResults(responses) {
-    const imported = responses.map(createAzureQueueDocument);
+  // quiet: a letter that arrives in the background (from the Incoming scans folder) is added without changing the letter or tab the person is working on
+  function importAzureResults(responses, { quiet = false, source } = {}) {
+    const imported = responses.map((response, index) => createAzureQueueDocument(response, index, source));
     if (!imported.length) return;
     setDocuments((current) => [...imported.filter((item) => !current.some((existing) => existing.id === item.id)), ...current]);
-    setSelectedId(imported[0].id);
-    setActiveTab("synthetic-document");
+    if (!quiet) { setSelectedId(imported[0].id); setActiveTab("synthetic-document"); }
     cacheClinFlowDocuments(imported).catch((error) => console.error("ClinFlow documents could not be cached", error));
     writeAuditEvent({
       action: "clinflow.analysis.import",
@@ -444,7 +445,7 @@ export default function ClinFlowWorkspace() {
       classification: "synthetic",
       metadata: { count: imported.length, provider: "azure-document-intelligence" },
     }).catch(() => {});
-    notify(`${imported.length} analysed document${imported.length === 1 ? "" : "s"} added to ClinFlow review`);
+    notify(quiet ? `${imported.length} scanned letter${imported.length === 1 ? "" : "s"} ready to check` : `${imported.length} analysed document${imported.length === 1 ? "" : "s"} added to ClinFlow review`);
   }
 
   // Every move a person makes is on the record: what they changed, what they opened, what they copied or downloaded, and what they were refused
@@ -975,6 +976,7 @@ export default function ClinFlowWorkspace() {
           <label className="cf-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search documents..." /></label>
           <span className={`cf-data-state cf-data-state--${syncState}`}>Synthetic only · {syncState === "synced" ? "Workflow synced" : syncState === "error" ? "Sync unavailable" : "Local preview"}</span>
           {completedDocuments.length > 0 && <button className="cf-top-button cf-top-button--finished" type="button" onClick={downloadAllFinishedPacks} disabled={busy}><FolderCheck size={15} /> Download finished ({completedDocuments.length})</button>}
+          {can("clinflow.capture") && <ScanInbox canRun={can("clinflow.capture")} record={(action, summary, metadata) => record(action, summary, metadata).catch(() => {})} onLetter={(response) => importAzureResults([response], { quiet: true, source: "Scanned in" })} />}
           {can("clinflow.capture") && <button className="cf-top-button cf-top-button--azure" type="button" onClick={() => setAzureTestOpen(true)}><UploadCloud size={15} /> Test Azure OCR</button>}
           <button className="cf-top-button" type="button" onClick={refreshWorkflow} disabled={busy}><RefreshCw size={15} /> Refresh</button>
           <span className="cf-user-chip"><UserRound size={16} /> {displayName || "Workflow user"}</span>

@@ -38,7 +38,7 @@ fn open_clinflow_pdf(app: tauri::AppHandle, bytes: Vec<u8>, file_name: String) -
 }
 
 // The two Docman upload folders: "nfw" (letters needing no action) and "action". The person chooses each with the system folder picker and the choice is kept in this
-// computer's app settings. The web page never names a folder: it can only say "nfw" or "action", so it cannot make the app write anywhere else.
+// computer's app settings. The web page never names a folder: it can only say "nfw", "action" or "incoming", so it cannot make the app write anywhere else.
 #[cfg(desktop)]
 fn docman_folders_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
   let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
@@ -61,7 +61,7 @@ fn read_docman_folders(app: &tauri::AppHandle) -> serde_json::Value {
 #[tauri::command]
 fn docman_folders(app: tauri::AppHandle) -> serde_json::Value {
   let saved = read_docman_folders(&app);
-  serde_json::json!({ "nfw": saved["nfw"].as_str().unwrap_or(""), "action": saved["action"].as_str().unwrap_or("") })
+  serde_json::json!({ "nfw": saved["nfw"].as_str().unwrap_or(""), "action": saved["action"].as_str().unwrap_or(""), "incoming": saved["incoming"].as_str().unwrap_or("") })
 }
 
 // Async so the picker is not opened from the main thread. Resolves the chosen folder, or nothing if the person cancelled.
@@ -69,7 +69,7 @@ fn docman_folders(app: tauri::AppHandle) -> serde_json::Value {
 #[tauri::command]
 async fn choose_docman_folder(app: tauri::AppHandle, kind: String, title: String) -> Result<Option<String>, String> {
   use tauri_plugin_dialog::DialogExt;
-  if kind != "nfw" && kind != "action" {
+  if kind != "nfw" && kind != "action" && kind != "incoming" {
     return Err("That is not one of the Docman folders.".to_string());
   }
   let Some(picked) = app.dialog().file().set_title(title).blocking_pick_folder() else { return Ok(None) };
@@ -125,6 +125,102 @@ fn save_docman_pdf(app: tauri::AppHandle, kind: String, file_name: String, bytes
       Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
       Err(e) => return Err(format!("The PDF could not be saved there: {e}")),
     }
+  }
+  Err("Too many files with that name are already in the folder.".to_string())
+}
+
+// The Incoming scans folder: where the practice's scanners save letters for ClinFlow to read in the background. The person chooses it once with the system folder picker
+// (kind "incoming", kept with the two Docman folders). The web page can only name a file in it by its bare name, never a path, so it cannot reach anywhere else. ClinFlow never
+// deletes a scan: a finished one is moved into "ClinFlow done" and one it could not read into "ClinFlow problems", both inside the Incoming folder.
+#[cfg(desktop)]
+fn incoming_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+  let saved = read_docman_folders(app);
+  let folder = saved["incoming"].as_str().unwrap_or("");
+  if folder.is_empty() {
+    return Err("Choose the Incoming scans folder first.".to_string());
+  }
+  let dir = PathBuf::from(folder);
+  if !dir.is_dir() {
+    return Err("The Incoming scans folder cannot be found. Choose it again.".to_string());
+  }
+  Ok(dir)
+}
+
+// A bare PDF file name: no folders, no "..", at most 200 characters.
+#[cfg(desktop)]
+fn bare_pdf_name(name: &str) -> Result<String, String> {
+  let ok = !name.is_empty()
+    && name.chars().count() <= 200
+    && !name.contains('/')
+    && !name.contains('\\')
+    && !name.contains("..")
+    && name.to_ascii_lowercase().ends_with(".pdf");
+  if ok { Ok(name.to_string()) } else { Err("That is not a PDF in the Incoming scans folder.".to_string()) }
+}
+
+// The PDFs waiting in the Incoming folder itself (not the "done" and "problems" folders inside it), oldest first: [{ name, size, modifiedMs }].
+#[cfg(desktop)]
+#[tauri::command]
+fn list_incoming_scans(app: tauri::AppHandle) -> Result<Vec<serde_json::Value>, String> {
+  let dir = incoming_dir(&app)?;
+  let mut found: Vec<(u128, serde_json::Value)> = Vec::new();
+  for entry in fs::read_dir(&dir).map_err(|e| format!("The Incoming scans folder could not be read: {e}"))?.flatten() {
+    let Ok(meta) = entry.metadata() else { continue };
+    let name = entry.file_name().to_string_lossy().to_string();
+    if !meta.is_file() || bare_pdf_name(&name).is_err() {
+      continue;
+    }
+    let modified = meta.modified().ok()
+      .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+      .map(|d| d.as_millis())
+      .unwrap_or(0);
+    found.push((modified, serde_json::json!({ "name": name, "size": meta.len(), "modifiedMs": modified as u64 })));
+  }
+  found.sort_by_key(|(modified, _)| *modified);
+  Ok(found.into_iter().map(|(_, value)| value).collect())
+}
+
+// The bytes of one waiting scan. Only a PDF, and no more than 25 MB.
+#[cfg(desktop)]
+#[tauri::command]
+fn read_incoming_scan(app: tauri::AppHandle, name: String) -> Result<Vec<u8>, String> {
+  let path = incoming_dir(&app)?.join(bare_pdf_name(&name)?);
+  let meta = fs::metadata(&path).map_err(|_| "That scan is no longer in the Incoming scans folder.".to_string())?;
+  if !meta.is_file() || meta.len() > 25 * 1024 * 1024 {
+    return Err("That scan is too large to read (the limit is 25 MB).".to_string());
+  }
+  let bytes = fs::read(&path).map_err(|e| format!("That scan could not be read: {e}"))?;
+  if bytes.len() < 5 || &bytes[..5] != b"%PDF-" {
+    return Err("That file is not a PDF.".to_string());
+  }
+  Ok(bytes)
+}
+
+// Moves a scan out of the way once ClinFlow has dealt with it: outcome "done" or "problem". Never overwrites and never deletes; resolves where it went.
+#[cfg(desktop)]
+#[tauri::command]
+fn finish_incoming_scan(app: tauri::AppHandle, name: String, outcome: String) -> Result<String, String> {
+  let dir = incoming_dir(&app)?;
+  let from = dir.join(bare_pdf_name(&name)?);
+  if !from.is_file() {
+    return Err("That scan is no longer in the Incoming scans folder.".to_string());
+  }
+  let sub = match outcome.as_str() {
+    "done" => "ClinFlow done",
+    "problem" => "ClinFlow problems",
+    _ => return Err("That is not a way to finish a scan.".to_string()),
+  };
+  let target_dir = dir.join(sub);
+  fs::create_dir_all(&target_dir).map_err(|e| format!("The {sub} folder could not be made: {e}"))?;
+  let stem = name[..name.len() - 4].to_string();
+  for attempt in 1..=200u32 {
+    let file = if attempt == 1 { format!("{stem}.pdf") } else { format!("{stem} ({attempt}).pdf") };
+    let target = target_dir.join(&file);
+    if target.exists() {
+      continue;
+    }
+    fs::rename(&from, &target).map_err(|e| format!("The scan could not be moved: {e}"))?;
+    return Ok(target.to_string_lossy().to_string());
   }
   Err("Too many files with that name are already in the folder.".to_string())
 }
@@ -676,6 +772,12 @@ pub fn run() {
       choose_docman_folder,
       #[cfg(desktop)]
       save_docman_pdf,
+      #[cfg(desktop)]
+      list_incoming_scans,
+      #[cfg(desktop)]
+      read_incoming_scan,
+      #[cfg(desktop)]
+      finish_incoming_scan,
       #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
       open_storage_pdf,
       #[cfg(any(target_os = "macos", windows, target_os = "linux"))]

@@ -278,3 +278,13 @@
 .cf-figure-optional span{font-weight:600;color:#7a6a55}
 .cf-figures-problem{color:#b3261e;font-weight:700}.cf-figures-buttons{display:flex;gap:8px}.cf-figures-buttons button{padding:6px 12px;border:1px solid var(--cf-border);border-radius:8px;background:#fff;font-weight:700;font-size:12.5px;cursor:pointer}
 .cf-figures-entered{padding:6px 10px;border-radius:8px;background:#fff;border:1px solid #e8c79a}
+
+/* Incoming scans: the button in the top bar and its panel */
+.cf-inbox-button{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid var(--cf-border);border-radius:9px;background:#fff;color:#13233d;font-weight:800;font-size:12px;cursor:pointer}
+.cf-inbox-button.is-running{border-color:#4fa595;background:#effaf7;color:#0f5f4a}
+.cf-inbox{display:grid}.cf-inbox>div{display:grid;gap:10px;max-width:640px}
+.cf-inbox-row{display:grid;grid-template-columns:minmax(120px,auto) 1fr auto;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--cf-border);border-radius:9px;font-size:12.5px}
+.cf-inbox-row span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#35506b}.cf-inbox-row button{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1px solid var(--cf-border);border-radius:8px;background:#fff;font-weight:700;font-size:12px;cursor:pointer}
+.cf-inbox-check{display:flex;gap:8px;align-items:flex-start;font-size:12.5px;line-height:1.4;color:#243750}.cf-inbox-check small{color:var(--cf-muted)}
+.cf-inbox-actions{display:flex;gap:10px;align-items:center}.cf-inbox-actions button{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:9px;font-weight:800;font-size:13px;cursor:pointer}
+.cf-inbox-status{display:grid;gap:3px;margin:0;padding:10px 14px;list-style:none;border:1px solid var(--cf-border);border-radius:9px;background:#fbfcfe;font-size:12.5px}.cf-inbox-error{color:#9a5a00}

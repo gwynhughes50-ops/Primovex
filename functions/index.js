@@ -184,7 +184,8 @@ exports.analyzeSyntheticClinFlowDocument = onCall(
     region: "europe-west2",
     timeoutSeconds: 120,
     memory: "512MiB",
-    maxInstances: 1,
+    // Letters now arrive from the Incoming scans folder as well as by hand, so a few can be read at once: up to 3 at a time, each on its own instance
+    maxInstances: 3,
     concurrency: 1,
     secrets: [AZURE_DOCUMENT_INTELLIGENCE_KEY, AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT, AZURE_OPENAI_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT],
   },
