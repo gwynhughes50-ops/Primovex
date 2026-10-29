@@ -186,6 +186,15 @@ export default function MobileSessionShell({ children, showSplash = false }) {
     unlock();
   };
 
+  // Enter does what the Continue button does; when creating a PIN, Enter in the first box moves on to the confirm box
+  const onPinEnter = (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const next = mode === "set-pin" && event.currentTarget.nextElementSibling?.tagName === "INPUT" ? event.currentTarget.nextElementSibling : null;
+    if (next) next.focus();
+    else (mode === "pin" ? submitPin : savePin)();
+  };
+
   useEffect(() => {
     if (!expiresAtMs) return;
     const warningAt = expiresAtMs - 15 * 60 * 1000;
@@ -234,8 +243,8 @@ export default function MobileSessionShell({ children, showSplash = false }) {
             {(mode === "pin" || mode === "set-pin") && (
               <div className="mt-7 rounded-3xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-5">
                 <div className="flex items-center gap-2 font-bold"><LockKeyhole className="h-5 w-5" /> {mode === "pin" ? "Enter PIN" : "Create mobile PIN"}</div>
-                <input type="password" inputMode="numeric" pattern="[0-9]*" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} placeholder="••••••" aria-label="Six-digit PIN" className="mt-4 w-full rounded-2xl border px-4 py-4 text-center text-2xl tracking-[0.5em]" />
-                {mode === "set-pin" && <input type="password" inputMode="numeric" pattern="[0-9]*" maxLength={6} value={confirmPin} onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))} placeholder="••••••" aria-label="Confirm six-digit PIN" className="mt-3 w-full rounded-2xl border px-4 py-4 text-center text-lg tracking-[0.25em]" />}
+                <input type="password" inputMode="numeric" onKeyDown={onPinEnter} pattern="[0-9]*" maxLength={6} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))} placeholder="••••••" aria-label="Six-digit PIN" className="mt-4 w-full rounded-2xl border px-4 py-4 text-center text-2xl tracking-[0.5em]" />
+                {mode === "set-pin" && <input type="password" inputMode="numeric" onKeyDown={onPinEnter} pattern="[0-9]*" maxLength={6} value={confirmPin} onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))} placeholder="••••••" aria-label="Confirm six-digit PIN" className="mt-3 w-full rounded-2xl border px-4 py-4 text-center text-lg tracking-[0.25em]" />}
                 <button onClick={mode === "pin" ? submitPin : savePin} className="mt-4 w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 py-4 font-bold text-white">Continue</button>
                 <button onClick={() => setMode("biometric")} className="mt-2 w-full px-4 py-3 text-sm text-[var(--medtrak-muted)]">Back</button>
               </div>
