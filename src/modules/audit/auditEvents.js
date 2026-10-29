@@ -85,6 +85,7 @@ export function concernEvent(step, { concern = {}, party = "", action = "", roun
     case "closed": return gov("closed", `${labelled} closed${sentBeforeAccepted ? " (final response sent before everyone had accepted it)" : ""}`, { outcome: text(outcome, 40), sentBeforeAccepted: sentBeforeAccepted === true });
     case "extended": return gov("deadline_extended", `${labelled}: response deadline extended`);
     case "deleted": return gov("deleted", `${labelled} deleted`);
+    case "printed": return gov("printed", `${labelled}: case summary printed`);
     default: return gov(step, `${labelled}: ${step}`);
   }
 }

@@ -21,6 +21,7 @@ import { isSafeSyntheticMode } from "@/config/platformMode";
 import { identityFields, identityProblems } from "@/modules/governance/patientIdentity";
 import { recordAudit } from "@/modules/audit/recordAudit";
 import { concernEvent } from "@/modules/audit/auditEvents";
+import { AUDIT_TYPE, auditEntry, cleanChanges } from "@/modules/governance/concernAudit";
 import { cleanContact, contactFromForm, hasContact, legacyContact } from "@/modules/governance/concernContact";
 import { STEP_ACTIONS, WITHDRAWN, buildClosePatch, buildStep, buildWithdrawal, otherKey, partyOf, sentCount, ukDay } from "@/modules/governance/concernCase";
 import { demoGovernanceCases, demoConcernTimeline, demoLearningActions } from "@/data/demoDataset";
@@ -261,6 +262,7 @@ export async function addConcernTimeline(concernId, event = {}) {
       type: event.type || "note",
       title: event.title || "Timeline event",
       message: event.message || "",
+      ...(Array.isArray(event.changes) && event.changes.length ? { changes: cleanChanges(event.changes) } : {}),
       actorUid: event.actor?.uid || null,
       actorName: event.actor?.displayName || event.actor?.email || "Unknown",
       createdAt: serverTimestamp(),
@@ -301,13 +303,29 @@ export async function createConcern(form, actor = {}) {
   return ref.id;
 }
 
+// Writes the detailed audit line for a change: which fields, from what to what, who and when. It is a record of the work, never part of it, so it can never stop the work.
+async function recordCaseChange(concernId, before, patch, actor) {
+  try {
+    const entry = auditEntry(before, patch);
+    if (entry) await addConcernTimeline(concernId, { ...entry, actor });
+  } catch (err) {
+    console.error("The audit line for a concern change could not be written", err);
+  }
+}
+
 export async function updateConcern(concernId, patch = {}, actor = {}) {
   if (isSafeSyntheticMode()) return;
   if (!concernId) return;
+  let before = null;
+  try {
+    const snap = await getDoc(doc(db, CONCERNS_COLLECTION, concernId));
+    before = snap.exists() ? snap.data() : null;
+  } catch { /* the change is still recorded, with the old values marked as not known */ }
   await updateDoc(doc(db, CONCERNS_COLLECTION, concernId), {
     ...patch,
     updatedAt: serverTimestamp(),
   });
+  await recordCaseChange(concernId, before, patch, actor);
   if (patch.status) {
     await addConcernTimeline(concernId, {
       type: "status",
@@ -323,13 +341,38 @@ export async function updateConcern(concernId, patch = {}, actor = {}) {
 // listening/learning timestamps, all of which have their own dedicated
 // controls already (assign owner, move-to-stage buttons, etc.).
 // Save (or, when everything is blank, clear) the contact details for a case. Never part of the case record itself.
+// The contact details themselves are never copied into the audit trail: it says that they changed, by whom and when
+async function recordContactChange(concernId, title, actor) {
+  try {
+    await addConcernTimeline(concernId, { type: AUDIT_TYPE, title, message: "The details themselves are not shown here.", actor });
+  } catch (err) {
+    console.error("The audit line for a contact change could not be written", err);
+  }
+}
+
+// Printing the summary goes in the governed audit ledger for everyone, and is a line in the audit trail too when the person is on the concerns team
+export async function recordCasePrinted(concern, actor = {}, { inTrail = false } = {}) {
+  if (isSafeSyntheticMode() || !concern?.id) return;
+  recordAudit(concernEvent("printed", { concern }));
+  if (!inTrail) return;
+  try {
+    await addConcernTimeline(concern.id, { type: AUDIT_TYPE, title: "Case summary printed", message: "", actor });
+  } catch (err) {
+    console.error("The audit line for printing could not be written", err);
+  }
+}
+
 export async function saveConcernContact(concernId, contact, actor = {}) {
   if (isSafeSyntheticMode() || !concernId) return;
   const clean = cleanContact(contact);
+  const before = await getConcernContact(concernId);
+  const changed = JSON.stringify(cleanContact(before || {})) !== JSON.stringify(clean);
   if (!hasContact(clean)) {
     await deleteDoc(doc(db, CONCERN_CONTACTS_COLLECTION, concernId)).catch(() => {});
+    if (changed && before) await recordContactChange(concernId, "Contact details removed", actor);
     return;
   }
+  if (changed) await recordContactChange(concernId, before ? "Contact details changed" : "Contact details added", actor);
   await setDoc(doc(db, CONCERN_CONTACTS_COLLECTION, concernId), {
     concernId,
     ...clean,
@@ -737,7 +780,7 @@ export function subscribeConcernTimeline(concernId, callback, onError) {
   if (!concernId) return () => {};
   const q = query(collection(db, CONCERN_TIMELINE_COLLECTION), where("concernId", "==", concernId), orderBy("createdAt", "desc"));
   return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })));
+    callback(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })).filter((event) => event.type !== AUDIT_TYPE)); // the audit lines are for the printed summary, not the case timeline
   }, onError);
 }
 

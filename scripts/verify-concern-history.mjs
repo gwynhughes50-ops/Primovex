@@ -74,7 +74,7 @@ t("the printed summary uses them: every date, and the whole history with who and
   assert.match(print, /historyRows\(timeline\)/);
   assert.match(print, /<th>When<\/th><th>Who<\/th><th>What happened<\/th>/);
   assert.match(print, /History of the case: who did what, and when/);
-  assert.match(print, /limit\(500\)/);
+  assert.match(print, /limit\(1000\)/); // room for the detailed audit lines as well as the history
   assert.ok(!/limit\(6\)/.test(print));
   assert.ok(!/Recent activity/.test(print));
 });

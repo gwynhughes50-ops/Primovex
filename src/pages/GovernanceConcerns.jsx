@@ -325,7 +325,7 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
   const printSummary = async () => {
     setPrintBusy(true);
     try {
-      await printConcernSummary(concern, actor);
+      await printConcernSummary(concern, actor, { includeAudit: isTeam });
     } catch (err) {
       console.error(err);
       alert(err?.message || "Couldn't prepare the summary to print.");
@@ -668,7 +668,7 @@ export default function GovernanceConcerns() {
   const printFromRegister = async (concern) => {
     setPrintingId(concern.id);
     try {
-      await printConcernSummary(concern, actor);
+      await printConcernSummary(concern, actor, { includeAudit: isTeam });
     } catch (err) {
       console.error(err);
       alert(err?.message || "Couldn't prepare the summary to print.");

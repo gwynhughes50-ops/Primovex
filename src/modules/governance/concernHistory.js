@@ -60,7 +60,7 @@ export function keyDates(concern = {}, timeline = []) {
 
 // The whole history, oldest first: [{ when, who, title, message }]
 export function historyRows(timeline = []) {
-  return sorted(timeline).map((e) => ({
+  return sorted(timeline).filter((e) => e.type !== "audit").map((e) => ({ // the detailed audit lines have their own table (concernAudit.js)
     when: ukDateTime(toDate(e.createdAt)),
     who: e.actorName && e.actorName !== "Unknown" ? e.actorName : "Not recorded",
     title: e.title || "",

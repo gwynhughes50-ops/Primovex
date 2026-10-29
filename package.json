@@ -104,6 +104,7 @@
     "test:bright-hr": "esbuild scripts/verify-bright-hr.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-bright-hr.bundle.mjs && node work/verify-bright-hr.bundle.mjs",
     "test:report-summary": "esbuild scripts/verify-report-summary.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-report-summary.bundle.mjs && node work/verify-report-summary.bundle.mjs",
     "test:concern-history": "esbuild scripts/verify-concern-history.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-concern-history.bundle.mjs && node work/verify-concern-history.bundle.mjs",
+    "test:concern-audit": "esbuild scripts/verify-concern-audit.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-concern-audit.bundle.mjs && node work/verify-concern-audit.bundle.mjs",
     "test:timesheet-payroll": "esbuild scripts/verify-timesheet-payroll.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-timesheet-payroll.bundle.mjs && node work/verify-timesheet-payroll.bundle.mjs",
     "test:sidebar-groups": "esbuild scripts/verify-sidebar-groups.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-sidebar-groups.bundle.mjs && node work/verify-sidebar-groups.bundle.mjs",
     "test:quality-opportunities": "esbuild scripts/verify-quality-opportunities.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-quality-opportunities.bundle.mjs && node work/verify-quality-opportunities.bundle.mjs",

@@ -2,6 +2,7 @@ import { collection, getDocs, limit, orderBy, query, where } from "firebase/fire
 
 import { db } from "@/lib/firebase";
 import { identityLabel } from "@/modules/governance/patientIdentity";
+import { auditRows } from "@/modules/governance/concernAudit";
 import { historyRows, keyDates } from "@/modules/governance/concernHistory";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import {
@@ -13,6 +14,7 @@ import {
   formatMeetingDate,
   friendly,
   getMeetingStatus,
+  recordCasePrinted,
   toDate,
 } from "@/modules/governance/services/concernService";
 
@@ -46,7 +48,7 @@ function section(title, body) {
   return `<section><h2>${esc(title)}</h2>${body}</section>`;
 }
 
-export function buildConcernSummaryHtml({ concern = {}, meetings = null, timeline = null, printedBy = "", printedAt = new Date() } = {}) {
+export function buildConcernSummaryHtml({ concern = {}, meetings = null, timeline = null, printedBy = "", printedAt = new Date(), includeAudit = false } = {}) {
   const stage = CONCERN_STAGES.find((item) => item.key === concern.status)?.label || friendly(concern.status);
   const identifier = identityLabel(concern, { withDob: true });
   const raisedBy = [friendly(concern.source || "patient"), concern.raisedByInitials].filter(Boolean).join(" — ");
@@ -111,6 +113,16 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
     timelineBlock = `<table class="history"><thead><tr><th>When</th><th>Who</th><th>What happened</th></tr></thead><tbody>${historyRows(timeline).map((event) => `<tr><td class="when">${esc(event.when)}</td><td class="who">${esc(event.who)}</td><td><strong>${esc(event.title)}</strong>${event.message ? ` &mdash; ${esc(event.message)}` : ""}</td></tr>`).join("")}</tbody></table>`;
   }
 
+  // The detailed audit trail is for the concerns team only: every field changed, from what to what, who and when. Free text and patient details are shown as changed, never repeated.
+  let auditBlock = "";
+  if (includeAudit) {
+    const rows = timeline === null ? null : auditRows(timeline);
+    const intro = `<p class="muted">Every change made to the case record. Summaries, patient details and contact details are shown as changed, without repeating them. Changes made before this was recorded appear in the history above without the fields that changed.</p>`;
+    if (rows === null) auditBlock = `<p class="muted">The audit trail could not be loaded for this print.</p>`;
+    else if (rows.length === 0) auditBlock = `${intro}<p class="muted">No detailed changes have been recorded for this case yet.</p>`;
+    else auditBlock = `${intro}<table class="history audit"><thead><tr><th>When</th><th>Who</th><th>Change</th><th>From</th><th>To</th></tr></thead><tbody>${rows.map((r) => `<tr><td class="when">${esc(r.when)}</td><td class="who">${esc(r.who)}</td><td>${esc(r.what)}</td><td>${esc(r.from || "—")}</td><td>${esc(r.to || "—")}</td></tr>`).join("")}</tbody></table>`;
+  }
+
   return `<!doctype html>
 <html lang="en-GB"><head><meta charset="utf-8" />
 <title>Concern summary ${esc(concern.reference)}</title>
@@ -131,6 +143,7 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
   .history td { padding: 3px 6px; border-bottom: 1px solid #e2e8f0; }
   .history td.when { width: 14%; white-space: nowrap; color: #475569; }
   .history td.who { width: 18%; font-weight: 600; }
+  .audit td { font-size: 10.5px; }
   .history tr { page-break-inside: avoid; }
   .prose { margin: 3px 0 6px; white-space: pre-wrap; }
   .label { margin: 6px 0 0; font-size: 10px; color: #475569; text-transform: uppercase; letter-spacing: .04em; }
@@ -153,6 +166,7 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
   ${section("Summary", summaryBlock)}
   ${section("Face-to-face meetings", meetingsBlock)}
   ${section("History of the case: who did what, and when", timelineBlock).replace("<section>", '<section class="long">')}
+  ${includeAudit ? section("Audit trail: every change to the case record", auditBlock).replace("<section>", '<section class="long">') : ""}
   <footer>Printed ${esc(printedAt.toLocaleString("en-GB"))}${printedBy ? ` by ${esc(printedBy)}` : ""} from Primovex. This is a summary — the full case record is in Primovex.</footer>
 </body></html>`;
 }
@@ -164,7 +178,7 @@ export async function fetchConcernPrintData(concernId) {
   if (isSafeSyntheticMode() || !concernId) return { meetings: [], timeline: [] };
   const [meetings, timeline] = await Promise.allSettled([
     getDocs(query(collection(db, CONCERN_MEETINGS_COLLECTION), where("concernId", "==", concernId))),
-    getDocs(query(collection(db, CONCERN_TIMELINE_COLLECTION), where("concernId", "==", concernId), orderBy("createdAt", "desc"), limit(500))),
+    getDocs(query(collection(db, CONCERN_TIMELINE_COLLECTION), where("concernId", "==", concernId), orderBy("createdAt", "desc"), limit(1000))),
   ]);
   const toRows = (result) => (result.status === "fulfilled" ? result.value.docs.map((d) => ({ id: d.id, ...d.data() })) : null);
   const meetingRows = toRows(meetings);
@@ -200,13 +214,16 @@ export function printHtmlDocument(html) {
   });
 }
 
-export async function printConcernSummary(concern, actor = {}) {
+// `includeAudit` is true only for the concerns team: they get the detailed audit trail, and the print itself is added to it
+export async function printConcernSummary(concern, actor = {}, { includeAudit = false } = {}) {
+  await recordCasePrinted(concern, actor, { inTrail: includeAudit }); // first, so the print lists itself in its own audit trail
   const data = await fetchConcernPrintData(concern?.id);
   const html = buildConcernSummaryHtml({
     concern,
     meetings: data.meetings,
     timeline: data.timeline,
     printedBy: actor.displayName || actor.email || "",
+    includeAudit,
   });
   await printHtmlDocument(html);
 }
