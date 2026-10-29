@@ -1,88 +1,173 @@
 import { useEffect, useRef, useState } from "react";
-import { FolderInput, Pause, Play, ScanLine, X } from "lucide-react";
+import { FolderInput, Pause, Play, ScanLine, Share2, X } from "lucide-react";
 import { analyzeSyntheticDocument } from "./azureDocumentIntelligenceClient";
-import { chooseFolder, desktopFoldersAvailable, incomingScans, loadFolders } from "./docmanFolders";
+import { setClinFlowMirror } from "./clinflowDocumentCache";
+import { activeShare, createSharedStore } from "./clinflowShare";
+import { LIST_WORDS, localStamps, syncSharedLists } from "./clinflowSharedLists";
+import { chooseFolder, desktopFoldersAvailable, incomingScans, loadFolders, sharedLetters } from "./docmanFolders";
 import { POLL_MS, createInboxRunner } from "./scanInboxRunner";
 import { splitAtBlankPages } from "./scanSplit";
 
 const remembered = (key) => { try { return globalThis.localStorage?.getItem(key) === "true"; } catch { return false; } };
 const remember = (key, value) => { try { globalThis.localStorage?.setItem(key, String(value)); } catch { /* only a convenience */ } };
+const SHARE_POLL_MS = 8000;
+const LIST_POLL_MS = 5 * 60 * 1000;
 
-// The Incoming scans folder: scanners save letters into one folder, ClinFlow reads them in the background and they appear in the letters list, ready to check. It only works
-// in the desktop app, only while ClinFlow is open, and only after a person confirms the scans are invented test letters (there is no sign-off for real patient letters yet).
-// Nothing is deleted: a scan is moved to "ClinFlow done" or "ClinFlow problems" inside the folder.
-export default function ScanInbox({ onLetter, record, canRun }) {
+// Two things that need the desktop app and ClinFlow being open:
+//  * Incoming scans: scanners save letters into one folder and this computer reads them in the background. Switch it on for ONE computer only.
+//  * Sharing: every computer keeps the letters being worked on in one shared folder (a OneDrive folder only the coding team can see), so they all see the same list. A letter is
+//    deleted from the shared folder when it is finished and its Docman PDF saved.
+// Both are for invented test letters until the data protection sign-off is done, so a person confirms that each time; it is never remembered.
+export default function ScanInbox({ documents, onLetter, onShared, notify, record, canRun, who, lists }) {
   const desktop = desktopFoldersAvailable();
   const [open, setOpen] = useState(false);
-  const [folder, setFolder] = useState("");
+  const [folders, setFolders] = useState({ incoming: "", shared: "" });
   const [attested, setAttested] = useState(false);
   const [running, setRunning] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [split, setSplit] = useState(() => remembered("primovex.clinflow.inbox.split"));
   const [status, setStatus] = useState({ waiting: 0, current: "", read: 0, problems: 0, lastProblem: "", error: "" });
+  const [shareStatus, setShareStatus] = useState({ count: 0, lastAt: 0, conflicts: 0, error: "" });
+  const [listStatus, setListStatus] = useState({ present: [], loaded: {}, error: "", lastAt: 0 });
   const [message, setMessage] = useState("");
   const splitRef = useRef(split);
   splitRef.current = split;
-  const latest = useRef({ onLetter, record });
-  latest.current = { onLetter, record };
+  const latest = useRef({});
+  latest.current = { documents, onLetter, onShared, notify, record, who, lists };
+  const store = useRef(null);
 
-  useEffect(() => { if (desktop) loadFolders().then((folders) => setFolder(folders.incoming)); }, [desktop]);
+  useEffect(() => { if (desktop) loadFolders().then((all) => setFolders({ incoming: all.incoming, shared: all.shared })); }, [desktop]);
 
-  // the background reader: it runs while this is switched on, and stops when ClinFlow is closed or it is paused
+  // sharing: bring other people's letters in, keep the shared folder up to date after each save, and clear finished letters out of it
   useEffect(() => {
-    if (!running || !folder || !desktop) return undefined;
+    if (!sharing || !folders.shared || !desktop) return undefined;
+    let stopped = false;
+    const shared = createSharedStore({ api: sharedLetters, who: latest.current.who });
+    store.current = shared;
+    activeShare.current = shared;
+    let conflicts = 0;
+    async function cycle() {
+      if (stopped) return;
+      try {
+        const result = await shared.pull({ hasPdf: (id) => latest.current.documents.find((d) => d.id === id)?.syntheticOcr?.sourceFile instanceof Blob });
+        if (result.upserts.length || result.finishedIds.length) latest.current.onShared(result);
+        setShareStatus({ count: result.count, lastAt: Date.now(), conflicts, error: result.problems[0] || "" });
+      } catch (error) {
+        setShareStatus((current) => ({ ...current, error: String(error?.message || error).slice(0, 160) }));
+      }
+    }
+    setClinFlowMirror(async (docs) => {
+      for (const document of docs) {
+        const outcome = await shared.push(document);
+        if (outcome.conflict) {
+          conflicts += 1;
+          latest.current.notify("Someone else changed this letter first. Their version has been loaded: please make your change again.", 5000);
+          await cycle();
+        }
+      }
+    });
+    (async () => {
+      await cycle(); // first learn what the shared folder holds, including letters already finished
+      for (const document of latest.current.documents) if (!shared.knows(document.id)) await shared.push(document).catch(() => {});
+      await cycle();
+    })();
+    const timer = setInterval(cycle, SHARE_POLL_MS);
+    // the three lists, kept once in the "lists" folder of the shared folder: loaded here when they are new or different, checked every few minutes
+    async function syncLists() {
+      if (stopped || !latest.current.lists) return;
+      try {
+        const { results, present } = await syncSharedLists({ api: sharedLetters, loaders: latest.current.lists.loaders, stamps: localStamps(), have: latest.current.lists.have });
+        const loaded = results.filter((r) => r.ok);
+        setListStatus((current) => ({ present, loaded: { ...current.loaded, ...Object.fromEntries(loaded.map((r) => [r.kind, Date.now()])) }, error: results.find((r) => !r.ok)?.error || "", lastAt: Date.now() }));
+        if (loaded.length) {
+          latest.current.notify(`${loaded.map((r) => LIST_WORDS[r.kind]).join(", ")} loaded from the shared folder`, 4000);
+          latest.current.record("clinflow.share.lists", "Lists were loaded from the shared folder", { lists: loaded.map((r) => r.kind).join(",") });
+        }
+      } catch (error) {
+        setListStatus((current) => ({ ...current, error: String(error?.message || error).slice(0, 160), lastAt: Date.now() }));
+      }
+    }
+    syncLists();
+    const listTimer = setInterval(syncLists, LIST_POLL_MS);
+    return () => { stopped = true; clearInterval(timer); clearInterval(listTimer); setClinFlowMirror(null); activeShare.current = null; store.current = null; };
+  }, [sharing, folders.shared, desktop]);
+
+  // the background reader for the Incoming scans folder
+  useEffect(() => {
+    if (!running || !folders.incoming || !desktop) return undefined;
     const runner = createInboxRunner({
-      folder: incomingScans,
+      folder: { ...incomingScans, finishStored: (name, ids) => incomingScans.finish(name, "stored", ids) },
       analyse: (file) => analyzeSyntheticDocument(file, true),
       split: (bytes) => (splitRef.current ? splitAtBlankPages(bytes).catch(() => null) : null),
       onStatus: setStatus,
-      onLetter: (item) => {
-        if (item.problem) { latest.current.record("clinflow.inbox.problem", "A scan could not be read and was moved to the problems folder", { reason: "unreadable_or_too_large" }); return; }
-        latest.current.onLetter(item.response);
-        latest.current.record("clinflow.inbox.read", "A scanned letter was read in the background", { parts: item.parts, split: item.split, attempts: item.attempts, automatedTransmission: false });
+      onLetter: async (item) => {
+        if (item.problem) { latest.current.record("clinflow.inbox.problem", "A scan could not be read and was moved to the problems folder", { reason: "unreadable_or_too_large" }); return null; }
+        const existing = latest.current.documents.find((d) => d.syntheticOcr?.fileSha256 && d.syntheticOcr.fileSha256 === item.response.fileSha256);
+        const imported = existing ? [existing] : latest.current.onLetter(item.response);
+        latest.current.record("clinflow.inbox.read", "A scanned letter was read in the background", { parts: item.parts, split: item.split, attempts: item.attempts, duplicate: Boolean(existing), automatedTransmission: false });
+        if (!store.current || !imported?.[0]) return null;
+        // the scan is only deleted once the letter is safely in the shared folder
+        const outcome = await store.current.push(imported[0]);
+        if (outcome.conflict) throw new Error("The shared folder already has a newer copy of this letter.");
+        return { storedId: imported[0].id };
       },
     });
     runner.tick();
     const timer = setInterval(runner.tick, POLL_MS);
     return () => { clearInterval(timer); runner.stop(); };
-  }, [running, folder, desktop]);
+  }, [running, folders.incoming, desktop]);
 
-  async function choose() {
+  async function choose(kind) {
     try {
-      const path = await chooseFolder("incoming");
+      const path = await chooseFolder(kind);
       if (!path) return;
-      setFolder(path);
+      setFolders((current) => ({ ...current, [kind]: path }));
       setMessage("");
-      record("clinflow.inbox.folder_set", "The Incoming scans folder was chosen on this computer", {});
+      record(kind === "shared" ? "clinflow.share.folder_set" : "clinflow.inbox.folder_set", `The ${kind === "shared" ? "shared letters" : "Incoming scans"} folder was chosen on this computer`, {});
     } catch (error) { setMessage(error?.message || "The folder could not be chosen"); }
   }
-  function start() {
-    setRunning(true);
-    setMessage("");
-    record("clinflow.inbox.start", "Reading the Incoming scans folder in the background was switched on", { attestedSyntheticOnly: true, splitAtBlankPages: split });
-  }
-  function pause() {
-    setRunning(false);
-    record("clinflow.inbox.pause", "Reading the Incoming scans folder was paused", { read: status.read, problems: status.problems });
-  }
+  const startReading = () => { setRunning(true); setMessage(""); record("clinflow.inbox.start", "Reading the Incoming scans folder in the background was switched on", { attestedSyntheticOnly: true, splitAtBlankPages: split, sharing }); };
+  const pauseReading = () => { setRunning(false); record("clinflow.inbox.pause", "Reading the Incoming scans folder was paused", { read: status.read, problems: status.problems }); };
+  const startSharing = () => { setSharing(true); setMessage(""); record("clinflow.share.start", "Sharing letters through the shared folder was switched on", { attestedSyntheticOnly: true }); };
+  const stopSharing = () => { setSharing(false); record("clinflow.share.stop", "Sharing letters through the shared folder was switched off", {}); };
+
+  const Folder = ({ kind, label, busy }) => (
+    <div className="cf-inbox-row"><b>{label}</b><span title={folders[kind]}>{folders[kind] || "Not chosen yet"}</span><button type="button" onClick={() => choose(kind)} disabled={busy}><FolderInput size={14} /> {folders[kind] ? "Change" : "Choose folder"}</button></div>
+  );
 
   return (
     <>
-      <button type="button" className={`cf-inbox-button${running ? " is-running" : ""}`} onClick={() => setOpen(true)} title="Letters scanned into the Incoming folder are read here in the background">
-        <ScanLine size={15} aria-hidden="true" /> Incoming scans{running ? ` · ${status.waiting}` : ""}
+      <button type="button" className={`cf-inbox-button${running || sharing ? " is-running" : ""}`} onClick={() => setOpen(true)} title="Letters scanned into the Incoming folder, and sharing letters with the team">
+        <ScanLine size={15} aria-hidden="true" /> Incoming scans{sharing ? " · shared" : ""}{running ? ` · ${status.waiting}` : ""}
       </button>
       {open && (
-        <div className="cf-modal cf-inbox" role="dialog" aria-modal="true" aria-label="Incoming scans"><div>
-          <header className="cf-scorecard-head"><h2><ScanLine size={18} /> Incoming scans</h2><button type="button" className="cf-scorecard-close" onClick={() => setOpen(false)} aria-label="Close"><X size={16} /></button></header>
-          {!desktop ? <p className="cf-modal-guidance">Reading scans from a folder needs the Primovex desktop app. Open ClinFlow there.</p> : (
+        <div className="cf-modal cf-inbox" role="dialog" aria-modal="true" aria-label="Incoming scans and sharing"><div>
+          <header className="cf-scorecard-head"><h2><ScanLine size={18} /> Incoming scans and sharing</h2><button type="button" className="cf-scorecard-close" onClick={() => setOpen(false)} aria-label="Close"><X size={16} /></button></header>
+          {!desktop ? <p className="cf-modal-guidance">Reading scans from a folder and sharing letters need the Primovex desktop app. Open ClinFlow there.</p> : (
             <>
-              <p className="cf-modal-guidance">Scanners save letters into one folder. ClinFlow reads each one in the background and it appears in your letters list, ready to check. The person scanning does not need to do anything else. ClinFlow must stay open on this computer for it to work.</p>
-              <div className="cf-inbox-row"><b>Incoming scans folder</b><span title={folder}>{folder || "Not chosen yet"}</span><button type="button" onClick={choose} disabled={running}><FolderInput size={14} /> {folder ? "Change" : "Choose folder"}</button></div>
-              <label className="cf-inbox-check"><input type="checkbox" checked={attested} onChange={(event) => setAttested(event.target.checked)} disabled={running} /><span>I confirm everything scanned into this folder is an <b>invented test letter</b> with no real patient or staff details. (Real letters cannot be read here until the data protection sign-off is done.)</span></label>
-              <label className="cf-inbox-check"><input type="checkbox" checked={split} onChange={(event) => { setSplit(event.target.checked); remember("primovex.clinflow.inbox.split", event.target.checked); }} /><span>If a scan holds a stack of letters, split it at blank pages. <small>Better done in the scanner's own software; use this only if that is not possible. The original scan is kept untouched.</small></span></label>
+              <label className="cf-inbox-check"><input type="checkbox" checked={attested} onChange={(event) => setAttested(event.target.checked)} disabled={running || sharing} /><span>I confirm every letter here is an <b>invented test letter</b> with no real patient or staff details. (Real letters cannot be used until the data protection sign-off is done.)</span></label>
+
+              <h3 className="cf-score-title"><Share2 size={15} /> Share letters with the team</h3>
+              <p className="cf-modal-guidance">Every computer using ClinFlow keeps the letters being worked on in one shared folder, so the whole coding team sees the same list, codes and decisions. When a letter is finished and its Docman PDF saved, ClinFlow deletes it from the shared folder. The folder must be shared with the named coding team only, and fully synced (not online-only) on every computer.</p>
+              <Folder kind="shared" label="Shared letters folder (OneDrive)" busy={sharing} />
+              <div className="cf-inbox-actions">
+                {sharing
+                  ? <button type="button" className="primary" onClick={stopSharing}><Pause size={14} /> Stop sharing</button>
+                  : <button type="button" className="primary" onClick={startSharing} disabled={!folders.shared || !attested || !canRun}><Play size={14} /> Start sharing</button>}
+                {sharing && <span>{shareStatus.count} letter{shareStatus.count === 1 ? "" : "s"} in the shared folder{shareStatus.lastAt ? ` · checked ${new Date(shareStatus.lastAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : ""}{shareStatus.conflicts ? ` · ${shareStatus.conflicts} clash${shareStatus.conflicts === 1 ? "" : "es"}` : ""}</span>}
+              </div>
+              {shareStatus.error && sharing && <p className="cf-inbox-error">Still syncing, trying again: {shareStatus.error}</p>}
+              <p className="cf-muted"><small>The three lists (SNOMED, dm+d, abbreviations) can be kept once in a folder called <b>lists</b> inside the shared folder, as <b>snomed-uk-index.json.gz</b>, <b>dmd-index.json.gz</b> and <b>abbreviations.csv</b>. Every computer then loads them from there, and picks up a new file within about five minutes.{sharing ? ` In the shared folder now: ${listStatus.present.length ? listStatus.present.map((k) => LIST_WORDS[k]).join(", ") : "none yet"}.` : ""}</small></p>
+              {listStatus.error && sharing && <p className="cf-inbox-error">A list could not be loaded yet: {listStatus.error}</p>}
+
+              <h3 className="cf-score-title"><ScanLine size={15} /> Read scanned letters</h3>
+              <p className="cf-modal-guidance">Scanners save letters into one folder and this computer reads each in the background. <b>Switch this on for one computer only</b>, or two computers will read the same scan. ClinFlow must stay open on it. With sharing on, a scan is deleted from the folder once its letter is safely in the shared folder; without sharing it is moved to "ClinFlow done".</p>
+              <Folder kind="incoming" label="Incoming scans folder" busy={running} />
+              <label className="cf-inbox-check"><input type="checkbox" checked={split} onChange={(event) => { setSplit(event.target.checked); remember("primovex.clinflow.inbox.split", event.target.checked); }} /><span>If a scan holds a stack of letters, split it at blank pages. <small>Better done in the scanner's own software. The original scan is kept untouched unless every letter from it is stored.</small></span></label>
               <div className="cf-inbox-actions">
                 {running
-                  ? <button type="button" className="primary" onClick={pause}><Pause size={14} /> Pause reading</button>
-                  : <button type="button" className="primary" onClick={start} disabled={!folder || !attested || !canRun}><Play size={14} /> Start reading</button>}
+                  ? <button type="button" className="primary" onClick={pauseReading}><Pause size={14} /> Pause reading</button>
+                  : <button type="button" className="primary" onClick={startReading} disabled={!folders.incoming || !attested || !canRun}><Play size={14} /> Start reading</button>}
                 {!canRun && <small>Your role cannot add letters to ClinFlow.</small>}
               </div>
               {message && <p className="cf-code-error" role="alert">{message}</p>}
@@ -93,7 +178,7 @@ export default function ScanInbox({ onLetter, record, canRun }) {
                 <li>Could not be read: <b>{status.problems}</b>{status.lastProblem ? <span> · last: {status.lastProblem}</span> : null}</li>
                 {status.error && <li className="cf-inbox-error">Trying again: {status.error}</li>}
               </ul>
-              <p className="cf-muted"><small>Finished scans are moved into a <b>ClinFlow done</b> folder inside the Incoming folder, and ones that could not be read into <b>ClinFlow problems</b>. Nothing is deleted. A scan is read once it has stopped growing, about ten seconds after it is saved. Each file must be a PDF of no more than 4 MB (one letter).</small></p>
+              <p className="cf-muted"><small>A scan is read once it has stopped growing, about ten seconds after it is saved. Each file must be a PDF of no more than 4 MB (one letter). Ones that could not be read go into a "ClinFlow problems" folder inside the Incoming folder.</small></p>
             </>
           )}
           <footer><button type="button" onClick={() => setOpen(false)}>Close</button></footer>

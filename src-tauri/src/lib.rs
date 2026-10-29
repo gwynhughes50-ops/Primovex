@@ -61,7 +61,7 @@ fn read_docman_folders(app: &tauri::AppHandle) -> serde_json::Value {
 #[tauri::command]
 fn docman_folders(app: tauri::AppHandle) -> serde_json::Value {
   let saved = read_docman_folders(&app);
-  serde_json::json!({ "nfw": saved["nfw"].as_str().unwrap_or(""), "action": saved["action"].as_str().unwrap_or(""), "incoming": saved["incoming"].as_str().unwrap_or("") })
+  serde_json::json!({ "nfw": saved["nfw"].as_str().unwrap_or(""), "action": saved["action"].as_str().unwrap_or(""), "incoming": saved["incoming"].as_str().unwrap_or(""), "shared": saved["shared"].as_str().unwrap_or("") })
 }
 
 // Async so the picker is not opened from the main thread. Resolves the chosen folder, or nothing if the person cancelled.
@@ -69,7 +69,7 @@ fn docman_folders(app: tauri::AppHandle) -> serde_json::Value {
 #[tauri::command]
 async fn choose_docman_folder(app: tauri::AppHandle, kind: String, title: String) -> Result<Option<String>, String> {
   use tauri_plugin_dialog::DialogExt;
-  if kind != "nfw" && kind != "action" && kind != "incoming" {
+  if kind != "nfw" && kind != "action" && kind != "incoming" && kind != "shared" {
     return Err("That is not one of the Docman folders.".to_string());
   }
   let Some(picked) = app.dialog().file().set_title(title).blocking_pick_folder() else { return Ok(None) };
@@ -199,11 +199,37 @@ fn read_incoming_scan(app: tauri::AppHandle, name: String) -> Result<Vec<u8>, St
 // Moves a scan out of the way once ClinFlow has dealt with it: outcome "done" or "problem". Never overwrites and never deletes; resolves where it went.
 #[cfg(desktop)]
 #[tauri::command]
-fn finish_incoming_scan(app: tauri::AppHandle, name: String, outcome: String) -> Result<String, String> {
+fn finish_incoming_scan(app: tauri::AppHandle, name: String, outcome: String, stored_ids: Option<Vec<String>>) -> Result<String, String> {
   let dir = incoming_dir(&app)?;
   let from = dir.join(bare_pdf_name(&name)?);
   if !from.is_file() {
     return Err("That scan is no longer in the Incoming scans folder.".to_string());
+  }
+  // "stored": the letter is safely in the shared letters folder, so the scan is not needed any more and is deleted. It is only deleted if every letter made from it is there, and
+  // for a scan that became one letter, only if the stored copy is byte for byte the same.
+  if outcome == "stored" {
+    let ids = stored_ids.unwrap_or_default();
+    if ids.is_empty() {
+      return Err("Say which letters the scan was stored as.".to_string());
+    }
+    let shared = shared_dir(&app)?;
+    let mut stored_copy = None;
+    for id in &ids {
+      let pdf = shared.join(letter_id(id)?).join("letter.pdf");
+      let meta = fs::metadata(&pdf).map_err(|_| "The letter is not in the shared folder yet, so the scan was kept.".to_string())?;
+      if !meta.is_file() || meta.len() == 0 {
+        return Err("The letter is not in the shared folder yet, so the scan was kept.".to_string());
+      }
+      stored_copy = Some(pdf);
+    }
+    if ids.len() == 1 {
+      let same = fs::read(&from).ok() == stored_copy.and_then(|pdf| fs::read(pdf).ok());
+      if !same {
+        return Err("The stored copy does not match the scan, so the scan was kept.".to_string());
+      }
+    }
+    fs::remove_file(&from).map_err(|e| format!("The scan could not be deleted: {e}"))?;
+    return Ok("deleted".to_string());
   }
   let sub = match outcome.as_str() {
     "done" => "ClinFlow done",
@@ -223,6 +249,200 @@ fn finish_incoming_scan(app: tauri::AppHandle, name: String, outcome: String) ->
     return Ok(target.to_string_lossy().to_string());
   }
   Err("Too many files with that name are already in the folder.".to_string())
+}
+
+// The shared letters folder: a folder (a OneDrive folder that only the named coding team can see) where every computer running ClinFlow keeps the letters being worked on, so they
+// all see the same list. Each letter has its own folder named by its id, holding only three possible files: document.json (the letter's reading and everyone's decisions),
+// letter.pdf (the scan) and finished.json (a tiny note, with no patient details, left when the letter is finished so other computers know it is done and not just missing).
+// The web page names a letter by id and a file from that list, never a path. When a letter is finished the two patient files are deleted and only the note remains.
+#[cfg(desktop)]
+fn shared_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+  let saved = read_docman_folders(app);
+  let folder = saved["shared"].as_str().unwrap_or("");
+  if folder.is_empty() {
+    return Err("Choose the shared letters folder first.".to_string());
+  }
+  let dir = PathBuf::from(folder);
+  if !dir.is_dir() {
+    return Err("The shared letters folder cannot be found. Choose it again.".to_string());
+  }
+  Ok(dir)
+}
+
+#[cfg(desktop)]
+fn letter_id(id: &str) -> Result<String, String> {
+  let ok = (6..=100).contains(&id.chars().count()) && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_');
+  if ok { Ok(id.to_string()) } else { Err("That is not a letter in the shared folder.".to_string()) }
+}
+
+#[cfg(desktop)]
+fn shared_file(name: &str) -> Result<&'static str, String> {
+  match name {
+    "document.json" => Ok("document.json"),
+    "letter.pdf" => Ok("letter.pdf"),
+    "finished.json" => Ok("finished.json"),
+    _ => Err("That is not a file ClinFlow keeps for a letter.".to_string()),
+  }
+}
+
+#[cfg(desktop)]
+fn stamp(path: &std::path::Path) -> (u64, u64) {
+  match fs::metadata(path) {
+    Ok(meta) if meta.is_file() => {
+      let ms = meta.modified().ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis() as u64).unwrap_or(0);
+      (ms.max(1), meta.len())
+    }
+    _ => (0, 0),
+  }
+}
+
+// Every letter folder: [{ id, docMs, docSize, pdfSize, finishedMs }]. A zero means that file is not there.
+#[cfg(desktop)]
+#[tauri::command]
+fn shared_list(app: tauri::AppHandle) -> Result<Vec<serde_json::Value>, String> {
+  let dir = shared_dir(&app)?;
+  let mut found = Vec::new();
+  for entry in fs::read_dir(&dir).map_err(|e| format!("The shared letters folder could not be read: {e}"))?.flatten() {
+    let Ok(meta) = entry.metadata() else { continue };
+    let name = entry.file_name().to_string_lossy().to_string();
+    if !meta.is_dir() || letter_id(&name).is_err() {
+      continue;
+    }
+    let (doc_ms, doc_size) = stamp(&entry.path().join("document.json"));
+    let (_, pdf_size) = stamp(&entry.path().join("letter.pdf"));
+    let (finished_ms, _) = stamp(&entry.path().join("finished.json"));
+    found.push(serde_json::json!({ "id": name, "docMs": doc_ms, "docSize": doc_size, "pdfSize": pdf_size, "finishedMs": finished_ms }));
+  }
+  Ok(found)
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn shared_read(app: tauri::AppHandle, id: String, file: String) -> Result<Vec<u8>, String> {
+  let path = shared_dir(&app)?.join(letter_id(&id)?).join(shared_file(&file)?);
+  let meta = fs::metadata(&path).map_err(|_| "That file is not in the shared folder (it may not have synced to this computer yet).".to_string())?;
+  if !meta.is_file() || meta.len() > 30 * 1024 * 1024 {
+    return Err("That file is too large to read.".to_string());
+  }
+  fs::read(&path).map_err(|e| format!("That file could not be read: {e}"))
+}
+
+// Writes one file for a letter. Checked: document.json and finished.json must be JSON of a sensible size, letter.pdf must be a PDF of no more than 25 MB. It is written to a
+// temporary name and moved into place, so another computer never reads half a file.
+#[cfg(desktop)]
+#[tauri::command]
+fn shared_write(app: tauri::AppHandle, id: String, file: String, bytes: Vec<u8>) -> Result<(), String> {
+  let name = shared_file(&file)?;
+  let dir = shared_dir(&app)?.join(letter_id(&id)?);
+  match name {
+    "letter.pdf" => {
+      if bytes.len() < 5 || &bytes[..5] != b"%PDF-" || bytes.len() > 25 * 1024 * 1024 {
+        return Err("Only a PDF of no more than 25 MB can be kept as the letter.".to_string());
+      }
+    }
+    "document.json" => {
+      if bytes.len() > 8 * 1024 * 1024 || serde_json::from_slice::<serde_json::Value>(&bytes).is_err() {
+        return Err("The letter's details are not in the right shape to keep.".to_string());
+      }
+    }
+    _ => {
+      if bytes.len() > 4096 || serde_json::from_slice::<serde_json::Value>(&bytes).is_err() {
+        return Err("The finished note is not in the right shape to keep.".to_string());
+      }
+    }
+  }
+  fs::create_dir_all(&dir).map_err(|e| format!("The letter's folder could not be made: {e}"))?;
+  let temp = dir.join(format!(".{name}.writing"));
+  fs::write(&temp, &bytes).map_err(|e| format!("The file could not be saved: {e}"))?;
+  fs::rename(&temp, dir.join(name)).map_err(|e| format!("The file could not be put in place: {e}"))
+}
+
+// A letter is finished: leave the tiny finished note, then delete the letter's two patient files. Nothing else is touched.
+#[cfg(desktop)]
+#[tauri::command]
+fn shared_finish(app: tauri::AppHandle, id: String, finished: Vec<u8>) -> Result<(), String> {
+  let dir = shared_dir(&app)?.join(letter_id(&id)?);
+  if finished.len() > 4096 || serde_json::from_slice::<serde_json::Value>(&finished).is_err() {
+    return Err("The finished note is not in the right shape to keep.".to_string());
+  }
+  fs::create_dir_all(&dir).map_err(|e| format!("The letter's folder could not be made: {e}"))?;
+  let temp = dir.join(".finished.json.writing");
+  fs::write(&temp, &finished).map_err(|e| format!("The finished note could not be saved: {e}"))?;
+  fs::rename(&temp, dir.join("finished.json")).map_err(|e| format!("The finished note could not be put in place: {e}"))?;
+  for name in ["document.json", "letter.pdf"] {
+    let path = dir.join(name);
+    if path.is_file() {
+      fs::remove_file(&path).map_err(|e| format!("{name} could not be deleted: {e}"))?;
+    }
+  }
+  Ok(())
+}
+
+// Tidies away the finished note of an old letter, once it holds nothing else. Refuses if there is anything else in the folder.
+#[cfg(desktop)]
+#[tauri::command]
+fn shared_forget(app: tauri::AppHandle, id: String) -> Result<(), String> {
+  let dir = shared_dir(&app)?.join(letter_id(&id)?);
+  if !dir.is_dir() {
+    return Ok(());
+  }
+  for entry in fs::read_dir(&dir).map_err(|e| e.to_string())?.flatten() {
+    let name = entry.file_name().to_string_lossy().to_string();
+    if name != "finished.json" && name != ".finished.json.writing" {
+      return Err("That letter's folder still holds the letter, so it was not removed.".to_string());
+    }
+  }
+  for name in ["finished.json", ".finished.json.writing"] {
+    let path = dir.join(name);
+    if path.is_file() {
+      fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+  }
+  fs::remove_dir(&dir).map_err(|e| e.to_string())
+}
+
+// The practice's three lists (SNOMED, dm+d, abbreviations) can be kept once in a "lists" folder inside the shared letters folder, and every computer loads them from there. The
+// page can only name one of those three files, and ask for a piece of it at a time (they are a few megabytes, read two at a time over the desktop app's link to the page).
+#[cfg(desktop)]
+fn shared_list_name(name: &str) -> Result<&'static str, String> {
+  match name {
+    "snomed-uk-index.json.gz" => Ok("snomed-uk-index.json.gz"),
+    "dmd-index.json.gz" => Ok("dmd-index.json.gz"),
+    "abbreviations.csv" => Ok("abbreviations.csv"),
+    _ => Err("That is not one of the practice's lists.".to_string()),
+  }
+}
+
+// Which of the three list files are in the shared folder's "lists" folder: [{ name, size, modifiedMs }]
+#[cfg(desktop)]
+#[tauri::command]
+fn shared_lists_status(app: tauri::AppHandle) -> Result<Vec<serde_json::Value>, String> {
+  let dir = shared_dir(&app)?.join("lists");
+  let mut found = Vec::new();
+  for name in ["snomed-uk-index.json.gz", "dmd-index.json.gz", "abbreviations.csv"] {
+    let (modified_ms, size) = stamp(&dir.join(name));
+    if size > 0 {
+      found.push(serde_json::json!({ "name": name, "size": size, "modifiedMs": modified_ms }));
+    }
+  }
+  Ok(found)
+}
+
+// One piece of a list file: `length` bytes (at most 2 MB) from `offset`.
+#[cfg(desktop)]
+#[tauri::command]
+fn shared_lists_read(app: tauri::AppHandle, name: String, offset: u64, length: u64) -> Result<Vec<u8>, String> {
+  use std::io::{Read, Seek, SeekFrom};
+  let path = shared_dir(&app)?.join("lists").join(shared_list_name(&name)?);
+  let mut file = fs::File::open(&path).map_err(|_| "That list is not in the shared folder.".to_string())?;
+  let total = file.metadata().map_err(|e| e.to_string())?.len();
+  if total > 400 * 1024 * 1024 || offset >= total {
+    return Err("That list is too large, or the piece asked for is past its end.".to_string());
+  }
+  file.seek(SeekFrom::Start(offset)).map_err(|e| e.to_string())?;
+  let mut bytes = vec![0u8; length.min(2 * 1024 * 1024).min(total - offset) as usize];
+  file.read_exact(&mut bytes).map_err(|e| format!("That list could not be read: {e}"))?;
+  Ok(bytes)
 }
 
 // Downloads a practice document (a COSHH sheet, a certificate, a waste consignment note) from the practice's own Firebase
@@ -778,6 +998,20 @@ pub fn run() {
       read_incoming_scan,
       #[cfg(desktop)]
       finish_incoming_scan,
+      #[cfg(desktop)]
+      shared_list,
+      #[cfg(desktop)]
+      shared_read,
+      #[cfg(desktop)]
+      shared_write,
+      #[cfg(desktop)]
+      shared_finish,
+      #[cfg(desktop)]
+      shared_forget,
+      #[cfg(desktop)]
+      shared_lists_status,
+      #[cfg(desktop)]
+      shared_lists_read,
       #[cfg(any(target_os = "macos", windows, target_os = "linux"))]
       open_storage_pdf,
       #[cfg(any(target_os = "macos", windows, target_os = "linux"))]

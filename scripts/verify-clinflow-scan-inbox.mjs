@@ -167,8 +167,10 @@ await t("the desktop commands are narrow: bare PDF names only, no deleting, move
   assert.match(rust, /fn bare_pdf_name\(name: &str\)/);
   assert.match(rust, /!name\.contains\('\/'\)[\s\S]{0,80}!name\.contains\('\\\\'\)[\s\S]{0,80}!name\.contains\("\.\."\)/);
   for (const command of ["list_incoming_scans", "read_incoming_scan", "finish_incoming_scan"]) assert.match(rust, new RegExp(`fn ${command}\\(`));
-  const incoming = rust.slice(rust.indexOf("fn incoming_dir"), rust.indexOf("// Downloads a practice document"));
-  assert.ok(!/remove_file|remove_dir|fs::copy/.test(incoming), "a scan is never deleted");
+  const incoming = rust.slice(rust.indexOf("fn incoming_dir"), rust.indexOf("// The shared letters folder"));
+  // a scan is deleted in exactly one case: its letter is verified to be stored in the shared folder (and for a single letter, byte for byte the same)
+  assert.equal((incoming.match(/remove_file|remove_dir|fs::copy/g) || []).length, 1, "only one place deletes a scan");
+  assert.ok(incoming.indexOf("remove_file") > incoming.indexOf('if outcome == "stored"') && incoming.indexOf("remove_file") < incoming.indexOf('let sub = match outcome.as_str()'), "and it is the verified 'stored' case");
   assert.match(incoming, /"ClinFlow done"/);
   assert.match(incoming, /"ClinFlow problems"/);
   assert.match(incoming, /25 \* 1024 \* 1024/);
@@ -178,7 +180,7 @@ await t("the desktop commands are narrow: bare PDF names only, no deleting, move
 
 await t("it is wired: test data only until a person confirms, switched on by a person, quiet when a letter arrives, and the reader can run three at once", () => {
   const ui = read("src/modules/clinflow/ScanInbox.jsx");
-  assert.match(ui, /disabled=\{!folder \|\| !attested \|\| !canRun\}/);
+  assert.match(ui, /disabled=\{!folders\.incoming \|\| !attested \|\| !canRun\}/);
   assert.match(ui, /invented test letter/);
   assert.match(ui, /analyzeSyntheticDocument\(file, true\)/);
   assert.match(ui, /record\("clinflow\.inbox\.start"/);

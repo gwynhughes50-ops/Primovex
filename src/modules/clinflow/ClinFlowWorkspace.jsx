@@ -51,6 +51,7 @@ import { canSpotCheck, folderKindFor, needsSpotCheck } from "./clinflowNfwf";
 import { LANES, LANE_WORDS, inLane, lanesFor } from "./clinflowLanes";
 import { readingChecks } from "./clinflowChecks";
 import ScanInbox from "./ScanInbox";
+import { activeShare } from "./clinflowShare";
 import { cleanEnteredFigures } from "./clinflowEnteredFigures";
 import RecordFigures from "./RecordFigures";
 import { chooseFolder, deliverDocmanPdf, desktopFoldersAvailable, loadFolders } from "./docmanFolders";
@@ -432,7 +433,7 @@ export default function ClinFlowWorkspace() {
   // quiet: a letter that arrives in the background (from the Incoming scans folder) is added without changing the letter or tab the person is working on
   function importAzureResults(responses, { quiet = false, source } = {}) {
     const imported = responses.map((response, index) => createAzureQueueDocument(response, index, source));
-    if (!imported.length) return;
+    if (!imported.length) return [];
     setDocuments((current) => [...imported.filter((item) => !current.some((existing) => existing.id === item.id)), ...current]);
     if (!quiet) { setSelectedId(imported[0].id); setActiveTab("synthetic-document"); }
     cacheClinFlowDocuments(imported).catch((error) => console.error("ClinFlow documents could not be cached", error));
@@ -446,6 +447,33 @@ export default function ClinFlowWorkspace() {
       metadata: { count: imported.length, provider: "azure-document-intelligence" },
     }).catch(() => {});
     notify(quiet ? `${imported.length} scanned letter${imported.length === 1 ? "" : "s"} ready to check` : `${imported.length} analysed document${imported.length === 1 ? "" : "s"} added to ClinFlow review`);
+    return imported;
+  }
+
+  // Letters other computers have saved in the shared folder come in; letters someone finished there leave this list (unless this computer finished them itself).
+  // A letter a person is looking at is replaced by the newest version, and the scan this computer already holds is kept rather than fetched again.
+  const documentsNow = useRef(documents);
+  documentsNow.current = documents;
+  function applySharedChanges({ upserts = [], finishedIds = [] }) {
+    const current = documentsNow.current;
+    const incoming = upserts.map(({ document, pdf }) => {
+      const local = current.find((item) => item.id === document.id);
+      const sourceFile = pdf ? new File([pdf], document.syntheticOcr?.fileName || "letter.pdf", { type: "application/pdf" }) : local?.syntheticOcr?.sourceFile;
+      return sourceFile ? { ...document, syntheticOcr: { ...document.syntheticOcr, sourceFile, sourceFileAvailable: true } } : document;
+    });
+    const gone = current.filter((item) => finishedIds.includes(item.id) && item.status !== "completed").map((item) => item.id);
+    if (incoming.length || gone.length) {
+      setDocuments((items) => {
+        const byId = new Map(incoming.map((item) => [item.id, item]));
+        const kept = items.filter((item) => !gone.includes(item.id)).map((item) => byId.get(item.id) || item);
+        return [...incoming.filter((item) => !items.some((existing) => existing.id === item.id)), ...kept];
+      });
+    }
+    if (incoming.length) cacheClinFlowDocuments(incoming, { mirrored: false }).catch((error) => console.error("ClinFlow shared letters could not be cached", error));
+    gone.forEach((id) => removeCachedClinFlowDocument(id).catch(() => {}));
+    const added = incoming.filter((item) => !current.some((existing) => existing.id === item.id)).length;
+    if (added) notify(`${added} letter${added === 1 ? "" : "s"} from the shared folder`);
+    track("clinflow.share.pull", "Letters were brought in from the shared folder", { changed: incoming.length, new: added, finishedByOthers: gone.length });
   }
 
   // Every move a person makes is on the record: what they changed, what they opened, what they copied or downloaded, and what they were refused
@@ -578,6 +606,7 @@ export default function ClinFlowWorkspace() {
     if (!can("clinflow.manage")) return denied("clinflow.manage", "ClinFlow management permission is required");
     await runAction(async () => {
       if (context.cloudEnabled) await applyClinFlowAction(selected, { type: "archive", summary: "Synthetic workflow document archived" }, context);
+      await activeShare.current?.finish(selected, "archived").catch(() => {});
       await removeCachedClinFlowDocument(selected.id);
     const remaining = documents.filter((item) => item.id !== selected.id);
     setDocuments(remaining);
@@ -597,6 +626,7 @@ export default function ClinFlowWorkspace() {
     if (!can("clinflow.manage")) return denied("clinflow.manage", "ClinFlow management permission is required");
     await runAction(async () => {
       if (context.cloudEnabled) await applyClinFlowAction(selected, { type: "delete", summary: "Synthetic workflow document permanently deleted from view" }, context);
+      await activeShare.current?.finish(selected, "deleted").catch(() => {});
       await removeCachedClinFlowDocument(selected.id);
       const remaining = documents.filter((item) => item.id !== selected.id);
       setDocuments(remaining);
@@ -912,6 +942,9 @@ export default function ClinFlowWorkspace() {
     const kind = folderKindFor(selected?.triageReview);
     if (!kind) return notify("Confirm the outcome on the Triage tab first (is any action needed?) so the PDF goes in the right Docman folder");
     deliverDocmanPdf({ blob: pack.summaryBlob, fileName: pack.summaryFileName, kind, folders: docmanFolders }).then((result) => {
+      const filed = { ...selected, triageReview: { ...selected.triageReview, savedFolder: kind, savedAt: new Date().toISOString() } };
+      setDocuments((items) => items.map((item) => item.id === selected.id ? filed : item));
+      cacheClinFlowDocuments([filed]).catch(() => {});
       record("clinflow.finished.download", `Finished ClinFlow document (summary + original copy) ${result.saved ? "saved into" : "downloaded for"} the ${kind === "nfw" ? "NFW" : "Action needed"} Docman folder`, { format: "pdf", docmanFolder: kind, savedToFolder: result.saved, automatedTransmission: false }, pack.documentId).catch(() => {});
       notify(result.saved ? `Saved in the ${kind === "nfw" ? "NFW" : "Action needed"} folder` : "Docman-ready PDF downloaded (ClinFlow summary + copy of the original letter)");
     }).catch((error) => notify(error?.message || "The Docman PDF could not be saved"));
@@ -976,7 +1009,7 @@ export default function ClinFlowWorkspace() {
           <label className="cf-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search documents..." /></label>
           <span className={`cf-data-state cf-data-state--${syncState}`}>Synthetic only · {syncState === "synced" ? "Workflow synced" : syncState === "error" ? "Sync unavailable" : "Local preview"}</span>
           {completedDocuments.length > 0 && <button className="cf-top-button cf-top-button--finished" type="button" onClick={downloadAllFinishedPacks} disabled={busy}><FolderCheck size={15} /> Download finished ({completedDocuments.length})</button>}
-          {can("clinflow.capture") && <ScanInbox canRun={can("clinflow.capture")} record={(action, summary, metadata) => record(action, summary, metadata).catch(() => {})} onLetter={(response) => importAzureResults([response], { quiet: true, source: "Scanned in" })} />}
+          {can("clinflow.capture") && <ScanInbox canRun={can("clinflow.capture")} lists={{ loaders: { snomed: auditedList(snomedList, "snomed").load, dmd: auditedList(medicinesList, "dmd").load, abbreviations: auditedAbbreviations.load }, have: { snomed: snomedList.loading ? undefined : Boolean(snomedList.search), dmd: medicinesList.loading ? undefined : Boolean(medicinesList.search) } }} documents={documents} who={{ uid: user?.uid || "", name: displayName || user?.email || "" }} notify={notify} onShared={applySharedChanges} record={(action, summary, metadata) => record(action, summary, metadata).catch(() => {})} onLetter={(response) => importAzureResults([response], { quiet: true, source: "Scanned in" })} />}
           {can("clinflow.capture") && <button className="cf-top-button cf-top-button--azure" type="button" onClick={() => setAzureTestOpen(true)}><UploadCloud size={15} /> Test Azure OCR</button>}
           <button className="cf-top-button" type="button" onClick={refreshWorkflow} disabled={busy}><RefreshCw size={15} /> Refresh</button>
           <span className="cf-user-chip"><UserRound size={16} /> {displayName || "Workflow user"}</span>

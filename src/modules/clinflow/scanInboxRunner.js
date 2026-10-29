@@ -18,6 +18,7 @@ export function createInboxRunner({ folder, analyse, split = null, onLetter, onS
   const sizes = new Map(); // name -> size at the last look: a scan is ready once it is old enough and the same size twice running
   const attempts = new Map();
   const finishedParts = new Map(); // name -> parts already read, so a retry does not read a letter twice
+  const finishedStored = new Map(); // name -> the ids the letters were stored as in the shared folder (when sharing is on)
   const status = { waiting: 0, current: "", read: 0, problems: 0, lastProblem: "", lastReadAt: 0, error: "" };
   let busy = false;
   let stopped = false;
@@ -27,7 +28,7 @@ export function createInboxRunner({ folder, analyse, split = null, onLetter, onS
     status.problems += 1;
     status.lastProblem = reason;
     try { await folder.finish(name, "problem"); } catch { /* it stays where it is and will be looked at again */ }
-    attempts.delete(name); finishedParts.delete(name); sizes.delete(name);
+    attempts.delete(name); finishedParts.delete(name); finishedStored.delete(name); sizes.delete(name);
     onLetter({ problem: true, reason });
   }
 
@@ -41,6 +42,8 @@ export function createInboxRunner({ folder, analyse, split = null, onLetter, onS
       const letters = split_ ? split_.parts : [{ bytes }];
       const done = finishedParts.get(file.name) || new Set();
       finishedParts.set(file.name, done);
+      const storedIds = finishedStored.get(file.name) || [];
+      finishedStored.set(file.name, storedIds);
       for (let index = 0; index < letters.length; index += 1) {
         if (done.has(index)) continue;
         const part = letters[index].bytes;
@@ -48,15 +51,21 @@ export function createInboxRunner({ folder, analyse, split = null, onLetter, onS
         const name = letters.length > 1 ? `${stemOf(file.name)} - letter ${index + 1} of ${letters.length}.pdf` : file.name;
         const letter = new File([part], name, { type: "application/pdf" });
         const response = await analyse(letter);
-        onLetter({ response: { ...response, sourceFile: letter }, parts: letters.length, split: Boolean(split_), attempts: (attempts.get(file.name) || 0) + 1 });
+        const result = await onLetter({ response: { ...response, sourceFile: letter }, parts: letters.length, split: Boolean(split_), attempts: (attempts.get(file.name) || 0) + 1 });
+        if (result?.storedId) storedIds.push(result.storedId);
         done.add(index);
         status.read += 1;
         status.lastReadAt = now();
         publish();
         if (index < letters.length - 1) await sleep(pauseMs);
       }
-      await folder.finish(file.name, "done");
-      attempts.delete(file.name); finishedParts.delete(file.name); sizes.delete(file.name);
+      // when every letter from this scan is safely stored in the shared folder the scan is not needed and is deleted (the desktop app checks it first); otherwise it is moved to "done"
+      let removed = false;
+      if (folder.finishStored && storedIds.length === letters.length) {
+        try { await folder.finishStored(file.name, storedIds); removed = true; } catch { removed = false; }
+      }
+      if (!removed) await folder.finish(file.name, "done");
+      attempts.delete(file.name); finishedParts.delete(file.name); finishedStored.delete(file.name); sizes.delete(file.name);
       status.error = "";
     } catch (error) {
       if (error instanceof ScanProblem) return problem(file.name, error.message);

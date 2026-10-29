@@ -21,7 +21,7 @@ function openDatabase() {
   });
 }
 
-function serialisableDocument(document, sourceFileAvailable = false) {
+export function serialisableDocument(document, sourceFileAvailable = false) {
   if (!document?.id || document?.dataMode === "live") return null;
   const { sourceFile: _sourceFile, ...syntheticOcr } = document.syntheticOcr || {};
   return JSON.parse(JSON.stringify({
@@ -80,7 +80,11 @@ export async function loadCachedClinFlowDocuments() {
     });
 }
 
-export async function cacheClinFlowDocuments(documents) {
+// While letters are shared with the team (see ScanInbox.jsx), every save is also passed to this function, which keeps the shared folder up to date. Never blocks or fails a save.
+let mirror = null;
+export function setClinFlowMirror(fn) { mirror = typeof fn === "function" ? fn : null; }
+
+export async function cacheClinFlowDocuments(documents, { mirrored = true } = {}) {
   const sourceRows = (documents || []).map((document) => {
     const sourceFile = document?.syntheticOcr?.sourceFile;
     if (!document?.id || !(sourceFile instanceof Blob)) return null;
@@ -100,6 +104,7 @@ export async function cacheClinFlowDocuments(documents) {
   const rows = (documents || []).map((document) => serialisableDocument(document, sourceIds.has(document.id) || Boolean(document?.syntheticOcr?.sourceFileAvailable))).filter(Boolean);
   if (!rows.length) return 0;
   await runTransaction(DOCUMENT_STORE, "readwrite", (store) => rows.forEach((item) => store.put(item)));
+  if (mirrored && mirror) Promise.resolve(mirror(documents)).catch((error) => console.error("ClinFlow shared folder update failed", error));
   return rows.length;
 }
 
