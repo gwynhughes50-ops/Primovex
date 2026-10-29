@@ -3,12 +3,14 @@ import { collection, getDocs, limit, orderBy, query, where } from "firebase/fire
 import { db } from "@/lib/firebase";
 import { identityLabel } from "@/modules/governance/patientIdentity";
 import { auditRows } from "@/modules/governance/concernAudit";
+import { outsidePartiesSummary } from "@/modules/governance/concernCase";
 import { historyRows, keyDates } from "@/modules/governance/concernHistory";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import {
   CONCERN_MEETINGS_COLLECTION,
   CONCERN_OUTCOME_LABELS,
   CONCERN_STAGES,
+  CONCERN_STEPS_COLLECTION,
   CONCERN_TIMELINE_COLLECTION,
   MEETING_FURTHER_REQUESTS,
   formatMeetingDate,
@@ -48,7 +50,7 @@ function section(title, body) {
   return `<section><h2>${esc(title)}</h2>${body}</section>`;
 }
 
-export function buildConcernSummaryHtml({ concern = {}, meetings = null, timeline = null, printedBy = "", printedAt = new Date(), includeAudit = false } = {}) {
+export function buildConcernSummaryHtml({ concern = {}, meetings = null, timeline = null, steps = [], printedBy = "", printedAt = new Date(), includeAudit = false } = {}) {
   const stage = CONCERN_STAGES.find((item) => item.key === concern.status)?.label || friendly(concern.status);
   const identifier = identityLabel(concern, { withDob: true });
   const raisedBy = [friendly(concern.source || "patient"), concern.raisedByInitials].filter(Boolean).join(" — ");
@@ -104,6 +106,20 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
     }).join("");
   }
 
+  // The dealings with outside parties (the indemnity insurer, GMPI, the Health Board, a solicitor ...), as the case screen shows them: where each has got to, then every step with its date and note;
+  // a step taken back stays, struck through, with when and why. Nothing is shown when the case has no outside parties.
+  let outsideBlock = "";
+  if (steps === null) {
+    outsideBlock = section("With outside parties", `<p class="muted">The record of dealings with outside parties could not be loaded for this print.</p>`);
+  } else {
+    const outside = outsidePartiesSummary(concern, steps, printedAt);
+    if (outside) {
+      const parties = outside.parties.map((p) => `<tr><th>${esc(p.name)}</th><td>${esc(p.text)}</td></tr>`).join("");
+      const rows = outside.history.map((s) => `<tr${s.takenBack ? ' class="taken"' : ""}><td class="when">${esc(s.date)}</td><td class="who">${esc(s.by || "Not recorded")}</td><td><strong>${esc(s.title)}</strong>${s.detail ? ` &mdash; ${esc(s.detail)}` : ""}${s.takenBack ? `<br /><span class="back">Taken back as recorded by mistake (${esc(s.takenBack.date)}${s.takenBack.by ? ` by ${esc(s.takenBack.by)}` : ""}): ${esc(s.takenBack.why)}</span>` : ""}</td></tr>`).join("");
+      outsideBlock = section(`With outside parties: ${outside.ready ? "ready for the final response" : "not ready yet"}`, `<table>${parties}</table>${rows ? `<table class="history"><thead><tr><th>Date</th><th>Recorded by</th><th>What happened</th></tr></thead><tbody>${rows}</tbody></table>` : ""}`).replace("<section>", '<section class="long">');
+    }
+  }
+
   let timelineBlock;
   if (timeline === null) {
     timelineBlock = `<p class="muted">The history could not be loaded for this print.</p>`;
@@ -144,6 +160,8 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
   .history td.when { width: 14%; white-space: nowrap; color: #475569; }
   .history td.who { width: 18%; font-weight: 600; }
   .audit td { font-size: 10.5px; }
+  .history tr.taken td strong { text-decoration: line-through; color: #64748b; }
+  .back { color: #b91c1c; font-weight: 600; font-size: 10.5px; }
   .history tr { page-break-inside: avoid; }
   .prose { margin: 3px 0 6px; white-space: pre-wrap; }
   .label { margin: 6px 0 0; font-size: 10px; color: #475569; text-transform: uppercase; letter-spacing: .04em; }
@@ -165,6 +183,7 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
   </div>
   ${section("Summary", summaryBlock)}
   ${section("Face-to-face meetings", meetingsBlock)}
+  ${outsideBlock}
   ${section("History of the case: who did what, and when", timelineBlock).replace("<section>", '<section class="long">')}
   ${includeAudit ? section("Audit trail: everything done to the case", auditBlock).replace("<section>", '<section class="long">') : ""}
   <footer>Printed ${esc(printedAt.toLocaleString("en-GB"))}${printedBy ? ` by ${esc(printedBy)}` : ""} from Primovex. This is a summary — the full case record is in Primovex.</footer>
@@ -175,17 +194,18 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
 // can be printed straight from the register without opening the case first.
 // Either can fail independently (returns null) without stopping the print.
 export async function fetchConcernPrintData(concernId) {
-  if (isSafeSyntheticMode() || !concernId) return { meetings: [], timeline: [] };
-  const [meetings, timeline] = await Promise.allSettled([
+  if (isSafeSyntheticMode() || !concernId) return { meetings: [], timeline: [], steps: [] };
+  const [meetings, timeline, steps] = await Promise.allSettled([
     getDocs(query(collection(db, CONCERN_MEETINGS_COLLECTION), where("concernId", "==", concernId))),
     getDocs(query(collection(db, CONCERN_TIMELINE_COLLECTION), where("concernId", "==", concernId), orderBy("createdAt", "desc"), limit(1000))),
+    getDocs(query(collection(db, CONCERN_STEPS_COLLECTION), where("concernId", "==", concernId))),
   ]);
   const toRows = (result) => (result.status === "fulfilled" ? result.value.docs.map((d) => ({ id: d.id, ...d.data() })) : null);
   const meetingRows = toRows(meetings);
   if (meetingRows) {
     meetingRows.sort((a, b) => String(b.requestedDate || "").localeCompare(String(a.requestedDate || "")));
   }
-  return { meetings: meetingRows, timeline: toRows(timeline) };
+  return { meetings: meetingRows, timeline: toRows(timeline), steps: toRows(steps) };
 }
 
 // Prints through a hidden frame rather than a pop-up window: no pop-up
@@ -222,6 +242,7 @@ export async function printConcernSummary(concern, actor = {}, { includeAudit = 
     concern,
     meetings: data.meetings,
     timeline: data.timeline,
+    steps: data.steps,
     printedBy: actor.displayName || actor.email || "",
     includeAudit,
   });

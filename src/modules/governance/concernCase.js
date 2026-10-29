@@ -166,6 +166,27 @@ export function reviewStatus(concern = {}, steps = [], now = new Date()) {
   return { parties, ready: blockers.length === 0, blockers };
 }
 
+// Where one party has got to, in words (the case screen and the printed summary say the same thing)
+export const partyStateText = (p) => (p.state === "accepted" ? `Accepted${p.rounds > 1 ? ` after ${p.rounds} rounds` : ""}` : p.state === "with-them" ? `With them since ${ukDay(p.lastOn)}${p.rounds > 1 ? ` · sent ${p.rounds} times` : ""}` : p.state === "back-to-us" ? (p.lastAction === "changes" ? "Back with us: they want changes" : "Back with us: they need more information") : "Nothing sent yet");
+
+// The dealings with outside parties for the printed summary, the same as the case screen shows: where each party has got to and the whole history, oldest first.
+// A step taken back is kept, marked with when and why; the withdrawal records themselves are not listed twice. Returns null when there is nothing to show.
+export function outsidePartiesSummary(concern = {}, steps = [], now = new Date()) {
+  const review = reviewStatus(concern, steps, now);
+  const history = orderedSteps(steps).filter((s) => s.action !== WITHDRAWN).map((s) => {
+    const taken = withdrawalOf(steps, s);
+    return {
+      date: ukDay(s.occurredOn),
+      title: `${partyOf(s.party, steps)?.short || "An outside party"}: ${STEP_ACTIONS[s.action] || "A step"}${s.round > 1 ? ` (time ${s.round})` : ""}`,
+      detail: [SENT_WHAT.find((w) => w.key === s.what)?.label, s.note].filter(Boolean).join(" · "),
+      by: s.createdByName && s.createdByName !== "Unknown" ? s.createdByName : "",
+      takenBack: taken ? { date: ukDay(taken.occurredOn), why: taken.note || "", by: taken.createdByName && taken.createdByName !== "Unknown" ? taken.createdByName : "" } : null,
+    };
+  });
+  if (!review.parties.length && !history.length) return null;
+  return { ready: review.ready, parties: review.parties.map((p) => ({ name: p.short, text: `${p.instructed ? "Solicitor instructed · " : ""}${partyStateText(p)}` })), history };
+}
+
 // ---- what to offer ----
 
 // The things a person may want to do, most useful first, given where the case is.

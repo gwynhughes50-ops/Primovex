@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { auditEntry, auditRows, changeText, cleanChanges, describeChanges } from "../src/modules/governance/concernAudit.js";
 import { historyRows } from "../src/modules/governance/concernHistory.js";
+import { outsidePartiesSummary } from "../src/modules/governance/concernCase.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
@@ -125,6 +126,49 @@ t("only the concerns team gets the audit table on the print, and the print is ad
   const page = read("src/pages/GovernanceConcerns.jsx");
   assert.equal((page.match(/printConcernSummary\(concern, actor, \{ includeAudit: isTeam \}\)/g) || []).length, 2, "both print buttons pass the team flag");
   assert.match(read("src/modules/audit/auditEvents.js"), /case "printed"/);
+});
+
+// the case in the screenshot: the Health Board has had it twice and asked for more in between; GMPI was recorded by mistake
+const step = (id, party, action, occurredOn, extra = {}) => ({ id, party, action, occurredOn, what: "", note: "", round: null, createdByName: "Gwyn Hughes", createdAtMs: Date.parse(occurredOn), ...extra });
+const caseSteps = [
+  step("a", "gmpi", "sent", "2026-10-21", { what: "our_reply", round: 1 }),
+  step("b", "healthboard", "sent", "2026-10-21", { what: "our_reply", round: 1 }),
+  step("w", "gmpi", "withdrawn", "2026-10-21", { withdrawsId: "a", note: "GMPI was wrong should have been BCUHB" }),
+  step("c", "healthboard", "info", "2026-10-27", { note: "want practice to review the final reply and confirm if happy to approve by end of 28/10/26" }),
+  step("d", "healthboard", "sent", "2026-10-29", { what: "draft_response", note: "final statement checked by gwyn hughes and sent", round: 2 }),
+];
+
+t("the printed summary has the dealings with outside parties, the same as the case screen", () => {
+  const out = outsidePartiesSummary({ mddusRequired: false }, caseSteps, new Date(2026, 9, 29));
+  assert.equal(out.ready, false);
+  assert.deepEqual(out.parties, [{ name: "Health Board", text: "With them since 29/10/2026 · sent 2 times" }]);
+  assert.equal(out.history.length, 4, "the withdrawal record is not listed as a step of its own");
+  assert.equal(out.history[0].title, "GMPI: We sent it to them");
+  assert.deepEqual(out.history[0].takenBack, { date: "21/10/2026", why: "GMPI was wrong should have been BCUHB", by: "Gwyn Hughes" });
+  assert.equal(out.history[0].detail, "Our reply to what they asked for");
+  assert.equal(out.history[1].takenBack, null);
+  assert.equal(out.history[2].title, "Health Board: They need more information");
+  assert.match(out.history[2].detail, /^want practice to review/);
+  assert.equal(out.history[3].title, "Health Board: We sent it to them (time 2)");
+  assert.equal(out.history[3].detail, "The draft final response letter · final statement checked by gwyn hughes and sent");
+  assert.equal(out.history[3].by, "Gwyn Hughes");
+});
+
+t("a case with no outside parties prints nothing for them, and an accepted case says ready", () => {
+  assert.equal(outsidePartiesSummary({}, [], new Date()), null);
+  const accepted = outsidePartiesSummary({}, [step("1", "healthboard", "sent", "2026-10-01", { round: 1 }), step("2", "healthboard", "accepted", "2026-10-05")], new Date(2026, 9, 29));
+  assert.equal(accepted.ready, true);
+  assert.equal(accepted.parties[0].text, "Accepted");
+});
+
+t("the print reads the steps themselves and shows the section to everyone who prints", () => {
+  const print = read("src/modules/governance/services/concernPrint.js");
+  assert.match(print, /collection\(db, CONCERN_STEPS_COLLECTION\), where\("concernId", "==", concernId\)/);
+  assert.match(print, /steps: data\.steps/);
+  assert.match(print, /\$\{outsideBlock\}/);
+  assert.ok(!/includeAudit[^\n]*outsideBlock|outsideBlock[^\n]*includeAudit/.test(print), "not only for the team");
+  assert.match(print, /could not be loaded for this print/, "a failed read is said, not hidden");
+  assert.match(read("src/modules/governance/components/ConcernWizards.jsx"), /const stateText = partyStateText;/, "the screen and the print use the same words");
 });
 
 console.log(`\n${n} concern audit checks passed`);

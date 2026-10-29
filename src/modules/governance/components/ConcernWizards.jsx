@@ -25,7 +25,7 @@ import {
 } from "@/modules/governance/services/concernService";
 import {
   ASKED_BY, ASKED_FOR, LEARNING, closeStepsFor, isStatementOnly, LFE_STATUSES, OUTCOMES, RESPONSE_HOW, SENT_WHAT, STEP_ACTIONS,
-  closeStepProblems, dayKey, orderedSteps, partyOf, reviewStatus, ukDay, updateChoices, withdrawalOf, WITHDRAWN,
+  closeStepProblems, dayKey, orderedSteps, partyOf, partyStateText, reviewStatus, ukDay, updateChoices, withdrawalOf, WITHDRAWN,
 } from "@/modules/governance/concernCase";
 
 // The two wizards for a concern, shared by the desktop and the phone: "Update this case" (usable at any time: a reply from the
@@ -80,7 +80,7 @@ const Problems = ({ list }) => (list.length ? <ul className="mt-3 space-y-1 roun
 // ---- where each outside party has got to, for the case page ----
 
 const STATE_TONE = { accepted: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700", "with-them": "border-amber-500/40 bg-amber-500/10 text-amber-800", "back-to-us": "border-rose-500/40 bg-rose-500/10 text-rose-700", none: "border-[var(--medtrak-border)] text-[var(--medtrak-muted)]" };
-const stateText = (p) => (p.state === "accepted" ? `Accepted${p.rounds > 1 ? ` after ${p.rounds} rounds` : ""}` : p.state === "with-them" ? `With them since ${ukDay(p.lastOn)}${p.rounds > 1 ? ` · sent ${p.rounds} times` : ""}` : p.state === "back-to-us" ? (p.lastAction === "changes" ? "Back with us: they want changes" : "Back with us: they need more information") : "Nothing sent yet");
+const stateText = partyStateText;
 
 export function useCaseSteps(concernId) {
   const [steps, setSteps] = useState([]);
