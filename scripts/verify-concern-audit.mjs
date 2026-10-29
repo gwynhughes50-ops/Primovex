@@ -75,20 +75,23 @@ t("an audit entry is a timeline line of type audit with a readable message and c
   assert.deepEqual(cleanChanges("nonsense"), []);
 });
 
-t("the audit table has one row per field, oldest first, with who and when", () => {
+t("the audit table is the whole case timeline plus one row per field changed, oldest first, with who and when", () => {
   const timeline = [
     { id: "3", type: "audit", title: "Case summary printed", message: "", actorName: "Sam Lee", createdAt: at(2026, 10, 9, 15, 0) },
     { id: "1", type: "audit", title: "Case record changed", changes: [{ label: "Priority", from: "Low", to: "High", hidden: false }, { label: "Summary", from: "", to: "", hidden: true }], actorName: "Pat Example", createdAt: at(2026, 10, 5, 10, 5) },
     { id: "2", type: "note", title: "Note added", message: "hello", actorName: "Pat Example", createdAt: at(2026, 10, 6) },
     { id: "4", type: "audit", title: "Contact details changed", message: "The details themselves are not shown here.", actorName: "Unknown", createdAt: at(2026, 10, 7) },
+    { id: "0", type: "created", title: "Concern received", message: "Logged by phone.", actorName: "Pat Example", createdAt: at(2026, 10, 1) },
   ];
   const rows = auditRows(timeline);
-  assert.equal(rows.length, 4, "the note is not an audit line");
-  assert.deepEqual(rows[0], { when: "05/10/2026 10:05", who: "Pat Example", what: "Priority", from: "Low", to: "High" });
-  assert.deepEqual(rows[1], { when: "05/10/2026 10:05", who: "Pat Example", what: "Summary changed", from: "not shown", to: "not shown" });
-  assert.equal(rows[2].who, "Not recorded", "a missing name is said, not hidden");
-  assert.equal(rows[2].what, "Contact details changed");
-  assert.equal(rows[3].what, "Case summary printed");
+  assert.equal(rows.length, 6, "the timeline entries are in the audit table as well as the field changes");
+  assert.deepEqual(rows[0], { when: "01/10/2026 09:30", who: "Pat Example", what: "Concern received", detail: "Logged by phone." });
+  assert.deepEqual(rows[1], { when: "05/10/2026 10:05", who: "Pat Example", what: "Priority changed", detail: "Low → High" });
+  assert.deepEqual(rows[2], { when: "05/10/2026 10:05", who: "Pat Example", what: "Summary changed", detail: "The words are not shown here." });
+  assert.equal(rows[3].what, "Note added");
+  assert.equal(rows[4].who, "Not recorded", "a missing name is said, not hidden");
+  assert.equal(rows[4].what, "Contact details changed");
+  assert.equal(rows[5].what, "Case summary printed");
   assert.deepEqual(auditRows(null), []);
 });
 
@@ -117,7 +120,7 @@ t("every change goes through one place and is written when it is made", () => {
 t("only the concerns team gets the audit table on the print, and the print is added to it", () => {
   const print = read("src/modules/governance/services/concernPrint.js");
   assert.match(print, /includeAudit = false/, "off unless asked for");
-  assert.match(print, /\$\{includeAudit \? section\("Audit trail: every change to the case record"/);
+  assert.match(print, /\$\{includeAudit \? section\("Audit trail: everything done to the case"/);
   assert.match(print, /recordCasePrinted\(concern, actor, \{ inTrail: includeAudit \}\)/);
   const page = read("src/pages/GovernanceConcerns.jsx");
   assert.equal((page.match(/printConcernSummary\(concern, actor, \{ includeAudit: isTeam \}\)/g) || []).length, 2, "both print buttons pass the team flag");

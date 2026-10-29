@@ -107,17 +107,22 @@ export function auditEntry(before, patch) {
   return { type: AUDIT_TYPE, title: "Case record changed", message: changesText(changes), changes };
 }
 
-// The audit trail for the print, oldest first: one row per field changed. [{ when, who, what, from, to }]
+// The complete audit trail for the print, oldest first: everything in the case timeline (notes, steps, stage moves, meetings, closing ...) and, one row per field, every
+// change to the case record. [{ when, who, what, detail }]
 export function auditRows(timeline = []) {
   const time = (event) => toDate(event?.createdAt)?.getTime() || 0;
   const rows = [];
-  for (const event of [...(timeline || [])].filter(isAuditEvent).sort((a, b) => time(a) - time(b))) {
+  for (const event of [...(timeline || [])].sort((a, b) => time(a) - time(b))) {
     const when = ukDateTime(toDate(event.createdAt));
     const who = event.actorName && event.actorName !== "Unknown" ? event.actorName : "Not recorded";
-    if (Array.isArray(event.changes) && event.changes.length) {
-      for (const change of event.changes) rows.push({ when, who, what: change.hidden ? `${change.label} changed` : change.label, from: change.hidden ? "not shown" : change.from, to: change.hidden ? "not shown" : change.to });
+    if (isAuditEvent(event) && Array.isArray(event.changes) && event.changes.length) {
+      for (const change of event.changes) {
+        rows.push(change.hidden
+          ? { when, who, what: `${change.label} changed`, detail: "The words are not shown here." }
+          : { when, who, what: `${change.label} changed`, detail: `${change.from || "blank"} → ${change.to || "blank"}` });
+      }
     } else {
-      rows.push({ when, who, what: event.title || "Change", from: "", to: event.message || "" });
+      rows.push({ when, who, what: event.title || "Change", detail: event.message || "" });
     }
   }
   return rows;

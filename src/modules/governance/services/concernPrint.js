@@ -113,14 +113,14 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
     timelineBlock = `<table class="history"><thead><tr><th>When</th><th>Who</th><th>What happened</th></tr></thead><tbody>${historyRows(timeline).map((event) => `<tr><td class="when">${esc(event.when)}</td><td class="who">${esc(event.who)}</td><td><strong>${esc(event.title)}</strong>${event.message ? ` &mdash; ${esc(event.message)}` : ""}</td></tr>`).join("")}</tbody></table>`;
   }
 
-  // The detailed audit trail is for the concerns team only: every field changed, from what to what, who and when. Free text and patient details are shown as changed, never repeated.
+  // The audit trail is for the concerns team only: the whole case timeline plus every field changed, from what to what, who and when. Free text and patient details are shown as changed, never repeated.
   let auditBlock = "";
   if (includeAudit) {
     const rows = timeline === null ? null : auditRows(timeline);
-    const intro = `<p class="muted">Every change made to the case record. Summaries, patient details and contact details are shown as changed, without repeating them. Changes made before this was recorded appear in the history above without the fields that changed.</p>`;
+    const intro = `<p class="muted">Everything done to the case, in date order: each entry in the case timeline, and every change to the case record with what it was before and after. Summaries, patient details and contact details are shown as changed, without repeating them. Changes made to the record before 0.15.105 are in the timeline without the fields that changed.</p>`;
     if (rows === null) auditBlock = `<p class="muted">The audit trail could not be loaded for this print.</p>`;
-    else if (rows.length === 0) auditBlock = `${intro}<p class="muted">No detailed changes have been recorded for this case yet.</p>`;
-    else auditBlock = `${intro}<table class="history audit"><thead><tr><th>When</th><th>Who</th><th>Change</th><th>From</th><th>To</th></tr></thead><tbody>${rows.map((r) => `<tr><td class="when">${esc(r.when)}</td><td class="who">${esc(r.who)}</td><td>${esc(r.what)}</td><td>${esc(r.from || "—")}</td><td>${esc(r.to || "—")}</td></tr>`).join("")}</tbody></table>`;
+    else if (rows.length === 0) auditBlock = `${intro}<p class="muted">Nothing has been recorded for this case yet.</p>`;
+    else auditBlock = `${intro}<table class="history audit"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr></thead><tbody>${rows.map((r) => `<tr><td class="when">${esc(r.when)}</td><td class="who">${esc(r.who)}</td><td><strong>${esc(r.what)}</strong></td><td>${esc(r.detail || "—")}</td></tr>`).join("")}</tbody></table>`;
   }
 
   return `<!doctype html>
@@ -166,7 +166,7 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
   ${section("Summary", summaryBlock)}
   ${section("Face-to-face meetings", meetingsBlock)}
   ${section("History of the case: who did what, and when", timelineBlock).replace("<section>", '<section class="long">')}
-  ${includeAudit ? section("Audit trail: every change to the case record", auditBlock).replace("<section>", '<section class="long">') : ""}
+  ${includeAudit ? section("Audit trail: everything done to the case", auditBlock).replace("<section>", '<section class="long">') : ""}
   <footer>Printed ${esc(printedAt.toLocaleString("en-GB"))}${printedBy ? ` by ${esc(printedBy)}` : ""} from Primovex. This is a summary — the full case record is in Primovex.</footer>
 </body></html>`;
 }
