@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import { PDFDocument } from "pdf-lib";
 import { SNOMED_NOTICE } from "./snomedIndex";
 import { reviewCandidates, reviewOutcome } from "./clinflowCodeReview";
+import { DOCMAN_ACTION_PREFIX, DOCMAN_HEADING } from "./clinflowDocmanTemplates";
 import { AI_OUTPUT_FOOTER, CLINICAL_DECISION_SUPPORT_BANNER, HIGH_RISK_BANNER, SYNTHETIC_TEST_BANNER, isRealAnalysedDocument } from "./clinflowDisclaimers";
 
 const cleanFileName = (value) => String(value || "clinflow-summary").replace(/[^a-z0-9._-]+/gi, "-").replace(/-+/g, "-").slice(0, 90);
@@ -415,8 +416,12 @@ export function docmanSummaryLines(document) {
       : confirmed === "workflow_required" || analysis.docmanDraft?.actionRequired ? ["Action is needed: see the letter."]
         : ["No action listed."];
   const codes = coding.accepted.map((c) => `SNOMED ${c.conceptId || "no code"} - ${oneLine(c.term)}${c.value ? ` - ${oneLine(c.value)}` : ""}`);
+  // One fixed line Docman's Intellisense templates can recognise (see DOCMAN_INTELLISENSE in clinflowDocmanTemplates.js): YES when the practice has something to do, NONE when the person confirmed it has not,
+  // and nothing at all when that has not been decided, so a template never fires on a guess
+  const practiceAction = confirmed === "no_workflow" ? "NONE" : confirmed === "workflow_required" || confirmed === "urgent" || actions.length || analysis.docmanDraft?.actionRequired ? "YES" : "";
   return {
     urgent,
+    practiceAction,
     facts,
     summary: analysis.clinicalConclusion ? oneLine(analysis.clinicalConclusion) : findings.length ? `${findings.join("; ")}.` : "See the letter.",
     actions: actionText,
@@ -446,7 +451,8 @@ function buildClinFlowDocmanPdf(document) {
   const heading = (text) => { y += 3; write(text, { size: 11, bold: true, after: 2 }); };
   const list = (items) => items.forEach((item) => write(`- ${item}`));
 
-  write("LETTER SUMMARY", { size: 16, bold: true, after: 4 });
+  write(DOCMAN_HEADING, { size: 16, bold: true, after: 4 });
+  if (content.practiceAction) write(`${DOCMAN_ACTION_PREFIX}${content.practiceAction}`, { size: 11, bold: true, after: 3 });
   if (content.urgent) write("MARKED URGENT", { size: 12, bold: true, after: 3 });
   content.facts.forEach(([label, value]) => write(`${label}: ${value}`));
   heading("SUMMARY");

@@ -4,6 +4,7 @@ import { PDFDocument } from "pdf-lib";
 import { analyseClinFlowOcr } from "../src/modules/clinflow/clinflowAnalysisService.js";
 import { decide, emptyReview, optionsFor, reviewCandidates } from "../src/modules/clinflow/clinflowCodeReview.js";
 import { createClinFlowDocmanPdfBlob, docmanSummaryLines } from "../src/modules/clinflow/clinflowSummaryExportService.js";
+import { DOCMAN_ACTION_NONE, DOCMAN_ACTION_PREFIX, DOCMAN_ACTION_YES, DOCMAN_AVOID, DOCMAN_HEADING, DOCMAN_INTELLISENSE } from "../src/modules/clinflow/clinflowDocmanTemplates.js";
 
 let n = 0;
 const t = async (name, fn) => { await fn(); n += 1; console.log(`ok  ${name}`); };
@@ -79,6 +80,35 @@ await t("filing and finishing use the clean PDF, and the full evidence PDF is st
   assert.match(ws, /downloadClinFlowSummaryPdf\(selected, originalBlob\)/, "Summary PDF is still the full evidence version");
   const ready = readFileSync(new URL("../src/modules/clinflow/DocmanReadiness.jsx", import.meta.url), "utf8");
   assert.match(ready, /Download the full evidence PDF instead/);
+});
+
+await t("the summary page carries the fixed lines Docman's Intellisense templates look for, and only when they are true", async () => {
+  const { document } = letter();
+  const nfw = { ...document, triageReview: { status: "human_confirmed", confirmedDecision: "no_workflow" } };
+  const yes = { ...document, triageReview: { status: "human_confirmed", confirmedDecision: "workflow_required" } };
+  assert.equal(docmanSummaryLines(nfw).practiceAction, "NONE");
+  assert.equal(docmanSummaryLines(yes).practiceAction, "YES");
+  assert.equal(docmanSummaryLines(letter(E({ actions: ["Repeat sodium in two weeks"] })).document).practiceAction, "YES", "an action on the letter, not yet confirmed");
+  assert.equal(docmanSummaryLines({ ...yes, triageReview: { status: "human_confirmed", confirmedDecision: "no_workflow" } }).practiceAction, "NONE", "the person's confirmation wins over an action the reader listed");
+  assert.equal(docmanSummaryLines(document).practiceAction, "", "not decided: no line, so no template fires on a guess");
+  const original = await PDFDocument.create(); original.addPage([595, 842]);
+  const bytes = new Uint8Array(await original.save());
+  const lineOf = async (doc) => (await text((await createClinFlowDocmanPdfBlob(doc, new Blob([bytes], { type: "application/pdf" }))).blob));
+  const nfwPdf = await lineOf(nfw); const yesPdf = await lineOf(yes); const noneYet = await lineOf(document);
+  assert.ok(nfwPdf.includes(DOCMAN_HEADING) && yesPdf.includes(DOCMAN_HEADING) && noneYet.includes(DOCMAN_HEADING), "every summary has the heading");
+  assert.ok(nfwPdf.includes(DOCMAN_ACTION_NONE) && !nfwPdf.includes(DOCMAN_ACTION_YES));
+  assert.ok(yesPdf.includes(DOCMAN_ACTION_YES) && !yesPdf.includes(DOCMAN_ACTION_NONE));
+  assert.ok(!noneYet.includes(DOCMAN_ACTION_PREFIX), "undecided: neither line");
+});
+
+await t("the Intellisense keywords can never fire on the wrong summary", () => {
+  const keywords = DOCMAN_INTELLISENSE.flatMap((tpl) => tpl.keywords.map((k) => k.toLowerCase()));
+  assert.equal(new Set(keywords).size, keywords.length, "no two templates share a keyword");
+  for (const a of keywords) for (const b of keywords) if (a !== b) assert.ok(!a.includes(b), `"${b}" is inside "${a}": one template would fire on both`);
+  for (const avoided of DOCMAN_AVOID) for (const k of keywords) assert.notEqual(k, avoided.toLowerCase(), "a word that is on every summary is never a keyword");
+  assert.ok(!DOCMAN_ACTION_NONE.toLowerCase().includes(DOCMAN_ACTION_YES.toLowerCase()) && !DOCMAN_ACTION_YES.toLowerCase().includes(DOCMAN_ACTION_NONE.toLowerCase()));
+  for (const tpl of DOCMAN_INTELLISENSE) for (const k of tpl.keywords) assert.ok(k.length <= 60 && !/\n/.test(k), "one short line");
+  assert.ok(DOCMAN_INTELLISENSE.every((tpl) => tpl.match === "Any" && tpl.name.startsWith("ClinFlow: ")), "named so they can be found and checked for duplicates in Docman");
 });
 
 console.log(`\n${n} passed`);
