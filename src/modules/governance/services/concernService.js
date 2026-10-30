@@ -303,13 +303,22 @@ export async function createConcern(form, actor = {}) {
   return ref.id;
 }
 
+// A change was saved but its audit line was not: never left to be found later. The person is told on the screen (AuditFailureNotice), with the database's own word for the reason,
+// and it is recorded in the governed ledger, which is separate from the case history that just failed.
+function reportAuditFailure(concernId, err) {
+  const reason = String(err?.code || err?.message || "unknown").slice(0, 120);
+  console.error("An audit line could not be written", err);
+  try { globalThis.window?.dispatchEvent(new CustomEvent("primovex:audit-failed", { detail: { reason } })); } catch { /* no screen to tell */ }
+  recordAudit(concernEvent("audit_line_failed", { concern: { id: concernId } }));
+}
+
 // Writes the detailed audit line for a change: which fields, from what to what, who and when. It is a record of the work, never part of it, so it can never stop the work.
 async function recordCaseChange(concernId, before, patch, actor) {
   try {
     const entry = auditEntry(before, patch);
     if (entry) await addConcernTimeline(concernId, { ...entry, actor });
   } catch (err) {
-    console.error("The audit line for a concern change could not be written", err);
+    reportAuditFailure(concernId, err);
   }
 }
 
@@ -346,7 +355,7 @@ async function recordContactChange(concernId, title, actor) {
   try {
     await addConcernTimeline(concernId, { type: AUDIT_TYPE, title, message: "The details themselves are not shown here.", actor });
   } catch (err) {
-    console.error("The audit line for a contact change could not be written", err);
+    reportAuditFailure(concernId, err);
   }
 }
 
@@ -358,7 +367,7 @@ export async function recordCasePrinted(concern, actor = {}, { inTrail = false }
   try {
     await addConcernTimeline(concern.id, { type: AUDIT_TYPE, title: "Case summary printed", message: "", actor });
   } catch (err) {
-    console.error("The audit line for printing could not be written", err);
+    reportAuditFailure(concern.id, err);
   }
 }
 

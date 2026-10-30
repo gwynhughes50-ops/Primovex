@@ -86,6 +86,7 @@ export function concernEvent(step, { concern = {}, party = "", action = "", roun
     case "extended": return gov("deadline_extended", `${labelled}: response deadline extended`);
     case "deleted": return gov("deleted", `${labelled} deleted`);
     case "printed": return gov("printed", `${labelled}: case summary printed`);
+    case "audit_line_failed": return gov("audit_line_failed", `${labelled}: a change was saved but its audit line could not be written`);
     default: return gov(step, `${labelled}: ${step}`);
   }
 }

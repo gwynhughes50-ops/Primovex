@@ -19,6 +19,7 @@ import ViewAsBanner from "@/components/security/ViewAsBanner";
 import OrbStatusProvider from "@/orb/OrbStatusContext";
 import UpdateBanner from "@/components/system/UpdateBanner";
 import DesktopUpdateBanner from "@/components/system/DesktopUpdateBanner";
+import AuditFailureNotice from "@/components/system/AuditFailureNotice";
 
 const isAndroidRuntime = /Android/i.test(navigator.userAgent) && Boolean(window.__TAURI_INTERNALS__);
 const isAndroidBuild = import.meta.env.MODE === "android";
@@ -61,6 +62,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
                 {useMobileApplication && <ViewAsBanner compact />}
                 <UpdateBanner />
                 <DesktopUpdateBanner />
+                <AuditFailureNotice />
               </PrimovexAIProvider>
             </MedTrakThemeProvider>
           </SenseSessionProvider>

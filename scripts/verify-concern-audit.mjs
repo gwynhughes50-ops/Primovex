@@ -194,4 +194,14 @@ t("the concerns team sees the audit trail on the case itself, newest first, and 
   assert.match(read("src/mobile/MobileGovernanceConcerns.jsx"), /\{isTeam && <div className="mt-3"><ConcernAuditTrail concernId=\{concern\.id\} \/><\/div>\}/, "phone: team only");
 });
 
+t("a change whose audit line cannot be written says so on the screen and in the ledger, never silently", () => {
+  const service = read("src/modules/governance/services/concernService.js");
+  assert.match(service, /function reportAuditFailure\(concernId, err\)[\s\S]*dispatchEvent\(new CustomEvent\("primovex:audit-failed"[\s\S]*recordAudit\(concernEvent\("audit_line_failed"/);
+  assert.equal((service.match(/reportAuditFailure\(/g) || []).length, 4, "the definition and the three places an audit line is written");
+  assert.ok(!/console\.error\("The audit line/.test(service), "no failure is only logged to a console nobody reads");
+  assert.match(read("src/components/system/AuditFailureNotice.jsx"), /AUDIT_FAILED_EVENT = "primovex:audit-failed"/);
+  assert.match(read("src/main.jsx"), /<AuditFailureNotice \/>/);
+  assert.match(read("src/modules/audit/auditEvents.js"), /case "audit_line_failed"/);
+});
+
 console.log(`\n${n} concern audit checks passed`);

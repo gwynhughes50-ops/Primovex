@@ -48,6 +48,39 @@
         { "fieldPath": "startedAt", "order": "DESCENDING" }
       ]
     }
+    ,
+    {
+      "collectionGroup": "governance_concern_timeline",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "concernId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "governance_concern_learning_actions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "concernId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "governance_concern_correspondence",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "concernId", "order": "ASCENDING" },
+        { "fieldPath": "occurredAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "governance_se_timeline",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "seId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    }
   ],
   "fieldOverrides": []
 }
