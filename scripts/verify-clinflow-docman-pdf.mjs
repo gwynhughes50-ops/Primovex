@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { PDFDocument } from "pdf-lib";
 import { analyseClinFlowOcr } from "../src/modules/clinflow/clinflowAnalysisService.js";
 import { decide, emptyReview, optionsFor, reviewCandidates } from "../src/modules/clinflow/clinflowCodeReview.js";
-import { createClinFlowDocmanPdfBlob, docmanSummaryLines } from "../src/modules/clinflow/clinflowSummaryExportService.js";
+import { createClinFlowDocmanPdfBlob, docmanSummaryLines, nhsNumberText, ukDateText } from "../src/modules/clinflow/clinflowSummaryExportService.js";
 import { DOCMAN_ACTION_NONE, DOCMAN_ACTION_PREFIX, DOCMAN_ACTION_YES, DOCMAN_AVOID, DOCMAN_HEADING, DOCMAN_INTELLISENSE } from "../src/modules/clinflow/clinflowDocmanTemplates.js";
 
 let n = 0;
@@ -99,6 +99,21 @@ await t("the summary page carries the fixed lines Docman's Intellisense template
   assert.ok(nfwPdf.includes(DOCMAN_ACTION_NONE) && !nfwPdf.includes(DOCMAN_ACTION_YES));
   assert.ok(yesPdf.includes(DOCMAN_ACTION_YES) && !yesPdf.includes(DOCMAN_ACTION_NONE));
   assert.ok(!noneYet.includes(DOCMAN_ACTION_PREFIX), "undecided: neither line");
+});
+
+await t("the patient and the dates are written the way Docman reads UK paperwork: 27/10/2026 and 485 777 3456", () => {
+  const { document } = letter();
+  const draft = document.clinflowAnalysis.docmanDraft;
+  const withDraft = { ...document, clinflowAnalysis: { ...document.clinflowAnalysis, docmanDraft: { ...draft, patient: { ...draft.patient, identifier: "4857773456", birthDate: "1950-01-02" }, document: { ...draft.document, eventDate: "2026-10-27" } } } };
+  const facts = Object.fromEntries(docmanSummaryLines(withDraft).facts);
+  assert.equal(facts["Date of birth"], "02/01/1950");
+  assert.equal(facts["NHS number"], "485 777 3456");
+  assert.equal(facts["Letter date"], "27/10/2026");
+  assert.equal(ukDateText("2026-10-27T09:00:00Z"), "27/10/2026");
+  assert.equal(ukDateText("not a date"), "not a date", "anything else is shown as it is, never altered");
+  assert.equal(nhsNumberText("485 777 3456"), "485 777 3456");
+  assert.equal(nhsNumberText("12345"), "12345", "a number that is not ten digits is left alone");
+  assert.equal(nhsNumberText(""), "");
 });
 
 await t("the Intellisense keywords can never fire on the wrong summary", () => {

@@ -389,6 +389,9 @@ function downloadBlob(blob, fileName) {
 // headings, the codes a person accepted one per line in the same shape every time, and none of ClinFlow's working, scores, caveats or codes that were not accepted.
 // The full evidence version (every candidate, the reasoning, the checks) is a separate download and stays out of the patient's record.
 const oneLine = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
+// How Docman reads UK paperwork: dates as 27/10/2026 and an NHS number as 485 777 3456 (the page used 2026-10-27 and ten digits run together)
+export const ukDateText = (value) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value ?? "")); return m ? `${m[3]}/${m[2]}/${m[1]}` : oneLine(value); };
+export const nhsNumberText = (value) => { const d = String(value ?? "").replace(/\s+/g, ""); return /^\d{10}$/.test(d) ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : oneLine(value); };
 
 export function docmanSummaryLines(document) {
   const analysis = document?.clinflowAnalysis;
@@ -405,11 +408,11 @@ export function docmanSummaryLines(document) {
   const draftPatient = analysis.docmanDraft?.patient || {};
   const facts = [
     ["Patient", [patient.givenNames, patient.familyName].filter(Boolean).join(" ") || "Not stated on the letter"],
-    ...(draftPatient.birthDate ? [["Date of birth", draftPatient.birthDate]] : []),
-    ...(draftPatient.identifier ? [["NHS number", draftPatient.identifier]] : []),
+    ...(draftPatient.birthDate ? [["Date of birth", ukDateText(draftPatient.birthDate)]] : []),
+    ...(draftPatient.identifier ? [["NHS number", nhsNumberText(draftPatient.identifier)]] : []),
     ["Letter type", analysis.documentType || "Correspondence"],
     ...(analysis.specialty && analysis.specialty !== analysis.documentType ? [["Specialty", analysis.specialty]] : []),
-    ...(analysis.docmanDraft?.document?.eventDate ? [["Letter date", analysis.docmanDraft.document.eventDate]] : []),
+    ...(analysis.docmanDraft?.document?.eventDate ? [["Letter date", ukDateText(analysis.docmanDraft.document.eventDate)]] : []),
   ];
   const actionText = confirmed === "no_workflow" ? ["No action needed from the practice."]
     : actions.length ? actions
