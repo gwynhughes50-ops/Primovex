@@ -192,4 +192,20 @@ await t("the lists are loaded through the screen's own audited loaders, only whi
   assert.ok(!/fn shared_lists_[a-z]+[\s\S]{0,600}remove_file/.test(rust), "reading the lists never deletes anything");
 });
 
+t("the shared folder can be checked from the screen, and a OneDrive placeholder folder is still counted as a folder", () => {
+  const rust = read("src-tauri/src/lib.rs");
+  assert.match(rust, /fn entry_is_folder\(entry: &fs::DirEntry\) -> bool \{\s*entry\.file_type\(\)\.map\(\|t\| t\.is_dir\(\)\)\.unwrap_or\(false\) \|\| entry\.path\(\)\.is_dir\(\)/);
+  const list = rust.slice(rust.indexOf("fn shared_list("), rust.indexOf("fn shared_read("));
+  assert.match(list, /!entry_is_folder\(&entry\)/, "the listing uses it");
+  assert.ok(!/entry\.metadata\(\)/.test(list), "the listing no longer trusts the entry's own metadata alone");
+  const probe = rust.slice(rust.indexOf("fn shared_probe("), rust.indexOf("// Every letter folder:"));
+  assert.ok(!/remove_|write\(|create_dir/.test(probe), "checking the folder only looks");
+  assert.match(rust, /      shared_probe,\n/, "the command is registered");
+  assert.match(read("src/modules/clinflow/docmanFolders.js"), /probe: \(\) => call\("shared_probe"\)/);
+  const screen = read("src/modules/clinflow/ScanInbox.jsx");
+  assert.match(screen, />Check the folder</);
+  assert.match(screen, /Letter folders found: <b>\{probe\.letters\}<\/b>/);
+  assert.match(screen, /shareStatus\.count === 0 && !shareStatus\.error/, "an empty result points at the button");
+});
+
 console.log(`\n${n} passed`);

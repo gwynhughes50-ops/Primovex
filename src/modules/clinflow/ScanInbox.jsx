@@ -30,6 +30,7 @@ export default function ScanInbox({ documents, onLetter, onShared, notify, recor
   const [shareStatus, setShareStatus] = useState({ count: 0, lastAt: 0, conflicts: 0, error: "" });
   const [listStatus, setListStatus] = useState({ present: [], loaded: {}, error: "", lastAt: 0 });
   const [message, setMessage] = useState("");
+  const [probe, setProbe] = useState(null); // what this computer sees in the shared folder, from the "Check the folder" button
   const splitRef = useRef(split);
   splitRef.current = split;
   const latest = useRef({});
@@ -129,6 +130,10 @@ export default function ScanInbox({ documents, onLetter, onShared, notify, recor
   const startReading = () => { setRunning(true); setMessage(""); record("clinflow.inbox.start", "Reading the Incoming scans folder in the background was switched on", { attestedSyntheticOnly: true, splitAtBlankPages: split, sharing }); };
   const pauseReading = () => { setRunning(false); record("clinflow.inbox.pause", "Reading the Incoming scans folder was paused", { read: status.read, problems: status.problems }); };
   const startSharing = () => { setSharing(true); setMessage(""); record("clinflow.share.start", "Sharing letters through the shared folder was switched on", { attestedSyntheticOnly: true }); };
+  const checkSharedFolder = async () => {
+    setProbe({ checking: true });
+    try { setProbe(await sharedLetters.probe()); } catch (error) { setProbe({ error: String(error?.message || error).slice(0, 200) }); }
+  };
   const stopSharing = () => { setSharing(false); record("clinflow.share.stop", "Sharing letters through the shared folder was switched off", {}); };
 
   const Folder = ({ kind, label, busy }) => (
@@ -157,6 +162,23 @@ export default function ScanInbox({ documents, onLetter, onShared, notify, recor
                 {sharing && <span>{shareStatus.count} letter{shareStatus.count === 1 ? "" : "s"} in the shared folder{shareStatus.lastAt ? ` · checked ${new Date(shareStatus.lastAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : ""}{shareStatus.conflicts ? ` · ${shareStatus.conflicts} clash${shareStatus.conflicts === 1 ? "" : "es"}` : ""}</span>}
               </div>
               {shareStatus.error && sharing && <p className="cf-inbox-error">Still syncing, trying again: {shareStatus.error}</p>}
+              {sharing && shareStatus.lastAt > 0 && shareStatus.count === 0 && !shareStatus.error && <p className="cf-inbox-error">No letters were found in the shared folder. Press "Check the folder" to see why.</p>}
+              {folders.shared && <div className="cf-inbox-actions"><button type="button" onClick={checkSharedFolder} disabled={probe?.checking}>Check the folder</button><small className="cf-muted">Shows exactly what this computer can see in the shared folder.</small></div>}
+              {probe && !probe.checking && (
+                <ul className="cf-inbox-status">
+                  {probe.error && !probe.folder ? <li className="cf-inbox-error">{probe.error}</li> : (
+                    <>
+                      <li>Looking in: <b>{probe.folder}</b></li>
+                      <li>{probe.exists && probe.isFolder ? "The folder is there." : "That folder cannot be found on this computer."}</li>
+                      <li>Letter folders found: <b>{probe.letters}</b>{probe.folders !== probe.letters ? ` (and ${probe.folders - probe.letters} other folder${probe.folders - probe.letters === 1 ? "" : "s"}${probe.otherFolders?.length ? `: ${probe.otherFolders.join(", ")}` : ""})` : ""}</li>
+                      {probe.files > 0 && <li>Loose files in it: <b>{probe.files}</b>{probe.otherFiles?.length ? ` (${probe.otherFiles.join(", ")})` : ""}</li>}
+                      {probe.letters === 0 && probe.folders > 0 && <li className="cf-inbox-error">There are folders, but none is named like a letter, so this is probably one level too high or too low. Choose the folder that holds the letter folders directly.</li>}
+                      {probe.letters === 0 && probe.folders === 0 && probe.exists && <li className="cf-inbox-error">The folder looks empty to this computer. If File Explorer shows letters, they are probably still online-only: right-click the folder there and choose Always keep on this device.</li>}
+                      {probe.error && <li className="cf-inbox-error">{probe.error}</li>}
+                    </>
+                  )}
+                </ul>
+              )}
               <p className="cf-muted"><small>The three lists (SNOMED, dm+d, abbreviations) can be kept once in a folder called <b>lists</b> inside the shared folder, as <b>snomed-uk-index.json.gz</b>, <b>dmd-index.json.gz</b> and <b>abbreviations.csv</b>. Every computer then loads them from there, and picks up a new file within about five minutes.{sharing ? ` In the shared folder now: ${listStatus.present.length ? listStatus.present.map((k) => LIST_WORDS[k]).join(", ") : "none yet"}.` : ""}</small></p>
               {listStatus.error && sharing && <p className="cf-inbox-error">A list could not be loaded yet: {listStatus.error}</p>}
 

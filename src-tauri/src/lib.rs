@@ -296,6 +296,66 @@ fn stamp(path: &std::path::Path) -> (u64, u64) {
   }
 }
 
+// Is this entry a folder? A OneDrive folder that is not downloaded yet can be a placeholder, so the entry's own answer is not trusted on its own: the path is asked as well, which follows it.
+#[cfg(desktop)]
+fn entry_is_folder(entry: &fs::DirEntry) -> bool {
+  entry.file_type().map(|t| t.is_dir()).unwrap_or(false) || entry.path().is_dir()
+}
+
+// What this computer actually sees in the shared letters folder, for the "Check the folder" button: the folder it is looking in, how many folders and files are in it, and a few of their names
+// (letter ids and file names, never anything from a letter). So a folder that looks full in File Explorer but empty to ClinFlow can be explained.
+#[cfg(desktop)]
+#[tauri::command]
+fn shared_probe(app: tauri::AppHandle) -> Result<serde_json::Value, String> {
+  let saved = read_docman_folders(&app);
+  let folder = saved["shared"].as_str().unwrap_or("").to_string();
+  if folder.is_empty() {
+    return Err("Choose the shared letters folder first.".to_string());
+  }
+  let path = PathBuf::from(&folder);
+  let mut folders = 0u32;
+  let mut letters = 0u32;
+  let mut files = 0u32;
+  let mut other_folders: Vec<String> = Vec::new();
+  let mut other_files: Vec<String> = Vec::new();
+  let mut error = String::new();
+  match fs::read_dir(&path) {
+    Ok(entries) => {
+      for entry in entries {
+        match entry {
+          Ok(entry) => {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if entry_is_folder(&entry) {
+              folders += 1;
+              if letter_id(&name).is_ok() {
+                letters += 1;
+              } else if other_folders.len() < 8 {
+                other_folders.push(name.chars().take(60).collect());
+              }
+            } else {
+              files += 1;
+              if other_files.len() < 8 {
+                other_files.push(name.chars().take(60).collect());
+              }
+            }
+          }
+          Err(e) => {
+            if error.is_empty() {
+              error = format!("An entry could not be read: {e}");
+            }
+          }
+        }
+      }
+    }
+    Err(e) => error = format!("The folder could not be read: {e}"),
+  }
+  Ok(serde_json::json!({
+    "folder": folder, "exists": path.exists(), "isFolder": path.is_dir(),
+    "folders": folders, "letters": letters, "files": files,
+    "otherFolders": other_folders, "otherFiles": other_files, "error": error,
+  }))
+}
+
 // Every letter folder: [{ id, docMs, docSize, pdfSize, finishedMs }]. A zero means that file is not there.
 #[cfg(desktop)]
 #[tauri::command]
@@ -303,9 +363,8 @@ fn shared_list(app: tauri::AppHandle) -> Result<Vec<serde_json::Value>, String> 
   let dir = shared_dir(&app)?;
   let mut found = Vec::new();
   for entry in fs::read_dir(&dir).map_err(|e| format!("The shared letters folder could not be read: {e}"))?.flatten() {
-    let Ok(meta) = entry.metadata() else { continue };
     let name = entry.file_name().to_string_lossy().to_string();
-    if !meta.is_dir() || letter_id(&name).is_err() {
+    if letter_id(&name).is_err() || !entry_is_folder(&entry) {
       continue;
     }
     let (doc_ms, doc_size) = stamp(&entry.path().join("document.json"));
@@ -1000,6 +1059,7 @@ pub fn run() {
       finish_incoming_scan,
       #[cfg(desktop)]
       shared_list,
+      shared_probe,
       #[cfg(desktop)]
       shared_read,
       #[cfg(desktop)]

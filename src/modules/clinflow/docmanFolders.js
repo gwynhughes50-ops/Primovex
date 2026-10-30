@@ -50,6 +50,7 @@ export const incomingScans = {
 const call = async (command, args) => { const { invoke } = await import("@tauri-apps/api/core"); return invoke(command, args); };
 export const sharedLetters = {
   list: () => call("shared_list"),
+  probe: () => call("shared_probe"),
   read: async (id, file) => new Uint8Array(await call("shared_read", { id, file })),
   write: (id, file, bytes) => call("shared_write", { id, file, bytes: Array.from(bytes) }),
   finish: (id, bytes) => call("shared_finish", { id, finished: Array.from(bytes) }),
