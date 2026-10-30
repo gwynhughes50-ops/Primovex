@@ -9,14 +9,14 @@ const FIRST = 25;
 
 export default function ConcernAuditTrail({ concernId }) {
   const [events, setEvents] = useState(null); // null: still loading
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState(""); // why the history could not be read, in the database's own words
   const [who, setWho] = useState("");
   const [all, setAll] = useState(false);
 
   useEffect(() => {
     if (!concernId) return undefined;
-    setEvents(null); setFailed(false); setWho(""); setAll(false);
-    return subscribeConcernTimeline(concernId, setEvents, () => { setFailed(true); setEvents([]); }, { includeAudit: true });
+    setEvents(null); setFailed(""); setWho(""); setAll(false);
+    return subscribeConcernTimeline(concernId, setEvents, (error) => { console.error("Audit trail could not be read", error); setFailed(String(error?.code || error?.message || "unknown").slice(0, 120)); setEvents([]); }, { includeAudit: true });
   }, [concernId]);
 
   const people = useMemo(() => auditPeople(events || []), [events]);
@@ -39,8 +39,8 @@ export default function ConcernAuditTrail({ concernId }) {
       </div>
       <p className="mt-1 text-xs text-[var(--medtrak-muted)]">Everything done to this case, newest first: who did it, when, and what changed. Summaries, patient details and contact details show as changed without the words. Changes made before 0.15.105 have no field detail.</p>
       {events === null && <p className="mt-2 text-sm text-[var(--medtrak-muted)]">Loading…</p>}
-      {failed && <p className="mt-2 text-sm font-semibold text-rose-600">The audit trail could not be loaded.</p>}
-      {events !== null && !failed && rows.length === 0 && <p className="mt-2 text-sm text-[var(--medtrak-muted)]">Nothing recorded{who ? ` for ${who}` : ""} yet.</p>}
+      {failed && <p className="mt-2 text-sm font-semibold text-rose-600">The audit trail could not be read ({failed}). Tell whoever looks after Primovex, with this word in brackets.</p>}
+      {events !== null && !failed && rows.length === 0 && <p className="mt-2 text-sm text-[var(--medtrak-muted)]">The database returned no history lines for this case{who ? ` from ${who}` : ""}, not even when it was received. If the Case timeline above shows lines, tell whoever looks after Primovex.</p>}
       {shown.length > 0 && (
         <ul className="mt-2 divide-y divide-[var(--medtrak-border)] rounded-xl border border-[var(--medtrak-border)] text-sm">
           {shown.map((row, index) => (
