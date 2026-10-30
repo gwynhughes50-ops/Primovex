@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { auditEntry, auditRows, changeText, cleanChanges, describeChanges } from "../src/modules/governance/concernAudit.js";
+import { auditEntry, auditPeople, auditRows, auditRowsForScreen, changeText, cleanChanges, describeChanges } from "../src/modules/governance/concernAudit.js";
 import { historyRows } from "../src/modules/governance/concernHistory.js";
 import { outsidePartiesSummary } from "../src/modules/governance/concernCase.js";
 
@@ -114,7 +114,7 @@ t("every change goes through one place and is written when it is made", () => {
   assert.match(service, /try \{[\s\S]*await addConcernTimeline\(concernId, \{ \.\.\.entry, actor \}\)[\s\S]*\} catch/, "a failed audit write can never stop the work");
   assert.match(service, /recordContactChange\(concernId, "Contact details removed"/);
   assert.match(service, /"The details themselves are not shown here\."/);
-  assert.match(service, /\.filter\(\(event\) => event\.type !== AUDIT_TYPE\)/, "the case timeline screen does not show the audit lines");
+  assert.match(service, /\.filter\(\(event\) => includeAudit \|\| event\.type !== AUDIT_TYPE\)/, "the plain case timeline screen does not show the audit lines");
   assert.match(service, /recordAudit\(concernEvent\("printed", \{ concern \}\)\)/, "every print is in the governed ledger");
 });
 
@@ -169,6 +169,29 @@ t("the print reads the steps themselves and shows the section to everyone who pr
   assert.ok(!/includeAudit[^\n]*outsideBlock|outsideBlock[^\n]*includeAudit/.test(print), "not only for the team");
   assert.match(print, /could not be loaded for this print/, "a failed read is said, not hidden");
   assert.match(read("src/modules/governance/components/ConcernWizards.jsx"), /const stateText = partyStateText;/, "the screen and the print use the same words");
+});
+
+t("the concerns team sees the audit trail on the case itself, newest first, and can look at one person's lines", () => {
+  const timeline = [
+    { id: "1", type: "created", title: "Concern received", message: "Logged by phone.", actorName: "Pat Example", createdAt: at(2026, 10, 1) },
+    { id: "2", type: "audit", title: "Case record changed", changes: [{ label: "Priority", from: "Low", to: "High", hidden: false }], actorName: "Sam Lee", createdAt: at(2026, 10, 5, 10, 5) },
+    { id: "3", type: "note", title: "Note added", message: "hello", actorName: "Pat Example", createdAt: at(2026, 10, 6) },
+  ];
+  const all = auditRowsForScreen(timeline);
+  assert.deepEqual(all.map((r) => r.what), ["Note added", "Priority changed", "Concern received"], "newest first");
+  assert.deepEqual(auditRowsForScreen(timeline, "Sam Lee").map((r) => r.what), ["Priority changed"]);
+  assert.deepEqual(auditRowsForScreen(timeline, "Nobody"), []);
+  assert.deepEqual(auditPeople(timeline), ["Pat Example", "Sam Lee"]);
+  assert.deepEqual(auditRowsForScreen(null), []);
+
+  const service = read("src/modules/governance/services/concernService.js");
+  assert.match(service, /subscribeConcernTimeline\(concernId, callback, onError, \{ includeAudit = false \} = \{\}\)/, "the plain timeline still leaves the audit lines out");
+  assert.match(service, /filter\(\(event\) => includeAudit \|\| event\.type !== AUDIT_TYPE\)/);
+  const component = read("src/modules/governance/components/ConcernAuditTrail.jsx");
+  assert.match(component, /\{ includeAudit: true \}/);
+  assert.match(component, /auditRowsForScreen\(events \|\| \[\], who\)/);
+  assert.match(read("src/pages/GovernanceConcerns.jsx"), /\{isTeam && <ConcernAuditTrail concernId=\{concern\.id\} \/>\}/, "desktop: team only");
+  assert.match(read("src/mobile/MobileGovernanceConcerns.jsx"), /\{isTeam && <div className="mt-3"><ConcernAuditTrail concernId=\{concern\.id\} \/><\/div>\}/, "phone: team only");
 });
 
 console.log(`\n${n} concern audit checks passed`);

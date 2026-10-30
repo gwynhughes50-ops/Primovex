@@ -127,3 +127,11 @@ export function auditRows(timeline = []) {
   }
   return rows;
 }
+
+// The same rows for the screen: newest first, optionally only one person's. `who` is a name from auditPeople(); empty means everyone.
+export function auditRowsForScreen(timeline = [], who = "") {
+  const rows = auditRows(timeline).reverse();
+  return who ? rows.filter((row) => row.who === who) : rows;
+}
+// The people who appear in the audit trail, for the filter, in alphabetical order
+export const auditPeople = (timeline = []) => [...new Set(auditRows(timeline).map((row) => row.who))].sort((a, b) => a.localeCompare(b));

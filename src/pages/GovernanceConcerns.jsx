@@ -11,6 +11,7 @@ import { identityLabel } from "@/modules/governance/patientIdentity";
 import { Icons } from "@/config/medtrakIcons";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeUsers } from "@/services/adminUserService";
+import ConcernAuditTrail from "@/modules/governance/components/ConcernAuditTrail";
 import ConcernMeetings from "@/modules/governance/components/ConcernMeetings";
 import { CaseReviewPanel, ConcernCloseWizard, ConcernUpdateWizard, useCaseSteps } from "@/modules/governance/components/ConcernWizards";
 import { printConcernSummary } from "@/modules/governance/services/concernPrint";
@@ -630,6 +631,8 @@ function ConcernDetail({ concern, actor, isTeam, isPartner, isAdmin, users, onEd
           ))}
         </div>
       </SectionCard>
+
+      {isTeam && <ConcernAuditTrail concernId={concern.id} />}
 
       {showUpdate && <ConcernUpdateWizard concern={concern} actor={actor} users={users} onClose={() => setShowUpdate(false)} />}
       {showClose && <ConcernCloseWizard concern={concern} actor={actor} onClose={() => setShowClose(false)} onClosed={() => setShowClose(false)} />}

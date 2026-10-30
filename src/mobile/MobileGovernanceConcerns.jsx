@@ -5,6 +5,7 @@ import { identityLabel } from '@/modules/governance/patientIdentity';
 import { ChevronLeft, Plus, ShieldAlert, X } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { subscribeUsers } from '@/services/adminUserService';
+import ConcernAuditTrail from '@/modules/governance/components/ConcernAuditTrail';
 import ConcernMeetings from '@/modules/governance/components/ConcernMeetings';
 import { CaseReviewPanel, ConcernCloseWizard, ConcernUpdateWizard, useCaseSteps } from '@/modules/governance/components/ConcernWizards';
 import {
@@ -518,6 +519,8 @@ function ConcernDetailSheet({ concern, actor, onClose, isTeam, isPartner, isAdmi
           </div>
         </div>
       </section>
+
+      {isTeam && <div className="mt-3"><ConcernAuditTrail concernId={concern.id} /></div>}
 
       {showUpdate && <ConcernUpdateWizard concern={concern} actor={actor} users={users} onClose={() => setShowUpdate(false)} />}
       {showClose && <ConcernCloseWizard concern={concern} actor={actor} onClose={() => setShowClose(false)} onClosed={() => setShowClose(false)} />}

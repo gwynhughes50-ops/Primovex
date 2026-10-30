@@ -769,7 +769,8 @@ export function subscribeConcerns(callback, onError, { involvedUid } = {}) {
   }, onError);
 }
 
-export function subscribeConcernTimeline(concernId, callback, onError) {
+// includeAudit is for the concerns team's Audit trail, which shows every line; the case timeline leaves the audit lines out
+export function subscribeConcernTimeline(concernId, callback, onError, { includeAudit = false } = {}) {
   if (isSafeSyntheticMode()) {
     const rows = demoConcernTimeline[concernId] || [
       { id: "demo-tl-created", type: "created", title: "Concern received", message: "Synthetic case opened for demonstration.", actorName: "Demo User", createdAt: new Date() },
@@ -780,7 +781,7 @@ export function subscribeConcernTimeline(concernId, callback, onError) {
   if (!concernId) return () => {};
   const q = query(collection(db, CONCERN_TIMELINE_COLLECTION), where("concernId", "==", concernId), orderBy("createdAt", "desc"));
   return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })).filter((event) => event.type !== AUDIT_TYPE)); // the audit lines are for the printed summary, not the case timeline
+    callback(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })).filter((event) => includeAudit || event.type !== AUDIT_TYPE)); // the plain case timeline leaves the audit lines out
   }, onError);
 }
 
