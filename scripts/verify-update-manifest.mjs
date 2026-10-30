@@ -70,6 +70,8 @@ t("everyone can check for updates in the desktop app, not only people who can op
   assert.match(link, /isDesktopApp\(\)/, "only in the installed Windows app");
   assert.ok(!/can\(|capabilit|isAdmin|useAuth/.test(link), "no permission is needed to see it");
   assert.match(link, /<ReleaseUpdateCard autoCheck \/>/, "it checks as soon as it opens");
+  assert.match(link, /if \(!desktop\) return collapsed \|\| !WEB_VERSION \? null : <p[^>]*>Version \{WEB_VERSION\}<\/p>/, "the website shows only its version number, with no update button");
+  assert.match(link, /typeof __PRIMOVEX_VERSION__ !== "undefined" \? __PRIMOVEX_VERSION__ : ""/);
   assert.match(read("src/release/ReleaseUpdateCard.jsx"), /if \(autoCheck\) check\(\)/);
   assert.match(read("src/release/ReleaseUpdateCard.jsx"), /autoCheck = false/, "the card in the Security Centre and on the phone still waits to be pressed");
 });

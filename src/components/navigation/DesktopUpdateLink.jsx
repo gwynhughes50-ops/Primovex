@@ -5,14 +5,18 @@ import { getInstalledVersion, isDesktopApp } from "@/release/updateService";
 
 // "Check for updates" at the foot of the desktop sidebar, for everyone who signs in (not only people with access to the Security
 // Centre, where the update card also lives). It shows the installed version and opens the update card, which checks straight away.
-// Only in the installed Windows app: the website and the phone update themselves.
+// The update check is only in the installed Windows app: the website and the phone update themselves. The website shows just its version number.
+
+const WEB_VERSION = typeof __PRIMOVEX_VERSION__ !== "undefined" ? __PRIMOVEX_VERSION__ : "";
+const WEB_BUILD = typeof __PRIMOVEX_BUILD__ !== "undefined" ? __PRIMOVEX_BUILD__ : "";
 
 export default function DesktopUpdateLink({ collapsed = false }) {
   const [version, setVersion] = useState("");
   const [open, setOpen] = useState(false);
   const desktop = isDesktopApp();
   useEffect(() => { if (desktop) getInstalledVersion().then(setVersion); }, [desktop]);
-  if (!desktop) return null;
+  // The website updates itself, so there is nothing to check, but the version it is running is shown in the same place so a person can say which one they have
+  if (!desktop) return collapsed || !WEB_VERSION ? null : <p className="mb-1 px-3 py-1 text-xs text-[var(--medtrak-muted)]" title={WEB_BUILD ? `Build ${WEB_BUILD}` : undefined}>Version {WEB_VERSION}</p>;
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} title="Check for updates" aria-label={`Check for updates. Installed version ${version}`}
