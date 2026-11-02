@@ -1,6 +1,6 @@
 {
   "name": "primovex",
-  "version": "0.15.114",
+  "version": "0.15.115",
   "private": true,
   "scripts": {
     "dev": "vite",
