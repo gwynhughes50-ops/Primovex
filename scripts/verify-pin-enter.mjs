@@ -23,4 +23,11 @@ t("ClinFlow dialogs fit the screen and scroll when they are taller than it", () 
   assert.match(css, /\.cf-inbox>div\{[^}]*max-width:92vw/, "the Incoming scans box never goes wider than the screen");
 });
 
+t("two rows of ClinFlow action buttons never touch, so Original PDF has a gap above Confirm & Finish", () => {
+  const css = read("src/modules/clinflow/clinflow-workspace.css");
+  assert.match(css, /\.cf-action-grid\+\.cf-action-grid\{margin-top:8px\}/);
+  const workspace = read("src/modules/clinflow/ClinFlowWorkspace.jsx");
+  assert.match(workspace, /Original PDF<\/ActionButton><\/>[\s\S]{0,400}<\/div>\s*<div className="cf-action-grid">\s*<ActionButton tone="success" wide/, "Confirm & Finish is in its own row after the download buttons");
+});
+
 console.log(`\n${n} PIN and dialog checks passed`);
