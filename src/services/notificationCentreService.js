@@ -131,6 +131,19 @@ export function buildSnoozeUpdate(option) {
   };
 }
 
+// How far off the deadline is, from today's date (the title was written when the notice was created, so it can be days out of date).
+// A notice that has been completed no longer says how long is left, and a deadline that has passed never reads "Due in -12 days".
+export function formatDue(notification) {
+  if (notification.status === "completed") return notification.completedNote ? `Completed: ${notification.completedNote}` : "Completed";
+  const days = notification.dueDays;
+  if (days === null || days === undefined) return "No due date";
+  if (days < 0) return `Overdue by ${-days} day${days === -1 ? "" : "s"}`;
+  if (notification.overdue) return "Overdue";
+  if (days === 0) return "Due today";
+  if (days === 1) return "Due tomorrow";
+  return `Due in ${days} days`;
+}
+
 export function normalizeNotification(notification, now = new Date()) {
   const priority = getNotificationPriority(notification, now);
   const dueDays = daysUntil(notification, now);

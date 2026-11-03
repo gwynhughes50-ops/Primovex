@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { DUE_SOURCES, isOpenDueNotification, sourcesToCheck, staleNotificationIds } from "../src/services/staleDueNotifications.js";
-import { summariseNotifications } from "../src/services/notificationCentreService.js";
+import { DUE_SOURCES, isOpenDueNotification, sourcesToCheck, staleNotificationIds, staleNotifications } from "../src/services/staleDueNotifications.js";
+import { formatDue, normalizeNotification, summariseNotifications } from "../src/services/notificationCentreService.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
@@ -51,6 +51,61 @@ t("once completed, the notice drops out of what the bell and the pop-up count", 
   const after = rows.map((row) => (row.id === "a" ? { ...row, status: "completed", read: true } : row));
   const active = summariseNotifications(after).active;
   assert.deepEqual(active.map((row) => row.id), ["b"]);
+});
+
+// the notification in the report: ID48127, "acknowledgement due in 2 days", created 20/10/2026, deadline 22/10/2026, seen on 2/11/2026
+const TODAY = new Date(Date.UTC(2026, 10, 2, 9, 0));
+const ack = (over = {}) => due("concern-due-soon-c1-craig-acknowledgement-20261022", { kind: "due-soon", title: "Concern acknowledgement due in 2 days: ID48127", ...over });
+
+t("a 'due soon' notice whose day has passed is out of date, and says why, even for a case that cannot be read", () => {
+  assert.deepEqual(staleNotifications([ack()], {}, TODAY), [{ id: "concern-due-soon-c1-craig-acknowledgement-20261022", why: "The deadline has passed." }]);
+  assert.deepEqual(staleNotificationIds([ack()], { "governance_concerns/c1": { status: "investigation", data: {} } }, TODAY), ["concern-due-soon-c1-craig-acknowledgement-20261022"]);
+  const tomorrow = new Date(Date.UTC(2026, 9, 21, 9, 0));
+  assert.deepEqual(staleNotificationIds([ack()], {}, tomorrow), [], "still ahead on 21/10: left alone");
+  assert.deepEqual(staleNotificationIds([ack()], {}, new Date(Date.UTC(2026, 9, 22, 9, 0))), [], "due today is still due");
+  assert.deepEqual(staleNotificationIds([ack({ kind: "overdue", id: "concern-overdue-c1-craig-acknowledgement-20261022" })], {}, TODAY), [], "an overdue notice does not go out of date by the days passing");
+});
+
+t("an acknowledgement notice is retired once the concern is acknowledged, even while it is open and not yet due", () => {
+  const soon = ack({ id: "concern-due-soon-c1-craig-acknowledgement-20261103" });
+  const open = { status: "investigation", data: { acknowledgedAt: { toDate: () => new Date(Date.UTC(2026, 9, 30)) }, acknowledgementDueAt: new Date(Date.UTC(2026, 10, 3, 11)) } };
+  assert.deepEqual(staleNotifications([soon], { "governance_concerns/c1": open }, TODAY), [{ id: soon.id, why: "The concern has been acknowledged." }]);
+  assert.deepEqual(staleNotificationIds([soon], { "governance_concerns/c1": { status: "received", data: { acknowledgementDueAt: new Date(Date.UTC(2026, 10, 3, 11)) } } }, TODAY), [], "not acknowledged: still right");
+});
+
+t("an early resolution notice is retired once the case has left that stage; a final response one once it has been sent", () => {
+  const early = due("concern-due-soon-c1-craig-early-resolution-20261104", { kind: "due-soon" });
+  assert.deepEqual(staleNotificationIds([early], { "governance_concerns/c1": { status: "investigation", data: {} } }, TODAY), [early.id]);
+  assert.deepEqual(staleNotificationIds([early], { "governance_concerns/c1": { status: "early_resolution", data: { earlyResolutionDueAt: new Date(Date.UTC(2026, 10, 4, 11)) } } }, TODAY), []);
+  const final = due("concern-due-soon-c1-craig-final-response-20261104", { kind: "due-soon" });
+  assert.deepEqual(staleNotificationIds([final], { "governance_concerns/c1": { status: "response", data: { finalResponseSentAt: new Date(), finalResponseDueAt: new Date(Date.UTC(2026, 10, 4, 11)) } } }, TODAY), [final.id]);
+});
+
+t("a notice for a deadline that was moved is out of date (the daily job tells people again under a new id)", () => {
+  const final = due("concern-due-soon-c1-craig-final-response-20261104", { kind: "due-soon" });
+  const extended = { status: "response", data: { finalResponseDueAt: new Date(Date.UTC(2026, 10, 18, 11)) } };
+  assert.deepEqual(staleNotifications([final], { "governance_concerns/c1": extended }, TODAY), [{ id: final.id, why: "The deadline has been changed." }]);
+  const same = { status: "response", data: { finalResponseDueAt: new Date(Date.UTC(2026, 10, 4, 11)) } };
+  assert.deepEqual(staleNotificationIds([final], { "governance_concerns/c1": same }, TODAY), []);
+});
+
+t("a SAR 'due soon' notice goes out of date when its day has passed; a message from a colleague never does", () => {
+  const sarNote = due("sar-due-soon-s1-craig-20261022", { module: "sar", sourceId: "s1", kind: "due-soon" });
+  assert.deepEqual(staleNotificationIds([sarNote], {}, TODAY), [sarNote.id]);
+  assert.deepEqual(staleNotificationIds([{ ...sarNote, automated: false }], {}, TODAY), []);
+});
+
+t("the screen says how far past the deadline it is, never 'Due in -12 days', and a completed notice says it is completed and why", () => {
+  const now = TODAY;
+  const view = (over) => formatDue(normalizeNotification({ dueDate: new Date(Date.UTC(2026, 9, 22, 11)), status: "open", ...over }, now));
+  assert.equal(view({}), "Overdue by 11 days");
+  assert.equal(view({ dueDate: new Date(Date.UTC(2026, 10, 1, 11)) }), "Overdue by 1 day");
+  assert.equal(view({ dueDate: new Date(Date.UTC(2026, 10, 2, 11)) }), "Due today");
+  assert.equal(view({ dueDate: new Date(Date.UTC(2026, 10, 3, 11)) }), "Due tomorrow");
+  assert.equal(view({ dueDate: new Date(Date.UTC(2026, 10, 5, 11)) }), "Due in 3 days");
+  assert.equal(view({ dueDate: null }), "No due date");
+  assert.equal(view({ status: "completed", completedNote: "The concern has been acknowledged." }), "Completed: The concern has been acknowledged.");
+  assert.equal(view({ status: "completed" }), "Completed");
 });
 
 console.log(`\n${n} passed`);

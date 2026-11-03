@@ -1,15 +1,7 @@
 import { Button } from "@/components/ui/button";
 import StatusBadge from "@/components/common/StatusBadge";
-import { normalizeNotification, toDate } from "@/services/notificationCentreService";
+import { formatDue, normalizeNotification, toDate } from "@/services/notificationCentreService";
 import { Icons } from "@/config/medtrakIcons";
-
-function formatDue(notification) {
-  if (notification.overdue) return "Overdue";
-  if (notification.dueDays === null || notification.dueDays === undefined) return "No due date";
-  if (notification.dueDays === 0) return "Due today";
-  if (notification.dueDays === 1) return "Due tomorrow";
-  return `Due in ${notification.dueDays} days`;
-}
 
 function fmtDate(value) {
   const d = toDate(value);
