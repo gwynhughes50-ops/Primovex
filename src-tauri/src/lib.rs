@@ -1059,6 +1059,7 @@ pub fn run() {
       finish_incoming_scan,
       #[cfg(desktop)]
       shared_list,
+      #[cfg(desktop)]
       shared_probe,
       #[cfg(desktop)]
       shared_read,

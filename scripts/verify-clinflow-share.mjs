@@ -200,7 +200,12 @@ t("the shared folder can be checked from the screen, and a OneDrive placeholder 
   assert.ok(!/entry\.metadata\(\)/.test(list), "the listing no longer trusts the entry's own metadata alone");
   const probe = rust.slice(rust.indexOf("fn shared_probe("), rust.indexOf("// Every letter folder:"));
   assert.ok(!/remove_|write\(|create_dir/.test(probe), "checking the folder only looks");
-  assert.match(rust, /      shared_probe,\n/, "the command is registered");
+  assert.match(rust, /      #\[cfg\(desktop\)\]\n      shared_probe,\n/, "the command is registered, for the desktop only (the Android build has no such command)");
+  const handler = rust.slice(rust.indexOf("generate_handler!["));
+  for (const command of handler.match(/^\s{6}(?:#\[cfg\(desktop\)\]\n\s{6})?[a-z_]+,?$/gm) || []) {
+    const name = command.trim().split("\n").pop().trim().replace(",", "");
+    if (/^(shared_|docman_|list_incoming|read_incoming|finish_incoming|choose_docman)/.test(name)) assert.ok(/#\[cfg\(desktop\)\]/.test(command), `${name} is desktop only, so it must be marked so`);
+  }
   assert.match(read("src/modules/clinflow/docmanFolders.js"), /probe: \(\) => call\("shared_probe"\)/);
   const screen = read("src/modules/clinflow/ScanInbox.jsx");
   assert.match(screen, />Check the folder</);
