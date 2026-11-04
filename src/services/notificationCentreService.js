@@ -88,6 +88,7 @@ export function getModuleLabel(module) {
     sar: "Subject Access Requests",
     quality: "Quality",
     clinflow: "ClinFlow",
+    laptop: "IT equipment",
     general: "General",
   };
   return labels[key] || key.charAt(0).toUpperCase() + key.slice(1);

@@ -23,6 +23,9 @@ export const ROUTE_MANIFEST = [
   { path: "/my-training", label: "My training", section: "mywork", iconKey: "training" },
   { path: "/mileage", label: "Mileage", section: "mywork", iconKey: "mileage" },
   { path: "/quality-opportunities", label: "From ClinFlow", section: "mywork", iconKey: "governance" },
+  { path: "/it-equipment", label: "IT equipment", section: "operations", iconKey: "laptop", capability: "itAssets.read", anyOf: ["itAssets.read", "itAssets.manage"] },
+  // Reached from the reminder a laptop's holder is sent and from the laptop's QR label, so it is not in everyone's sidebar.
+  { path: "/my-laptop", label: "My laptop", section: "mywork", iconKey: "laptop", hiddenFromSidebar: true },
   { path: "/timesheets", label: "Timesheets", section: "operations", iconKey: "timesheets", capability: "timesheets.manage" },
   { path: "/waste", label: "Clinical waste", section: "operations", iconKey: "waste", capability: "waste.read", anyOf: ["waste.read", "waste.manage"] },
   { path: "/compliance", label: "Compliance", section: "operations", iconKey: "compliance", capability: "compliance.read", anyOf: ["compliance.read", "coshh.read"], children: ["Overview", "Checks history", "Cleaning", "Maintenance", "Assets and tags", "PAT Testing", "Certificates", "COSHH"] },

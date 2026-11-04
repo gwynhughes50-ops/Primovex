@@ -126,7 +126,7 @@ test("notifications are shaped for the inbox: unread, open, automated, with the 
 });
 
 // ---- the part that talks to Firestore, against a tiny in-memory stand-in ----
-function fakeDb({ sars = [], concerns = [], users = {} }) {
+function fakeDb({ sars = [], concerns = [], laptops = [], users = {} }) {
   const notifications = new Map(); // "uid/id" -> data
   const snap = (rows) => ({ docs: rows.map(({ id, ...data }) => ({ id, data: () => data })) });
   return {
@@ -134,6 +134,7 @@ function fakeDb({ sars = [], concerns = [], users = {} }) {
     collection(name) {
       if (name === "governance_sars") return { where: () => ({ get: async () => snap(sars) }) };
       if (name === "governance_concerns") return { where: () => ({ get: async () => snap(concerns) }) };
+      if (name === "it_laptops") return { where: () => ({ get: async () => snap(laptops) }) };
       if (name === "users") {
         return {
           doc: (uid) => ({
@@ -204,4 +205,68 @@ test("the notification ids carry the real SAR id, the person and the due date", 
     "craig/sar-overdue-s1-craig-20260930",
     "liz/sar-overdue-manager-s1-liz-20260930",
   ]);
+});
+
+// ---- IT laptops ----
+// NOW is Fri 2 Oct 2026 in London.
+const laptop = (over = {}) => ({ id: "L1", assetCode: "W91003MLAP10026", status: "in_use", active: true, currentUserUid: "ann", currentUserName: "Ann", nextUpdateDue: "2026-10-09", ...over });
+const loaned = (over = {}) => laptop({ status: "on_loan", currentUserUid: "", loan: { borrowerUid: "bob", borrowerName: "Bob", dueBackOn: "2026-10-20" }, nextUpdateDue: "", ...over });
+
+test("a laptop update due within a week tells the person it is assigned to, a week ahead and no earlier", () => {
+  const plan = planDueNotifications({ laptops: [laptop({ nextUpdateDue: "2026-10-09" })], now: NOW });
+  assert.equal(plan.length, 1);
+  assert.equal(plan[0].recipientUid, "ann");
+  assert.equal(plan[0].id, "laptop-update-soon-L1-ann-20261009");
+  assert.equal(plan[0].data.kind, "due-soon");
+  assert.equal(plan[0].data.actionUrl, "/my-laptop");
+  assert.match(plan[0].data.title, /Laptop update due in 7 days: W91003MLAP10026/);
+  assert.equal(planDueNotifications({ laptops: [laptop({ nextUpdateDue: "2026-10-10" })], now: NOW }).length, 0, "8 days ahead is too early");
+  assert.match(planDueNotifications({ laptops: [laptop({ nextUpdateDue: "2026-10-02" })], now: NOW })[0].data.title, /today/);
+});
+
+test("an overdue update is a separate, later notice", () => {
+  const plan = planDueNotifications({ laptops: [laptop({ nextUpdateDue: "2026-09-28" })], now: NOW });
+  assert.equal(plan.length, 1);
+  assert.equal(plan[0].id, "laptop-update-overdue-L1-ann-20260928");
+  assert.equal(plan[0].data.kind, "overdue");
+  assert.match(plan[0].data.message, /4 days ago/);
+});
+
+test("a laptop on loan tells the borrower about its return, and not the person it was assigned to", () => {
+  const plan = planDueNotifications({ laptops: [loaned({ loan: { borrowerUid: "bob", dueBackOn: "2026-10-05" }, currentUserUid: "ann" })], now: NOW });
+  assert.deepEqual(plan.map((p) => [p.recipientUid, p.id]), [["bob", "laptop-return-soon-L1-bob-20261005"]]);
+  const late = planDueNotifications({ laptops: [loaned({ loan: { borrowerUid: "bob", dueBackOn: "2026-09-30" } })], now: NOW });
+  assert.equal(late[0].id, "laptop-return-overdue-L1-bob-20260930");
+});
+
+test("a lent laptop that is also due an update tells the borrower both", () => {
+  const plan = planDueNotifications({ laptops: [loaned({ nextUpdateDue: "2026-10-03", loan: { borrowerUid: "bob", dueBackOn: "2026-10-04" } })], now: NOW });
+  assert.deepEqual(plan.map((p) => p.id).sort(), ["laptop-return-soon-L1-bob-20261004", "laptop-update-soon-L1-bob-20261003"]);
+});
+
+test("nobody is told about a spare, unassigned or decommissioned laptop, or a bad date", () => {
+  const cases = [
+    laptop({ status: "spare", currentUserUid: "" }), laptop({ currentUserUid: "" }), laptop({ status: "decommissioned" }), laptop({ active: false }),
+    laptop({ nextUpdateDue: "" }), laptop({ nextUpdateDue: "2026-02-31" }), laptop({ nextUpdateDue: "soon" }),
+  ];
+  for (const c of cases) assert.equal(planDueNotifications({ laptops: [c], now: NOW }).length, 0, JSON.stringify(c));
+});
+
+test("a moved update date is a new notice, so the holder is told again", () => {
+  const a = planDueNotifications({ laptops: [laptop({ nextUpdateDue: "2026-10-05" })], now: NOW })[0].id;
+  const b = planDueNotifications({ laptops: [laptop({ nextUpdateDue: "2026-10-06" })], now: NOW })[0].id;
+  assert.notEqual(a, b);
+});
+
+test("the laptop reminders are sent once, and never carry a BitLocker key or note", async () => {
+  const db = fakeDb({
+    laptops: [laptop({ nextUpdateDue: "2026-10-05", notes: "key 111111-222222", bitlocker: "111111" })],
+    users: { ann: { displayName: "Ann" } },
+  });
+  const first = await sendDueNotifications({ db, now: NOW });
+  const second = await sendDueNotifications({ db, now: NOW });
+  assert.equal(first.created, 1);
+  assert.equal(second.created, 0);
+  assert.equal(second.alreadySent, 1);
+  assert.doesNotMatch(JSON.stringify([...db.notifications.values()]), /111111|bitlocker/i);
 });

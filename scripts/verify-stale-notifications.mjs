@@ -108,4 +108,41 @@ t("the screen says how far past the deadline it is, never 'Due in -12 days', and
   assert.equal(view({ status: "completed" }), "Completed");
 });
 
-console.log(`\n${n} passed`);
+
+// ---- IT laptops ----
+const laptopNote = (id, extra = {}) => ({ id, automated: true, module: "laptop", sourceId: "L1", recipientUid: "ann", kind: "due-soon", status: "open", read: false, ...extra });
+const NOV2 = new Date(Date.UTC(2026, 10, 2, 9, 0));
+
+t("a laptop reminder is checked against the laptop register", () => {
+  assert.equal(DUE_SOURCES.laptop.collection, "it_laptops");
+  assert.deepEqual(sourcesToCheck([laptopNote("laptop-update-soon-L1-ann-20261105")]), [{ collection: "it_laptops", id: "L1" }]);
+});
+
+t("an update reminder stays while the date stands, and goes once the update is recorded or the date moves", () => {
+  const note = laptopNote("laptop-update-soon-L1-ann-20261105");
+  const base = { status: "in_use", currentUserUid: "ann", nextUpdateDue: "2026-11-05" };
+  assert.deepEqual(staleNotificationIds([note], { "it_laptops/L1": { status: "in_use", data: base } }, NOV2), []);
+  assert.deepEqual(staleNotificationIds([note], { "it_laptops/L1": { status: "in_use", data: { ...base, nextUpdateDue: "2027-05-05" } } }, NOV2), [note.id], "update recorded: the next date is months away");
+  assert.deepEqual(staleNotificationIds([note], { "it_laptops/L1": "gone" }, NOV2), [note.id]);
+  assert.deepEqual(staleNotificationIds([note], { "it_laptops/L1": { status: "decommissioned", data: { ...base, status: "decommissioned" } } }, NOV2), [note.id]);
+  assert.deepEqual(staleNotificationIds([note], {}, NOV2), [], "a laptop that could not be read is left alone");
+});
+
+t("a return reminder goes once the laptop is back, or the return date moves, or someone else has it", () => {
+  const note = laptopNote("laptop-return-soon-L1-ann-20261105");
+  const lent = { status: "on_loan", currentUserUid: "", loan: { borrowerUid: "ann", dueBackOn: "2026-11-05" } };
+  assert.deepEqual(staleNotificationIds([note], { "it_laptops/L1": { status: "on_loan", data: lent } }, NOV2), []);
+  assert.deepEqual(staleNotificationIds([note], { "it_laptops/L1": { status: "spare", data: { status: "spare", currentUserUid: "" } } }, NOV2), [note.id], "returned");
+  assert.deepEqual(staleNotificationIds([note], { "it_laptops/L1": { status: "on_loan", data: { ...lent, loan: { borrowerUid: "ann", dueBackOn: "2026-11-20" } } } }, NOV2), [note.id], "extended");
+  assert.deepEqual(staleNotificationIds([note], { "it_laptops/L1": { status: "on_loan", data: { ...lent, loan: { borrowerUid: "bob", dueBackOn: "2026-11-05" } } } }, NOV2), [note.id], "lent to someone else");
+});
+
+t("a 'due soon' laptop reminder whose day has gone is out of date; an overdue one is not", () => {
+  const past = "laptop-update-soon-L1-ann-20261101";
+  assert.deepEqual(staleNotificationIds([laptopNote(past)], {}, NOV2), [past]);
+  const overdue = laptopNote("laptop-update-overdue-L1-ann-20261101", { kind: "overdue" });
+  assert.deepEqual(staleNotificationIds([overdue], { "it_laptops/L1": { status: "in_use", data: { status: "in_use", currentUserUid: "ann", nextUpdateDue: "2026-11-01" } } }, NOV2), []);
+});
+
+console.log(`
+${n} passed`);

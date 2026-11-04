@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { featureOn } from "@/config/featureFlags";
 
 import Layout from "@/layout/Layout";
@@ -16,6 +16,8 @@ import Timesheets from "@/pages/Timesheets";
 import Mileage from "@/pages/Mileage";
 import QualityOpportunities from "@/pages/QualityOpportunities";
 import MyTimesheet from "@/pages/MyTimesheet";
+import ITEquipment from "@/pages/ITEquipment";
+import MyLaptop from "@/pages/MyLaptop";
 import AnnualLeave from "@/pages/AnnualLeave";
 import MyTrainingPage from "@/pages/MyTrainingPage";
 import Compliance from "@/pages/Compliance";
@@ -48,6 +50,12 @@ import DesktopSessionShell from "@/desktop/DesktopSessionShell";
 import DesktopAlertsHost from "@/desktop/alerts/DesktopAlertsHost";
 import MessageCardHost from "@/messaging/MessageCardHost";
 
+// A laptop's own QR label opened on a PC: the register, with that laptop open.
+function LaptopLinkRedirect() {
+  const { laptopId } = useParams();
+  return <Navigate to={`/it-equipment?open=${encodeURIComponent(laptopId || "")}`} replace />;
+}
+
 export default function DesktopApp() {
   return (
     <Routes>
@@ -58,6 +66,7 @@ export default function DesktopApp() {
 
       {/* a fire point or water outlet's own tag, opened on a PC: the checks are done on a phone, so show the Compliance page */}
       <Route path="/sense/open/compliance/:assetId" element={<Navigate to="/compliance" replace />} />
+      <Route path="/sense/open/laptop/:laptopId" element={<LaptopLinkRedirect />} />
 
       <Route
         path="/sense/open/:entityType/:entityId"
@@ -91,6 +100,8 @@ export default function DesktopApp() {
         <Route path="inventory" element={<PermissionGate capability="inventory.read"><Inventory /></PermissionGate>} />
         <Route path="stocktake" element={<PermissionGate capability="stocktake.manage"><StockTake /></PermissionGate>} />
         <Route path="my-timesheet" element={<MyTimesheet />} />
+        <Route path="it-equipment" element={<PermissionGate anyOf={["itAssets.read", "itAssets.manage"]}><ITEquipment /></PermissionGate>} />
+        <Route path="my-laptop" element={<MyLaptop />} />
         <Route path="annual-leave" element={<AnnualLeave />} />
         <Route path="my-training" element={<MyTrainingPage />} />
         <Route path="mileage" element={<Mileage />} />

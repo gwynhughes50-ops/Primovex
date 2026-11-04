@@ -10,6 +10,7 @@ import SenseNfcOpen from "@/pages/SenseNfcOpen";
 import FridgeCheckLanding from "@/mobile/FridgeCheckLanding";
 import CoshhLanding from "@/mobile/CoshhLanding";
 import ComplianceLanding from "@/mobile/ComplianceLanding";
+import { MobileLaptops, LaptopLanding, MobileMyLaptop } from "@/mobile/MobileLaptops";
 import MobileBootSplash from "@/mobile/auth/MobileBootSplash";
 import MobileAccountLogin from "@/mobile/auth/MobileAccountLogin";
 import FirstRunSetupGate from "@/setup/FirstRunSetupGate";
@@ -65,6 +66,8 @@ function MobileSenseRoute() {
   if (entityType === "coshh") return <CoshhLanding placeKey={entityId} />;
   // a fire point, water outlet or other checked asset's own tag or QR code goes straight to its check
   if (entityType === "compliance") return <ComplianceLanding assetId={entityId} />;
+  // a laptop's own QR label: the IT team get that laptop open with its actions; anyone else sees their own laptop. Behind the session lock because it names people.
+  if (entityType === "laptop") return <MobileSessionShell><LaptopLanding id={entityId} /></MobileSessionShell>;
   return <SenseNfcOpen />;
 }
 
@@ -91,6 +94,16 @@ function MobileGovernanceSARsRoute() {
   return <MobileSessionShell><MobileGovernanceSARs /></MobileSessionShell>;
 }
 
+function MobileLaptopRoute({ mine = false }) {
+  const { user, loading, can, profile } = useAuth();
+  if (loading) return <MobileBootSplash message="Opening laptops" />;
+  if (!user) return <MobileAccountLogin />;
+  if (profile?.mustChangePassword === true) return <MustChangePassword />;
+  if (!can("mobile.access")) return <MobileAccessDenied />;
+  if (!mine && !can("itAssets.read") && !can("itAssets.manage")) return <MobileAccessDenied />;
+  return <MobileSessionShell>{mine ? <MobileMyLaptop /> : <MobileLaptops />}</MobileSessionShell>;
+}
+
 function MobileSignificantEventsRoute() {
   const { user, loading, can, profile } = useAuth();
   if (loading) return <MobileBootSplash message="Opening Significant events" />;
@@ -108,6 +121,8 @@ export default function MobileApp() {
       <Route path="/sense/open/:entityType/:entityId" element={<MobileSenseRoute />} />
       <Route path="/governance/concerns" element={<MobileGovernanceConcernsRoute />} />
       <Route path="/governance/sars" element={<MobileGovernanceSARsRoute />} />
+      <Route path="/it-equipment" element={<MobileLaptopRoute />} />
+      <Route path="/my-laptop" element={<MobileLaptopRoute mine />} />
       <Route path="/governance/significant-events" element={<MobileSignificantEventsRoute />} />
       <Route path="/spaces" element={<MobileBootController initialTab="sense" />} />
       <Route path="/temperature" element={<MobileBootController initialTab="temperature" />} />

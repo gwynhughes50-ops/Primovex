@@ -90,3 +90,9 @@ export function concernEvent(step, { concern = {}, party = "", action = "", roun
     default: return gov(step, `${labelled}: ${step}`);
   }
 }
+
+// IT equipment: the laptop register. The summary is the line that is also written to the laptop's own log (it never holds a BitLocker key, a note or a name beyond the person's own).
+export function laptopEvent(type, { laptopId = "", assetCode = "", summary = "", count = 0 } = {}) {
+  if (type === "imported") return event("it.laptop.imported", "it", "it_laptop", null, `${count} ${count === 1 ? "laptop" : "laptops"} added from a list`, { count });
+  return event(`it.laptop.${text(type, 30)}`, "it", "it_laptop", laptopId, summary || `${text(assetCode, 40)}: ${text(type, 30)}`, { assetCode: text(assetCode, 40) });
+}

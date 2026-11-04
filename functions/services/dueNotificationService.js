@@ -178,10 +178,65 @@ function planConcern(concern, now) {
   })];
 }
 
-// Everything that should exist right now, given the open SARs and concerns.
+// IT laptops: the person who has a laptop (lent to them, otherwise assigned to them) is told a week before it is due an
+// update or due back, and again once it is overdue. The IT team set the dates; nobody else is told. Laptop dates are plain
+// days ("2026-11-20"), not moments, so they are read as the London calendar day they name.
+const LAPTOP_SOON_DAYS = 7;
+const LAPTOP_LIVE = ["in_use", "on_loan"];
+
+function dayFromKey(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ""));
+  if (!m) return null;
+  const parts = { year: Number(m[1]), month: Number(m[2]), day: Number(m[3]) };
+  // reject 2026-02-31 and the like
+  const back = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
+  return back.getUTCMonth() === parts.month - 1 && back.getUTCDate() === parts.day ? parts : null;
+}
+
+function planLaptop(laptop, now) {
+  if (!laptop || laptop.active === false || !LAPTOP_LIVE.includes(laptop.status)) return [];
+  const onLoan = laptop.status === "on_loan" && laptop.loan;
+  const holder = String((onLoan ? laptop.loan.borrowerUid : laptop.currentUserUid) || "");
+  if (!holder) return [];
+  const code = laptop.assetCode || laptop.id;
+  const today = dayNumber(londonParts(now));
+  const base = { module: "laptop", actionUrl: "/my-laptop", sourceId: laptop.id, recipientUid: holder };
+  const out = [];
+
+  const one = (what, dueOn, soonTitle, overdueTitle, soonMessage, overdueMessage) => {
+    const parts = dayFromKey(dueOn);
+    if (!parts) return;
+    const days = dayNumber(parts) - today;
+    if (days > LAPTOP_SOON_DAYS) return;
+    const key = String(dueOn).replace(/-/g, "");
+    const dueDate = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, 12));
+    const when = formatDate(dueDate);
+    if (days >= 0) {
+      out.push(notification({ ...base, id: `laptop-${what}-soon-${laptop.id}-${holder}-${key}`, kind: "due-soon", priority: "routine", dueDate, title: `${soonTitle} ${whenText(days)}: ${code}`, message: soonMessage(when) }));
+    } else {
+      out.push(notification({ ...base, id: `laptop-${what}-overdue-${laptop.id}-${holder}-${key}`, kind: "overdue", priority: "high", dueDate, title: `${overdueTitle}: ${code}`, message: overdueMessage(when, plural(-days, "day")) }));
+    }
+  };
+
+  one("update", laptop.nextUpdateDue, "Laptop update due", "Laptop update overdue",
+    (when) => `The IT team need to update this laptop by ${when}. Please bring it to them or contact them to arrange it.`,
+    (when, ago) => `This laptop was due an update on ${when} (${ago} ago). Please contact the IT team to arrange it.`);
+  if (onLoan) {
+    one("return", laptop.loan.dueBackOn, "Laptop due back", "Laptop overdue back",
+      (when) => `This laptop is on loan to you until ${when}. Please return it to the IT team by then.`,
+      (when, ago) => `This laptop was due back on ${when} (${ago} ago). Please return it to the IT team.`);
+  }
+  return out;
+}
+
+// Everything that should exist right now, given the open SARs and concerns and the laptops in use.
 // Pure, so it can be tested without Firebase.
-function planDueNotifications({ sars = [], concerns = [], now = new Date() } = {}) {
-  return [...sars.flatMap((sar) => planSar(sar, now)), ...concerns.flatMap((concern) => planConcern(concern, now))];
+function planDueNotifications({ sars = [], concerns = [], laptops = [], now = new Date() } = {}) {
+  return [
+    ...sars.flatMap((sar) => planSar(sar, now)),
+    ...concerns.flatMap((concern) => planConcern(concern, now)),
+    ...laptops.flatMap((laptop) => planLaptop(laptop, now)),
+  ];
 }
 
 const ALREADY_EXISTS = 6; // gRPC status code the Admin SDK reports for create() on an existing document
@@ -194,13 +249,15 @@ async function inChunks(items, size, fn) {
 // each notification that doesn't already exist (and only for accounts that are
 // still active).
 async function sendDueNotifications({ db, now = new Date() }) {
-  const [sarSnap, concernSnap] = await Promise.all([
+  const [sarSnap, concernSnap, laptopSnap] = await Promise.all([
     db.collection("governance_sars").where("status", "in", SAR_OPEN).get(),
     db.collection("governance_concerns").where("status", "in", CONCERN_OPEN).get(),
+    db.collection("it_laptops").where("status", "in", LAPTOP_LIVE).get(),
   ]);
   const plan = planDueNotifications({
     sars: sarSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
     concerns: concernSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
+    laptops: laptopSnap.docs.map((d) => ({ id: d.id, ...d.data() })),
     now,
   });
   const result = { considered: plan.length, created: 0, alreadySent: 0, skippedInactive: 0 };
@@ -232,6 +289,7 @@ async function sendDueNotifications({ db, now = new Date() }) {
 
 module.exports = {
   DUE_SOON_DAYS,
+  LAPTOP_SOON_DAYS,
   daysUntil,
   formatDate,
   dueKey,

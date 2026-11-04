@@ -7,6 +7,7 @@
 export const DUE_SOURCES = {
   governance: { collection: "governance_concerns", done: ["closed", "archived"] },
   sar: { collection: "governance_sars", done: ["completed", "archived"] },
+  laptop: { collection: "it_laptops", done: ["decommissioned"] },
 };
 
 const FINISHED = ["completed", "archived"];
@@ -61,6 +62,24 @@ export function sourcesToCheck(notes = []) {
   return [...seen.values()];
 }
 
+// A laptop reminder ("laptop-update-soon-<id>-<uid>-20261120", "laptop-return-overdue-...") is out of date when the laptop is gone,
+// or the update has been recorded or its date moved, or it has been returned or its return date moved, or someone else has it now.
+function staleLaptopReason(note, status, data, now) {
+  if (status === "gone" || status === "decommissioned") return "This laptop is no longer in use.";
+  const m = /^laptop-(update|return)-(soon|overdue)-.*-(\d{8})$/.exec(String(note.id || ""));
+  if (!m) return "";
+  const [, what, , key] = m;
+  if (note.kind === "due-soon" && key < londonDayKey(now)) return "The date has passed.";
+  if (!data) return "";
+  const onLoan = data.status === "on_loan" && data.loan;
+  const holder = String((onLoan ? data.loan.borrowerUid : data.currentUserUid) || "");
+  if (note.recipientUid && holder && holder !== note.recipientUid) return "This laptop is with someone else now.";
+  if (note.recipientUid && !holder) return "This laptop is no longer with you.";
+  if (what === "update") return String(data.nextUpdateDue || "").replace(/-/g, "") === key ? "" : "The update has been recorded or its date changed.";
+  if (!onLoan) return "The laptop has been returned.";
+  return String(data.loan.dueBackOn || "").replace(/-/g, "") === key ? "" : "The return date has been changed.";
+}
+
 // Why a notification is out of date, in words, or "" when it is still right.
 // state is what was found about the case: a status word ("closed" | "gone" | an open status), or { status, data } with the case's own fields; missing = could not be read.
 export function staleReason(note, state, now = new Date()) {
@@ -68,6 +87,7 @@ export function staleReason(note, state, now = new Date()) {
   const source = DUE_SOURCES[note.module];
   const status = typeof state === "string" ? state : state?.status;
   const data = typeof state === "object" && state ? state.data : null;
+  if (note.module === "laptop") return staleLaptopReason(note, status, data, now);
   if (status === "gone" || source.done.includes(status)) return source.collection === "governance_concerns" ? "The case has been closed." : "The request has been completed.";
   const deadline = deadlineOf(note);
   // "due soon" says the deadline is still ahead: once the day has passed it is untrue (the daily job writes a separate overdue notice if the case is still late)
