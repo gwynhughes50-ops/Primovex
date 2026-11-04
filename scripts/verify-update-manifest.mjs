@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { failureText, withRetries } from "../src/release/updateService.js";
-import { UPDATE_BASE_URL, UPDATE_PLATFORM, buildLatestJson, compareVersions, installerName } from "../src/release/updateManifest.js";
+import { failureText, installDesktopUpdate, withRetries } from "../src/release/updateService.js";
+import { UPDATE_BASE_URL, UPDATE_PLATFORM, buildLatestJson, compareVersions, installerName, oldInstallersToRemove } from "../src/release/updateManifest.js";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
@@ -75,6 +75,68 @@ t("everyone can check for updates in the desktop app, not only people who can op
   assert.match(read("src/release/ReleaseUpdateCard.jsx"), /if \(autoCheck\) check\(\)/);
   assert.match(read("src/release/ReleaseUpdateCard.jsx"), /autoCheck = false/, "the card in the Security Centre and on the phone still waits to be pressed");
 });
+
+t("only the newest three installers are kept, so an app holding an older release can still download it", () => {
+  const name = (v) => installerName(v);
+  const staged = [name("0.15.118"), name("0.15.119"), name("0.15.120"), name("0.15.121"), "latest.json", "notes.txt"];
+  assert.deepEqual(oldInstallersToRemove(staged, 3), [name("0.15.118")], "the oldest goes, and only installers are ever touched");
+  assert.deepEqual(oldInstallersToRemove([name("0.15.9"), name("0.15.10"), name("0.15.11"), name("0.15.12")], 3), [name("0.15.9")], "versions are compared as numbers, not as text");
+  assert.deepEqual(oldInstallersToRemove([name("0.15.120"), name("0.15.119")], 3), [], "nothing is removed while there are three or fewer");
+  assert.deepEqual(oldInstallersToRemove([name("0.15.119"), name("0.15.120")], 0), [name("0.15.119")], "the newest always stays");
+  const release = read("scripts/desktop-release.mjs");
+  assert.match(release, /oldInstallersToRemove\(fs\.readdirSync\(out\), KEEP_INSTALLERS\)/);
+  assert.ok(release.indexOf("fs.copyFileSync(exe") < release.indexOf("oldInstallersToRemove(fs.readdirSync(out)"), "the new installer is copied in before the old ones are counted");
+});
+
+// the app asks for the current release just before it downloads, because the one it holds may be hours old
+const fakeUpdate = (version, behaviour = async () => {}) => ({ version, downloadAndInstall: async (onEvent) => { onEvent({ event: "Started", data: { contentLength: 100 } }); await behaviour(); onEvent({ event: "Progress", data: { chunkLength: 100 } }); } });
+const quick = { refresh: null, relaunch: async () => {} };
+{
+  const run = async (name, fn) => { await fn(); n += 1; console.log(`ok  ${name}`); };
+  await run("the update that is downloaded is the current one, not the one found at the last check", async () => {
+    const calls = [];
+    const held = fakeUpdate("0.15.119", async () => { calls.push("held"); });
+    const current = fakeUpdate("0.15.120", async () => { calls.push("current"); });
+    await installDesktopUpdate(held, () => {}, { ...quick, refresh: async () => current });
+    assert.deepEqual(calls, ["current"]);
+  });
+  await run("when the question cannot be asked the held update is used; when nothing newer exists the person is told so", async () => {
+    const calls = [];
+    const held = fakeUpdate("0.15.120", async () => { calls.push("held"); });
+    await installDesktopUpdate(held, () => {}, { ...quick, refresh: async (u) => u });
+    assert.deepEqual(calls, ["held"]);
+    await assert.rejects(() => installDesktopUpdate(held, () => {}, { ...quick, refresh: async () => null }), /already up to date/);
+  });
+  await run("a signature failure is not repeated ten times; the current release is asked for once more and that one is tried", async () => {
+    let first = 0;
+    const bad = fakeUpdate("0.15.120", async () => { first += 1; throw new Error("signature verification failed"); });
+    const good = fakeUpdate("0.15.121");
+    let asked = 0;
+    let relaunched = false;
+    await installDesktopUpdate(bad, () => {}, { relaunch: async () => { relaunched = true; }, refresh: async () => { asked += 1; return asked === 1 ? bad : good; } });
+    assert.equal(first, 1, "tried once, not ten times");
+    assert.equal(asked, 2);
+    assert.ok(relaunched);
+  });
+  await run("a signature failure with nothing newer is reported, not hidden", async () => {
+    const bad = fakeUpdate("0.15.120", async () => { throw new Error("signature verification failed"); });
+    await assert.rejects(() => installDesktopUpdate(bad, () => {}, { ...quick, refresh: async () => bad }), /signature/);
+  });
+  await run("a dropped connection is still repeated; the app restarts only after a good download", async () => {
+    let tries = 0;
+    let relaunched = false;
+    const flaky = fakeUpdate("0.15.120", async () => { tries += 1; if (tries < 3) throw new Error("connection reset"); });
+    const realWait = globalThis.setTimeout;
+    globalThis.setTimeout = (fn) => realWait(fn, 0);
+    try { await installDesktopUpdate(flaky, () => {}, { relaunch: async () => { relaunched = true; }, refresh: async (u) => u }); } finally { globalThis.setTimeout = realWait; }
+    assert.equal(tries, 3);
+    assert.ok(relaunched);
+  });
+  await run("the banner and the update card both go through installDesktopUpdate, so both ask for the current release", async () => {
+    assert.match(read("src/components/system/DesktopUpdateBanner.jsx"), /installDesktopUpdate\(found\.update/);
+    assert.match(read("src/release/updateService.js"), /const current = await refresh\(update\);/);
+  });
+}
 
 // a connection that drops now and then must not stop an update being found or downloaded
 {

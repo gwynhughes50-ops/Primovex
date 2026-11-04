@@ -26,13 +26,14 @@ export async function getInstalledVersion() {
 // what went wrong, in words: the updater rejects with plain text as often as with an Error
 export const failureText = (error) => String(error?.message || (typeof error === "string" ? error : "") || "").replace(/\s+/g, " ").trim().slice(0, 160);
 
-export async function withRetries(task, { tries = 5, delayMs = 2000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
+export async function withRetries(task, { tries = 5, delayMs = 2000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), retryIf = () => true } = {}) {
   let failure;
   for (let attempt = 1; attempt <= tries; attempt += 1) {
     try {
       return await task(attempt);
     } catch (error) {
       failure = error;
+      if (!retryIf(error)) throw error; // not the kind of failure that trying again can fix
       if (attempt < tries) await wait(delayMs * attempt);
     }
   }
@@ -52,18 +53,42 @@ export async function checkForDesktopUpdate() {
   return { supported: true, available: true, update, version: update.version, date: update.date, notes: update.body || "A new Primovex release is available." };
 }
 
-export async function installDesktopUpdate(update, onProgress = () => {}) {
+// The update the banner holds was found at its last check, which may be hours ago. A newer release published since then replaces the installer that update points to, and the website
+// answers a missing address with its home page: the app downloads that, and the signature check refuses it. So just before downloading, ask again for the current release and
+// use that. If the question cannot be asked (no connection), the held update is used as it is. Returns null when there is nothing newer than the installed version.
+export async function freshestUpdate(held) {
+  try {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    return await withRetries(() => check({ timeout: 20000 }), { tries: 3, delayMs: 1000 });
+  } catch {
+    return held;
+  }
+}
+
+const signatureTrouble = (error) => /signature|verif/i.test(failureText(error));
+
+export async function installDesktopUpdate(update, onProgress = () => {}, { refresh = freshestUpdate, relaunch = async () => { const { relaunch: go } = await import("@tauri-apps/plugin-process"); await go(); } } = {}) {
   if (!update) throw new Error("No update is ready to install.");
-  // a dropped connection part-way starts the download again, up to ten times, before giving up
-  await withRetries(async () => {
+  const download = (target) => withRetries(async () => {
     let downloaded = 0;
     let total = 0;
-    await update.downloadAndInstall((event) => {
+    await target.downloadAndInstall((event) => {
       if (event.event === "Started") total = Number(event.data?.contentLength || 0);
       if (event.event === "Progress") downloaded += Number(event.data?.chunkLength || 0);
       onProgress({ phase: event.event, downloaded, total });
     });
-  }, { tries: 10, delayMs: 1000 });
-  const { relaunch } = await import("@tauri-apps/plugin-process");
+  // a dropped connection part-way starts the download again, up to ten times, before giving up; a signature failure is not a dropped connection, so it is not repeated
+  }, { tries: 10, delayMs: 1000, retryIf: (error) => !signatureTrouble(error) });
+  const current = await refresh(update);
+  if (!current) throw new Error("Primovex is already up to date.");
+  try {
+    await download(current);
+  } catch (error) {
+    // a release may have been published between asking and downloading: ask once more and try that one
+    if (!signatureTrouble(error)) throw error;
+    const newer = await refresh(current);
+    if (!newer || newer === current || newer.version === current.version) throw error;
+    await download(newer);
+  }
   await relaunch();
 }

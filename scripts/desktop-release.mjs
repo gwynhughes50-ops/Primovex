@@ -14,7 +14,9 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildLatestJson, installerName } from "../src/release/updateManifest.js";
+import { buildLatestJson, installerName, oldInstallersToRemove } from "../src/release/updateManifest.js";
+
+const KEEP_INSTALLERS = 3;
 
 const root = process.cwd();
 const args = process.argv.slice(2);
@@ -46,8 +48,9 @@ if (!fs.existsSync(exe) || !fs.existsSync(sig)) {
 
 const out = path.join(root, "release", "updates");
 fs.mkdirSync(out, { recursive: true });
-for (const old of fs.readdirSync(out)) if (old.endsWith(".exe")) fs.rmSync(path.join(out, old));
 fs.copyFileSync(exe, path.join(out, path.basename(exe)));
+// the last three installers stay, so an app holding an older release it found earlier can still download it (see oldInstallersToRemove)
+for (const old of oldInstallersToRemove(fs.readdirSync(out), KEEP_INSTALLERS)) fs.rmSync(path.join(out, old));
 const manifest = buildLatestJson({ version, notes: value("--notes"), signature: fs.readFileSync(sig, "utf8") });
 fs.writeFileSync(path.join(out, "latest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(`\nStaged ${path.basename(exe)} for the updater in release/updates/. Deploy hosting to publish it.`);

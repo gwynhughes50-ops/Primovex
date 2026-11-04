@@ -22,6 +22,17 @@ export function buildLatestJson({ version, notes = "", signature, now = new Date
   };
 }
 
+// Which old installers to delete when a new release is staged: all but the newest `keep` (never fewer than one). An installed app remembers the release it found at its last
+// check. If a newer release is published before the person presses Update now, the address it remembers must still hold that installer: the website answers a missing address
+// with its home page, the app downloads that, and the signature check refuses it ("signature verification failure"). Found on 4 November 2026 after two releases in an hour.
+export function oldInstallersToRemove(names = [], keep = 3) {
+  const found = names
+    .map((name) => ({ name, version: /^Primovex_(\d+\.\d+\.\d+)_x64-setup\.exe$/.exec(String(name))?.[1] }))
+    .filter((item) => item.version);
+  found.sort((a, b) => compareVersions(b.version, a.version));
+  return found.slice(Math.max(1, Number(keep) || 1)).map((item) => item.name);
+}
+
 // 1 when a is newer than b, -1 when older, 0 when the same (the three numbers only)
 export function compareVersions(a, b) {
   const parts = (v) => String(v).split(/[-+]/)[0].split(".").map((n) => Number(n) || 0);
