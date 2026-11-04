@@ -1984,6 +1984,67 @@ async function main() {
   await check("Admin CAN restore the User role", () => assertSucceeds(deleteDoc(doc(admin, "role_overrides", "User"))));
   await check("...and a User can see the kits again", () => assertSucceeds(getDoc(doc(user, "emergency_assets", "kit-1"))));
 
+  console.log("\n=== 30. Concern history, audit lines and notifications (governance_concern_timeline, users/{uid}/notifications) ===");
+  const HISTORY = "governance_concern_timeline";
+  const historyOf = (who, concernId) => getDocs(query(collection(who, HISTORY), where("concernId", "==", concernId)));
+  const line = (extra = {}) => ({ concernId: "concern-1", type: "note", title: "Note added", message: "hello", actorUid: "user-uid", actorName: "A Person", createdAt: serverTimestamp(), ...extra });
+  const auditLine = (extra = {}) => line({ type: "audit", title: "Case record changed", message: "Priority: Low -> High", changes: [{ label: "Priority", from: "Low", to: "High", hidden: false }], actorUid: "reception-uid", actorName: "Reception", ...extra });
+  await seed(async (db) => {
+    await setDoc(doc(db, HISTORY, "tl-seed"), line({ createdAt: new Date() }));
+    await setDoc(doc(db, HISTORY, "tl-audit-seed"), auditLine({ createdAt: new Date() }));
+    await setDoc(doc(db, "governance_concerns", "concern-other"), { reference: "CN-OTHER", ownerUid: "someone", involvedUserIds: [], summary: "x", status: "received" });
+    await setDoc(doc(db, HISTORY, "tl-other"), line({ concernId: "concern-other", createdAt: new Date() }));
+    await setDoc(doc(db, "users", "nurse-uid", "notifications", "n1"), { title: "Concern overdue: CN-1", status: "open", read: false, automated: true, module: "governance", sourceId: "concern-1", createdAt: new Date() });
+  });
+  await check("The concerns team (Reception) CAN add an audit line and a status line to a case's history", async () => {
+    await assertSucceeds(addDoc(collection(reception, HISTORY), auditLine()));
+    await assertSucceeds(addDoc(collection(reception, HISTORY), line({ type: "status", title: "Moved to Investigation", actorUid: "reception-uid" })));
+  });
+  await check("Someone merely involved in the case CAN add a note but CANNOT add an audit line or a stage change (no forged history)", async () => {
+    await assertSucceeds(addDoc(collection(user, HISTORY), line()));
+    await assertFails(addDoc(collection(user, HISTORY), auditLine({ actorUid: "user-uid" })));
+    await assertFails(addDoc(collection(user, HISTORY), line({ type: "status", title: "Moved to Closed" })));
+  });
+  await check("A partner, a read-only user and anonymous CANNOT add anything to a case's history", async () => {
+    for (const who of [partner, readonly, anon]) await assertFails(addDoc(collection(who, HISTORY), line()));
+  });
+  await check("A history line, and an audit line, can never be edited or removed: not by the concerns team, an administrator, the person involved or a partner", async () => {
+    for (const who of [reception, admin, user, partner]) {
+      await assertFails(updateDoc(doc(who, HISTORY, "tl-audit-seed"), { message: "tampered" }));
+      await assertFails(deleteDoc(doc(who, HISTORY, "tl-audit-seed")));
+      await assertFails(updateDoc(doc(who, HISTORY, "tl-seed"), { message: "tampered" }));
+      await assertFails(deleteDoc(doc(who, HISTORY, "tl-seed")));
+    }
+  });
+  await check("The concerns team, an administrator, a partner and someone involved CAN list a case's history", async () => {
+    for (const who of [reception, admin, partner, user]) await assertSucceeds(historyOf(who, "concern-1"));
+  });
+  await check("An uninvolved read-only user and anonymous CANNOT read or list a case's history", async () => {
+    await assertFails(historyOf(readonly, "concern-1"));
+    await assertFails(historyOf(anon, "concern-1"));
+    await assertFails(getDoc(doc(readonly, HISTORY, "tl-seed")));
+  });
+  await check("Someone involved in one case CANNOT read another case's history", async () => {
+    await assertFails(getDoc(doc(user, HISTORY, "tl-other")));
+    await assertFails(historyOf(user, "concern-other"));
+  });
+  await check("KNOWN GAP (SR-14): someone merely involved in a case CAN read its audit lines through the database; the screen shows the Audit trail to the concerns team only", async () => {
+    await assertSucceeds(getDoc(doc(user, HISTORY, "tl-audit-seed")));
+  });
+  await check("Notifications: a person CAN read, mark and clear their own", async () => {
+    await assertSucceeds(getDoc(doc(nurse, "users", "nurse-uid", "notifications", "n1")));
+    await assertSucceeds(updateDoc(doc(nurse, "users", "nurse-uid", "notifications", "n1"), { status: "completed", read: true }));
+  });
+  await check("Notifications: nobody else can read or change someone's, not an administrator or the Practice Manager", async () => {
+    for (const who of [admin, pm, reception, partner, anon]) {
+      await assertFails(getDoc(doc(who, "users", "nurse-uid", "notifications", "n1")));
+      await assertFails(updateDoc(doc(who, "users", "nurse-uid", "notifications", "n1"), { status: "completed" }));
+    }
+  });
+  await check("Notifications: nobody can create one from the app, so a reminder cannot be forged", async () => {
+    for (const who of [nurse, admin, pm]) await assertFails(setDoc(doc(who, "users", "nurse-uid", "notifications", "n-forged"), { title: "Concern overdue", status: "open", automated: true }));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);

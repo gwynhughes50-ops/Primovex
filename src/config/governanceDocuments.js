@@ -31,9 +31,9 @@ export const GOVERNANCE_DOCUMENTS = [
     // this is an internal, AI-assisted review, not an independent or accredited test.
     requirementId: null,
     title: "Security Review and Penetration Test Report",
-    description: "Access-control audit, the 13 findings from the 18 September 2026 security review and how each was fixed, the 63-check attack test of the real database rules in a local test copy (all passing), and the residual risks. An internal, AI-assisted review, not an independent or accredited penetration test. Supports the DPIA.",
+    description: "Access-control audit, the 13 findings from the 18 September 2026 security review and how each was fixed, the 441-check attack test of the real database rules in a local test copy (all passing, re-run 4 November 2026), the changes since September with four new findings (SR-14 to SR-17), and the residual risks. An internal, AI-assisted review, not an independent or accredited penetration test. Supports the DPIA.",
     status: "draft",
-    addedAt: "2026-09-21",
+    addedAt: "2026-11-04",
     viewPath: "/governance/security-review-and-penetration-test.html",
     downloadPath: "/governance/security-review-and-penetration-test.docx",
   },
