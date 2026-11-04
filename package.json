@@ -107,6 +107,7 @@
     "test:concern-audit": "esbuild scripts/verify-concern-audit.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-concern-audit.bundle.mjs && node work/verify-concern-audit.bundle.mjs",
     "test:pin-enter": "node scripts/verify-pin-enter.mjs",
     "test:laptops": "node scripts/verify-laptops.mjs",
+    "test:sar-requested-by": "esbuild scripts/verify-sar-requested-by.mjs --bundle --platform=node --format=esm --external:firebase/* --alias:@/lib/firebase=./scripts/stubs/sarStubs.js --alias:@/core/identity/auditService=./scripts/stubs/sarStubs.js --alias:@=./src --outfile=work/verify-sar-requested-by.bundle.mjs && node work/verify-sar-requested-by.bundle.mjs",
     "test:laptop-labels": "esbuild scripts/verify-laptop-labels.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-laptop-labels.bundle.mjs && node work/verify-laptop-labels.bundle.mjs",
     "test:firestore-indexes": "node scripts/verify-firestore-indexes.mjs",
     "test:governance-docx": "esbuild scripts/verify-governance-docx.mjs --bundle --platform=node --format=esm --outfile=work/verify-governance-docx.bundle.mjs && node work/verify-governance-docx.bundle.mjs",

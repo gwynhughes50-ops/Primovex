@@ -41,6 +41,8 @@ const LABEL = 'block space-y-1 text-xs font-bold uppercase tracking-wide text-[v
 const friendly = (value) => String(value || '').replaceAll('_', ' ').replace(/\b\w/g, (m) => m.toUpperCase());
 const actorFromUser = (user, displayName) => ({ uid: user?.uid || null, displayName: displayName || user?.email || 'Unknown', email: user?.email || null });
 const dateLabel = (value) => { const d = toDate(value); return d ? d.toLocaleDateString('en-GB') : '—'; };
+// getRequestedByDisplay gives { label, tag, isCompany }, not text: showing the object itself made React throw and the whole page go white. This is the words, e.g. "Acme Solicitors (company)".
+export const requestedByText = (sar) => { const r = getRequestedByDisplay(sar); return r.tag ? `${r.label} (${r.tag.toLowerCase()})` : r.label; };
 const isOpen = (sar) => ![SAR_STATUSES.completed, SAR_STATUSES.archived].includes(sar.status);
 
 function metricsOf(rows) {
@@ -231,7 +233,7 @@ function SarDetailSheet({ sar, actor, isTeam, onClose, onEdit }) {
         <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
           <div><dt className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Received</dt><dd>{dateLabel(sar.receivedDate)}</dd></div>
           <div><dt className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Due</dt><dd>{dateLabel(sar.dueDate)}</dd></div>
-          <div><dt className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Requested by</dt><dd>{getRequestedByDisplay(sar)}</dd></div>
+          <div><dt className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Requested by</dt><dd>{requestedByText(sar)}</dd></div>
           <div><dt className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Assigned to</dt><dd>{sar.assignedToName || 'Unassigned'}</dd></div>
         </dl>
         <div className="mt-3 space-y-2 text-sm">
@@ -330,7 +332,7 @@ export default function MobileGovernanceSARs() {
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
     return rows.filter((r) => {
-      if (term && ![r.reference, r.emisNumber, r.patientInitials, r.assignedToName, getRequestedByDisplay(r)].some((v) => String(v || '').toLowerCase().includes(term))) return false;
+      if (term && ![r.reference, r.emisNumber, r.patientInitials, r.assignedToName, requestedByText(r)].some((v) => String(v || '').toLowerCase().includes(term))) return false;
       if (filter === 'all') return true;
       if (filter === 'completed') return !isOpen(r);
       if (!isOpen(r)) return false;
@@ -396,7 +398,7 @@ export default function MobileGovernanceSARs() {
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <p className="font-bold">{sar.reference}</p>
-                  <p className="mt-0.5 text-xs text-[var(--medtrak-muted)]">{identityLabel(sar)} · {getRequestedByDisplay(sar)}</p>
+                  <p className="mt-0.5 text-xs text-[var(--medtrak-muted)]">{identityLabel(sar)} · {requestedByText(sar)}</p>
                 </div>
                 {urgent && <span className="shrink-0 rounded-full bg-rose-600 px-2.5 py-1 text-[11px] font-black uppercase tracking-wide text-white">Urgent</span>}
               </div>
