@@ -697,6 +697,32 @@ match /subject_access_requests/{requestId} {
       allow update, delete: if isAdmin();
     }
 
+    // -------------------------
+    // IT EQUIPMENT: the laptop register, and the log of lending them out
+    // -------------------------
+    // Whoever has itAssets.manage (the IT team) sees every laptop and records loans, returns and updates. Someone with itAssets.read sees every laptop. Anyone else can read only
+    // the laptop assigned to them or lent to them (the "My laptop" page), and cannot change it. A BitLocker recovery key is never stored: there is no field for one.
+    function itAssetsReader() { return isAdmin() || hasPermission("itAssets", "read") || hasPermission("itAssets", "manage"); }
+    function itAssetsManager() { return isAdmin() || hasPermission("itAssets", "manage"); }
+
+    match /it_laptops/{laptopId} {
+      allow get, list: if signedIn() && (itAssetsReader()
+        || resource.data.currentUserUid == request.auth.uid
+        || resource.data.borrowerUid == request.auth.uid);
+      allow create: if signedIn() && itAssetsManager();
+      // a laptop that is already on loan cannot be lent again to someone else: it has to be returned first
+      allow update: if signedIn() && itAssetsManager()
+        && !(resource.data.status == "on_loan" && request.resource.data.status == "on_loan" && request.resource.data.loan != resource.data.loan);
+      allow delete: if isAdmin();
+    }
+
+    // One line for everything that happens to a laptop: never edited or removed, and only ever recorded as yourself.
+    match /it_laptop_events/{eventId} {
+      allow get, list: if signedIn() && itAssetsReader();
+      allow create: if signedIn() && itAssetsManager() && request.resource.data.byUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
 
 
     // -------------------------
@@ -717,7 +743,7 @@ match /subject_access_requests/{requestId} {
       return
         role == "System Admin" ? ["*"] :
         role == "Practice Manager" ? ["governance.reportEvents", 
-          "stocktake.count", "stocktake.manage", "training.manage", "waste.read", "waste.manage", "timesheets.manage",
+          "stocktake.count", "stocktake.manage", "training.manage", "waste.read", "waste.manage", "timesheets.manage", "itAssets.manage",
           "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
           "dashboard.read", "operations.read", "operations.manage",
           "inventory.read", "inventory.kits", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",

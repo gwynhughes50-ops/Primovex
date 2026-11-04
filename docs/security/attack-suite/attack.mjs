@@ -2045,6 +2045,84 @@ async function main() {
     for (const who of [nurse, admin, pm]) await assertFails(setDoc(doc(who, "users", "nurse-uid", "notifications", "n-forged"), { title: "Concern overdue", status: "open", automated: true }));
   });
 
+  console.log("\n=== 31. IT equipment: the laptop register and its log (it_laptops, it_laptop_events) ===");
+  const itTeam = testEnv.authenticatedContext("itteam-uid").firestore(); // a custom "IT Team" role with itAssets.manage
+  const itView = testEnv.authenticatedContext("itview-uid").firestore(); // a custom "IT Viewer" role with itAssets.read only
+  const holder = testEnv.authenticatedContext("holder-uid").firestore(); // has a laptop assigned
+  const borrower = testEnv.authenticatedContext("borrower-uid").firestore(); // has a laptop on loan
+  const LAPTOPS = "it_laptops";
+  const laptop = (extra = {}) => ({ assetCode: "W91003MLAP10020", status: "spare", active: true, currentUserUid: "", currentUserName: "", borrowerUid: "", condition: "good", win11: "yes", office365: true, loan: null, lastUpdatedOn: "2026-05-01", nextUpdateDue: "2026-11-20", ...extra });
+  const loanOf = (uid, extra = {}) => ({ borrowerUid: uid, borrowerName: "B", borrowedOn: "2026-11-01", dueBackOn: "2026-11-15", conditionOut: "good", recordedByUid: "itteam-uid", recordedByName: "IT", ...extra });
+  const eventOf = (uid, extra = {}) => ({ laptopId: "l-spare", assetCode: "W91003MLAP10020", type: "loan_out", text: "loaned", onDay: "2026-11-01", byUid: uid, byName: "x", detail: {}, createdAt: serverTimestamp(), ...extra });
+  await seed(async (db) => {
+    await setDoc(doc(db, "roles", "IT Team"), { name: "IT Team", capabilities: ["itAssets.manage", "dashboard.read"], builtIn: false });
+    await setDoc(doc(db, "roles", "IT Viewer"), { name: "IT Viewer", capabilities: ["itAssets.read", "dashboard.read"], builtIn: false });
+    await setDoc(doc(db, "users", "itteam-uid"), { role: "IT Team", displayName: "IT" });
+    await setDoc(doc(db, "users", "itview-uid"), { role: "IT Viewer", displayName: "Viewer" });
+    await setDoc(doc(db, "users", "holder-uid"), { role: "User", displayName: "Holder" });
+    await setDoc(doc(db, "users", "borrower-uid"), { role: "User", displayName: "Borrower" });
+    await setDoc(doc(db, LAPTOPS, "l-spare"), laptop());
+    await setDoc(doc(db, LAPTOPS, "l-held"), laptop({ assetCode: "W91003MLAP10021", status: "in_use", currentUserUid: "holder-uid", currentUserName: "Holder" }));
+    await setDoc(doc(db, LAPTOPS, "l-loan"), laptop({ assetCode: "W91003MLAP10022", status: "on_loan", borrowerUid: "borrower-uid", loan: loanOf("borrower-uid") }));
+    await setDoc(doc(db, "it_laptop_events", "ev-seed"), eventOf("itteam-uid", { createdAt: new Date() }));
+  });
+  await check("The IT team (itAssets.manage), the Practice Manager and an administrator CAN list the laptops, add one, and change one", async () => {
+    for (const who of [itTeam, pm, admin]) await assertSucceeds(getDocs(collection(who, LAPTOPS)));
+    await assertSucceeds(setDoc(doc(itTeam, LAPTOPS, "l-new-1"), laptop({ assetCode: "NEW1" })));
+    await assertSucceeds(setDoc(doc(pm, LAPTOPS, "l-new-2"), laptop({ assetCode: "NEW2" })));
+    await assertSucceeds(updateDoc(doc(itTeam, LAPTOPS, "l-spare"), { condition: "very_good", nextUpdateDue: "2027-05-01" }));
+  });
+  await check("Someone with itAssets.read CAN see every laptop but CANNOT add, change or remove one", async () => {
+    await assertSucceeds(getDocs(collection(itView, LAPTOPS)));
+    await assertFails(setDoc(doc(itView, LAPTOPS, "l-x"), laptop({ assetCode: "X" })));
+    await assertFails(updateDoc(doc(itView, LAPTOPS, "l-spare"), { condition: "faulty" }));
+    await assertFails(deleteDoc(doc(itView, LAPTOPS, "l-spare")));
+  });
+  await check("Someone with no IT permission CANNOT list the register, or read a laptop that is not theirs", async () => {
+    for (const who of [reception, readonly, partner, caretaker, nurse, anon]) {
+      await assertFails(getDocs(collection(who, LAPTOPS)));
+      await assertFails(getDoc(doc(who, LAPTOPS, "l-spare")));
+    }
+  });
+  await check("The person a laptop is assigned to CAN read it and CAN find it by their own id, but CANNOT change it or read anyone else's", async () => {
+    await assertSucceeds(getDoc(doc(holder, LAPTOPS, "l-held")));
+    await assertSucceeds(getDocs(query(collection(holder, LAPTOPS), where("currentUserUid", "==", "holder-uid"))));
+    await assertFails(updateDoc(doc(holder, LAPTOPS, "l-held"), { condition: "faulty" }));
+    await assertFails(updateDoc(doc(holder, LAPTOPS, "l-held"), { currentUserUid: "someone-else" }));
+    await assertFails(getDoc(doc(holder, LAPTOPS, "l-spare")));
+    await assertFails(getDoc(doc(holder, LAPTOPS, "l-loan")));
+    await assertFails(getDocs(collection(holder, LAPTOPS)));
+  });
+  await check("The person a laptop is lent to CAN read it and CAN find it by their own id, but CANNOT change it, return it for themselves, or read anyone else's", async () => {
+    await assertSucceeds(getDoc(doc(borrower, LAPTOPS, "l-loan")));
+    await assertSucceeds(getDocs(query(collection(borrower, LAPTOPS), where("borrowerUid", "==", "borrower-uid"))));
+    await assertFails(updateDoc(doc(borrower, LAPTOPS, "l-loan"), { loan: null, status: "spare", borrowerUid: "" }));
+    await assertFails(getDoc(doc(borrower, LAPTOPS, "l-held")));
+  });
+  await check("A laptop that is already on loan CANNOT be lent to someone else until it is returned; returning it, then lending it, works", async () => {
+    await assertFails(updateDoc(doc(itTeam, LAPTOPS, "l-loan"), { status: "on_loan", borrowerUid: "holder-uid", loan: loanOf("holder-uid") }));
+    await assertSucceeds(updateDoc(doc(itTeam, LAPTOPS, "l-loan"), { status: "spare", borrowerUid: "", loan: null }));
+    await assertSucceeds(updateDoc(doc(itTeam, LAPTOPS, "l-loan"), { status: "on_loan", borrowerUid: "holder-uid", loan: loanOf("holder-uid") }));
+  });
+  await check("Only an administrator CAN delete a laptop record: not the IT team", async () => {
+    await assertFails(deleteDoc(doc(itTeam, LAPTOPS, "l-new-1")));
+    await assertSucceeds(deleteDoc(doc(admin, LAPTOPS, "l-new-1")));
+  });
+  await check("The IT team CAN add lines to the log as themselves, and CAN read it; nobody can edit or remove a line, not even an administrator", async () => {
+    await assertSucceeds(addDoc(collection(itTeam, "it_laptop_events"), eventOf("itteam-uid")));
+    await assertSucceeds(getDocs(collection(itTeam, "it_laptop_events")));
+    await assertSucceeds(getDocs(collection(itView, "it_laptop_events")));
+    for (const who of [itTeam, admin, pm]) {
+      await assertFails(updateDoc(doc(who, "it_laptop_events", "ev-seed"), { text: "tampered" }));
+      await assertFails(deleteDoc(doc(who, "it_laptop_events", "ev-seed")));
+    }
+  });
+  await check("A line in the log CANNOT be written as someone else, by someone without the permission, or read by someone without it", async () => {
+    await assertFails(addDoc(collection(itTeam, "it_laptop_events"), eventOf("admin-uid")));
+    for (const who of [itView, holder, borrower, reception, readonly, partner, anon]) await assertFails(addDoc(collection(who, "it_laptop_events"), eventOf("x")));
+    for (const who of [holder, borrower, reception, readonly, partner, anon]) await assertFails(getDocs(collection(who, "it_laptop_events")));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);

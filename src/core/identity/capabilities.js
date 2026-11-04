@@ -71,6 +71,10 @@ export const CAPABILITIES = {
     manage: "timesheets.manage",
     payroll: "timesheets.payroll",
   },
+  itAssets: {
+    read: "itAssets.read",
+    manage: "itAssets.manage",
+  },
   waste: {
     read: "waste.read",
     manage: "waste.manage",
@@ -203,6 +207,8 @@ export const CAPABILITY_CATALOG = [
   { id: "training.manage", label: "Staff training: see and update everyone's training record", group: "Staff" },
   { id: "training.manageClinical", label: "Staff training: see and update the clinical team's training record", group: "Staff" },
   { id: "timesheets.manage", label: "Timesheets: set up everyone's working pattern and hours, and see and update their timesheets", group: "Staff" },
+  { id: "itAssets.read", label: "IT equipment: see the laptop register and who has each laptop", group: "IT" },
+  { id: "itAssets.manage", label: "IT equipment: add laptops, loan them out, record returns and updates, and print their QR labels", group: "IT" },
   { id: "timesheets.payroll", label: "Timesheets: the payroll team. See signed-off timesheets and send them to payroll, or return one with a reason", group: "Staff" },
   { id: "waste.read", label: "Clinical waste: see the consignment notes and collection records", group: "Compliance" },
   { id: "waste.manage", label: "Clinical waste: add consignment notes (drop in the Stericycle PDF) and correct them", group: "Compliance" },
@@ -243,6 +249,7 @@ export const ROLE_TEMPLATES = {
     "waste.read",
     "waste.manage",
     "timesheets.manage",
+    "itAssets.manage",
     "clinflow.read",
     "clinflow.capture",
     "clinflow.workflow",
