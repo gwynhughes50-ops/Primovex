@@ -85,6 +85,10 @@
       <h3>Why this matters now</h3>
       <p>Primovex has always let staff log that a concern was shared with, say, MDDUS or the police — but until this review, nothing had checked whether that sharing sits under an agreed protocol. That's exactly the gap WASPI exists to close. None of these flows are new because of Primovex; Primovex just makes them visible and auditable for the first time.</p>
     </div>
+    <div class="callout">
+      <h3>Updated 4 November 2026</h3>
+      <p>This map was first written on 18 September 2026 for the Concerns module only. It now also records what has been added since: how ClinFlow handles clinical letters, the Microsoft services behind it, the shared folder, and the Google Cloud services the whole system runs on. Three things to note. (1) What is said above about never sharing a patient's name is true of Concerns and SARs. It would <b>not</b> be true of ClinFlow if real letters were ever allowed, because a hospital letter names the patient. ClinFlow is used with invented test letters only, and that does not change until the DPIA is signed. (2) The statement below that technical third parties receive no patient data was true when written and is corrected: the Microsoft services used by ClinFlow would receive patient letters. (3) Everything marked &quot;to confirm&quot; still needs the practice's own WASPI, contract and data-processing records, which this review cannot see.</p>
+    </div>
   </div>
 
   <section>
@@ -146,14 +150,61 @@
       <div class="row"><h3>Ombudsman</h3><span class="status none">No current data (defined, not yet used)</span></div>
       <p>Public Services Ombudsman for Wales. Available as a Source category in Primovex but no case has been recorded against it in the data reviewed.</p>
     </div>
-  </section>
+  
+    <div class="org-card">
+      <div class="row"><h3>Concerns: dealings with outside parties (added October 2026)</h3><span class="status unknown">Protocol status: to confirm</span></div>
+      <p>Primovex now records each step with an outside party on a concern, so the case shows where it is up to. The parties are the practice's indemnity insurer, GMPI, the Health Board and the solicitor, and anyone else the team types in by name (for example an expert, a regulator or another practice). For each step Primovex records the date, what happened (sent to them, they want changes, they need more information, they accepted it, GMPI instructed a solicitor), what kind of thing was sent (the draft final response, a reply to what they asked for, records or documents, or something else) and a short note. The documents themselves are sent outside Primovex, by post or email, as before. A step recorded by mistake is never deleted: it is struck through with the reason. These parties are the same bodies listed above, so the same protocol questions apply.</p>
+      <div class="meta"><span><b>Data shared:</b> none by Primovex; Primovex holds the record that something was sent, when, to whom, and a short note</span><span><b>Direction:</b> practice &rarr; party, and replies back</span><span><b>Printed:</b> this record appears on the printed case summary for anyone who prints it</span></div>
+    </div>
+
+    <div class="org-card">
+      <div class="row"><h3>Hospitals and other organisations that send letters to the practice (ClinFlow)</h3><span class="status none">Not a sharing-out flow</span></div>
+      <p>ClinFlow helps the coding team deal with incoming clinical letters from hospitals, clinics and other services. These arrive as scans and are filed in Docman as they always have been. ClinFlow reads them and suggests a summary and codes; it sends nothing back to the organisation that wrote the letter, and it does not write to EMIS or Docman. The only recipients of the letter's content are the Microsoft services listed under technical third parties below. Used with invented test letters only at present.</p>
+      <div class="meta"><span><b>Data shared with the sender:</b> none</span><span><b>Direction:</b> organisation &rarr; practice (incoming only)</span><span><b>Protocol:</b> receiving letters is part of normal care and needs no protocol of its own; the processing is covered in the DPIA (Step 2F)</span></div>
+    </div>
+</section>
 
   <section>
     <div class="sec-head">
       <h2>Technical third parties</h2>
-      <p class="sec-note">Distinct from the bodies above: these receive data automatically as a side effect of a feature working, not because a member of staff chose to share a case. Not a WASPI matter in themselves (no patient data is involved), but they belong on the record for the DPIA's third-party section.</p>
+      <p class="sec-note">Distinct from the bodies above: these receive data automatically as a side effect of a feature working, not because a member of staff chose to share a case. Most receive no patient data and are not a WASPI matter in themselves. The exception is ClinFlow, whose Microsoft services would receive patient letters if real letters were ever allowed; that is not permitted until the DPIA is signed. Processors such as Microsoft and Google need a contract and a data processing agreement rather than a WASPI protocol. All of them belong on the record for the DPIA's third-party section.</p>
     </div>
 
+    <div class="org-card">
+      <div class="row"><h3>Microsoft Azure OpenAI (the Orb, and ClinFlow)</h3><span class="status unknown">Agreement and region: to confirm</span></div>
+      <p>Used in two places. For the Orb's optional AI language assistant, Primovex sends a typed question with numbers, dates, email addresses and phone numbers removed, and for the wording feature the facts of an answer (item, room, fridge names, counts). For ClinFlow, the text of a clinical letter goes here after it has been read, and a structured summary comes back. The calls are made from Primovex's server in London, never from the app, and the key is never in the app. The resource is stated to be in UK South (7 October 2026). The AI makes suggestions or rewords text; it decides nothing.</p>
+      <div class="meta"><span><b>Data shared:</b> Orb: scrubbed questions and answer facts. ClinFlow: letter text, <b>invented test letters only today</b>; a real letter would hold a patient's name, date of birth, NHS number and clinical detail</span><span><b>Never shared:</b> any stock, staff, patient or governance data through the Orb; no case or SAR data</span><span><b>To confirm:</b> Microsoft's data processing terms, retention of prompts for abuse monitoring, no training on the data, and the region (DPIA Appendix C items 5 and 14)</span></div>
+    </div>
+
+    <div class="org-card">
+      <div class="row"><h3>Microsoft Azure Document Intelligence (ClinFlow)</h3><span class="status unknown">Agreement and region: to confirm</span></div>
+      <p>Reads the text out of a scanned clinical letter. ClinFlow sends the letter (a PDF of up to 4 MB) from a Primovex server in London; the text comes back. The server keeps only a record that a reading took place (file name, a fingerprint of the file, size, page and word counts), never the letter or its text.</p>
+      <div class="meta"><span><b>Data shared:</b> the letter PDF; <b>invented test letters only today</b></span><span><b>Region:</b> not yet confirmed (the OpenAI resource above is stated as UK South)</span><span><b>To confirm:</b> data processing terms, retention of what is sent, region (DPIA Appendix C item 14)</span></div>
+    </div>
+
+    <div class="org-card">
+      <div class="row"><h3>Microsoft OneDrive (the ClinFlow shared folder, in testing)</h3><span class="status unknown">Tenant and sharing: to confirm</span></div>
+      <p>To let two computers see the same letters, ClinFlow can keep them in a shared folder. For testing this is a folder in a Microsoft OneDrive that the two computers sync (the work PC shows &quot;OneDrive - NHS Wales&quot;; which account and tenant it is has not been confirmed). The intended home is a practice network folder visible only to named people (stated by the Practice Manager in late October 2026). Each letter is three files: its reading and decisions, the scan, and later a short note with no patient details. A finished letter's files are deleted, but OneDrive keeps deleted files in its recycle bin for a period.</p>
+      <div class="meta"><span><b>Data shared:</b> the letter's reading, decisions and notes, and the scan; <b>invented test letters only today</b>; reference lists (no personal data)</span><span><b>Who can see it:</b> whoever the folder is shared with, which Primovex cannot check</span><span><b>To confirm:</b> tenant, who it is shared with, recycle-bin retention (DPIA Appendix C items 15 and 16)</span></div>
+    </div>
+
+    <div class="org-card">
+      <div class="row"><h3>Google Cloud / Firebase (the platform Primovex runs on)</h3><span class="status unknown">Data processing addendum: to confirm it is on file</span></div>
+      <p>Primovex's database, sign-in, file storage, server code, website hosting and phone alerts are Google Firebase services. The database and file storage are in the EU (eur3) and the server code runs in London (europe-west2). On an iPhone, a spoken question is turned into words by Google Cloud Speech-to-Text through its EU endpoint: the recording (up to 20 seconds) is held in memory for that one request and is not stored. Alerts on a phone's lock screen are carried by Firebase Cloud Messaging and Apple's or Google's push service; a lock screen shows only a short line and, for governance matters, only &quot;You have a new notification&quot;. This is the platform every flow in this map runs on and was not listed here before.</p>
+      <div class="meta"><span><b>Data shared:</b> everything Primovex stores: staff accounts, concern, SAR and event records, stock, timesheets, and so on, as described in the DPIA</span><span><b>Hosting:</b> EU for data; UK for server code</span><span><b>To confirm:</b> the data processing addendum is on file; the UK-only question (DPIA Appendix C items 8 and 5)</span></div>
+    </div>
+
+    <div class="org-card">
+      <div class="row"><h3>Firebase App Distribution (Android test builds)</h3><span class="status none">Low: tester addresses only</span></div>
+      <p>New Android builds are sent to named testers through Firebase App Distribution, by email link. The only personal data involved is the testers' email addresses (two at present). No case, patient or staff records are in a build.</p>
+      <div class="meta"><span><b>Data shared:</b> two tester email addresses</span><span><b>Never shared:</b> any patient, staff, case or SAR data</span></div>
+    </div>
+
+    <div class="org-card">
+      <div class="row"><h3>Docman and EMIS (the practice's own systems)</h3><span class="status none">No data flows from Primovex</span></div>
+      <p>Primovex has no connection to Docman or EMIS. ClinFlow saves a one-page summary PDF (and the original letter) into two folders on the practice's own network, and the practice's usual Docman process takes it from there. Nothing is sent to EMIS. If a supplier ever asks the practice to create a user account on EMIS so that software can sign in as a person, that is a new data flow and needs the DPO's and Caldicott Guardian's agreement first (DPIA Appendix C item 21). A future ClinFlow link to EMIS should go through EMIS's approved partner route and would need this map and the DPIA to be updated.</p>
+      <div class="meta"><span><b>Data shared:</b> none</span><span><b>Direction:</b> none</span></div>
+    </div>
     <div class="org-card">
       <div class="row"><h3>QR code image service (api.qrserver.com)</h3><span class="status none">Resolved &mdash; no longer used</span></div>
       <p>Until 18 September 2026, printing or viewing a QR label for compliance assets and clinical kit (fire points, water outlets, fridges, anaphylaxis boxes, emergency drug kits) loaded the QR image from this public third-party API, sending the code's content in the request URL. Primovex now generates QR codes on the device, so labels make no external request at all, and the desktop app's Content-Security-Policy no longer permits the service. Kept here as a record of the earlier flow.</p>
@@ -164,10 +215,11 @@
   <section>
     <div class="sec-head"><h2>Recommended next step</h2></div>
     <p style="font-size:13.5px;line-height:1.7;">For each body above marked "to confirm," ask your IG/WASPI contact (likely via BCUHB) whether an existing Information Sharing Protocol already covers "GP practice governance correspondence with [body]," or whether this specific flow needs its own ISP or Data Disclosure Agreement. Several of these (BCUHB itself, the health-board-mediated bodies) are likely already covered by standing NHS Wales arrangements; the ones most likely to need a fresh look are the less routine ones — coroner, police, and solicitor correspondence — since those tend to be handled case-by-case rather than under a standing agreement. The QR image service above is resolved and needs no protocol — just a line in the DPIA noting the earlier flow and its removal.</p>
+    <p style="font-size:13.5px;line-height:1.7;">Added 4 November 2026. For the Microsoft and Google services above, ask for the data processing agreement and the region of each resource to be put on file, which is a contract matter, not a WASPI one. For the shared folder, record which Microsoft account holds it and who it is shared with. Do not use real patient letters in ClinFlow until the DPIA decisions are made (DPIA Appendix C item 14), because that is the point at which the Microsoft services would start to receive patient data.</p>
   </section>
 
   <footer>
-    Compiled from Primovex's Concerns "Source" category list and correspondence-log data model, 18 September 2026; technical third-party section added following the same-day security review. Protocol status for every body above is marked "to confirm" because verifying it requires access to the practice's actual WASPI/ISP records, which this technical review has no visibility into.
+    Compiled from Primovex's Concerns "Source" category list and correspondence-log data model, 18 September 2026; technical third-party section added following the same-day security review. Protocol status for every body above is marked "to confirm" because verifying it requires access to the practice's actual WASPI/ISP records, which this technical review has no visibility into. Updated 4 November 2026 to add the dealings with outside parties on a concern, ClinFlow and its Microsoft services, the shared folder, and the Google Cloud and Firebase services; the QR image service entry is unchanged.
   </footer>
 </div>
 </body>
