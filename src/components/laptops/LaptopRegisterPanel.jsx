@@ -8,7 +8,7 @@ import { STATUS, dayKey, holderText, isLive, isOnLoan, loanState, parseLaptopLin
 import { addLaptops, subscribeLaptops } from "@/modules/laptops/laptopService";
 import LaptopActions, { Chips } from "./LaptopActions";
 import LaptopImportPanel from "./LaptopImportPanel";
-import { buildLabelsHtml } from "./laptopLabels";
+import { PER_SHEET, buildLabelsHtml } from "./laptopLabels";
 
 // The laptop register: every laptop, who has it, whether it is on loan or due an update, and the IT team's actions on each. For the desktop and the phone. People who may only read the register
 // see it without the actions; the IT team (itAssets.manage) can add laptops, paste a list, print QR labels and record loans, returns and updates.
@@ -65,10 +65,11 @@ export default function LaptopRegisterPanel({ scan = false, initialId = "" }) {
       setAdd({ assetCode: "", status: "spare", holder: null }); setPanel(""); setMessage("Laptop added.");
     } catch (e) { setAddProblem(e?.message || "That could not be saved."); }
   }
-  async function printLabels() {
+  async function printLabels(guides = false) {
     const list = shown.filter(isLive);
     if (!list.length) { setMessage("There are no laptops to print labels for."); return; }
-    await printHtmlDocument(buildLabelsHtml(list));
+    // the trial print is one sheet on plain paper, with each sticker outlined
+    await printHtmlDocument(buildLabelsHtml(guides ? list.slice(0, PER_SHEET) : list, { guides }));
   }
 
   return (
@@ -85,7 +86,8 @@ export default function LaptopRegisterPanel({ scan = false, initialId = "" }) {
         <div className="flex flex-wrap gap-2">
           <button type="button" className="min-h-10 rounded-xl border border-[var(--medtrak-border)] px-3 text-sm font-semibold" onClick={() => setPanel(panel === "add" ? "" : "add")}>Add a laptop</button>
           <button type="button" className="min-h-10 rounded-xl border border-[var(--medtrak-border)] px-3 text-sm font-semibold" onClick={() => setPanel(panel === "import" ? "" : "import")}>Add from a list</button>
-          <button type="button" className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[var(--medtrak-border)] px-3 text-sm font-semibold" onClick={printLabels}><Printer className="h-4 w-4" aria-hidden="true" /> Print QR labels ({shown.filter(isLive).length})</button>
+          <button type="button" className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[var(--medtrak-border)] px-3 text-sm font-semibold" onClick={() => printLabels(false)}><Printer className="h-4 w-4" aria-hidden="true" /> Print QR labels ({shown.filter(isLive).length})</button>
+          <button type="button" className="min-h-10 rounded-xl border border-[var(--medtrak-border)] px-3 text-sm font-semibold" onClick={() => printLabels(true)} title="One sheet with each sticker outlined, to print on plain paper and hold against your stickers">Trial sheet (outlined)</button>
         </div>
       )}
       {canManage && panel === "add" && (
