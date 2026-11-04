@@ -9,7 +9,7 @@ export const GOVERNANCE_DOCUMENTS = [
     id: "dpia-draft",
     requirementId: "dpia",
     title: "Data Protection Impact Assessment",
-    description: "Draft DPIA, version 0.3 (4 November 2026), ICO 7-step structure. Covers Concerns, SARs, Inventory and Temperature, staff accounts and the organisation chart, sign-in and activity records (staff monitoring), the Orb AI language assistant (Azure OpenAI) and staff messages, and now ClinFlow (reading clinical letters with Azure AI services, sharing letters through a shared folder, scanning, Docman folders), the concerns audit trail, and how the apps are distributed. Includes the technical controls as at 4 November and the decisions needed from the DPO before sign-off. ClinFlow is for invented test letters only until it is signed.",
+    description: "Draft DPIA, version 0.3 (4 November 2026), ICO 7-step structure. Covers Concerns, SARs, Inventory and Temperature, staff accounts and the organisation chart, sign-in and activity records (staff monitoring), the Orb AI language assistant (Azure OpenAI) and staff messages, and now the concerns audit trail, retired reminders and how the apps are distributed. Includes the technical controls as at 4 November and the decisions needed from the DPO before sign-off. ClinFlow, which is still under development and uses invented test letters only, is not covered by this version.",
     status: "draft",
     addedAt: "2026-11-04",
     viewPath: "/governance/dpia-draft.html",
