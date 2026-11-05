@@ -2123,6 +2123,53 @@ async function main() {
     for (const who of [holder, borrower, reception, readonly, partner, anon]) await assertFails(getDocs(collection(who, "it_laptop_events")));
   });
 
+  console.log("\n=== 32. Fridge readings: archive with a reason, never delete (temperature_logs) ===");
+  const fridgeLead = testEnv.authenticatedContext("fridgelead-uid").firestore(); // a custom role with temperature.archive only
+  const TL = "temperature_logs";
+  const reading = (extra = {}) => ({ temp: 4.5, minTemp: 3, maxTemp: 6, unitId: "f1", unitName: "Vaccine fridge", dateKey: "2026-11-05", slot: "PM", recordedBy: "Nurse", recordedByUid: "nurse-uid", notes: "", measured_at: new Date(), created_at: new Date(), ...extra });
+  const archivePatch = (uid) => ({ archived: true, archivedAt: new Date(), archivedBy: "Someone", archivedByUid: uid, archiveReason: "Duplicate reading", archiveReasonKey: "duplicate", archiveNote: "" });
+  const restorePatch = (uid) => ({ archived: false, archivedAt: null, archivedBy: null, archivedByUid: null, archiveReason: null, archiveReasonKey: null, archiveNote: null, restoredAt: new Date(), restoredBy: "Someone", restoredByUid: uid });
+  await seed(async (db) => {
+    await setDoc(doc(db, "roles", "Fridge Lead"), { name: "Fridge Lead", capabilities: ["temperature.archive", "temperature.read", "dashboard.read"], builtIn: false });
+    await setDoc(doc(db, "users", "fridgelead-uid"), { role: "Fridge Lead", displayName: "Lead" });
+    for (const id of ["t-a", "t-b", "t-c", "t-d", "t-e"]) await setDoc(doc(db, TL, id), reading());
+  });
+  await check("The Practice Manager CAN archive a reading with a reason, and CAN bring it back", async () => {
+    await assertSucceeds(updateDoc(doc(pm, TL, "t-a"), archivePatch("pm-uid")));
+    await assertSucceeds(updateDoc(doc(pm, TL, "t-a"), restorePatch("pm-uid")));
+  });
+  await check("Someone whose role has temperature.archive CAN archive a reading", async () => {
+    await assertSucceeds(updateDoc(doc(fridgeLead, TL, "t-b"), archivePatch("fridgelead-uid")));
+  });
+  await check("A nurse who records temperatures CANNOT archive or restore a reading, or change it at all", async () => {
+    await assertFails(updateDoc(doc(nurse, TL, "t-c"), archivePatch("nurse-uid")));
+    await assertFails(updateDoc(doc(nurse, TL, "t-b"), restorePatch("nurse-uid")));
+    await assertFails(updateDoc(doc(nurse, TL, "t-c"), { temp: 5 }));
+    await assertFails(updateDoc(doc(nurse, TL, "t-c"), { notes: "changed" }));
+  });
+  await check("Someone with no temperature permission, a read-only user and an anonymous visitor CANNOT archive a reading", async () => {
+    for (const who of [reception, readonly, partner, caretaker, anon]) await assertFails(updateDoc(doc(who, TL, "t-c"), archivePatch("x")));
+  });
+  await check("Archiving CANNOT be used to change the reading: the temperature, time, fridge, who took it and the note are all refused, even alongside a valid archive", async () => {
+    for (const who of [pm, fridgeLead]) {
+      await assertFails(updateDoc(doc(who, TL, "t-d"), { temp: 5.5 }));
+      await assertFails(updateDoc(doc(who, TL, "t-d"), { ...archivePatch("x"), temp: 5.5 }));
+      await assertFails(updateDoc(doc(who, TL, "t-d"), { ...archivePatch("x"), measured_at: new Date(0) }));
+      await assertFails(updateDoc(doc(who, TL, "t-d"), { ...archivePatch("x"), unitId: "f2" }));
+      await assertFails(updateDoc(doc(who, TL, "t-d"), { ...archivePatch("x"), recordedBy: "Someone else" }));
+      await assertFails(updateDoc(doc(who, TL, "t-d"), { ...archivePatch("x"), notes: "rewritten" }));
+    }
+  });
+  await check("Only an administrator CAN permanently delete a reading: not the Practice Manager, not the archiver, not a nurse", async () => {
+    for (const who of [pm, fridgeLead, nurse, reception]) await assertFails(deleteDoc(doc(who, TL, "t-e")));
+    await assertSucceeds(deleteDoc(doc(admin, TL, "t-e")));
+  });
+  await check("An administrator CAN still correct a reading directly; every signed-in person CAN still read them, an anonymous visitor CANNOT", async () => {
+    await assertSucceeds(updateDoc(doc(admin, TL, "t-d"), { notes: "corrected by admin" }));
+    for (const who of [nurse, reception, readonly]) await assertSucceeds(getDoc(doc(who, TL, "t-d")));
+    await assertFails(getDoc(doc(anon, TL, "t-d")));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);

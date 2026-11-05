@@ -96,3 +96,13 @@ export function laptopEvent(type, { laptopId = "", assetCode = "", summary = "",
   if (type === "imported") return event("it.laptop.imported", "it", "it_laptop", null, `${count} ${count === 1 ? "laptop" : "laptops"} added from a list`, { count });
   return event(`it.laptop.${text(type, 30)}`, "it", "it_laptop", laptopId, summary || `${text(assetCode, 40)}: ${text(type, 30)}`, { assetCode: text(assetCode, 40) });
 }
+
+// ---- fridge temperature readings (archived with a reason, never deleted; the typed note is not copied here) ----
+export function temperatureReadingEvent(step, { reading = {}, reasonKey = "" } = {}) {
+  const unit = text(reading.unitName || "a fridge", 80);
+  const when = iso(reading.measured_at) || iso(reading.created_at);
+  const meta = { unitId: text(reading.unitId, 80), dateKey: text(reading.dateKey, 12), slot: text(reading.slot, 4) };
+  if (when) meta.measuredAt = when;
+  if (step === "archived") return event("temperature.reading.archived", "temperature", "temperature_log", reading.id, `Fridge reading archived: ${unit}${reading.dateKey ? `, ${text(reading.dateKey, 12)}` : ""}`, { ...meta, reason: text(reasonKey, 30) });
+  return event("temperature.reading.restored", "temperature", "temperature_log", reading.id, `Fridge reading restored: ${unit}${reading.dateKey ? `, ${text(reading.dateKey, 12)}` : ""}`, meta);
+}

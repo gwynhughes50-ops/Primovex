@@ -7,7 +7,7 @@ import { addDocResendSafe } from "@/lib/resendSafeWrites";
 import { db, functions } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { isQuarantined } from "@/modules/temperature/fridgeIncidents";
-import { ACTIONS, buildIncidentDoc, buildReadingDoc, checkReadings, dateKeyOf, normaliseUnit, parseTemp, rangeFor, resolveUnit, slotOf } from "./fridgeCheck";
+import { ACTIONS, NOTE_MAX, QUICK_NOTES, buildIncidentDoc, buildReadingDoc, checkReadings, composeNote, dateKeyOf, normaliseUnit, parseTemp, rangeFor, resolveUnit, slotOf } from "./fridgeCheck";
 
 // The manual fridge check, one question at a time: the current reading on the thermometer, then its
 // minimum, then its maximum, then "I pressed reset", then a summary that says in or out of range. The
@@ -34,6 +34,9 @@ export default function MobileFridgeCheckSheet({ asset, onClose }) {
   const [text, setText] = useState({ current: "", min: "", max: "" });
   const [reset, setReset] = useState(false);
   const [actionKeys, setActionKeys] = useState([]);
+  // an optional comment before saving ("Door was open"): quick picks and/or a few words, shown on the Recent readings list
+  const [pickedNotes, setPickedNotes] = useState([]);
+  const [typedNote, setTypedNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(null); // { outOfRange }
@@ -58,8 +61,9 @@ export default function MobileFridgeCheckSheet({ asset, onClose }) {
   // allowed after a reading that was out of range (to confirm it has recovered)
   useEffect(() => {
     if (!unitId) return;
-    getDocs(query(collection(db, "temperature_logs"), where("unitId", "==", unitId), where("dateKey", "==", dateKeyOf(opened)), where("slot", "==", slotOf(opened)), limit(1)))
-      .then((snap) => { const row = snap.docs[0]?.data(); setAlready(row && !row.outOfRange ? row : null); })
+    getDocs(query(collection(db, "temperature_logs"), where("unitId", "==", unitId), where("dateKey", "==", dateKeyOf(opened)), where("slot", "==", slotOf(opened))))
+      // an archived reading no longer holds the slot
+      .then((snap) => { const row = snap.docs.map((d) => d.data()).find((r) => r.archived !== true); setAlready(row && !row.outOfRange ? row : null); })
       .catch(() => setAlready(null));
   }, [unitId, opened]);
 
@@ -102,7 +106,7 @@ export default function MobileFridgeCheckSheet({ asset, onClose }) {
     const now = new Date();
     try {
       await addDocResendSafe(collection(db, "temperature_logs"), {
-        ...buildReadingDoc({ asset, unit, range, readings, actor, now, checked: { reset, outOfRange: result.outOfRange } }),
+        ...buildReadingDoc({ asset, unit, range, readings, actor, now, checked: { reset, outOfRange: result.outOfRange }, note: composeNote(pickedNotes, typedNote) }),
         created_at: serverTimestamp(),
       });
       if (result.outOfRange) {
@@ -215,6 +219,17 @@ export default function MobileFridgeCheckSheet({ asset, onClose }) {
                   </dl>
                   {result.reasons.length > 0 && <ul className="mt-2 list-disc pl-5 text-sm">{result.reasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>}
                 </div>
+                <fieldset className="mt-4">
+                  <legend className="text-sm font-bold">Add a note <span className="font-normal text-[var(--medtrak-muted)]">(optional)</span></legend>
+                  <p className="mt-0.5 text-xs text-[var(--medtrak-muted)]">For anything that explains the reading. It shows on the fridge readings list.</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {QUICK_NOTES.map((quick) => {
+                      const on = pickedNotes.includes(quick);
+                      return <button key={quick} type="button" aria-pressed={on} onClick={() => setPickedNotes((old) => (on ? old.filter((q) => q !== quick) : [...old, quick]))} className={`min-h-10 rounded-full border px-3 text-sm font-semibold ${on ? "border-[var(--medtrak-accent)] bg-[var(--medtrak-accent)] text-white" : "border-[var(--medtrak-border)]"}`}>{quick}</button>;
+                    })}
+                  </div>
+                  <textarea value={typedNote} maxLength={NOTE_MAX} rows={2} onChange={(e) => setTypedNote(e.target.value)} placeholder="Or type a note, e.g. door left open while restocking" aria-label="Note" className="mt-2 w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2 text-sm" />
+                </fieldset>
                 {needsActions && (
                   <fieldset className="mt-4">
                     <legend className="text-sm font-bold">What have you done about it?</legend>

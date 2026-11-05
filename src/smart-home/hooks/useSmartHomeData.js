@@ -44,8 +44,8 @@ export default function useSmartHomeData() {
   ), []);
 
   useEffect(() => onSnapshot(
-    query(collection(db, COLLECTIONS.temperatureLogs), orderBy("measured_at", "desc"), limit(1)),
-    (snap) => { setLatestTemp(snap.docs[0] ? { id: snap.docs[0].id, ...snap.docs[0].data() } : null); setState((s) => ({ ...s, tempLoading: false })); },
+    query(collection(db, COLLECTIONS.temperatureLogs), orderBy("measured_at", "desc"), limit(10)),
+    (snap) => { const live = snap.docs.find((d) => d.data().archived !== true); setLatestTemp(live ? { id: live.id, ...live.data() } : null); setState((s) => ({ ...s, tempLoading: false })); },
     (error) => { setErrors((e) => ({ ...e, temperature: error })); setState((s) => ({ ...s, tempLoading: false })); }
   ), []);
 

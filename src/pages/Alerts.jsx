@@ -379,7 +379,7 @@ export default function Alerts() {
       qy,
       (snap) => {
         setTempError("");
-        setTempLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setTempLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((row) => row.archived !== true));
       },
       (err) => {
         console.error("Alerts temperature_logs subscribe error:", err);

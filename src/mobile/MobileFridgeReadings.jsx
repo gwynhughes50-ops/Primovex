@@ -55,6 +55,7 @@ function HistoryRows({ logs }) {
               <span>{r.by || "Someone"}{r.min !== null ? ` · min ${degrees(r.min)}, max ${degrees(r.max)}` : ""}</span>
               {r.out && <span className="font-bold text-rose-700">Out of range</span>}
             </div>
+            {r.notes && <p className="mt-0.5 text-xs">Note: {r.notes}</p>}
           </li>
         );
       })}
@@ -97,6 +98,7 @@ function FridgeCard({ status, now }) {
       ) : (
         <p className="mt-3 text-sm text-[var(--medtrak-muted)]">No readings in the last {HISTORY_DAYS} days.</p>
       )}
+      {reading?.notes && <p className="mt-2 rounded-xl bg-[var(--medtrak-bg)] px-3 py-2 text-xs">Note: {reading.notes}</p>}
 
       {incidentOpen && <p className="mt-3 flex items-center gap-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs font-bold text-rose-700"><AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" /> An incident is open for this fridge.</p>}
 

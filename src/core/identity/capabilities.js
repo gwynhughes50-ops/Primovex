@@ -52,6 +52,7 @@ export const CAPABILITIES = {
     read: "temperature.read",
     write: "temperature.write",
     resolveIncident: "temperature.resolveIncident",
+    archive: "temperature.archive",
   },
   compliance: {
     read: "compliance.read",
@@ -197,6 +198,7 @@ export const CAPABILITY_CATALOG = [
   { id: "temperature.read", label: "View temperature logs", group: "Compliance" },
   { id: "temperature.write", label: "Record temperature logs", group: "Compliance" },
   { id: "temperature.resolveIncident", label: "Resolve temperature incidents", group: "Compliance" },
+  { id: "temperature.archive", label: "Archive fridge temperature readings (with a reason)", group: "Compliance" },
   { id: "compliance.read", label: "View compliance", group: "Compliance" },
   { id: "compliance.write", label: "Update compliance", group: "Compliance" },
   { id: "compliance.recordChecks", label: "Record QR/NFC compliance checks", group: "Compliance" },
@@ -250,6 +252,7 @@ export const ROLE_TEMPLATES = {
     "waste.manage",
     "timesheets.manage",
     "itAssets.manage",
+    "temperature.archive",
     "clinflow.read",
     "clinflow.capture",
     "clinflow.workflow",

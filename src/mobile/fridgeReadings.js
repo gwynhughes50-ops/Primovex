@@ -3,6 +3,7 @@
 // MobileFridgeReadings.jsx.
 
 import { dateKeyOf, isCheckTime } from "./fridgeCheck.js";
+import { activeReadings } from "../modules/temperature/readingArchive.js";
 
 export const HISTORY_DAYS = 14;
 
@@ -22,7 +23,8 @@ export const historyStartKey = (now = new Date(), days = HISTORY_DAYS) => dateKe
 
 // "ok" in range today; "out" out of range today; "waiting" not read yet today and not yet time to expect it;
 // "missing" not read today when one is due (a weekday afternoon onwards)
-export function fridgeStatuses({ units = [], logs = [], incidents = [], now = new Date() } = {}) {
+export function fridgeStatuses({ units = [], logs: allLogs = [], incidents = [], now = new Date() } = {}) {
+  const logs = activeReadings(allLogs); // an archived reading does not count
   const today = dateKeyOf(now);
   const due = isCheckTime(now);
   const open = new Set(incidents.filter((i) => String(i.status || "open") === "open").map((i) => i.unitId));
@@ -49,7 +51,7 @@ export function summarise(statuses = []) {
 export function describeReading(log) {
   const when = readingTime(log);
   const number = (value) => (Number.isFinite(Number(value)) && value !== null && value !== "" ? Number(value) : null);
-  return { temp: number(log?.temp), min: number(log?.minTemp), max: number(log?.maxTemp), out: log?.outOfRange === true, by: log?.recordedBy || "", when, slot: log?.slot || "", reset: log?.resetDone === true };
+  return { notes: String(log?.notes || "").trim(), temp: number(log?.temp), min: number(log?.minTemp), max: number(log?.maxTemp), out: log?.outOfRange === true, by: log?.recordedBy || "", when, slot: log?.slot || "", reset: log?.resetDone === true };
 }
 
 // The recent days at a glance, one cell for each of the last `days` days (today last), so a long list is never needed to spot a gap:
@@ -57,7 +59,7 @@ export function describeReading(log) {
 //   a day with nothing on a Saturday or Sunday is "weekend", not a miss
 export function dayStrip(history = [], now = new Date(), days = HISTORY_DAYS) {
   const byDay = new Map();
-  for (const log of history) {
+  for (const log of activeReadings(history)) {
     const when = readingTime(log);
     const key = log?.dateKey || (when ? dateKeyOf(when) : "");
     if (key) byDay.set(key, [...(byDay.get(key) || []), log]);

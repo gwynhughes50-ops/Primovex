@@ -95,7 +95,7 @@ export default function OrbStatusProvider({ children }) {
     if (!seesFridges || !uid || synthetic) return undefined;
     const stops = [
       onSnapshot(collection(db, "temperature_units"), (snap) => setUnits(snap.docs.map((d) => normaliseUnit(d.id, d.data()))), () => setUnits(null)),
-      onSnapshot(query(collection(db, "temperature_logs"), where("dateKey", "==", dateKeyOf(new Date()))), (snap) => setTodaysLogs(snap.docs.map((d) => d.data())), () => setTodaysLogs(null)),
+      onSnapshot(query(collection(db, "temperature_logs"), where("dateKey", "==", dateKeyOf(new Date()))), (snap) => setTodaysLogs(snap.docs.map((d) => d.data()).filter((row) => row.archived !== true)), () => setTodaysLogs(null)),
       onSnapshot(query(collection(db, "temperature_incidents"), where("status", "==", "open")), (snap) => setOpenFridgeIncidents(snap.docs.map((d) => d.data())), () => setOpenFridgeIncidents(null)),
     ];
     return () => stops.forEach((stop) => stop());

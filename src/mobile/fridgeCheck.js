@@ -2,6 +2,8 @@
 // (current, minimum and maximum), presses its reset button, and the phone records it with who and when.
 // Pure, so it can be tested; the screen is MobileFridgeCheckSheet.jsx.
 
+import { activeReadings } from "../modules/temperature/readingArchive.js";
+
 const FRIDGE_WORDS = /fridge|freezer|refrigerat|cold.?chain/i;
 export const DEFAULT_RANGES = { fridge: { min: 2, max: 8 }, freezer: { min: -25, max: -15 } };
 const finite = (value) => (value === null || value === undefined || value === "" ? null : Number.isFinite(Number(value)) ? Number(value) : null);
@@ -68,8 +70,18 @@ const pad = (n) => String(n).padStart(2, "0");
 export const dateKeyOf = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 export const slotOf = (date) => (date.getHours() < 12 ? "AM" : "PM");
 
+// A comment added before saving, e.g. "Door was open while the stock was put away": quick picks (ticked) and/or a few typed words, kept to one short line.
+export const NOTE_MAX = 200;
+export const QUICK_NOTES = ["Door was open", "Stock delivery put away", "Defrosting or cleaning", "Stock being checked", "Thermometer was reset"];
+export const cleanNote = (text) => String(text ?? "").replace(/\s+/g, " ").trim().slice(0, NOTE_MAX);
+// the quick picks and the typed words, joined into the one note that is saved
+export function composeNote(picked = [], typed = "") {
+  const parts = [...picked.filter((p) => QUICK_NOTES.includes(p)), cleanNote(typed)].filter(Boolean);
+  return cleanNote(parts.join(". "));
+}
+
 // The reading as the Temperature page stores it (the same fields its own form writes), plus the min, max and reset.
-export function buildReadingDoc({ asset, unit, range, readings, actor, now = new Date(), checked }) {
+export function buildReadingDoc({ asset, unit, range, readings, actor, now = new Date(), checked, note = "" }) {
   const unitId = unit?.id || asset.monitoring?.fridgeId || asset.id;
   return {
     measured_at: now,
@@ -80,7 +92,7 @@ export function buildReadingDoc({ asset, unit, range, readings, actor, now = new
     outOfRange: Boolean(checked?.outOfRange),
     recordedBy: actor.displayName || actor.email || "Unknown",
     recordedByUid: actor.uid || null,
-    notes: "",
+    notes: cleanNote(note),
     siteId: unit?.siteId || "",
     siteName: unit?.siteName || "",
     unitId,
@@ -128,8 +140,9 @@ export function isCheckTime(now = new Date(), afterHour = 12) {
 }
 
 // fridges: [{ id, name }]; logs: temperature_logs rows (unitId, dateKey). The fridges with no reading today.
-export function notCheckedToday({ fridges = [], logs = [], now = new Date(), afterHour = 12 } = {}) {
+export function notCheckedToday({ fridges = [], logs: allLogs = [], now = new Date(), afterHour = 12 } = {}) {
   if (!isCheckTime(now, afterHour)) return [];
+  const logs = activeReadings(allLogs);
   const today = dateKeyOf(now);
   const done = new Set(logs.filter((log) => (log.dateKey || "") === today).map((log) => log.unitId));
   return fridges.filter((fridge) => !done.has(fridge.id));
@@ -170,7 +183,8 @@ const names = (list, max = 5) => `${list.slice(0, max).map((f) => f.name).join("
 
 // "Which fridges haven't been checked today?": fridges are [{ id, name }], logs the day's temperature_logs,
 // incidents the open temperature_incidents.
-export function fridgeChecksAnswer({ fridges = [], logs = [], incidents = [], now = new Date() } = {}) {
+export function fridgeChecksAnswer({ fridges = [], logs: allLogs = [], incidents = [], now = new Date() } = {}) {
+  const logs = activeReadings(allLogs);
   if (!fridges.length) return { text: "No fridges or freezers are set up to be checked yet.", unchecked: 0 };
   const today = dateKeyOf(now);
   const done = new Set(logs.filter((log) => (log.dateKey || "") === today).map((log) => log.unitId));

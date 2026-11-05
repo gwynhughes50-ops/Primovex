@@ -822,7 +822,7 @@ export default function Reports() {
     return onSnapshot(
       qy,
       (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((row) => row.archived !== true); // archived readings are not reported
         const mapped = rows.map((t) => ({
           id: t.id,
           datetime: t.created_at || t.datetime || t.recorded_at || "",

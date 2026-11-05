@@ -13,6 +13,8 @@ import {
   AlertTriangle,
   CheckCircle,
   Settings2,
+  Trash2,
+  RotateCcw,
 } from "lucide-react";
 
 import {
@@ -36,6 +38,8 @@ import FridgeSetup from "@/components/temperature/FridgeSetup";
 import FridgeIncidentSheet from "@/components/temperature/FridgeIncidentSheet";
 import { canSetUpFridges } from "@/modules/temperature/fridgeSetup";
 import { isQuarantined } from "@/modules/temperature/fridgeIncidents";
+import { ARCHIVE_REASONS, activeReadings, archivedLine, isArchived } from "@/modules/temperature/readingArchive";
+import { archiveReading, restoreReading } from "@/modules/temperature/readingArchiveService";
 
 /* =========================================================
    Shared constants + helpers
@@ -237,8 +241,13 @@ function TemperatureLogTab() {
     notes: "",
   });
 
-  const { can } = useAuth();
+  const { can, isAdmin: isAdminUser, user: signedInUser, displayName: signedInName } = useAuth();
   const canLog = can("temperature.write");
+  // the bin: archive a reading with a reason (the Practice Manager and admins), never a permanent delete
+  const canArchive = isAdminUser === true || can("temperature.archive");
+  const [showArchived, setShowArchived] = useState(false);
+  const [archiving, setArchiving] = useState(null); // { reading, reasonKey, note, busy, error }
+  const actor = { uid: signedInUser?.uid || "", displayName: signedInName || signedInUser?.email || "" };
 
   // Units
   useEffect(() => {
@@ -332,6 +341,15 @@ function TemperatureLogTab() {
 
             dateKey: data.dateKey ?? data.date_key ?? "",
             slot: data.slot ?? "",
+
+            // archived readings are kept but not counted
+            archived: data.archived === true,
+            archivedAt: data.archivedAt ?? null,
+            archivedBy: data.archivedBy ?? "",
+            archiveReason: data.archiveReason ?? "",
+            archiveNote: data.archiveNote ?? "",
+            measured_at: data.measured_at ?? null,
+            created_at: data.created_at ?? null,
           };
         });
 
@@ -354,7 +372,7 @@ function TemperatureLogTab() {
   // Date range is now applied at the query level (see the Logs effect above)
   // — `readings` only ever contains what's already in range, so this just
   // narrows by site/unit.
-  const filteredReadings = useMemo(() => {
+  const siteUnitReadings = useMemo(() => {
     let list = [...readings];
 
     if (siteFilter !== "all") list = list.filter((r) => r.siteId === siteFilter);
@@ -362,6 +380,25 @@ function TemperatureLogTab() {
 
     return list;
   }, [readings, siteFilter, unitFilter]);
+  // what counts (the out-of-range banner, the latest reading of each fridge): archived readings do not
+  const filteredReadings = useMemo(() => activeReadings(siteUnitReadings), [siteUnitReadings]);
+  // what the table lists: the same, plus the archived ones when "Show archived" is on
+  const shownReadings = showArchived ? siteUnitReadings : filteredReadings;
+  const archivedCount = siteUnitReadings.length - filteredReadings.length;
+
+  async function confirmArchive() {
+    if (!archiving) return;
+    setArchiving((a) => ({ ...a, busy: true, error: "" }));
+    try {
+      await archiveReading(archiving.reading, { reasonKey: archiving.reasonKey, note: archiving.note, actor });
+      setArchiving(null);
+    } catch (e) {
+      setArchiving((a) => ({ ...a, busy: false, error: e?.message || "That could not be archived." }));
+    }
+  }
+  async function restore(reading) {
+    try { await restoreReading(reading, { actor }); } catch (e) { window.alert(e?.message || "That could not be restored."); }
+  }
 
   const outOfRangeLatest = useMemo(() => {
     const latestByUnit = new Map();
@@ -429,10 +466,10 @@ function TemperatureLogTab() {
       collection(db, TEMP_COLLECTION),
       where("unitId", "==", newReading.unitId),
       where("dateKey", "==", dateKey),
-      where("slot", "==", slot),
-      limit(1)
+      where("slot", "==", slot)
     ));
-    if (!dupSnap.empty) {
+    // an archived reading no longer holds the slot (that is how a wrong one is put right)
+    if (dupSnap.docs.some((d) => d.data().archived !== true)) {
       setSaveError(`AM/PM lock: a ${slot} reading already exists for this unit on ${dateKey}.`);
       return;
     }
@@ -614,6 +651,11 @@ function TemperatureLogTab() {
           <p className="mt-0.5 text-[0.7rem] text-slate-400">
             Tip: AM/PM lock is enabled (max one AM + one PM reading per unit per day).
           </p>
+          {canArchive && (archivedCount > 0 || showArchived) && (
+            <label className="mt-2 inline-flex items-center gap-2 text-xs text-slate-300">
+              <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} /> Show archived readings ({archivedCount})
+            </label>
+          )}
         </div>
 
         <div className="overflow-x-auto">
@@ -627,25 +669,26 @@ function TemperatureLogTab() {
                 <th className="px-4 py-2">Status</th>
                 <th className="px-4 py-2">Recorded By</th>
                 <th className="px-4 py-2">Notes</th>
+                {canArchive && <th className="px-4 py-2 text-right">Archive</th>}
               </tr>
             </thead>
             <tbody>
-              {filteredReadings.length === 0 ? (
+              {shownReadings.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-xs text-slate-400">
+                  <td colSpan={canArchive ? 8 : 7} className="px-4 py-8 text-center text-xs text-slate-400">
                     No temperature readings found. Click{" "}
                     <span className="font-medium text-slate-200">"Log Temperature"</span> to add one.
                   </td>
                 </tr>
               ) : (
-                filteredReadings.map((r) => {
+                shownReadings.map((r) => {
                   const unit = units.find((u) => u.id === r.unitId);
                   const range = r.unitRange || unit?.range || null;
                   const status = getStatusForReading(range, r.temp);
                   const dt = r.datetime ? new Date(r.datetime) : null;
 
                   return (
-                    <tr key={r.id} className="border-b border-white/10 last:border-0">
+                    <tr key={r.id} className={`border-b border-white/10 last:border-0 ${isArchived(r) ? "opacity-60" : ""}`}>
                       <td className="px-4 py-2 text-xs text-slate-200">
                         {dt
                           ? dt.toLocaleString("en-GB", {
@@ -675,7 +718,23 @@ function TemperatureLogTab() {
                         <span className={status.className}>{status.label}</span>
                       </td>
                       <td className="px-4 py-2 text-xs text-slate-200">{r.recordedBy || "—"}</td>
-                      <td className="px-4 py-2 text-xs text-slate-200">{r.notes || "—"}</td>
+                      <td className="px-4 py-2 text-xs text-slate-200">
+                        {r.notes || "—"}
+                        {isArchived(r) && <div className="mt-1 text-[0.7rem] font-semibold text-amber-300">{archivedLine(r)}</div>}
+                      </td>
+                      {canArchive && (
+                        <td className="px-4 py-2 text-right">
+                          {isArchived(r) ? (
+                            <button type="button" onClick={() => restore(r)} className="inline-flex items-center gap-1 rounded-lg border border-white/15 px-2 py-1 text-[0.7rem] text-slate-200 hover:bg-white/10" title="Bring this reading back">
+                              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Restore
+                            </button>
+                          ) : (
+                            <button type="button" onClick={() => setArchiving({ reading: r, reasonKey: "", note: "", busy: false, error: "" })} className="rounded-lg border border-white/15 p-1.5 text-slate-300 hover:bg-rose-500/20 hover:text-rose-200" title="Archive this reading (with a reason). It is kept on record, not deleted." aria-label="Archive this reading">
+                              <Trash2 className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                          )}
+                        </td>
+                      )}
                     </tr>
                   );
                 })
@@ -684,6 +743,34 @@ function TemperatureLogTab() {
           </table>
         </div>
       </Card>
+
+      {archiving && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur" role="dialog" aria-modal="true" aria-label="Archive this reading">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/95 p-5 shadow-2xl">
+            <h2 className="text-sm font-semibold text-slate-50">Archive this reading</h2>
+            <p className="mt-1 text-xs text-slate-300">
+              {archiving.reading.unitName || "Fridge"}, {archiving.reading.temp} °C{archiving.reading.dateKey ? ", " + archiving.reading.dateKey : ""}{archiving.reading.slot ? " (" + archiving.reading.slot + ")" : ""}.
+              It is taken out of the list, today's status and the reports, but kept on record with who archived it and why. It is not deleted, and can be restored.
+            </p>
+            <fieldset className="mt-3 space-y-1.5">
+              <legend className="text-xs font-semibold text-slate-200">Why? (required)</legend>
+              {ARCHIVE_REASONS.map((r) => (
+                <label key={r.key} className="flex items-center gap-2 text-xs text-slate-100">
+                  <input type="radio" name="archive-reason" checked={archiving.reasonKey === r.key} onChange={() => setArchiving((a) => ({ ...a, reasonKey: r.key, error: "" }))} /> {r.label}
+                </label>
+              ))}
+            </fieldset>
+            {archiving.reasonKey === "other" && (
+              <textarea value={archiving.note} maxLength={200} rows={2} onChange={(e) => setArchiving((a) => ({ ...a, note: e.target.value }))} placeholder="What was the reason?" className="mt-2 w-full rounded-lg border border-white/15 bg-slate-950/60 px-2 py-1.5 text-xs text-slate-100" />
+            )}
+            {archiving.error && <p className="mt-2 text-xs font-semibold text-rose-300" role="alert">{archiving.error}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setArchiving(null)} disabled={archiving.busy}>Cancel</Button>
+              <Button type="button" onClick={confirmArchive} disabled={archiving.busy || !archiving.reasonKey}>{archiving.busy ? "Archiving…" : "Archive reading"}</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Log Temperature modal */}
       {isLogOpen && (

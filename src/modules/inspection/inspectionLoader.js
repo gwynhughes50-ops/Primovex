@@ -60,6 +60,7 @@ export async function loadInspectionData(now = new Date()) {
   ]);
   // water uses the same compliance checks as fire
   available.water = available.fire;
+  const liveTempLogs = tempLogs.filter((row) => row.archived !== true); // archived readings are kept on record but not counted
 
   const stock = stockDocs.filter((item) => !item.archived_at);
   const stockAlerts = available.stock
@@ -67,7 +68,7 @@ export async function loadInspectionData(now = new Date()) {
     : [];
 
   return {
-    checks, fireWeekly, waterRounds, patSessions, patAssets, patTests, cleaningLogs, tempUnits, tempLogs, tempIncidents,
+    checks, fireWeekly, waterRounds, patSessions, patAssets, patTests, cleaningLogs, tempUnits, tempLogs: liveTempLogs, tempIncidents,
     stockAlerts, stockCount: stock.length, coshh: coshhDocs.map((d) => normaliseSubstance(d.id, d)), certificates: certDocs.map((d) => normaliseCertificate(d.id, d)), concerns, concernSteps, sars, events, assets, incidents, waste: wasteDocs.map((d) => normaliseConsignment(d.id, d)), training: { people: trainingPeople, courses: trainingCourses, records: trainingRecords }, available,
   };
 }

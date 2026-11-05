@@ -586,7 +586,11 @@ match /subject_access_requests/{requestId} {
     match /temperature_logs/{docId} {
       allow get, list: if signedIn();
       allow create: if hasPermission("temperature", "write") || isAdmin();
-      allow update, delete: if isAdmin();
+      // A reading is never deleted by anyone but an admin. Whoever has temperature.archive (the Practice Manager) can archive one, with a reason, or bring it back:
+      // that touches only the archive fields, never the temperature, the time, the fridge or who took it.
+      allow update: if isAdmin() || (hasPermission("temperature", "archive")
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["archived", "archivedAt", "archivedBy", "archivedByUid", "archiveReason", "archiveReasonKey", "archiveNote", "restoredAt", "restoredBy", "restoredByUid"]));
+      allow delete: if isAdmin();
     }
 
     // The practice's fridges and freezers and the range each must stay in. Set up by the Practice Manager and admins,
@@ -743,7 +747,7 @@ match /subject_access_requests/{requestId} {
       return
         role == "System Admin" ? ["*"] :
         role == "Practice Manager" ? ["governance.reportEvents", 
-          "stocktake.count", "stocktake.manage", "training.manage", "waste.read", "waste.manage", "timesheets.manage", "itAssets.manage",
+          "stocktake.count", "stocktake.manage", "training.manage", "waste.read", "waste.manage", "timesheets.manage", "itAssets.manage", "temperature.archive",
           "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
           "dashboard.read", "operations.read", "operations.manage",
           "inventory.read", "inventory.kits", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",

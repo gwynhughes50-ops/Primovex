@@ -31,7 +31,7 @@ export default function FridgeIncidentSheet({ incidentId, onClose }) {
   // this fridge's latest readings, to see whether a recheck is back in range
   useEffect(() => {
     if (!incident?.unitId) return undefined;
-    return onSnapshot(query(collection(db, "temperature_logs"), where("unitId", "==", incident.unitId), orderBy("created_at", "desc"), limit(10)), (snap) => setLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setLogs([]));
+    return onSnapshot(query(collection(db, "temperature_logs"), where("unitId", "==", incident.unitId), orderBy("created_at", "desc"), limit(10)), (snap) => setLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((row) => row.archived !== true)), () => setLogs([]));
   }, [incident?.unitId]);
 
   const blocked = incident ? clearBlockedReason(incident, logs, incident.expectedRange) : "";

@@ -148,10 +148,10 @@ export default function MobileFridgeSheet({ asset, onClose }) {
   useEffect(() => {
     if (!unitId) { setLatestReading(null); setReadingError(''); return undefined; }
     setReadingError('');
-    const qy = query(collection(db, 'temperature_logs'), where('unitId', '==', unitId), orderBy('created_at', 'desc'), limit(1));
+    const qy = query(collection(db, 'temperature_logs'), where('unitId', '==', unitId), orderBy('created_at', 'desc'), limit(10));
     return onSnapshot(
       qy,
-      (snap) => setLatestReading(snap.docs[0] ? { id: snap.docs[0].id, ...snap.docs[0].data() } : null),
+      (snap) => { const live = snap.docs.find((d) => d.data().archived !== true); setLatestReading(live ? { id: live.id, ...live.data() } : null); },
       (error) => {
         console.error('Fridge reading subscription failed', error);
         setLatestReading(null);

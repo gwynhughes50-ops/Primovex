@@ -445,7 +445,7 @@ export function registerApprovedReadOnlyTools() {
         ? unitResult.value.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
         : [];
       const logs = logResult.status === 'fulfilled'
-        ? logResult.value.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+        ? logResult.value.docs.map((doc) => ({ id: doc.id, ...doc.data() })).filter((row) => row.archived !== true)
         : [];
 
       const wanted = normalise(term);
@@ -541,6 +541,7 @@ export function registerApprovedReadOnlyTools() {
       const latest = new Map();
       snap.docs.forEach((row) => {
         const record = { id: row.id, ...row.data() };
+        if (record.archived === true) return; // an archived reading is not the latest
         const key = String(record.unitId || record.unit_id || record.unitName || record.unit_name || record.fridge || record.device || row.id);
         if (!latest.has(key)) latest.set(key, record);
       });
@@ -793,12 +794,13 @@ export function registerApprovedReadOnlyTools() {
   registerTool({
     id: 'coldChain.checksToday', label: 'Fridge checks today', requiredCapability: 'temperature.read',
     async execute() {
-      const [unitRows, logs, incidents, equipment] = await Promise.all([
+      const [unitRows, allLogs, incidents, equipment] = await Promise.all([
         readRows('temperature_units'),
         readRows('temperature_logs', [where('dateKey', '==', dateKeyOf(new Date()))]),
         readRows('temperature_incidents', [where('status', '==', 'open')]),
         Promise.resolve(listEquipment()).catch(() => []),
       ]);
+      const logs = allLogs.filter((row) => row.archived !== true);
       const fridges = expectedFridges({ units: unitRows.map((row) => normaliseUnit(row.id, row)), assets: Array.isArray(equipment) ? equipment : [] });
       const answer = fridgeChecksAnswer({ fridges, logs, incidents });
       return {
