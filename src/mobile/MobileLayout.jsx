@@ -33,6 +33,7 @@ import { recordEquipmentSighting } from "@/modules/equipment/services/equipmentS
 import { findEquipmentByBleTag } from "@/modules/equipment/services/equipmentRegistry";
 import { parseComplianceQrPayload } from "@/services/compliance/complianceQrService";
 import { parseAssetQrPayload } from "@/services/assets/assetLabelService";
+import { classifyScan } from "./scanRouter";
 import { completeCleaningSession, getActiveCleaningSession, startCleaningSession, subscribeRoomOperational } from "@/modules/facilities/services/cleaningRecordService";
 import { playBeep } from "@/utils/beep";
 import { getOpenQuickNotes, subscribeQuickNotes } from "@/services/quickNotesService";
@@ -351,6 +352,10 @@ export default function MobileLayout({ initialTab = "home" }) {
       case "scan-stock":
         document.querySelector("[data-mobile-scan-button]")?.click();
         break;
+      case "scan-any":
+        setSpaceScanError("");
+        document.querySelector("[data-mobile-any-scan-button]")?.click();
+        break;
       case "scan-room":
         openSpaceScanner();
         break;
@@ -444,6 +449,22 @@ export default function MobileLayout({ initialTab = "home" }) {
       })
       .slice(0, 8);
   }, [allItems, searchTerm]);
+
+  // "Scan anything": one camera button for every code Primovex has made (see scanRouter.js). A laptop, fridge or chemical cupboard opens its own screen; a fire point or water outlet its check;
+  // a kit or box its checklist; a room or asset its Sense page. Anything that is not one of our links is tried as a room code, then as a product barcode, which is what the older buttons did.
+  const handleAnyScan = async (rawCode) => {
+    const code = String(rawCode || "").trim();
+    if (!code) return;
+    const found = classifyScan(code);
+    if (found.route) { setSpaceScanError(""); setScanError(""); setUnknownBarcode(""); navigate(found.route); return; }
+    if (found.kind === "kit") { routeAssetScan(code); return; }
+    if (found.kind === "space" || found.kind === "asset") { await handleSpaceCodeScan(code); return; }
+    // a short plain code can look like a fire point's ("room-4"): a code that is one of this practice's rooms is the room
+    const isRoomCode = loadSpaceRegistry().spaces.some((item) => [item.id, item.spaceId, item.qrCode, item.nfcTagId, item.slug].filter(Boolean).some((value) => String(value).toLowerCase() === code.toLowerCase()));
+    if (isRoomCode) { await handleSpaceCodeScan(code); return; }
+    if (found.kind === "compliance") { routeComplianceScan(code, "qr"); return; }
+    await handleMobileScan(code);
+  };
 
   const handleMobileScan = async (code) => {
     const scannedCode = String(code || "").trim();
@@ -957,6 +978,12 @@ export default function MobileLayout({ initialTab = "home" }) {
       />
 
       <MobileBarcodeScanner onScan={handleMobileScan} />
+      <MobileBarcodeScanner
+        onScan={handleAnyScan}
+        triggerAttribute="data-mobile-any-scan-button"
+        title="Scan anything"
+        helper="Point the camera at any Primovex QR code or barcode: a laptop, fridge, fire point, room, kit box, chemical cupboard or a product. You can type the code in too."
+      />
       <MobileBarcodeScanner
         onScan={handleSpaceCodeScan}
         triggerAttribute="data-mobile-space-scan-button"

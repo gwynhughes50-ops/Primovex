@@ -62,4 +62,14 @@ t("a stock take: counters get the tile, and a banner only while one is waiting f
   stub.takes = [];
 });
 
+t("every kind of home has the Scan anything button, and the IT tile only for the IT team", () => {
+  for (const [role, caps] of [["Practice Manager", ["*"]], ["Nurse", ["inventory.write"]], ["Reception", ["dashboard.read"]], ["Caretaker", ["compliance.recordChecks"]], ["Partner", ["governance.read"]], ["HCA", []], ["Stock Controller", ["inventory.read"]]]) {
+    const html = home(role, caps);
+    assert.ok(html.includes("Scan anything"), role);
+    assert.ok(!html.includes("IT equipment") || caps.includes("*"), `${role} has no IT tile without the permission`);
+  }
+  assert.ok(home("Nurse", ["itAssets.manage"]).includes("IT equipment"), "the IT team's tile");
+  assert.ok(!home("Nurse", ["inventory.write"]).includes("My laptop"), "no laptop, no My laptop tile");
+});
+
 console.log(`\n${n} passed`);

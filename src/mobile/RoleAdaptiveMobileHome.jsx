@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MapPin, QrCode, Sparkles } from "lucide-react";
+import { MapPin, QrCode, ScanLine, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSenseSession } from "@/contexts/SenseSessionContext";
 import { getRoleHome, visibleActions } from "./roleHomes";
@@ -52,6 +52,11 @@ export default function RoleAdaptiveMobileHome({ onAction }) {
           <span><b>No room active</b><small>Tap NFC or scan the room code</small></span>
         </button>
       )}
+
+      <button type="button" className="pvx-primary-action is-compact" onClick={() => onAction?.("scan-any")}>
+        <span className="pvx-primary-icon"><ScanLine className="h-7 w-7" /></span>
+        <span><b>Scan anything</b><small>A laptop, fridge, fire point, room, box or product</small></span>
+      </button>
 
       <button type="button" className={`pvx-primary-action${home.primary.compact ? " is-compact" : ""}`} onClick={() => onAction?.(home.primary.key)}>
         <span className="pvx-primary-icon"><PrimaryIcon className="h-7 w-7" /></span>
