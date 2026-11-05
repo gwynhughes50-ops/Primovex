@@ -205,4 +205,23 @@ t("every kind of home can be chosen, and a name suggests the right one", () => {
     ["clinical", "clinical", "clinical", "clinical-lead", "manager", "general", "caretaker", "reception", "partner", "general"]);
 });
 
+t("the IT team get an IT equipment tile on whatever home they have; nobody else does", () => {
+  for (const role of ["Practice Manager", "Nurse", "Caretaker", "Reception", "Partner", "Stock Controller", "Management Assistant"]) {
+    const home = getRoleHome(role, ["itAssets.manage"]);
+    assert.ok(visibleActions(home, ["itAssets.manage"]).some((a) => a.key === "it-equipment"), `${role} with itAssets.manage`);
+    assert.ok(visibleActions(home, ["itAssets.read"]).some((a) => a.key === "it-equipment"), `${role} with itAssets.read`);
+    assert.ok(!visibleActions(home, ["inventory.read"]).some((a) => a.key === "it-equipment"), `${role} without it`);
+  }
+  assert.ok(visibleActions(getRoleHome("Practice Manager", ["*"]), ["*"]).some((a) => a.key === "it-equipment"));
+});
+
+t("a My laptop tile appears only for someone who has a laptop", () => {
+  const home = getRoleHome("Nurse", ["inventory.read"]);
+  assert.ok(!visibleActions(home, ["inventory.read"]).some((a) => a.key === "my-laptop"));
+  assert.ok(!visibleActions(home, ["inventory.read"], { hasLaptop: false }).some((a) => a.key === "my-laptop"));
+  const mine = visibleActions(home, ["inventory.read"], { hasLaptop: true });
+  assert.ok(mine.some((a) => a.key === "my-laptop"));
+  assert.ok(!mine.some((a) => a.key === "it-equipment"), "having a laptop does not open the register");
+});
+
 console.log(`\n${n} passed`);

@@ -35,3 +35,6 @@ export const useCertificates = () => ({ list: stub.certificates || null, error: 
 // the Orb's status provider reads the whole practice; the phone home only needs the chips it works out
 import { buildAttention } from "../../src/mobile/homeAttention.js";
 export const useOrbStatus = () => ({ chips: buildAttention({ ...(stub.attention || {}), now: new Date() }), level: "green", signals: [] });
+
+// the phone home asks whether this person has a laptop
+export const subscribeMyLaptops = (uid, onData) => { onData?.(stub.laptops || []); return () => {}; };

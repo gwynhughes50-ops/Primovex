@@ -1,14 +1,22 @@
+import { useEffect, useState } from "react";
 import { MapPin, QrCode, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSenseSession } from "@/contexts/SenseSessionContext";
 import { getRoleHome, visibleActions } from "./roleHomes";
 import MobileAttentionStrip from "./MobileAttentionStrip";
 import MobileStockTakeBanner from "./MobileStockTakeBanner";
+import { subscribeMyLaptops } from "@/modules/laptops/laptopService";
 
 // The phone home for everyone except the Cleaner (who has MobileCleanerHome): its tiles come from the role
 // (see roleHomes.js). Managers and partners also see what needs attention at the top.
 export default function RoleAdaptiveMobileHome({ onAction }) {
-  const { role, roleHomeType, capabilities = [], displayName } = useAuth();
+  const { role, roleHomeType, capabilities = [], displayName, user } = useAuth();
+  // whether a laptop is assigned or lent to this person: only then is there a My laptop tile (everyone else would only see an empty page)
+  const [hasLaptop, setHasLaptop] = useState(false);
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    return subscribeMyLaptops(user.uid, (rows) => setHasLaptop((rows || []).length > 0), () => setHasLaptop(false));
+  }, [user?.uid]);
   const { activeSenseSession } = useSenseSession();
   const home = getRoleHome(role, capabilities, roleHomeType);
   const firstName = String(displayName || "").trim().split(" ")[0] || "there";
@@ -51,7 +59,7 @@ export default function RoleAdaptiveMobileHome({ onAction }) {
       </button>
 
       <div className="pvx-role-actions">
-        {visibleActions(home, capabilities).map(({ key, label, helper, Icon }) => (
+        {visibleActions(home, capabilities, { hasLaptop }).map(({ key, label, helper, Icon }) => (
           <button key={key} type="button" onClick={() => onAction?.(key)}>
             <Icon className="h-5 w-5" />
             <b>{label}</b>

@@ -1,4 +1,4 @@
-import { ClipboardCheck, ClipboardList, FileText, FlaskConical, ListChecks, MessageSquare, Mic, NotebookPen, Package, ScanLine, ShieldAlert, GraduationCap, Sparkles, SprayCan, Stethoscope, Thermometer, TriangleAlert, Wrench } from "lucide-react";
+import { ClipboardCheck, ClipboardList, FileText, Laptop, FlaskConical, ListChecks, MessageSquare, Mic, NotebookPen, Package, ScanLine, ShieldAlert, GraduationCap, Sparkles, SprayCan, Stethoscope, Thermometer, TriangleAlert, Wrench } from "lucide-react";
 
 // What each kind of person sees on the phone: the home screen's tiles and the bottom bar. Pure data, so
 // it can be tested. A tile marked with a capability is only shown to people who hold it, and a bottom-bar
@@ -163,9 +163,14 @@ export function getRoleHome(role, capabilities = [], homeType = "") {
   };
 }
 
-// The tiles this person may see.
-export function visibleActions(home, capabilities = []) {
-  return home.actions.filter((action) => !action.capability || has(capabilities, action.capability));
+// The tiles this person may see. Two laptop tiles are added for anyone, whatever their home: the IT team (who may read or manage the laptop register) get the register, to loan out, take
+// back and record updates; and anyone who has a laptop assigned or lent to them (hasLaptop) gets a tile for it, which is where its update and return dates are.
+export function visibleActions(home, capabilities = [], { hasLaptop = false } = {}) {
+  const shown = home.actions.filter((action) => !action.capability || has(capabilities, action.capability));
+  const laptopTiles = [];
+  if (has(capabilities, "itAssets.read") || has(capabilities, "itAssets.manage")) laptopTiles.push({ key: "it-equipment", label: "IT equipment", helper: "Loan out, take back, update", Icon: Laptop });
+  if (hasLaptop) laptopTiles.push({ key: "my-laptop", label: "My laptop", helper: "When it is due an update or back", Icon: Laptop });
+  return [...shown, ...laptopTiles];
 }
 
 // Always four places (two each side of the Orb): home first, me last, and two of the role's own in between.
