@@ -8,11 +8,19 @@ import { STATUS, dayKey, holderText, isLive, isOnLoan, loanState, parseLaptopLin
 import { addLaptops, subscribeLaptops } from "@/modules/laptops/laptopService";
 import LaptopActions, { Chips } from "./LaptopActions";
 import LaptopImportPanel from "./LaptopImportPanel";
-import { PER_SHEET, buildLabelsHtml } from "./laptopLabels";
+import { DEFAULT_SHEET, NUDGE_LIMIT_MM, SHEETS, buildLabelsHtml, perSheet } from "./laptopLabels";
 
 // The laptop register: every laptop, who has it, whether it is on loan or due an update, and the IT team's actions on each. For the desktop and the phone. People who may only read the register
 // see it without the actions; the IT team (itAssets.manage) can add laptops, paste a list, print QR labels and record loans, returns and updates.
 const FIELD = "rounded-lg border border-[var(--medtrak-border)] bg-transparent px-2 py-2 text-sm text-[var(--medtrak-text)] [&>option]:text-slate-900";
+// which sticker sheet, and how far to nudge the print, are remembered on this computer (each printer has its own small offset)
+const SETTINGS_KEY = "primovex.laptopLabels";
+function loadLabelSettings() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || "{}");
+    return { sheet: SHEETS[saved.sheet] ? saved.sheet : DEFAULT_SHEET, nudgeX: Number(saved.nudgeX) || 0, nudgeY: Number(saved.nudgeY) || 0 };
+  } catch { return { sheet: DEFAULT_SHEET, nudgeX: 0, nudgeY: 0 }; }
+}
 const FILTERS = [["live", "Not decommissioned"], ["in_use", "In use"], ["spare", "Spare"], ["on_loan", "On loan"], ["due", "Needs attention"], ["decommissioned", "Decommissioned"], ["all", "All"]];
 
 export default function LaptopRegisterPanel({ scan = false, initialId = "" }) {
@@ -29,6 +37,12 @@ export default function LaptopRegisterPanel({ scan = false, initialId = "" }) {
   const [add, setAdd] = useState({ assetCode: "", status: "spare", holder: null });
   const [addProblem, setAddProblem] = useState("");
   const [message, setMessage] = useState("");
+  const [labels, setLabels] = useState(loadLabelSettings);
+  const changeLabels = (patch) => setLabels((current) => {
+    const next = { ...current, ...patch };
+    try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(next)); } catch { /* not remembered: still works for this print */ }
+    return next;
+  });
   const cards = useRef({});
   const today = dayKey();
 
@@ -69,7 +83,7 @@ export default function LaptopRegisterPanel({ scan = false, initialId = "" }) {
     const list = shown.filter(isLive);
     if (!list.length) { setMessage("There are no laptops to print labels for."); return; }
     // the trial print is one sheet on plain paper, with each sticker outlined
-    await printHtmlDocument(buildLabelsHtml(guides ? list.slice(0, PER_SHEET) : list, { guides }));
+    await printHtmlDocument(buildLabelsHtml(guides ? list.slice(0, perSheet(labels.sheet)) : list, { guides, sheet: labels.sheet, nudgeXMm: labels.nudgeX, nudgeYMm: labels.nudgeY }));
   }
 
   return (
@@ -89,6 +103,19 @@ export default function LaptopRegisterPanel({ scan = false, initialId = "" }) {
           <button type="button" className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[var(--medtrak-border)] px-3 text-sm font-semibold" onClick={() => printLabels(false)}><Printer className="h-4 w-4" aria-hidden="true" /> Print QR labels ({shown.filter(isLive).length})</button>
           <button type="button" className="min-h-10 rounded-xl border border-[var(--medtrak-border)] px-3 text-sm font-semibold" onClick={() => printLabels(true)} title="One sheet with each sticker outlined, to print on plain paper and hold against your stickers">Trial sheet (outlined)</button>
         </div>
+      )}
+      {canManage && (
+        <details className="rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-3">
+          <summary className="cursor-pointer text-sm font-semibold">Label sheet: {SHEETS[labels.sheet].name}{labels.nudgeX || labels.nudgeY ? ` (nudged ${labels.nudgeX} right, ${labels.nudgeY} down)` : ""}</summary>
+          <div className="mt-3 space-y-3">
+            <label className="block text-xs font-bold">Sticker sheet<select className={`${FIELD} mt-1 w-full font-normal`} value={labels.sheet} onChange={(e) => changeLabels({ sheet: e.target.value })}>{Object.entries(SHEETS).map(([key, v]) => <option key={key} value={key}>{v.name}</option>)}</select></label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block text-xs font-bold">Move right (mm)<input type="number" step="0.1" min={-NUDGE_LIMIT_MM} max={NUDGE_LIMIT_MM} className={`${FIELD} mt-1 w-full font-normal`} value={labels.nudgeX} onChange={(e) => changeLabels({ nudgeX: e.target.value === "" ? 0 : Number(e.target.value) })} /></label>
+              <label className="block text-xs font-bold">Move down (mm)<input type="number" step="0.1" min={-NUDGE_LIMIT_MM} max={NUDGE_LIMIT_MM} className={`${FIELD} mt-1 w-full font-normal`} value={labels.nudgeY} onChange={(e) => changeLabels({ nudgeY: e.target.value === "" ? 0 : Number(e.target.value) })} /></label>
+            </div>
+            <p className="text-xs text-[var(--medtrak-muted)]">Print the trial sheet on plain paper, hold it against a sheet of stickers up to the light, and use these to line it up (a negative number moves left or up). Print at 100% or "Actual size", with margins set to None, not "Fit to page".</p>
+          </div>
+        </details>
       )}
       {canManage && panel === "add" && (
         <section className="space-y-2 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-3" aria-label="Add a laptop">
