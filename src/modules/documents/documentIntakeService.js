@@ -58,7 +58,15 @@ export function fileProblem(file) {
   return `Primovex cannot read ${ext ? `.${ext} files` : "that kind of file"}. Use a PDF, a photo, a Word, Excel or PowerPoint file, an email (.eml), or a text file.`;
 }
 
-const baseName = (file) => String(file?.name || "document").replace(/\.[^.]+$/, "") || "document";
+// a name for the PDF kept in the register: the file's own name, unless it is a long camera name (JPEG_20261106_143900_4459904644...), which becomes "Photo 2026-11-06 14-39"
+export function friendlyName(file, now = new Date()) {
+  const own = String(file?.name || "document").replace(/\.[^.]+$/, "") || "document";
+  if (own.length <= 36) return own;
+  if (!/\.(jpe?g|png|webp|gif|bmp|tiff?|heic|heif|avif)$/i.test(String(file?.name || ""))) return own.slice(0, 36).trim(); // a long document name is only shortened
+  const p = (n) => String(n).padStart(2, "0");
+  return `Photo ${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())} ${p(now.getHours())}-${p(now.getMinutes())}`;
+}
+const baseName = (file) => friendlyName(file);
 const pdfFile = (bytes, name) => new File([bytes], `${name}.pdf`, { type: "application/pdf" });
 
 async function photoToPdf(file) {

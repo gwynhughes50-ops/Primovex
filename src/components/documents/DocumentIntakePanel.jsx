@@ -113,7 +113,7 @@ export default function DocumentIntakePanel({ phone = false }) {
   }
 
   if (stage === "card" && card) {
-    const common = { onCancel: reset, supplierNames, initialFile: pdf, evidence: card.evidence };
+    const common = { onCancel: reset, supplierNames, initialFile: pdf, evidence: card.evidence, compact: phone };
     const done = (message) => { setSaved(message); setStage("done"); };
     if (card.kind === "coshh") return <SubstanceForm key={pdf?.name} initial={card.initial} onSaved={done} {...common} />;
     if (target && !choice) {

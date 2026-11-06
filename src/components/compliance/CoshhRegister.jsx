@@ -60,7 +60,7 @@ function CheckGroup({ title, options, value, onChange, exclusive = "none" }) {
 }
 
 // `initialFile` and `evidence` are set when the form has been pre-filled from a dropped safety data sheet (see components/documents): the sheet is already attached, the panel shows what was read, and Save waits for the person to say they have checked it.
-export function SubstanceForm({ initial, supplierNames, onCancel, onSaved, initialFile = null, evidence = null }) {
+export function SubstanceForm({ initial, supplierNames, onCancel, onSaved, initialFile = null, evidence = null, compact = false }) {
   const { user } = useAuth();
   const actorName = user?.displayName || user?.email || "Unknown";
   const { siteNames, spaceNamesFor } = useSiteSpaceNames(true);
@@ -106,14 +106,14 @@ export function SubstanceForm({ initial, supplierNames, onCancel, onSaved, initi
   }
 
   return (
-    <section className="rounded-2xl border border-teal-300/30 bg-slate-900/80 p-4 shadow-lg" aria-label={isNew ? "Add a substance" : "Edit a substance"}>
+    <section className={`rounded-2xl border border-teal-300/30 bg-slate-900/80 shadow-lg ${compact ? "p-2.5" : "p-4"}`} aria-label={isNew ? "Add a substance" : "Edit a substance"}>
       <div className="flex items-start justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100"><FlaskConical className="h-5 w-5 text-teal-300" aria-hidden="true" /> {isNew ? "Add a substance" : `Edit ${initial.name}`}</h3>
         <button type="button" onClick={onCancel} className="text-slate-400 hover:text-slate-200" aria-label="Close"><X className="h-5 w-5" /></button>
       </div>
 
-      <EvidencePanel evidence={evidence} confirmed={confirmed} onConfirmedChange={setConfirmed} />
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+      <EvidencePanel evidence={evidence} confirmed={confirmed} onConfirmedChange={setConfirmed} compact={compact} />
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className={LABEL}>Product name (as on the label)
           <input className={FIELD} value={form.name} onChange={(e) => set({ name: e.target.value })} />
         </label>
@@ -145,15 +145,15 @@ export function SubstanceForm({ initial, supplierNames, onCancel, onSaved, initi
         <CheckGroup title="First aid" options={FIRST_AID_OPTIONS} value={form.firstAid} onChange={(firstAid) => set({ firstAid })} exclusive="" />
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className={LABEL}>Next review due
           <input type="date" className={FIELD} value={form.reviewDate} onChange={(e) => set({ reviewDate: e.target.value })} />
         </label>
         <div>
           <span className={LABEL}>Safety data sheet (PDF)</span>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-200">
-            {form.sdsUrl && !file && <span className="inline-flex items-center gap-1 text-emerald-300"><FileText className="h-4 w-4" aria-hidden="true" /> {form.sdsFileName || "Attached"}</span>}
-            {file && <span className="inline-flex items-center gap-1 text-teal-200"><FileText className="h-4 w-4" aria-hidden="true" /> {file.name}</span>}
+            {form.sdsUrl && !file && <span className="inline-flex min-w-0 max-w-full items-center gap-1 break-all text-emerald-300"><FileText className="h-4 w-4 shrink-0" aria-hidden="true" /> {form.sdsFileName || "Attached"}</span>}
+            {file && <span className="inline-flex min-w-0 max-w-full items-center gap-1 break-all text-teal-200"><FileText className="h-4 w-4 shrink-0" aria-hidden="true" /> {file.name}</span>}
             <label className="cursor-pointer rounded-lg border border-white/15 px-3 py-1.5 text-sm font-semibold text-slate-100 hover:bg-white/5">
               {form.sdsUrl || file ? "Replace PDF" : "Choose PDF"}
               <input type="file" accept="application/pdf,.pdf" className="sr-only" onChange={chooseFile} />

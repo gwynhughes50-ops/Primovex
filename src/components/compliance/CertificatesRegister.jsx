@@ -32,7 +32,7 @@ const STATUS_STYLE = {
 const uk = (key) => (key ? key.split("-").reverse().join("/") : "not set");
 
 // `initialFile` and `evidence` are set when the form has been pre-filled from a dropped document (see components/documents): the file is already attached, the panel shows what was read, and Save waits for the person to say they have checked it.
-export function CertificateForm({ initial, supplierNames, onCancel, onSaved, initialFile = null, evidence = null }) {
+export function CertificateForm({ initial, supplierNames, onCancel, onSaved, initialFile = null, evidence = null, compact = false }) {
   const { user, displayName } = useAuth();
   const actor = { uid: user?.uid || "", displayName: displayName || user?.email || "Unknown" };
   const { siteNames } = useSiteSpaceNames(true);
@@ -78,13 +78,13 @@ export function CertificateForm({ initial, supplierNames, onCancel, onSaved, ini
   }
 
   return (
-    <section className="rounded-2xl border border-teal-300/30 bg-slate-900/80 p-4 shadow-lg" aria-label={isNew ? "Add a certificate" : "Edit a certificate"}>
+    <section className={`rounded-2xl border border-teal-300/30 bg-slate-900/80 shadow-lg ${compact ? "p-2.5" : "p-4"}`} aria-label={isNew ? "Add a certificate" : "Edit a certificate"}>
       <div className="flex items-start justify-between gap-3">
         <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100"><FileBadge className="h-5 w-5 text-teal-300" aria-hidden="true" /> {isNew ? "Add a certificate" : `Edit ${certLabel(initial)}`}</h3>
         <button type="button" onClick={onCancel} className="text-slate-400 hover:text-slate-200" aria-label="Close"><X className="h-5 w-5" /></button>
       </div>
-      <EvidencePanel evidence={evidence} confirmed={confirmed} onConfirmedChange={setConfirmed} />
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+      <EvidencePanel evidence={evidence} confirmed={confirmed} onConfirmedChange={setConfirmed} compact={compact} />
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className={LABEL}>What is it
           <select className={FIELD} value={form.type} onChange={(e) => withSuggestion({ type: e.target.value })}>{CERT_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select>
         </label>
@@ -110,8 +110,8 @@ export function CertificateForm({ initial, supplierNames, onCancel, onSaved, ini
         <div>
           <span className={LABEL}>Certificate (PDF)</span>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-200">
-            {form.certUrl && !file && <span className="inline-flex items-center gap-1 text-emerald-300"><FileText className="h-4 w-4" aria-hidden="true" /> {form.certFileName || "Attached"}</span>}
-            {file && <span className="inline-flex items-center gap-1 text-teal-200"><FileText className="h-4 w-4" aria-hidden="true" /> {file.name}</span>}
+            {form.certUrl && !file && <span className="inline-flex min-w-0 max-w-full items-center gap-1 break-all text-emerald-300"><FileText className="h-4 w-4 shrink-0" aria-hidden="true" /> {form.certFileName || "Attached"}</span>}
+            {file && <span className="inline-flex min-w-0 max-w-full items-center gap-1 break-all text-teal-200"><FileText className="h-4 w-4 shrink-0" aria-hidden="true" /> {file.name}</span>}
             <label className="cursor-pointer rounded-lg border border-white/15 px-3 py-1.5 text-sm font-semibold text-slate-100 hover:bg-white/5">{form.certUrl || file ? "Replace PDF" : "Choose PDF"}<input type="file" accept="application/pdf,.pdf" className="sr-only" onChange={chooseFile} /></label>
           </div>
         </div>
@@ -127,7 +127,7 @@ export function CertificateForm({ initial, supplierNames, onCancel, onSaved, ini
 }
 
 // `initialValues`, `initialFile` and `evidence` are set when the renewal has been pre-filled from a dropped certificate (see components/documents).
-export function RenewForm({ cert, supplierNames, onCancel, onDone, initialValues = null, initialFile = null, evidence = null }) {
+export function RenewForm({ cert, supplierNames, onCancel, onDone, initialValues = null, initialFile = null, evidence = null, compact = false }) {
   const { user, displayName } = useAuth();
   const actor = { uid: user?.uid || "", displayName: displayName || user?.email || "Unknown" };
   const today = new Date();
@@ -156,15 +156,15 @@ export function RenewForm({ cert, supplierNames, onCancel, onDone, initialValues
     <div className="mt-3 rounded-xl border border-teal-300/30 bg-slate-950/50 p-3">
       <p className="text-sm font-semibold text-slate-100">Record a renewal of {certLabel(cert)}</p>
       <p className="text-xs text-slate-400">The old certificate is kept in its history.</p>
-      <EvidencePanel evidence={evidence} confirmed={confirmed} onConfirmedChange={setConfirmed} />
-      <div className="mt-2 grid gap-2 sm:grid-cols-4">
+      <EvidencePanel evidence={evidence} confirmed={confirmed} onConfirmedChange={setConfirmed} compact={compact} />
+      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-4">
         <label className={LABEL}>Date done<input type="date" className={FIELD} value={completedOn} onChange={(e) => { setCompletedOn(e.target.value); if (!touched) setExpiryDate(suggestedExpiry(cert.type, e.target.value)); }} /></label>
         <label className={LABEL}>New date it runs out<input type="date" className={FIELD} value={expiryDate} onChange={(e) => { setTouched(true); setExpiryDate(e.target.value); }} /></label>
         <label className={LABEL}>Done by<select className={FIELD} value={provider} onChange={(e) => setProvider(e.target.value)}>{suppliers.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
         <label className={LABEL}>Certificate number<input className={FIELD} value={reference} onChange={(e) => setReference(e.target.value)} maxLength={80} /></label>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-200">
-        {file && <span className="inline-flex items-center gap-1 text-teal-200"><FileText className="h-4 w-4" aria-hidden="true" /> {file.name}</span>}
+        {file && <span className="inline-flex min-w-0 max-w-full items-center gap-1 break-all text-teal-200"><FileText className="h-4 w-4 shrink-0" aria-hidden="true" /> {file.name}</span>}
         <label className="cursor-pointer rounded-lg border border-white/15 px-3 py-1.5 text-sm font-semibold hover:bg-white/5">{file ? "Replace PDF" : "Choose the new PDF"}<input type="file" accept="application/pdf,.pdf" className="sr-only" onChange={(e) => { const f = e.target.files?.[0] || null; const p = f ? pdfProblem(f) : ""; if (p) { setError(p); setFile(null); e.target.value = ""; } else { setError(""); setFile(f); } }} /></label>
       </div>
       {error && <p className="mt-2 text-sm text-rose-300" role="alert">{error}</p>}

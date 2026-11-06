@@ -6,10 +6,11 @@ import DocumentIntakePanel from "@/components/documents/DocumentIntakePanel";
 export default function MobileAddDocument() {
   const navigate = useNavigate();
   return (
-    <main className="pvx-mobile-page pvx-mobile-stack">
+    <main className="pvx-mobile-page pvx-mobile-stack min-w-0">
       <button type="button" onClick={() => navigate("/", { replace: true })} className="inline-flex min-h-10 items-center gap-1.5 self-start text-sm font-semibold"><ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back</button>
       <h1 className="text-xl font-black">Add a document</h1>
-      <div className="rounded-2xl bg-slate-900 p-3"><DocumentIntakePanel phone /></div>
+      {/* no extra card: the register form is already a card, and a second one takes a fifth of a small screen */}
+      <div style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 7rem)" }}><DocumentIntakePanel phone /></div>
     </main>
   );
 }

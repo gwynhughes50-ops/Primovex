@@ -10,14 +10,17 @@ const TONE = {
   missing: { Icon: HelpCircle, text: "text-slate-400", border: "border-white/10" },
 };
 
-export default function EvidencePanel({ evidence, confirmed, onConfirmedChange }) {
+// a very long name (a camera's) is shown with its middle left out
+const shortName = (name) => (String(name).length > 40 ? `${String(name).slice(0, 22)}...${String(name).slice(-14)}` : String(name));
+
+export default function EvidencePanel({ evidence, confirmed, onConfirmedChange, compact = false }) {
   if (!evidence) return null;
   const todo = needsChecking(evidence);
   return (
-    <section className="mt-3 rounded-xl border border-teal-300/30 bg-teal-500/5 p-3 text-sm text-slate-200" aria-label={evidence.title}>
+    <section className={`mt-3 min-w-0 break-words rounded-xl border border-teal-300/30 bg-teal-500/5 text-sm text-slate-200 ${compact ? "-mx-1 p-2" : "p-3"}`} aria-label={evidence.title}>
       <h4 className="flex items-center gap-2 font-semibold text-slate-100"><Sparkles className="h-4 w-4 text-teal-300" aria-hidden="true" /> {evidence.title}</h4>
       <p className="mt-1 text-xs text-slate-400">
-        Primovex read {evidence.fileName ? `"${evidence.fileName}"` : "the document"} and filled in what it could. It can make mistakes, so check each line against the document itself.
+        Primovex read {evidence.fileName ? `"${shortName(evidence.fileName)}"` : "the document"} and filled in what it could. It can make mistakes, so check each line against the document itself.
         {todo > 0 ? ` ${todo} ${todo === 1 ? "line needs" : "lines need"} your eyes.` : ""}
       </p>
       {evidence.sourceNote && <p className="mt-2 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-slate-300">{evidence.sourceNote}</p>}
@@ -26,13 +29,13 @@ export default function EvidencePanel({ evidence, confirmed, onConfirmedChange }
         {evidence.rows.map((r) => {
           const { Icon, text, border } = TONE[r.status];
           return (
-            <li key={r.key} className={`rounded-lg border ${border} px-2.5 py-1.5`}>
+            <li key={r.key} className={`rounded-lg border ${border} ${compact ? "px-2 py-1" : "px-2.5 py-1.5"}`}>
               <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                 <span className="text-xs font-semibold text-slate-300">{r.label}</span>
                 <span className={`inline-flex items-center gap-1 text-[11px] font-semibold ${text}`}><Icon className="h-3.5 w-3.5" aria-hidden="true" /> {STATUS_WORDS[r.status]}</span>
               </div>
-              {r.display && <p className="text-sm text-slate-100">{r.display}</p>}
-              {r.evidence && <p className="mt-0.5 text-[11px] italic text-slate-400">On the document: "{r.evidence}"</p>}
+              {r.display && <p className="break-words text-sm text-slate-100">{r.display}</p>}
+              {r.evidence && <p className="mt-0.5 break-words text-[11px] italic text-slate-400">On the document: "{r.evidence}"</p>}
               {r.note && <p className="mt-0.5 text-[11px] text-slate-300">{r.note}</p>}
             </li>
           );

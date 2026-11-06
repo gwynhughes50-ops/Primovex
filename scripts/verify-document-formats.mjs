@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { PDFDocument } from "pdf-lib";
 import { TEXT_PDF_LINES_PER_PAGE, textToPdf, wrapLines } from "../src/modules/documents/textPdf.js";
 import { decodeWords, htmlToText, parseEml, pickAttachment } from "../src/modules/documents/emailParser.js";
-import { ACCEPT, classify, fileProblem, prepareFile, recordAfterReading } from "../src/modules/documents/documentIntakeService.js";
+import { ACCEPT, classify, fileProblem, friendlyName, prepareFile, recordAfterReading } from "../src/modules/documents/documentIntakeService.js";
 
 let n = 0;
 const t = async (name, fn) => { await fn(); n += 1; console.log(`ok  ${name}`); };
@@ -208,6 +208,16 @@ await t("the record of a Word file is a labelled text copy made from what the se
   assert.throws(() => recordAfterReading(prepared, {}, original), /no copy of it could be made/);
   const pdfPrepared = await prepareFile(file("a.pdf", PDF_TEXT, "application/pdf"));
   assert.equal(recordAfterReading(pdfPrepared, {}, null), pdfPrepared.record, "a PDF is its own record");
+});
+
+await t("a phone camera's long file name becomes a short readable one, and a long document name is only shortened", () => {
+  const now = new Date(2026, 10, 6, 14, 39);
+  assert.equal(friendlyName(file("JPEG_20261106_143900_4459904644612412345678.jpg", "x"), now), "Photo 2026-11-06 14-39");
+  assert.equal(friendlyName(file("IMG_20261106_143900_4459904644612412345678.HEIC", "x"), now), "Photo 2026-11-06 14-39");
+  assert.equal(friendlyName(file("gas-safety.jpg", "x"), now), "gas-safety", "a short name is kept");
+  assert.equal(friendlyName(file("Annual gas safety certificate for the main surgery building 2026.docx", "x"), now).length <= 36, true);
+  assert.equal(friendlyName(file("Annual gas safety certificate for the main surgery building 2026.docx", "x"), now).startsWith("Annual gas safety"), true, "a document is not renamed Photo");
+  assert.equal(friendlyName(null, now), "document");
 });
 
 console.log(`\n${n} passed`);
