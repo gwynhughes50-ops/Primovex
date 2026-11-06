@@ -8,7 +8,7 @@ import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
 import { CertificateForm, RenewForm } from "@/components/compliance/CertificatesRegister";
 import { SubstanceForm } from "@/components/compliance/CoshhRegister";
 import { INTAKE_KINDS, cardFor, describeProblem, findRenewalTarget, ukDay } from "@/modules/documents/documentIntake";
-import { fileProblem, readDocument, toPdfFile } from "@/modules/documents/documentIntakeService";
+import { ACCEPT, DROP_HINT, fileProblem, prepareFile, readDocument, recordAfterReading } from "@/modules/documents/documentIntakeService";
 import { certLabel } from "@/modules/certificates/certificates";
 import { useCertificates } from "@/modules/certificates/certificateService";
 
@@ -27,7 +27,9 @@ export default function DocumentIntakePanel({ phone = false }) {
   const [supplierDocs, setSupplierDocs] = useState([]);
   const [kind, setKind] = useState("auto");
   const [stage, setStage] = useState("pick"); // pick | reading | card | other | done
-  const [pdf, setPdf] = useState(null);
+  const [pdf, setPdf] = useState(null); // the PDF that will be kept as the record
+  const [original, setOriginal] = useState(null); // the file as it was dropped, so it can be read again as another kind
+  const [sourceNote, setSourceNote] = useState(""); // how the file was handled (an email attachment was used, a text copy was made)
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState("");
@@ -42,10 +44,13 @@ export default function DocumentIntakePanel({ phone = false }) {
   }, [demo]);
   const supplierNames = useMemo(() => [...new Set(supplierDocs.filter((s) => s.active !== false && s.name).map((s) => String(s.name).trim()))].sort((a, b) => a.localeCompare(b)), [supplierDocs]);
 
-  const card = useMemo(() => (result ? cardFor(result, { siteNames, supplierNames }) : null), [result, siteNames, supplierNames]);
+  const card = useMemo(() => {
+    const built = result ? cardFor(result, { siteNames, supplierNames }) : null;
+    return built ? { ...built, evidence: { ...built.evidence, sourceNote } } : null;
+  }, [result, siteNames, supplierNames, sourceNote]);
   const target = useMemo(() => (card?.kind === "certificate" ? findRenewalTarget(certificates || [], card.initial) : null), [card, certificates]);
 
-  const reset = () => { setStage("pick"); setPdf(null); setResult(null); setError(""); setSaved(""); setChoice(""); };
+  const reset = () => { setStage("pick"); setPdf(null); setOriginal(null); setSourceNote(""); setResult(null); setError(""); setSaved(""); setChoice(""); };
 
   async function read(file, as = kind) {
     setError("");
@@ -53,9 +58,11 @@ export default function DocumentIntakePanel({ phone = false }) {
     if (problem) { setError(problem); return; }
     setStage("reading");
     try {
-      const asPdf = await toPdfFile(file);
-      setPdf(asPdf);
-      const found = await readDocument(asPdf, as);
+      const prepared = await prepareFile(file);
+      const found = await readDocument(prepared.send, as);
+      setOriginal(file);
+      setPdf(recordAfterReading(prepared, found, file));
+      setSourceNote(prepared.note);
       setResult(found);
       setChoice("");
       setStage(found.kind === "certificate" || found.kind === "coshh" ? "card" : "other");
@@ -97,8 +104,8 @@ export default function DocumentIntakePanel({ phone = false }) {
         {(result?.warnings || []).map((w) => <p key={w} className="mt-1 text-sm">{w}</p>)}
         <p className="mt-2 text-sm text-slate-300">If you know what it is, tell me and I will read it that way.</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" className={BTN} onClick={() => read(pdf, "certificate")}>Read it as a certificate</button>
-          <button type="button" className={BTN} onClick={() => read(pdf, "coshh")}>Read it as a COSHH data sheet</button>
+          <button type="button" className={BTN} onClick={() => read(original, "certificate")}>Read it as a certificate</button>
+          <button type="button" className={BTN} onClick={() => read(original, "coshh")}>Read it as a COSHH data sheet</button>
           <button type="button" className={BTN} onClick={reset}>Start again</button>
         </div>
       </div>
@@ -143,12 +150,12 @@ export default function DocumentIntakePanel({ phone = false }) {
       >
         <UploadCloud className="mx-auto h-10 w-10 text-teal-300" aria-hidden="true" />
         <p className="mt-2 font-semibold">{phone ? "Take a photo of the document, or choose a file" : "Drop a certificate or safety data sheet here"}</p>
-        <p className="mt-1 text-sm text-slate-400">A PDF or a photo, under 10 MB. Primovex reads it and fills in the form; you check it before anything is saved.</p>
+        <p className="mt-1 text-sm text-slate-400">{DROP_HINT} Primovex reads it and fills in the form; you check it before anything is saved.</p>
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           {phone && <button type="button" className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-teal-500/90 px-5 font-bold text-slate-950" onClick={() => photoInput.current?.click()}><Camera className="h-5 w-5" aria-hidden="true" /> Take a photo</button>}
           <button type="button" className={phone ? "min-h-12 rounded-xl border border-white/20 px-5 font-bold" : BTN} onClick={() => fileInput.current?.click()}>Choose a file</button>
         </div>
-        <input ref={fileInput} type="file" accept="application/pdf,.pdf,image/*" className="hidden" onChange={onPicked} />
+        <input ref={fileInput} type="file" accept={ACCEPT} className="hidden" onChange={onPicked} />
         <input ref={photoInput} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPicked} />
       </div>
       {error && <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm font-semibold text-rose-200" role="alert">{error}</p>}

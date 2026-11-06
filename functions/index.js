@@ -183,7 +183,7 @@ exports.readDocumentForRegister = onCall(
         endpoint: AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT.value(),
         key: AZURE_DOCUMENT_INTELLIGENCE_KEY.value(),
         base64Source: upload.base64,
-        pages: "1-6",
+        pages: upload.canLimitPages ? "1-6" : undefined,
       });
       const ocrText = String(analysed?.analyzeResult?.content || "");
       const pageCount = (analysed?.analyzeResult?.pages || []).length;
@@ -200,7 +200,10 @@ exports.readDocumentForRegister = onCall(
         options: request.data?.options,
       });
       await eventRef.set({ status: "succeeded", kind: result.kind, pageCount, completedAt: FieldValue.serverTimestamp() }, { merge: true });
-      return { ok: true, analysisId: eventRef.id, fileName: upload.fileName, fileSha256: upload.sha256, pageCount, ...result };
+      // A Word, Excel or PowerPoint file, or a photo the app could not turn into a PDF, cannot be kept as the record (the registers only hold PDFs), so the text that was read is
+      // handed back to the same person to make a clearly labelled text copy from. Nothing is kept here.
+      const textCopy = upload.needsTextCopy ? ocrText.slice(0, 24000) : "";
+      return { ok: true, analysisId: eventRef.id, fileName: upload.fileName, fileSha256: upload.sha256, pageCount, fileKind: upload.kind, textCopy, ...result };
     } catch (error) {
       if (error instanceof HttpsError) throw error;
       console.error("Document intake failed", { eventId: eventRef.id, message: error?.message });

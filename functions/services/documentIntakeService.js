@@ -18,7 +18,33 @@ const KEY = /^[a-z0-9_-]{1,40}$/;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // ---------- the file ----------
-// Only PDFs and photos; the first bytes must be what the type says, because a file name or type can be anything.
+// What Azure Document Intelligence can read: PDF, photos (JPEG, PNG, BMP, TIFF, HEIF) and Word, Excel and PowerPoint files (the new .docx, .xlsx, .pptx kinds).
+// The app turns everything else it can (webp and gif photos, emails, text, web pages) into a PDF before it gets here. The kind is decided from the file's own first
+// bytes, never from its name or its claimed type, because those can be anything.
+const OFFICE_PARTS = { docx: "word/document.xml", xlsx: "xl/workbook.xml", pptx: "ppt/presentation.xml" };
+const HEIF_BRANDS = new Set(["heic", "heix", "hevc", "hevx", "heim", "heis", "mif1", "msf1"]);
+const READABLE = "PDF, a photo (JPEG, PNG, TIFF, BMP or HEIC), or a Word, Excel or PowerPoint file (.docx, .xlsx, .pptx)";
+// the kinds that cannot be kept as the record by the app, so the server hands back the text it read to make a text copy from
+const NEEDS_TEXT_COPY = new Set(["docx", "xlsx", "pptx", "tiff", "bmp", "heif"]);
+const MIME_OK = /^(application\/pdf|image\/(jpeg|png|bmp|tiff|heic|heif)|application\/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation)|application\/octet-stream)$/;
+
+function kindOfBytes(bytes) {
+  const head = bytes.subarray(0, 12);
+  if (head.subarray(0, 5).toString("latin1") === "%PDF-") return "pdf";
+  if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return "jpeg";
+  if (head[0] === 0x89 && head.subarray(1, 4).toString("latin1") === "PNG") return "png";
+  if (head[0] === 0x42 && head[1] === 0x4d && bytes.length > 26) return "bmp";
+  if ((head[0] === 0x49 && head[1] === 0x49 && head[2] === 0x2a && head[3] === 0) || (head[0] === 0x4d && head[1] === 0x4d && head[2] === 0 && head[3] === 0x2a)) return "tiff";
+  if (head.subarray(4, 8).toString("latin1") === "ftyp" && HEIF_BRANDS.has(head.subarray(8, 12).toString("latin1").toLowerCase())) return "heif";
+  if (head[0] === 0x50 && head[1] === 0x4b && head[2] === 3 && head[3] === 4) {
+    // a zip: it is an Office file only if it holds that kind's main part. A plain zip, a jar or an old .docm-style file is not accepted.
+    const text = bytes.toString("latin1");
+    if (!text.includes("[Content_Types].xml")) return "";
+    return Object.keys(OFFICE_PARTS).find((kind) => text.includes(OFFICE_PARTS[kind])) || "";
+  }
+  return "";
+}
+
 function decodeUpload({ base64, mimeType, fileName } = {}) {
   const raw = String(base64 || "").replace(/^data:[^,]*,/, "");
   if (!raw) throw new Error("No document was sent.");
@@ -26,14 +52,17 @@ function decodeUpload({ base64, mimeType, fileName } = {}) {
   const bytes = Buffer.from(raw, "base64");
   if (!bytes.length) throw new Error("That file is empty.");
   if (bytes.length > MAX_BYTES) throw new Error("That file is over 10 MB.");
-  const kind = bytes.subarray(0, 5).toString("latin1") === "%PDF-" ? "pdf"
-    : bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff ? "jpeg"
-    : bytes.subarray(1, 4).toString("latin1") === "PNG" && bytes[0] === 0x89 ? "png" : "";
-  if (!kind) throw new Error("Only PDF, JPEG or PNG files can be read.");
+  const kind = kindOfBytes(bytes);
+  if (!kind) throw new Error(`That kind of file cannot be read. Use a ${READABLE}.`);
   const claimed = String(mimeType || "").toLowerCase();
-  if (claimed && !/^(application\/pdf|image\/jpeg|image\/png)$/.test(claimed)) throw new Error("Only PDF, JPEG or PNG files can be read.");
+  if (claimed && !MIME_OK.test(claimed)) throw new Error(`That kind of file cannot be read. Use a ${READABLE}.`);
   const name = String(fileName || "document").replace(/[^A-Za-z0-9._ -]+/g, "_").slice(-120) || "document";
-  return { bytes, base64: bytes.toString("base64"), kind, fileName: name, sha256: crypto.createHash("sha256").update(bytes).digest("hex") };
+  return {
+    bytes, base64: bytes.toString("base64"), kind, fileName: name, sha256: crypto.createHash("sha256").update(bytes).digest("hex"),
+    // only a PDF or a TIFF can be read page by page, so the page limit is only sent for those
+    canLimitPages: kind === "pdf" || kind === "tiff",
+    needsTextCopy: NEEDS_TEXT_COPY.has(kind),
+  };
 }
 
 // ---------- the choices the model may use ----------
@@ -246,4 +275,4 @@ async function extractDocumentFields({ endpoint, key, deployment, ocrText, kind 
   return verifyExtraction({ parsed, ocrText: text, kind, options: choices });
 }
 
-module.exports = { MAX_BYTES, buildInstructions, cleanOptions, datesIn, decodeUpload, extractDocumentFields, norm, verifyExtraction };
+module.exports = { MAX_BYTES, READABLE, buildInstructions, cleanOptions, datesIn, decodeUpload, extractDocumentFields, norm, verifyExtraction };

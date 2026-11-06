@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { MAX_BYTES, buildInstructions, cleanOptions, datesIn, decodeUpload, extractDocumentFields, verifyExtraction } = require("../services/documentIntakeService");
+const { MAX_BYTES, READABLE, buildInstructions, cleanOptions, datesIn, decodeUpload, extractDocumentFields, verifyExtraction } = require("../services/documentIntakeService");
 const { analyzeDocument } = require("../services/azureDocumentIntelligenceService");
 const { documentsEnabledFor, clinFlowEnabledFor } = require("../services/moduleAccess");
 
@@ -35,15 +35,55 @@ const SDS_TEXT = [
 
 const field = (value, evidence) => ({ value, evidence });
 
-test("only real PDFs and photos are accepted, judged by the file's own first bytes", () => {
+test("only readable files are accepted, judged by the file's own first bytes", () => {
   assert.equal(decodeUpload({ base64: b64(PDF), mimeType: "application/pdf", fileName: "gas.pdf" }).kind, "pdf");
   assert.equal(decodeUpload({ base64: b64(JPEG), mimeType: "image/jpeg" }).kind, "jpeg");
   assert.equal(decodeUpload({ base64: `data:image/png;base64,${b64(PNG)}` }).kind, "png");
-  assert.throws(() => decodeUpload({ base64: b64("hello there"), mimeType: "application/pdf" }), /Only PDF, JPEG or PNG/);
-  assert.throws(() => decodeUpload({ base64: b64(Buffer.concat([Buffer.from("MZ"), Buffer.alloc(40)])) }), /Only PDF, JPEG or PNG/);
-  assert.throws(() => decodeUpload({ base64: b64(PDF), mimeType: "text/html" }), /Only PDF, JPEG or PNG/);
+  assert.throws(() => decodeUpload({ base64: b64("hello there"), mimeType: "application/pdf" }), /cannot be read/);
+  assert.throws(() => decodeUpload({ base64: b64(Buffer.concat([Buffer.from("MZ"), Buffer.alloc(40)])) }), /cannot be read/);
+  assert.throws(() => decodeUpload({ base64: b64(PDF), mimeType: "text/html" }), /cannot be read/);
   assert.throws(() => decodeUpload({}), /No document/);
   assert.throws(() => decodeUpload({ base64: b64(Buffer.concat([PDF, Buffer.alloc(MAX_BYTES + 10)])) }), /over 10 MB/);
+});
+
+const zipOf = (...names) => Buffer.concat([Buffer.from([0x50, 0x4b, 3, 4]), Buffer.from(["[Content_Types].xml", ...names].join("\0"), "latin1"), Buffer.alloc(40)]);
+const BMP = Buffer.concat([Buffer.from("BM"), Buffer.alloc(40)]);
+const TIFF_LE = Buffer.concat([Buffer.from([0x49, 0x49, 0x2a, 0]), Buffer.alloc(40)]);
+const TIFF_BE = Buffer.concat([Buffer.from([0x4d, 0x4d, 0, 0x2a]), Buffer.alloc(40)]);
+const heif = (brand) => Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from("ftyp" + brand, "latin1"), Buffer.alloc(40)]);
+
+test("Word, Excel and PowerPoint files, and TIFF, BMP and HEIC photos, are recognised from their contents", () => {
+  assert.equal(decodeUpload({ base64: b64(zipOf("word/document.xml")), fileName: "cert.docx" }).kind, "docx");
+  assert.equal(decodeUpload({ base64: b64(zipOf("xl/workbook.xml")), fileName: "log.xlsx" }).kind, "xlsx");
+  assert.equal(decodeUpload({ base64: b64(zipOf("ppt/presentation.xml")), fileName: "deck.pptx" }).kind, "pptx");
+  assert.equal(decodeUpload({ base64: b64(BMP) }).kind, "bmp");
+  assert.equal(decodeUpload({ base64: b64(TIFF_LE) }).kind, "tiff");
+  assert.equal(decodeUpload({ base64: b64(TIFF_BE) }).kind, "tiff");
+  assert.equal(decodeUpload({ base64: b64(heif("heic")) }).kind, "heif");
+  assert.equal(decodeUpload({ base64: b64(heif("mif1")) }).kind, "heif");
+  assert.equal(decodeUpload({ base64: b64(zipOf("word/document.xml")), mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }).kind, "docx");
+});
+
+test("a zip that is not an Office file, an old Word file, a program or a web page is refused, however it is named", () => {
+  assert.throws(() => decodeUpload({ base64: b64(Buffer.concat([Buffer.from([0x50, 0x4b, 3, 4]), Buffer.from("just some files"), Buffer.alloc(40)])), fileName: "cert.docx" }), /cannot be read/, "a plain zip named .docx");
+  assert.throws(() => decodeUpload({ base64: b64(Buffer.concat([Buffer.from([0x50, 0x4b, 3, 4]), Buffer.from("[Content_Types].xml and some other part"), Buffer.alloc(40)])) }), /cannot be read/, "a zip with no Office part");
+  assert.throws(() => decodeUpload({ base64: b64(Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(100)])), fileName: "old.doc" }), /cannot be read/, "an old .doc or .xls");
+  assert.throws(() => decodeUpload({ base64: b64("<html><body>hello</body></html>"), mimeType: "text/html" }), /cannot be read/);
+  assert.throws(() => decodeUpload({ base64: b64(Buffer.concat([Buffer.from("MZ"), Buffer.alloc(80)])), mimeType: "application/octet-stream" }), /cannot be read/, "a program is refused whatever it claims to be");
+  assert.match(READABLE, /Word, Excel or PowerPoint/);
+});
+
+test("only a PDF or TIFF is limited to its first pages, and only the kinds that cannot be kept as the record need a text copy", () => {
+  const kinds = {
+    pdf: [PDF, true, false], tiff: [TIFF_LE, true, true], jpeg: [JPEG, false, false], png: [PNG, false, false],
+    docx: [zipOf("word/document.xml"), false, true], xlsx: [zipOf("xl/workbook.xml"), false, true], pptx: [zipOf("ppt/presentation.xml"), false, true], bmp: [BMP, false, true], heif: [heif("heic"), false, true],
+  };
+  for (const [kind, [buffer, pages, copy]] of Object.entries(kinds)) {
+    const up = decodeUpload({ base64: b64(buffer) });
+    assert.equal(up.kind, kind);
+    assert.equal(up.canLimitPages, pages, `${kind} page limit`);
+    assert.equal(up.needsTextCopy, copy, `${kind} text copy`);
+  }
 });
 
 test("the upload gives a fingerprint and a safe file name, and never keeps a path", () => {

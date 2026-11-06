@@ -20,6 +20,7 @@ export default function EvidencePanel({ evidence, confirmed, onConfirmedChange }
         Primovex read {evidence.fileName ? `"${evidence.fileName}"` : "the document"} and filled in what it could. It can make mistakes, so check each line against the document itself.
         {todo > 0 ? ` ${todo} ${todo === 1 ? "line needs" : "lines need"} your eyes.` : ""}
       </p>
+      {evidence.sourceNote && <p className="mt-2 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-slate-300">{evidence.sourceNote}</p>}
       {evidence.warnings?.length > 0 && <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs font-semibold text-amber-200" role="alert">{evidence.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
       <ul className="mt-2 space-y-1.5">
         {evidence.rows.map((r) => {
