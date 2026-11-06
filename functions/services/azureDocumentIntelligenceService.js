@@ -114,11 +114,13 @@ function summariseAnalyzeResult(payload, packDocument) {
   };
 }
 
-async function analyzeDocument({ endpoint, key, base64Source, fetchImpl = fetch }) {
+async function analyzeDocument({ endpoint, key, base64Source, pages, fetchImpl = fetch }) {
   const serviceEndpoint = normaliseEndpoint(endpoint);
   if (!String(key || "").trim()) throw new Error("The Azure Document Intelligence key is missing.");
 
-  const analyzeUrl = `${serviceEndpoint}/documentintelligence/documentModels/${MODEL_ID}:analyze?_overload=analyzeDocument&api-version=${API_VERSION}`;
+  // `pages` (for example "1-6") limits how much of a long document is read
+  const pageRange = /^\d+(-\d+)?(,\d+(-\d+)?)*$/.test(String(pages || "")) ? `&pages=${encodeURIComponent(String(pages))}` : "";
+  const analyzeUrl = `${serviceEndpoint}/documentintelligence/documentModels/${MODEL_ID}:analyze?_overload=analyzeDocument&api-version=${API_VERSION}${pageRange}`;
   let submitted;
   for (let attempt = 0; attempt < 4; attempt += 1) {
     submitted = await fetchImpl(analyzeUrl, {

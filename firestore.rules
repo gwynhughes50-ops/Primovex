@@ -747,7 +747,7 @@ match /subject_access_requests/{requestId} {
       return
         role == "System Admin" ? ["*"] :
         role == "Practice Manager" ? ["governance.reportEvents", 
-          "stocktake.count", "stocktake.manage", "training.manage", "waste.read", "waste.manage", "timesheets.manage", "itAssets.manage", "temperature.archive",
+          "stocktake.count", "stocktake.manage", "training.manage", "waste.read", "waste.manage", "timesheets.manage", "itAssets.manage", "temperature.archive", "documents.intake",
           "clinflow.read", "clinflow.capture", "clinflow.workflow", "clinflow.manage",
           "dashboard.read", "operations.read", "operations.manage",
           "inventory.read", "inventory.kits", "inventory.write", "inventory.adjust", "inventory.verify", "inventory.delete",

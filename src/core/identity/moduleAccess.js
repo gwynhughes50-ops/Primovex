@@ -10,7 +10,8 @@
 // This is the same rule the Firestore rules and the Cloud Functions apply (functions/services/moduleAccess.js), so
 // hiding it on screen is never the only thing keeping it away from staff.
 
-export const OFF_BY_DEFAULT = ["clinflow"];
+// documents: the AI that reads certificates and safety data sheets dropped into Primovex. It uses an outside processor (Azure), so like ClinFlow it is off until the practice has chosen to turn it on.
+export const OFF_BY_DEFAULT = ["clinflow", "documents"];
 
 // A module is on only when explicitly set { disabled: false }; a module that is off by default and has never been
 // set is off. Anything else is on unless { disabled: true }.

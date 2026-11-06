@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
-import { OFF_BY_DEFAULT, blockedModuleDomains, moduleMode, moduleToggleFor, shouldPurgeClinFlowLocalData } from "../src/core/identity/moduleAccess.js";
+import { OFF_BY_DEFAULT, blockedModuleDomains as blockedAll, moduleMode, moduleToggleFor, shouldPurgeClinFlowLocalData } from "../src/core/identity/moduleAccess.js";
 import { purgeClinFlowLocalData } from "../src/modules/clinflow/clinflowDocumentCache.js";
 import { CAPABILITY_CATALOG, getCapabilitiesForProfile } from "../src/core/identity/capabilities.js";
 
 let n = 0;
+// the ClinFlow tests below look at ClinFlow only; Document reading (also off by default) has its own tests at the end
+const blockedModuleDomains = (args) => blockedAll(args).filter((domain) => domain !== "documents");
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
 
 const dev = "dev-uid";
 const off = { clinflow: { disabled: true, allowUids: [dev] } };
 
 t("ClinFlow is off by default: nobody sees it until the practice has deliberately turned it on", () => {
-  assert.deepEqual(OFF_BY_DEFAULT, ["clinflow"]);
+  assert.deepEqual(OFF_BY_DEFAULT, ["clinflow", "documents"]);
   for (const toggles of [null, undefined, {}, { clinflow: {} }, { clinflow: { disabled: "false" } }]) {
     assert.deepEqual(blockedModuleDomains({ toggles, uid: "someone" }), ["clinflow"], JSON.stringify(toggles));
     assert.deepEqual(blockedModuleDomains({ toggles, uid: dev }), ["clinflow"], "even an administrator, if the practice never set it");
@@ -95,6 +97,35 @@ t("choosing a mode saves exactly the setting that gives it, and the setting is w
     assert.equal(blockedModuleDomains({ toggles: { clinflow: toggle }, uid: dev }).includes("clinflow"), mode === "off", `${mode}: what the menus hide from the administrator`);
     assert.equal(blockedModuleDomains({ toggles: { clinflow: toggle }, uid: "a-nurse" }).includes("clinflow"), mode !== "everyone", `${mode}: what a nurse is blocked from`);
   }
+});
+
+t("Document reading (the AI that reads dropped certificates and data sheets) is off by default, for everyone including an administrator", () => {
+  for (const toggles of [null, undefined, {}, { documents: {} }, { documents: { disabled: "false" } }]) {
+    assert.ok(blockedAll({ toggles, uid: "someone" }).includes("documents"), JSON.stringify(toggles));
+    assert.ok(blockedAll({ toggles, uid: dev }).includes("documents"));
+    assert.equal(moduleMode("documents", toggles?.documents, dev), "off");
+  }
+});
+
+t("Document reading can be on for only the administrator, or for everyone with permission, and turning ClinFlow on does not turn it on", () => {
+  const me = { documents: { disabled: true, allowUids: [dev] } };
+  assert.ok(!blockedAll({ toggles: me, uid: dev }).includes("documents"));
+  assert.ok(blockedAll({ toggles: me, uid: "pm" }).includes("documents"));
+  assert.ok(blockedAll({ toggles: me, uid: dev, viewingAs: true }).includes("documents"), "viewing as another role, the allow-list does not carry over");
+  assert.ok(!blockedAll({ toggles: { documents: { disabled: false, allowUids: [] } }, uid: "pm" }).includes("documents"));
+  assert.ok(blockedAll({ toggles: { clinflow: { disabled: false, allowUids: [] } }, uid: "pm" }).includes("documents"));
+  assert.equal(moduleMode("documents", me.documents, dev), "me");
+  assert.deepEqual(moduleToggleFor("everyone", dev, me.documents), { disabled: false, allowUids: [] });
+});
+
+t("demo and training can try Document reading (it reads a made-up sample); and while it is off, nobody loses the rest of what they can do", () => {
+  assert.ok(!blockedAll({ toggles: null, uid: dev, synthetic: true }).includes("documents"));
+  const pm = getCapabilitiesForProfile({ role: "Practice Manager" }, {});
+  assert.ok(pm.includes("documents.intake"), "the Practice Manager role carries the permission, so the switch is what hides it");
+  const visible = pm.filter((c) => !blockedAll({ toggles: null, uid: "pm" }).includes(c.split(".")[0]));
+  assert.ok(!visible.includes("documents.intake") && visible.includes("compliance.read") && visible.includes("temperature.archive"));
+  assert.ok(CAPABILITY_CATALOG.some((c) => c.id === "documents.intake"));
+  assert.equal(shouldPurgeClinFlowLocalData({ switchLoaded: true, blockedDomains: ["documents"], signedIn: true }), false, "a blocked Document reading does not wipe ClinFlow's local data");
 });
 
 console.log(`\n${n} passed`);

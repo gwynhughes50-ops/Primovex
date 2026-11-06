@@ -11,6 +11,7 @@ import FridgeCheckLanding from "@/mobile/FridgeCheckLanding";
 import CoshhLanding from "@/mobile/CoshhLanding";
 import ComplianceLanding from "@/mobile/ComplianceLanding";
 import { MobileLaptops, LaptopLanding, MobileMyLaptop } from "@/mobile/MobileLaptops";
+import MobileAddDocument from "@/mobile/MobileAddDocument";
 import MobileBootSplash from "@/mobile/auth/MobileBootSplash";
 import MobileAccountLogin from "@/mobile/auth/MobileAccountLogin";
 import FirstRunSetupGate from "@/setup/FirstRunSetupGate";
@@ -104,6 +105,16 @@ function MobileLaptopRoute({ mine = false }) {
   return <MobileSessionShell>{mine ? <MobileMyLaptop /> : <MobileLaptops />}</MobileSessionShell>;
 }
 
+function MobileAddDocumentRoute() {
+  const { user, loading, can, profile } = useAuth();
+  if (loading) return <MobileBootSplash message="Opening Add a document" />;
+  if (!user) return <MobileAccountLogin />;
+  if (profile?.mustChangePassword === true) return <MustChangePassword />;
+  if (!can("mobile.access") || !can("documents.intake")) return <MobileAccessDenied />;
+  // Behind the session lock: a certificate or data sheet is being read and saved to the registers.
+  return <MobileSessionShell><MobileAddDocument /></MobileSessionShell>;
+}
+
 function MobileSignificantEventsRoute() {
   const { user, loading, can, profile } = useAuth();
   if (loading) return <MobileBootSplash message="Opening Significant events" />;
@@ -123,6 +134,7 @@ export default function MobileApp() {
       <Route path="/governance/sars" element={<MobileGovernanceSARsRoute />} />
       <Route path="/it-equipment" element={<MobileLaptopRoute />} />
       <Route path="/my-laptop" element={<MobileLaptopRoute mine />} />
+      <Route path="/add-document" element={<MobileAddDocumentRoute />} />
       <Route path="/governance/significant-events" element={<MobileSignificantEventsRoute />} />
       <Route path="/spaces" element={<MobileBootController initialTab="sense" />} />
       <Route path="/temperature" element={<MobileBootController initialTab="temperature" />} />

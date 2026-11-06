@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
 import { namesWithCurrent } from "@/lib/stockPickerOptions";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
+import EvidencePanel from "@/components/documents/EvidencePanel";
 import { getQrImageUrl } from "@/lib/qrCode";
 import { openDocument } from "@/lib/openDocument";
 import { buildNfcUrl } from "@/modules/sense/services/nfcService";
@@ -58,7 +59,8 @@ function CheckGroup({ title, options, value, onChange, exclusive = "none" }) {
   );
 }
 
-function SubstanceForm({ initial, supplierNames, onCancel, onSaved }) {
+// `initialFile` and `evidence` are set when the form has been pre-filled from a dropped safety data sheet (see components/documents): the sheet is already attached, the panel shows what was read, and Save waits for the person to say they have checked it.
+export function SubstanceForm({ initial, supplierNames, onCancel, onSaved, initialFile = null, evidence = null }) {
   const { user } = useAuth();
   const actorName = user?.displayName || user?.email || "Unknown";
   const { siteNames, spaceNamesFor } = useSiteSpaceNames(true);
@@ -67,7 +69,8 @@ function SubstanceForm({ initial, supplierNames, onCancel, onSaved }) {
     reviewDate: initial.reviewDate || nextReviewFrom(dateKey(new Date())),
   }));
   const [otherSupplier, setOtherSupplier] = useState(false);
-  const [file, setFile] = useState(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [file, setFile] = useState(initialFile);
   const [busy, setBusy] = useState(false);
   const [problems, setProblems] = useState([]);
   const [error, setError] = useState("");
@@ -89,6 +92,7 @@ function SubstanceForm({ initial, supplierNames, onCancel, onSaved }) {
   async function save() {
     // a chosen file counts as the sheet for the checks below
     const found = validateSubstance({ ...form, sdsUrl: form.sdsUrl || (file ? "pending" : "") });
+    if (evidence && !confirmed) found.push("Tick the box to say you have checked these details against the data sheet.");
     setProblems(found);
     if (found.length) return;
     setBusy(true); setError("");
@@ -108,6 +112,7 @@ function SubstanceForm({ initial, supplierNames, onCancel, onSaved }) {
         <button type="button" onClick={onCancel} className="text-slate-400 hover:text-slate-200" aria-label="Close"><X className="h-5 w-5" /></button>
       </div>
 
+      <EvidencePanel evidence={evidence} confirmed={confirmed} onConfirmedChange={setConfirmed} />
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className={LABEL}>Product name (as on the label)
           <input className={FIELD} value={form.name} onChange={(e) => set({ name: e.target.value })} />

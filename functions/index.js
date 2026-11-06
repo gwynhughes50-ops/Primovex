@@ -9,7 +9,8 @@ const { getProvider, listProviders } = require("./providers/providerFactory");
 const { syncProvider } = require("./services/deviceSyncService");
 const { publishEvent } = require("./services/eventBus");
 const { getSyntheticPackDocument } = require("./config/clinflowSyntheticPack");
-const { clinFlowEnabledFor } = require("./services/moduleAccess");
+const { clinFlowEnabledFor, documentsEnabledFor } = require("./services/moduleAccess");
+const documentIntake = require("./services/documentIntakeService");
 const { raiseComplianceAlert } = require("./services/complianceAlertService");
 const sensorService = require("./services/sensorService");
 const { sendPushForNotification, sendTestAlert } = require("./services/pushService");
@@ -117,6 +118,97 @@ async function requireClinFlowCapture(request) {
   }
   return profile;
 }
+
+// Document intake: the practice's switch (Practice Admin > Module Access > Document reading, off unless deliberately turned on) and the documents.intake permission are both enforced here,
+// because the document goes to an outside processor (Azure) and must not depend on a screen hiding the button.
+async function requireDocumentIntake(request) {
+  assertSignedIn(request);
+  const config = await db.collection("practice_config").doc("main").get();
+  if (!documentsEnabledFor(config.data(), request.auth.uid)) {
+    throw new HttpsError("permission-denied", "Document reading is switched off for this practice.");
+  }
+  const snapshot = await db.collection("users").doc(request.auth.uid).get();
+  const profile = snapshot.data() || {};
+  if (profile.role !== "System Admin") {
+    const capabilities = await getEffectiveCapabilities(db, profile.role, profile);
+    if (!hasCapability(capabilities, "documents.intake")) {
+      throw new HttpsError("permission-denied", "You do not have permission to add documents this way.");
+    }
+  }
+  return profile;
+}
+
+const DOCUMENT_INTAKE_DAILY_LIMIT = 60; // a few a day is normal; this only stops a runaway
+
+// Reads a dropped certificate or COSHH safety data sheet and suggests the register fields from it. Suggestion only: the person checks and saves on the normal form.
+// Stored: who, when, what kind, the file's size and fingerprint, and whether it worked. NOT stored: the document or anything read from it.
+exports.readDocumentForRegister = onCall(
+  {
+    region: "europe-west2",
+    timeoutSeconds: 150,
+    memory: "512MiB",
+    maxInstances: 3,
+    concurrency: 1,
+    secrets: [AZURE_DOCUMENT_INTELLIGENCE_KEY, AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT, AZURE_OPENAI_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT],
+  },
+  async (request) => {
+    await requireDocumentIntake(request);
+    const wanted = String(request.data?.kind || "auto");
+    if (!["auto", "certificate", "coshh"].includes(wanted)) throw new HttpsError("invalid-argument", "Unknown kind of document.");
+    let upload;
+    try { upload = documentIntake.decodeUpload(request.data || {}); } catch (problem) { throw new HttpsError("invalid-argument", problem.message); }
+
+    // a simple daily cap per person (equality filters only, so no extra index is needed)
+    const dayKey = new Date().toISOString().slice(0, 10);
+    const today = await db.collection("document_intake_events").where("actorUid", "==", request.auth.uid).where("dayKey", "==", dayKey).count().get();
+    if (today.data().count >= DOCUMENT_INTAKE_DAILY_LIMIT) throw new HttpsError("resource-exhausted", "That is the most documents one person can read in a day. Try again tomorrow.");
+
+    const eventRef = db.collection("document_intake_events").doc();
+    await eventRef.set({
+      schemaVersion: 1,
+      status: "submitted",
+      requestedKind: wanted,
+      fileKind: upload.kind,
+      fileSha256: upload.sha256,
+      fileBytes: upload.bytes.length,
+      actorUid: request.auth.uid,
+      dayKey,
+      documentStored: false,
+      extractedTextStored: false,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    try {
+      const analysed = await analyzeDocument({
+        endpoint: AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT.value(),
+        key: AZURE_DOCUMENT_INTELLIGENCE_KEY.value(),
+        base64Source: upload.base64,
+        pages: "1-6",
+      });
+      const ocrText = String(analysed?.analyzeResult?.content || "");
+      const pageCount = (analysed?.analyzeResult?.pages || []).length;
+      if (ocrText.replace(/\s+/g, "").length < 40) {
+        await eventRef.set({ status: "unreadable", pageCount, completedAt: FieldValue.serverTimestamp() }, { merge: true });
+        throw new HttpsError("failed-precondition", "I could not read any text from that. Try a clearer photo or the PDF itself.");
+      }
+      const result = await documentIntake.extractDocumentFields({
+        endpoint: AZURE_OPENAI_ENDPOINT.value(),
+        key: AZURE_OPENAI_KEY.value(),
+        deployment: AZURE_OPENAI_DEPLOYMENT.value(),
+        ocrText,
+        kind: wanted,
+        options: request.data?.options,
+      });
+      await eventRef.set({ status: "succeeded", kind: result.kind, pageCount, completedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return { ok: true, analysisId: eventRef.id, fileName: upload.fileName, fileSha256: upload.sha256, pageCount, ...result };
+    } catch (error) {
+      if (error instanceof HttpsError) throw error;
+      console.error("Document intake failed", { eventId: eventRef.id, message: error?.message });
+      await eventRef.set({ status: "failed", failureCategory: "provider_error", completedAt: FieldValue.serverTimestamp() }, { merge: true });
+      throw new HttpsError("internal", "That document could not be read just now. Try again, or fill the form in by hand.");
+    }
+  }
+);
 
 exports.recordGovernedAuditEvent = onCall(
   { region: "europe-west2", timeoutSeconds: 15, memory: "256MiB" },

@@ -1,4 +1,4 @@
-import { ClipboardCheck, ClipboardList, FileText, Laptop, FlaskConical, ListChecks, MessageSquare, Mic, NotebookPen, Package, ScanLine, ShieldAlert, GraduationCap, Sparkles, SprayCan, Stethoscope, Thermometer, TriangleAlert, Wrench } from "lucide-react";
+import { ClipboardCheck, ClipboardList, FilePlus2, FileText, Laptop, FlaskConical, ListChecks, MessageSquare, Mic, NotebookPen, Package, ScanLine, ShieldAlert, GraduationCap, Sparkles, SprayCan, Stethoscope, Thermometer, TriangleAlert, Wrench } from "lucide-react";
 
 // What each kind of person sees on the phone: the home screen's tiles and the bottom bar. Pure data, so
 // it can be tested. A tile marked with a capability is only shown to people who hold it, and a bottom-bar
@@ -169,6 +169,8 @@ export function visibleActions(home, capabilities = [], { hasLaptop = false } = 
   const shown = home.actions.filter((action) => !action.capability || has(capabilities, action.capability));
   const laptopTiles = [];
   if (has(capabilities, "itAssets.read") || has(capabilities, "itAssets.manage")) laptopTiles.push({ key: "it-equipment", label: "IT equipment", helper: "Loan out, take back, update", Icon: Laptop });
+  // anyone allowed to add documents (and for whom the practice has switched Document reading on, which removes the permission otherwise) gets the Add a document tile
+  if (has(capabilities, "documents.intake")) laptopTiles.push({ key: "add-document", label: "Add a document", helper: "Photo of a certificate or data sheet", Icon: FilePlus2 });
   if (hasLaptop) laptopTiles.push({ key: "my-laptop", label: "My laptop", helper: "When it is due an update or back", Icon: Laptop });
   return [...shown, ...laptopTiles];
 }

@@ -338,6 +338,27 @@ export default function PracticeAdministration() {
     }
   };
 
+  // who Document reading (the AI that reads dropped certificates and safety data sheets) is on for: off for everyone unless it has been deliberately turned on
+  const documentsMode = moduleMode("documents", practice?.moduleToggles?.documents, user?.uid);
+
+  const setDocumentsMode = async (mode) => {
+    if (!requireManage()) return;
+    beginAction();
+    try {
+      setBusy(true);
+      await savePracticeConfig(
+        { moduleToggles: { ...(practice?.moduleToggles || {}), documents: moduleToggleFor(mode, user?.uid, practice?.moduleToggles?.documents) } },
+        actor
+      );
+      setSuccess(mode === "everyone" ? "Document reading is on for everyone with permission to add documents." : mode === "me" ? "Document reading is now on for you only." : "Document reading is now off for everyone.");
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || "Failed to update module access.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const savePulse = async () => {
     if (!requireManage()) return;
     beginAction();
@@ -745,6 +766,7 @@ export default function PracticeAdministration() {
               <p className="mb-4 text-sm leading-6 mt-text-secondary">
                 Choose who a module is on for. This doesn't change anyone's role or permissions, it just hides the module from the people it is not on for.
                 ClinFlow works on clinical letters, so use it with made-up (synthetic) documents only until the data protection paperwork is done.
+                Document reading sends a dropped certificate or safety data sheet to Microsoft Azure to be read, so keep it off until the data protection paperwork for it has been agreed. "Only me" lets you try it first.
               </p>
               <div className="rounded-xl mt-card-strong border p-4 space-y-3">
                 <div>
@@ -754,6 +776,17 @@ export default function PracticeAdministration() {
                 <div className="flex flex-wrap gap-2" role="group" aria-label="Who ClinFlow is on for">
                   {[["off", "Off for everyone"], ["me", "Only me"], ["everyone", "Everyone with access"]].map(([mode, label]) => (
                     <Button key={mode} variant={clinflowMode === mode ? "default" : "outline"} aria-pressed={clinflowMode === mode} disabled={busy || !canManage || clinflowMode === mode} onClick={() => setClinflowMode(mode)}>{label}</Button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-4 rounded-xl mt-card-strong border p-4 space-y-3">
+                <div>
+                  <div className="font-bold mt-text-primary">Document reading (certificates and COSHH safety data sheets)</div>
+                  <div className="text-xs mt-text-secondary" role="status">{documentsMode === "everyone" ? "On for everyone with permission to add documents" : documentsMode === "me" ? "On for you only" : "Off for everyone, you included"}</div>
+                </div>
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Who Document reading is on for">
+                  {[["off", "Off for everyone"], ["me", "Only me"], ["everyone", "Everyone with access"]].map(([mode, label]) => (
+                    <Button key={mode} variant={documentsMode === mode ? "default" : "outline"} aria-pressed={documentsMode === mode} disabled={busy || !canManage || documentsMode === mode} onClick={() => setDocumentsMode(mode)}>{label}</Button>
                   ))}
                 </div>
               </div>

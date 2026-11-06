@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
 import { namesWithCurrent } from "@/lib/stockPickerOptions";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
+import EvidencePanel from "@/components/documents/EvidencePanel";
 import { openDocument } from "@/lib/openDocument";
 import {
   CERT_TYPES, STATUS_LABEL, WARN_DAYS, certLabel, certStatus, certSummary, emptyCertificate, expiryText, registerRows, searchCertificates, sortCertificates, suggestedExpiry, validateCertificate,
@@ -30,14 +31,16 @@ const STATUS_STYLE = {
 };
 const uk = (key) => (key ? key.split("-").reverse().join("/") : "not set");
 
-function CertificateForm({ initial, supplierNames, onCancel, onSaved }) {
+// `initialFile` and `evidence` are set when the form has been pre-filled from a dropped document (see components/documents): the file is already attached, the panel shows what was read, and Save waits for the person to say they have checked it.
+export function CertificateForm({ initial, supplierNames, onCancel, onSaved, initialFile = null, evidence = null }) {
   const { user, displayName } = useAuth();
   const actor = { uid: user?.uid || "", displayName: displayName || user?.email || "Unknown" };
   const { siteNames } = useSiteSpaceNames(true);
   const [form, setForm] = useState(initial);
-  const [touchedExpiry, setTouchedExpiry] = useState(Boolean(initial.id));
+  const [touchedExpiry, setTouchedExpiry] = useState(Boolean(initial.id || initial.expiryDate));
+  const [confirmed, setConfirmed] = useState(false);
   const [otherSupplier, setOtherSupplier] = useState(false);
-  const [file, setFile] = useState(null);
+  const [file, setFile] = useState(initialFile);
   const [busy, setBusy] = useState(false);
   const [problems, setProblems] = useState([]);
   const [error, setError] = useState("");
@@ -61,6 +64,7 @@ function CertificateForm({ initial, supplierNames, onCancel, onSaved }) {
 
   async function save() {
     const found = validateCertificate({ ...form, certUrl: form.certUrl || (file ? "pending" : "") });
+    if (evidence && !confirmed) found.push("Tick the box to say you have checked these details against the document.");
     setProblems(found);
     if (found.length) return;
     setBusy(true); setError("");
@@ -79,6 +83,7 @@ function CertificateForm({ initial, supplierNames, onCancel, onSaved }) {
         <h3 className="flex items-center gap-2 text-base font-semibold text-slate-100"><FileBadge className="h-5 w-5 text-teal-300" aria-hidden="true" /> {isNew ? "Add a certificate" : `Edit ${certLabel(initial)}`}</h3>
         <button type="button" onClick={onCancel} className="text-slate-400 hover:text-slate-200" aria-label="Close"><X className="h-5 w-5" /></button>
       </div>
+      <EvidencePanel evidence={evidence} confirmed={confirmed} onConfirmedChange={setConfirmed} />
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className={LABEL}>What is it
           <select className={FIELD} value={form.type} onChange={(e) => withSuggestion({ type: e.target.value })}>{CERT_TYPES.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}</select>
@@ -121,22 +126,25 @@ function CertificateForm({ initial, supplierNames, onCancel, onSaved }) {
   );
 }
 
-function RenewForm({ cert, supplierNames, onCancel, onDone }) {
+// `initialValues`, `initialFile` and `evidence` are set when the renewal has been pre-filled from a dropped certificate (see components/documents).
+export function RenewForm({ cert, supplierNames, onCancel, onDone, initialValues = null, initialFile = null, evidence = null }) {
   const { user, displayName } = useAuth();
   const actor = { uid: user?.uid || "", displayName: displayName || user?.email || "Unknown" };
   const today = new Date();
   const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  const [completedOn, setCompletedOn] = useState(todayKey);
-  const [expiryDate, setExpiryDate] = useState(suggestedExpiry(cert.type, todayKey));
-  const [touched, setTouched] = useState(false);
-  const [provider, setProvider] = useState(cert.provider);
-  const [reference, setReference] = useState("");
-  const [file, setFile] = useState(null);
+  const [completedOn, setCompletedOn] = useState(initialValues?.completedOn || todayKey);
+  const [expiryDate, setExpiryDate] = useState(initialValues?.expiryDate || suggestedExpiry(cert.type, initialValues?.completedOn || todayKey));
+  const [touched, setTouched] = useState(Boolean(initialValues?.expiryDate));
+  const [provider, setProvider] = useState(initialValues?.provider || cert.provider);
+  const [reference, setReference] = useState(initialValues?.reference || "");
+  const [confirmed, setConfirmed] = useState(false);
+  const [file, setFile] = useState(initialFile);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const suppliers = namesWithCurrent(supplierNames, provider);
 
   async function save() {
+    if (evidence && !confirmed) { setError("Tick the box to say you have checked these details against the document."); return; }
     setBusy(true); setError("");
     try {
       await renewCertificate(cert, { completedOn, expiryDate, provider, reference, file, actor });
@@ -148,6 +156,7 @@ function RenewForm({ cert, supplierNames, onCancel, onDone }) {
     <div className="mt-3 rounded-xl border border-teal-300/30 bg-slate-950/50 p-3">
       <p className="text-sm font-semibold text-slate-100">Record a renewal of {certLabel(cert)}</p>
       <p className="text-xs text-slate-400">The old certificate is kept in its history.</p>
+      <EvidencePanel evidence={evidence} confirmed={confirmed} onConfirmedChange={setConfirmed} />
       <div className="mt-2 grid gap-2 sm:grid-cols-4">
         <label className={LABEL}>Date done<input type="date" className={FIELD} value={completedOn} onChange={(e) => { setCompletedOn(e.target.value); if (!touched) setExpiryDate(suggestedExpiry(cert.type, e.target.value)); }} /></label>
         <label className={LABEL}>New date it runs out<input type="date" className={FIELD} value={expiryDate} onChange={(e) => { setTouched(true); setExpiryDate(e.target.value); }} /></label>

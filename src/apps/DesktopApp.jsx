@@ -17,6 +17,7 @@ import Mileage from "@/pages/Mileage";
 import QualityOpportunities from "@/pages/QualityOpportunities";
 import MyTimesheet from "@/pages/MyTimesheet";
 import ITEquipment from "@/pages/ITEquipment";
+import AddDocument from "@/pages/AddDocument";
 import MyLaptop from "@/pages/MyLaptop";
 import AnnualLeave from "@/pages/AnnualLeave";
 import MyTrainingPage from "@/pages/MyTrainingPage";
@@ -102,6 +103,7 @@ export default function DesktopApp() {
         <Route path="my-timesheet" element={<MyTimesheet />} />
         <Route path="it-equipment" element={<PermissionGate anyOf={["itAssets.read", "itAssets.manage"]}><ITEquipment /></PermissionGate>} />
         <Route path="my-laptop" element={<MyLaptop />} />
+        <Route path="add-document" element={<PermissionGate capability="documents.intake"><AddDocument /></PermissionGate>} />
         <Route path="annual-leave" element={<AnnualLeave />} />
         <Route path="my-training" element={<MyTrainingPage />} />
         <Route path="mileage" element={<Mileage />} />
