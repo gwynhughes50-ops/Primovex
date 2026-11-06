@@ -147,7 +147,8 @@ const asObject = (value) => (value && typeof value === "object" && !Array.isArra
 const clean = (value, max) => (typeof value === "string" && value.trim() ? value.replace(/\s+/g, " ").trim().slice(0, max) : null);
 
 // one quoted value -> { value, evidence, verified }. `verified` is true only when the quote is in the document and the value is in the quote.
-function shapeField(raw, ocrNorm, { date = false, max = 200 } = {}) {
+// `classify`: the value is a KEY the app chose from its own list (a kind of certificate), so it is not in the quote; what must hold is that the quote is really on the page
+function shapeField(raw, ocrNorm, { date = false, max = 200, classify = false } = {}) {
   const field = asObject(raw);
   const evidence = clean(field.evidence, 200);
   const quoteFound = Boolean(evidence) && norm(evidence).length >= 4 && ocrNorm.includes(norm(evidence));
@@ -158,7 +159,7 @@ function shapeField(raw, ocrNorm, { date = false, max = 200 } = {}) {
   }
   const value = clean(field.value, max);
   if (!value) return { value: null, evidence: quoteFound ? evidence : null, verified: false };
-  return { value, evidence: quoteFound ? evidence : null, verified: quoteFound && norm(evidence).includes(norm(value)) };
+  return { value, evidence: quoteFound ? evidence : null, verified: quoteFound && (classify || norm(evidence).includes(norm(value))) };
 }
 
 // a list of { key, evidence } picked from the allowed keys only; each is verified by its quote
@@ -188,7 +189,7 @@ function verifyExtraction({ parsed, ocrText, kind, options }) {
 
   if (decided === "certificate") {
     const c = asObject(root.certificate);
-    const type = shapeField(c.type, ocrNorm, { max: 40 });
+    const type = shapeField(c.type, ocrNorm, { max: 40, classify: true });
     const typeKey = options.certTypes.some((item) => item.key === type.value) ? type.value : null;
     out.fields = {
       type: { ...type, value: typeKey, verified: Boolean(typeKey) && type.verified },

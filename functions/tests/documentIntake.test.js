@@ -297,3 +297,13 @@ test("Document reading is off unless it has been deliberately switched on, and C
   assert.equal(clinFlowEnabledFor({ moduleToggles: { clinflow: { disabled: false } } }, "u2"), true);
   assert.equal(clinFlowEnabledFor({ moduleToggles: { documents: { disabled: false } } }, "u2"), false);
 });
+
+test("the kind of certificate is confirmed by a quote on the page, whatever words the kind's key happens to use", () => {
+  const text = "EMPLOYERS' LIABILITY INSURANCE CERTIFICATE\nPolicy number: EL-7733019";
+  const out = (type, evidence) => verifyExtraction({ ocrText: text, kind: "certificate", options: { ...OPTIONS, certTypes: [...OPTIONS.certTypes, { key: "insurance_el", label: "Employers' liability insurance" }] }, parsed: { certificate: { type: field(type, evidence) } } }).fields.type;
+  assert.equal(out("insurance_el", "EMPLOYERS' LIABILITY INSURANCE CERTIFICATE").verified, true, "the key's words are not in the title, and that is fine");
+  assert.equal(out("insurance_el", "A title that is not on the page").verified, false, "a made-up quote still fails");
+  assert.equal(out("insurance_el", "A title that is not on the page").evidence, null);
+  assert.equal(out("not_a_kind", "EMPLOYERS' LIABILITY INSURANCE CERTIFICATE").value, null, "a kind the app does not offer is still dropped");
+  assert.equal(out("insurance_el", null).verified, false, "no quote, no confirmation");
+});
