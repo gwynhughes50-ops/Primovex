@@ -35,7 +35,7 @@ import ComplianceIncidentSheet from "@/components/compliance/ComplianceIncidentS
 import { isOpen as incidentOpen, ageText } from "@/modules/compliance/complianceIncidents";
 import { useComplianceIncidents } from "@/modules/compliance/complianceIncidentService";
 import { useCertificates } from "@/modules/certificates/certificateService";
-import { certLabel, certStatus, expiryText } from "@/modules/certificates/certificates";
+import { certLabel, certStatus, checkText, expiryText, hasProblem, problemChecks } from "@/modules/certificates/certificates";
 import { openDocument } from "@/lib/openDocument";
 import PatWizard from "@/mobile/pat/PatWizard";
 import { subscribePatAssets, subscribePatSettings } from "@/modules/pat/patService";
@@ -81,7 +81,7 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
   const [showPat, setShowPat] = useState(false);
   const patSummary = useMemo(() => patDueSummary(patAssets), [patAssets]);
   const { list: certList } = useCertificates(can("compliance.read"));
-  const certsNeeding = useMemo(() => (certList || []).filter((c) => c.active !== false && certStatus(c) !== "ok").sort((a, b) => (a.expiryDate || "").localeCompare(b.expiryDate || "")), [certList]);
+  const certsNeeding = useMemo(() => (certList || []).filter((c) => c.active !== false && (certStatus(c) !== "ok" || hasProblem(c))).sort((a, b) => Number(hasProblem(b)) - Number(hasProblem(a)) || (a.expiryDate || "").localeCompare(b.expiryDate || "")), [certList]);
   const { list: incidentList } = useComplianceIncidents(true);
   const openIncidents = useMemo(() => (incidentList || []).filter(incidentOpen), [incidentList]);
 
@@ -316,12 +316,13 @@ export default function MobileCompliance({ pendingNfcScan, onConsumeNfcScan }) {
 
         {certsNeeding.length > 0 && (
           <div className="mt-5 rounded-[1.5rem] border border-amber-500/40 bg-amber-500/10 p-4" aria-label="Certificates running out or expired">
-            <div className="mb-2 text-sm font-bold text-amber-800">Certificates to renew ({certsNeeding.length})</div>
+            <div className="mb-2 text-sm font-bold text-amber-800">Certificates needing attention ({certsNeeding.length})</div>
             <ul className="space-y-2">
               {certsNeeding.map((c) => (
                 <li key={c.id}>
                   <button type="button" disabled={!c.certUrl} onClick={async () => setCertMessage(await openDocument({ url: c.certUrl, path: c.certPath, fileName: c.certFileName }))} className="w-full rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-bg)] p-3 text-left disabled:opacity-70">
                     <span className="block font-semibold">{certLabel(c)}</span>
+                    {hasProblem(c) && <span className="block text-xs font-bold text-rose-700">Records a failed or unsafe result: {problemChecks(c).map(checkText).join("; ")}</span>}
                     <span className={`block text-xs font-bold ${certStatus(c) === "due-soon" ? "text-amber-800" : "text-rose-700"}`}>{expiryText(c)}{c.provider ? ` · ${c.provider}` : ""}</span>
                     {c.certUrl ? <span className="block text-xs text-[var(--medtrak-muted)]">Tap to open the current certificate</span> : <span className="block text-xs text-rose-700">No PDF attached</span>}
                   </button>

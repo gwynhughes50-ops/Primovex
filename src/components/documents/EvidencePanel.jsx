@@ -23,6 +23,13 @@ export default function EvidencePanel({ evidence, confirmed, onConfirmedChange, 
         Primovex read {evidence.fileName ? `"${shortName(evidence.fileName)}"` : "the document"} and filled in what it could. It can make mistakes, so check each line against the document itself.
         {todo > 0 ? ` ${todo} ${todo === 1 ? "line needs" : "lines need"} your eyes.` : ""}
       </p>
+      {evidence.alerts?.length > 0 && (
+        <div className="mt-2 rounded-lg border border-rose-400/60 bg-rose-500/15 px-2.5 py-2 text-sm font-bold text-rose-100" role="alert">
+          <p className="flex items-center gap-1.5"><AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" /> This document records a failed or unsafe result.</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-6 font-semibold">{evidence.alerts.map((a) => <li key={a}>{a}</li>)}</ul>
+          <p className="mt-1 text-xs font-semibold text-rose-200">Do not treat it as a pass. It will be shown in red on the register until a new certificate replaces it.</p>
+        </div>
+      )}
       {evidence.sourceNote && <p className="mt-2 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-slate-300">{evidence.sourceNote}</p>}
       {evidence.warnings?.length > 0 && <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs font-semibold text-amber-200" role="alert">{evidence.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
       <ul className="mt-2 space-y-1.5">

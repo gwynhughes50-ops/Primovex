@@ -166,7 +166,8 @@ function toBase64(file) {
 }
 
 // made-up answers for Demo and Training mode
-export function sampleResult(kind = "auto") {
+// (a file name containing "unsafe" or "fail" gives a certificate that records a failed result, to show how that looks)
+export function sampleResult(kind = "auto", fileName = "") {
   const textCopy = "SAMPLE TEXT\nThis is made-up text standing in for what would be read from the document.";
   if (kind === "coshh") {
     return {
@@ -182,7 +183,7 @@ export function sampleResult(kind = "auto") {
     };
   }
   return {
-    ok: true, sample: true, kind: "certificate", kindGuess: "certificate", fileName: "Sample gas safety record.pdf", warnings: [], textCopy,
+    ok: true, sample: true, kind: "certificate", kindGuess: "certificate", fileName: "Sample gas safety record.pdf", textCopy,
     fields: {
       type: { value: "gas_safety", evidence: "GAS SAFETY RECORD", verified: true },
       provider: { value: "Sample Gas Services Ltd", evidence: "Carried out by: Sample Gas Services Ltd", verified: true },
@@ -190,7 +191,19 @@ export function sampleResult(kind = "auto") {
       completedOn: { value: "2026-10-14", evidence: "Date of inspection: 14/10/2026", verified: true },
       expiryDate: { value: null, evidence: null, verified: false },
       premises: { value: "Main Surgery", evidence: "Premises: Main Surgery", verified: true },
+      engineer: { value: "A. Sample", evidence: "Engineer: A. Sample", verified: true },
+      findings: /unsafe|fail/i.test(fileName)
+        ? [
+          { label: "Gas supply tightness test", answer: "Fail", problem: true, evidence: "Gas supply tightness test: Fail", verified: true },
+          { label: "Boiler: safe to use", answer: "No", problem: true, evidence: "Boiler: safe to use: No", verified: true },
+          { label: "Carbon monoxide alarm fitted", answer: "Yes", problem: false, evidence: "Carbon monoxide alarm fitted: Yes", verified: true },
+        ]
+        : [
+          { label: "Gas supply tightness test", answer: "Pass", problem: false, evidence: "Gas supply tightness test: Pass", verified: true },
+          { label: "Boiler: safe to use", answer: "Yes", problem: false, evidence: "Boiler: safe to use: Yes", verified: true },
+        ],
     },
+    warnings: /unsafe|fail/i.test(fileName) ? ["This document records a failed or unsafe result: Gas supply tightness test: Fail; Boiler: safe to use: No. Do not treat it as a pass."] : [],
   };
 }
 
@@ -198,7 +211,7 @@ export function sampleResult(kind = "auto") {
 export async function readDocument(file, kind = "auto") {
   if (isSafeSyntheticMode()) {
     await new Promise((resolve) => setTimeout(resolve, 600));
-    return sampleResult(kind);
+    return sampleResult(kind, file?.name);
   }
   const base64 = await toBase64(file);
   const response = await httpsCallable(functions, "readDocumentForRegister", { timeout: 160000 })({

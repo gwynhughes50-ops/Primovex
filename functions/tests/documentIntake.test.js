@@ -307,3 +307,76 @@ test("the kind of certificate is confirmed by a quote on the page, whatever word
   assert.equal(out("not_a_kind", "EMPLOYERS' LIABILITY INSURANCE CERTIFICATE").value, null, "a kind the app does not offer is still dropped");
   assert.equal(out("insurance_el", null).verified, false, "no quote, no confirmation");
 });
+
+// ---- the engineer and the checks a certificate records ----
+const GSR_TEXT = [
+  "LANDLORD / HOMEOWNER GAS SAFETY RECORD",
+  "Record number: GSR-31877",
+  "Engineer: A. Sample (registration 000000)",
+  "Gas supply tightness test: Fail",
+  "Boiler: safe to use: No",
+  "Panel fault found: No",
+  "Smoke alarm tested: Yes",
+].join("\n");
+const cert = (c) => verifyExtraction({ ocrText: GSR_TEXT, kind: "certificate", options: OPTIONS, parsed: { certificate: c } });
+
+test("the engineer's name is read from the page, and each check needs a quote with its answer in it", () => {
+  const out = cert({
+    engineer: field("A. Sample", "Engineer: A. Sample (registration 000000)"),
+    findings: [
+      { label: "Gas supply tightness test", answer: "Fail", problem: true, evidence: "Gas supply tightness test: Fail" },
+      { label: "Panel fault found", answer: "No", problem: false, evidence: "Panel fault found: No" },
+    ],
+  }).fields;
+  assert.equal(out.engineer.value, "A. Sample");
+  assert.equal(out.engineer.verified, true);
+  assert.deepEqual(out.findings.map((f) => [f.label, f.answer, f.problem, f.verified]), [["Gas supply tightness test", "Fail", true, true], ["Panel fault found", "No", false, true]]);
+  assert.equal(cert({ engineer: field("B. Invented", "Engineer: B. Invented") }).fields.engineer.verified, false, "a name that is not on the page");
+});
+
+test("a check with a made-up quote, or an answer the quote does not contain, is shown but never marked as confirmed", () => {
+  const out = cert({ findings: [
+    { label: "Boiler safe to use", answer: "No", problem: true, evidence: "The boiler is not safe" },
+    { label: "Gas supply tightness test", answer: "Pass", problem: false, evidence: "Gas supply tightness test: Fail" },
+    { label: "Smoke alarm tested", answer: "Yes", problem: false, evidence: null },
+  ] }).fields.findings;
+  assert.deepEqual(out.map((f) => f.verified), [false, false, false]);
+  assert.equal(out[0].evidence, null, "a quote that is not on the page is dropped");
+});
+
+test("whether an answer is a problem is decided by the rule: the AI cannot call 'Safe to use: No' fine, or a 'Pass' a problem", () => {
+  const out = cert({ findings: [
+    { label: "Boiler: safe to use", answer: "No", problem: false, evidence: "Boiler: safe to use: No" },
+    { label: "Gas supply tightness test", answer: "Fail", problem: false, evidence: "Gas supply tightness test: Fail" },
+    { label: "Smoke alarm tested", answer: "Yes", problem: true, evidence: "Smoke alarm tested: Yes" },
+    { label: "Panel fault found", answer: "No", problem: true, evidence: "Panel fault found: No" },
+  ] }).fields.findings;
+  assert.deepEqual(out.map((f) => f.problem), [true, true, false, false]);
+});
+
+test("a problem is warned about in words, and no warning is made when every check is fine", () => {
+  const bad = cert({ findings: [{ label: "Boiler: safe to use", answer: "No", evidence: "Boiler: safe to use: No" }] });
+  assert.match(bad.warnings.join(" "), /records a failed or unsafe result: Boiler: safe to use: No\. Do not treat it as a pass/);
+  const fine = cert({ findings: [{ label: "Smoke alarm tested", answer: "Yes", evidence: "Smoke alarm tested: Yes" }] });
+  assert.deepEqual(fine.warnings, []);
+});
+
+test("checks without a name or an answer are dropped, repeats are merged, and at most twelve are kept", () => {
+  const out = cert({ findings: [
+    { label: "", answer: "Yes", evidence: "Smoke alarm tested: Yes" }, { label: "Smoke alarm tested", answer: "", evidence: "Smoke alarm tested: Yes" },
+    { label: "Smoke alarm tested", answer: "Yes", evidence: "Smoke alarm tested: Yes" }, { label: "smoke alarm TESTED", answer: "yes", evidence: "Smoke alarm tested: Yes" },
+    ...Array.from({ length: 20 }, (_, i) => ({ label: `Extra check ${i}`, answer: "Yes", evidence: "Smoke alarm tested: Yes" })),
+  ] }).fields.findings;
+  assert.equal(out.length, 12);
+  assert.equal(out.filter((f) => f.label.toLowerCase() === "smoke alarm tested").length, 1);
+  assert.deepEqual(cert({ findings: "not a list" }).fields.findings, []);
+  assert.deepEqual(cert({}).fields.findings, []);
+});
+
+test("the instructions ask for the engineer and the checks, and say when an answer is a problem", () => {
+  const text = buildInstructions("certificate", cleanOptions(OPTIONS));
+  assert.match(text, /engineer: the name of the engineer/);
+  assert.match(text, /findings: every pass\/fail or yes\/no RESULT/);
+  assert.match(text, /'Boiler safe to use: No'/);
+  assert.match(text, /"findings": \[\{"label"/);
+});

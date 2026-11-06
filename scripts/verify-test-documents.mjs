@@ -5,7 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { unzipSync } from "fflate";
 import { DOCUMENTS, SAMPLE_FOOTER, emailText, plainText } from "./test-documents.mjs";
-import { cleanOptions, datesIn, norm, verifyExtraction } from "../functions/services/documentIntakeService.js";
+import { cleanOptions, datesIn, judgeCheck as serverJudge, norm, verifyExtraction } from "../functions/services/documentIntakeService.js";
+import { judgeCheck as appJudge } from "../src/modules/certificates/certificates.js";
 import { CERT_TYPES } from "../src/modules/certificates/certificates.js";
 import { FIRST_AID_OPTIONS, HAZARD_TYPES, PPE_OPTIONS } from "../src/modules/coshh/coshh.js";
 import { intakeOptions } from "../src/modules/documents/documentIntake.js";
@@ -41,6 +42,8 @@ await t("every answer in the answer sheet is really written on the page it belon
       if (e.expiryDate) { check("expiry", e.expiryDate.quote); assert.ok(datesIn(e.expiryDate.quote).includes(e.expiryDate.iso), `${d.file}: expiry`); }
       else assert.ok(!/next|due|valid until|expir/i.test(plainText(d).replace(/Premises.*/s, "")), `${d.file}: has no expiry written`);
       assert.ok(CERT_TYPES.some((c) => c.key === e.type), `${d.file}: type ${e.type} is a real kind`);
+      if (e.engineer) check("engineer", e.engineer.quote);
+      for (const c of e.findings || []) { check(`check ${c.label}`, c.quote); assert.ok(norm(c.quote).includes(norm(c.answer)), `${d.file}: the answer ${c.answer} is in its quote`); }
     }
     if (d.kind === "coshh") {
       check("product", e.productName.quote);
@@ -67,6 +70,9 @@ await t("a perfect reading of every certificate verifies completely (and the doc
       completedOn: { value: e.completedOn.iso, evidence: e.completedOn.quote },
       expiryDate: e.expiryDate ? { value: e.expiryDate.iso, evidence: e.expiryDate.quote } : { value: null, evidence: null },
       premises: { value: "Main Surgery", evidence: rowOf("Premises") },
+      engineer: e.engineer ? { value: e.engineer.value, evidence: e.engineer.quote } : { value: null, evidence: null },
+      // the AI is deliberately wrong about 'problem' (the opposite of the truth) to show the rule decides, not the AI
+      findings: (e.findings || []).map((c) => ({ label: c.label, answer: c.answer, problem: !c.problem, evidence: c.quote })),
     } };
     const out = verifyExtraction({ parsed: model, ocrText: plainText(d), kind: "certificate", options: OPTIONS });
     const f = out.fields;
@@ -77,9 +83,19 @@ await t("a perfect reading of every certificate verifies completely (and the doc
       continue;
     }
     for (const name of ["type", "provider", "reference", "completedOn", "premises"]) assert.equal(f[name].verified, true, `${d.file}: ${name}`);
+    if (e.engineer) { assert.equal(f.engineer.value, e.engineer.value, d.file); assert.equal(f.engineer.verified, true, `${d.file}: engineer`); }
+    assert.deepEqual(f.findings.map((c) => [c.label, c.answer, c.problem, c.verified]), (e.findings || []).map((c) => [c.label, c.answer, c.problem, true]), `${d.file}: the checks, each judged by the rule and confirmed by its quote`);
+    const unsafe = (e.findings || []).some((c) => c.problem);
+    assert.equal(out.warnings.some((w) => /failed or unsafe result/.test(w)), unsafe, `${d.file}: warned only when a check is a problem`);
     assert.equal(f.expiryDate.verified, Boolean(e.expiryDate), `${d.file}: expiry`);
-    assert.deepEqual(out.warnings, [], d.file);
+    if (!unsafe) assert.deepEqual(out.warnings, [], d.file);
   }
+});
+
+await t("the app and the server judge every answer the same way, so a check is a problem on the form exactly when the server said it was", () => {
+  const labels = ["Boiler safe to use", "Boiler: safe to use", "Gas supply tightness test", "Panel fault found", "Defects found", "Defects requiring action", "Gas leak found", "Overall assessment", "Carbon monoxide alarm fitted", "Smoke alarm tested", "Flue and ventilation satisfactory", "Appliance", ""];
+  const answers = ["Yes", "YES", "No", "NO", "Pass", "Passed", "Fail", "Failed", "Satisfactory", "Satisfactory with advisories", "Unsatisfactory", "Safe", "Unsafe", "Not safe to use", "None", "N/A", "14", "Immediately dangerous", "Potentially dangerous", ""];
+  for (const l of labels) for (const a of answers) for (const m of [null, true, false]) assert.equal(appJudge(l, a, m), serverJudge(l, a, m), `${l} / ${a} / ${m}`);
 });
 
 await t("a perfect reading of every safety data sheet verifies completely, and the 'not hazardous' sheet is believed only for its own words", () => {

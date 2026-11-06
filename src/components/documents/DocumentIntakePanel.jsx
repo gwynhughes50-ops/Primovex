@@ -130,7 +130,7 @@ export default function DocumentIntakePanel({ phone = false }) {
       );
     }
     if (target && choice === "renew") {
-      const values = { completedOn: card.initial.completedOn, expiryDate: card.initial.expiryDate, provider: card.initial.provider, reference: card.initial.reference };
+      const values = { completedOn: card.initial.completedOn, expiryDate: card.initial.expiryDate, provider: card.initial.provider, reference: card.initial.reference, engineer: card.initial.engineer, findings: card.initial.findings };
       return <RenewForm key={pdf?.name} cert={target} initialValues={values} onDone={done} {...common} />;
     }
     return <CertificateForm key={pdf?.name} initial={card.initial} onSaved={done} {...common} />;

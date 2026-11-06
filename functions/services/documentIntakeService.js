@@ -100,9 +100,11 @@ function buildInstructions(kind, options) {
       "- reference: the certificate, report or policy number, as written.",
       "- completedOn: the date the inspection, test, service or work was done, or the date the cover started. Not the date printed for 'next due'.",
       "- expiryDate: ONLY a date the document itself gives as the expiry, 'valid until', 'next inspection due', 'next service due', 'renewal date' or similar. Do NOT work one out from the date done. If none is written, null.",
-      "- premises: the address or site the document covers, as written."
+      "- premises: the address or site the document covers, as written.",
+      "- engineer: the name of the engineer, inspector or assessor who did the work or signed the document, as written. The person, not the company.",
+      "- findings: every pass/fail or yes/no RESULT the document records about the work or the equipment, for example 'Gas supply tightness test: Pass', 'Boiler safe to use: Yes', 'Overall assessment: Satisfactory', 'Defects found: None'. Give each as: label (as written), answer (as written: Yes, No, Pass, Fail, Satisfactory, Unsatisfactory, Safe, Unsafe, None, N/A), problem (true ONLY if the answer means something is wrong, unsafe or failed, for example 'Boiler safe to use: No', 'Test: Fail', 'Defects found: Yes'; otherwise false) and evidence (the exact words with the answer in them). Do not list dates, numbers, names or comments as findings. At most 12."
     );
-    shapes.push('"certificate": {"type": {"value": string|null, "evidence": string|null}, "provider": {"value": string|null, "evidence": string|null}, "reference": {"value": string|null, "evidence": string|null}, "completedOn": {"value": "YYYY-MM-DD"|null, "evidence": string|null}, "expiryDate": {"value": "YYYY-MM-DD"|null, "evidence": string|null}, "premises": {"value": string|null, "evidence": string|null}}');
+    shapes.push('"certificate": {"type": {"value": string|null, "evidence": string|null}, "provider": {"value": string|null, "evidence": string|null}, "reference": {"value": string|null, "evidence": string|null}, "completedOn": {"value": "YYYY-MM-DD"|null, "evidence": string|null}, "expiryDate": {"value": "YYYY-MM-DD"|null, "evidence": string|null}, "premises": {"value": string|null, "evidence": string|null}, "engineer": {"value": string|null, "evidence": string|null}, "findings": [{"label": string, "answer": string, "problem": boolean, "evidence": string}]}');
   }
   if (kind === "coshh" || kind === "auto") {
     lines.push(
@@ -143,6 +145,23 @@ function datesIn(text) {
   return [...found];
 }
 
+// Does this answer mean something is wrong? Unambiguous answers decide it; a yes or no depends on what was asked ("Boiler safe to use: No" is a problem, "Panel fault found: No" is not);
+// anything else is left to the model's own reading. The same rule is in the app (judgeCheck in src/modules/certificates/certificates.js) and a test keeps the two the same.
+const words = (text) => String(text ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const NEGATIVE_ANSWER = /^(fail|failed|failure|unsafe|unsatisfactory|not satisfactory|not safe|not safe to use|dangerous|immediately dangerous|at risk|danger present|potentially dangerous)( |$)/;
+const POSITIVE_ANSWER = /^(pass|passed)( |$)|^(satisfactory|safe|safe to use|ok|compliant|none|n a|not applicable|nil)$/;
+const GOOD_THING = /\b(safe|satisfactory|pass|passed|compliant|working|operating|serviceable|fit|acceptable|tight|sound)\b/;
+const BAD_THING = /\b(defect|defects|fault|faults|leak|leaks|danger|dangerous|fail|failed|unsafe|escape|spillage|damage|corrosion|remedial|action required|requiring action|requires action|non compliant|noncompliant)\b/;
+function judgeCheck(label, answer, modelSays = null) {
+  const a = words(answer);
+  const l = words(label);
+  if (NEGATIVE_ANSWER.test(a)) return true;
+  if (POSITIVE_ANSWER.test(a)) return false;
+  if (a === "no" || a.startsWith("no ") || a === "not") return GOOD_THING.test(l) && !BAD_THING.test(l);
+  if (a === "yes" || a.startsWith("yes ")) return BAD_THING.test(l);
+  return modelSays === true;
+}
+
 const asObject = (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {});
 const clean = (value, max) => (typeof value === "string" && value.trim() ? value.replace(/\s+/g, " ").trim().slice(0, max) : null);
 
@@ -160,6 +179,27 @@ function shapeField(raw, ocrNorm, { date = false, max = 200, classify = false } 
   const value = clean(field.value, max);
   if (!value) return { value: null, evidence: quoteFound ? evidence : null, verified: false };
   return { value, evidence: quoteFound ? evidence : null, verified: quoteFound && (classify || norm(evidence).includes(norm(value))) };
+}
+
+// the checks a certificate records: each needs a name and an answer, and is verified by a quote that is on the page and has the answer in it.
+// Whether the answer is a problem is decided by judgeCheck (the model's own opinion only counts where the answer is not plain).
+function shapeChecks(raw, ocrNorm) {
+  const seen = new Set();
+  const out = [];
+  for (const item of (Array.isArray(raw) ? raw : []).slice(0, 24)) {
+    const f = asObject(item);
+    const label = clean(f.label, 80);
+    const answer = clean(f.answer, 30);
+    if (!label || !answer) continue;
+    const key = norm(label) + "|" + norm(answer);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const evidence = clean(f.evidence, 200);
+    const quoteFound = Boolean(evidence) && norm(evidence).length >= 4 && ocrNorm.includes(norm(evidence));
+    out.push({ label, answer, problem: judgeCheck(label, answer, f.problem === true), evidence: quoteFound ? evidence : null, verified: quoteFound && norm(evidence).includes(norm(answer)) });
+    if (out.length >= 12) break;
+  }
+  return out;
 }
 
 // a list of { key, evidence } picked from the allowed keys only; each is verified by its quote
@@ -198,7 +238,11 @@ function verifyExtraction({ parsed, ocrText, kind, options }) {
       completedOn: shapeField(c.completedOn, ocrNorm, { date: true }),
       expiryDate: shapeField(c.expiryDate, ocrNorm, { date: true }),
       premises: shapeField(c.premises, ocrNorm, { max: 160 }),
+      engineer: shapeField(c.engineer, ocrNorm, { max: 80 }),
+      findings: shapeChecks(c.findings, ocrNorm),
     };
+    const bad = out.fields.findings.filter((f) => f.problem);
+    if (bad.length) warnings.push(`This document records a failed or unsafe result: ${bad.map((f) => `${f.label}: ${f.answer}`).join('; ')}. Do not treat it as a pass.`);
     const { completedOn, expiryDate } = out.fields;
     if (completedOn.value && expiryDate.value && expiryDate.value < completedOn.value) {
       warnings.push("The expiry date is before the date it was done. One of them has probably been misread.");
@@ -276,4 +320,4 @@ async function extractDocumentFields({ endpoint, key, deployment, ocrText, kind 
   return verifyExtraction({ parsed, ocrText: text, kind, options: choices });
 }
 
-module.exports = { MAX_BYTES, READABLE, buildInstructions, cleanOptions, datesIn, decodeUpload, extractDocumentFields, norm, verifyExtraction };
+module.exports = { MAX_BYTES, READABLE, judgeCheck, buildInstructions, cleanOptions, datesIn, decodeUpload, extractDocumentFields, norm, verifyExtraction };

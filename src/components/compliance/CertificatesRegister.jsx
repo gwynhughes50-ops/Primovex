@@ -8,9 +8,10 @@ import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
 import { namesWithCurrent } from "@/lib/stockPickerOptions";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
 import EvidencePanel from "@/components/documents/EvidencePanel";
+import FindingsEditor from "@/components/certificates/FindingsEditor";
 import { openDocument } from "@/lib/openDocument";
 import {
-  CERT_TYPES, STATUS_LABEL, WARN_DAYS, certLabel, certStatus, certSummary, emptyCertificate, expiryText, registerRows, searchCertificates, sortCertificates, suggestedExpiry, validateCertificate,
+  CERT_TYPES, STATUS_LABEL, WARN_DAYS, certLabel, checkText, cleanChecks, hasProblem, problemChecks, certStatus, certSummary, emptyCertificate, expiryText, registerRows, searchCertificates, sortCertificates, suggestedExpiry, validateCertificate,
 } from "@/modules/certificates/certificates";
 import { certificatesRegisterHtml } from "@/modules/certificates/certificatesReport";
 import { pdfProblem, renewCertificate, restoreCertificate, retireCertificate, saveCertificate, useCertificates } from "@/modules/certificates/certificateService";
@@ -102,11 +103,13 @@ export function CertificateForm({ initial, supplierNames, onCancel, onSaved, ini
           </select>
           {otherSupplier && <input className={FIELD} placeholder="Name" value={form.provider} onChange={(e) => set({ provider: e.target.value })} />}
         </label>
+        <label className={LABEL}>Engineer or inspector (optional)<input className={FIELD} value={form.engineer || ""} onChange={(e) => set({ engineer: e.target.value })} maxLength={80} placeholder="Who did it, as signed" /></label>
         <label className={LABEL}>Date it was done<input type="date" className={FIELD} value={form.completedOn} onChange={(e) => withSuggestion({ completedOn: e.target.value })} /></label>
         <label className={LABEL}>Runs out or next due<input type="date" className={FIELD} value={form.expiryDate} onChange={(e) => { setTouchedExpiry(true); set({ expiryDate: e.target.value }); }} />
           <span className="mt-1 block text-[11px] font-normal normal-case text-slate-500">Filled in from the usual length for this kind; change it if the certificate says different.</span>
         </label>
         <label className={LABEL}>Certificate number (optional)<input className={FIELD} value={form.reference} onChange={(e) => set({ reference: e.target.value })} maxLength={80} /></label>
+        <div className="sm:col-span-2"><FindingsEditor value={form.findings || []} onChange={(findings) => set({ findings })} compact={compact} /></div>
         <div>
           <span className={LABEL}>Certificate (PDF)</span>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-200">
@@ -137,6 +140,8 @@ export function RenewForm({ cert, supplierNames, onCancel, onDone, initialValues
   const [touched, setTouched] = useState(Boolean(initialValues?.expiryDate));
   const [provider, setProvider] = useState(initialValues?.provider || cert.provider);
   const [reference, setReference] = useState(initialValues?.reference || "");
+  const [engineer, setEngineer] = useState(initialValues?.engineer || "");
+  const [findings, setFindings] = useState(initialValues?.findings || []);
   const [confirmed, setConfirmed] = useState(false);
   const [file, setFile] = useState(initialFile);
   const [busy, setBusy] = useState(false);
@@ -147,7 +152,7 @@ export function RenewForm({ cert, supplierNames, onCancel, onDone, initialValues
     if (evidence && !confirmed) { setError("Tick the box to say you have checked these details against the document."); return; }
     setBusy(true); setError("");
     try {
-      await renewCertificate(cert, { completedOn, expiryDate, provider, reference, file, actor });
+      await renewCertificate(cert, { completedOn, expiryDate, provider, reference, engineer, findings: cleanChecks(findings), file, actor });
       onDone(`${certLabel(cert)} renewed. It now runs out on ${uk(expiryDate)}.`);
     } catch (problem) { setError(problem?.message || "Could not record the renewal. Check you have permission."); } finally { setBusy(false); }
   }
@@ -162,7 +167,9 @@ export function RenewForm({ cert, supplierNames, onCancel, onDone, initialValues
         <label className={LABEL}>New date it runs out<input type="date" className={FIELD} value={expiryDate} onChange={(e) => { setTouched(true); setExpiryDate(e.target.value); }} /></label>
         <label className={LABEL}>Done by<select className={FIELD} value={provider} onChange={(e) => setProvider(e.target.value)}>{suppliers.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
         <label className={LABEL}>Certificate number<input className={FIELD} value={reference} onChange={(e) => setReference(e.target.value)} maxLength={80} /></label>
+        <label className={LABEL}>Engineer (optional)<input className={FIELD} value={engineer} onChange={(e) => setEngineer(e.target.value)} maxLength={80} /></label>
       </div>
+      <div className="mt-2"><FindingsEditor value={findings} onChange={setFindings} compact={compact} /></div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-200">
         {file && <span className="inline-flex min-w-0 max-w-full items-center gap-1 break-all text-teal-200"><FileText className="h-4 w-4 shrink-0" aria-hidden="true" /> {file.name}</span>}
         <label className="cursor-pointer rounded-lg border border-white/15 px-3 py-1.5 text-sm font-semibold hover:bg-white/5">{file ? "Replace PDF" : "Choose the new PDF"}<input type="file" accept="application/pdf,.pdf" className="sr-only" onChange={(e) => { const f = e.target.files?.[0] || null; const p = f ? pdfProblem(f) : ""; if (p) { setError(p); setFile(null); e.target.value = ""; } else { setError(""); setFile(f); } }} /></label>
@@ -238,6 +245,7 @@ export default function CertificatesRegister() {
         </div>
         <div className="mt-3 flex flex-wrap gap-2 text-sm">
           <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-slate-200">{summary.total} certificate{summary.total === 1 ? "" : "s"}</span>
+          {summary.problems > 0 && <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/60 bg-rose-500/20 px-3 py-1 font-bold text-rose-100"><AlertTriangle className="h-4 w-4" aria-hidden="true" /> {summary.problems} recording a failed or unsafe result</span>}
           {summary.expired > 0 && <span className="inline-flex items-center gap-1 rounded-full border border-rose-400/40 bg-rose-500/10 px-3 py-1 text-rose-200"><AlertTriangle className="h-4 w-4" aria-hidden="true" /> {summary.expired} expired</span>}
           {summary.dueSoon > 0 && <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-amber-200">{summary.dueSoon} running out in {WARN_DAYS} days</span>}
           {summary.noPdf > 0 && <span className="rounded-full border border-amber-400/40 bg-amber-500/10 px-3 py-1 text-amber-200">{summary.noPdf} without the PDF</span>}
@@ -263,11 +271,17 @@ export default function CertificatesRegister() {
           {shown.map((c) => {
             const status = certStatus(c, now);
             return (
-              <li key={c.id} className="rounded-xl border border-white/10 bg-slate-900/60 p-3">
+              <li key={c.id} className={`rounded-xl border p-3 ${hasProblem(c) ? "border-rose-400/60 bg-rose-500/10" : "border-white/10 bg-slate-900/60"}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="font-semibold text-slate-100">{certLabel(c)}</p>
-                    <p className="text-sm text-slate-400">{[c.site, c.provider, c.reference && `No. ${c.reference}`].filter(Boolean).join(" · ")} · done {uk(c.completedOn)} · runs out {uk(c.expiryDate)}</p>
+                    <p className="text-sm text-slate-400">{[c.site, c.provider, c.engineer && `engineer ${c.engineer}`, c.reference && `No. ${c.reference}`].filter(Boolean).join(" · ")} · done {uk(c.completedOn)} · runs out {uk(c.expiryDate)}</p>
+                    {hasProblem(c) && <p className="mt-1 flex items-center gap-1.5 text-sm font-bold text-rose-200" role="alert"><AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" /> Records a failed or unsafe result: {problemChecks(c).map(checkText).join("; ")}</p>}
+                    {cleanChecks(c.findings).length > 0 && (
+                      <ul className="mt-1.5 flex flex-wrap gap-1.5" aria-label="Checks recorded on the certificate">
+                        {cleanChecks(c.findings).map((k) => <li key={k.label + k.answer} className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${k.problem ? "border-rose-400/50 bg-rose-500/15 text-rose-100" : "border-emerald-400/30 bg-emerald-500/10 text-emerald-200"}`}>{checkText(k)}</li>)}
+                      </ul>
+                    )}
                   </div>
                   <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold ${STATUS_STYLE[status]}`}>{expiryText(c, now)}</span>
                 </div>
@@ -287,7 +301,7 @@ export default function CertificatesRegister() {
                   <ul className="mt-3 space-y-1 border-t border-white/5 pt-2 text-sm text-slate-300">
                     {[...c.previous].reverse().map((p, i) => (
                       <li key={`${p.replacedOn}-${i}`} className="flex flex-wrap items-center justify-between gap-2">
-                        <span>Done {uk(p.completedOn)}, ran out {uk(p.expiryDate)}{p.provider ? ` · ${p.provider}` : ""}{p.reference ? ` · No. ${p.reference}` : ""} <span className="text-slate-500">(replaced {uk(p.replacedOn)}{p.replacedBy ? ` by ${p.replacedBy}` : ""})</span></span>
+                        <span>Done {uk(p.completedOn)}, ran out {uk(p.expiryDate)}{p.provider ? ` · ${p.provider}` : ""}{p.engineer ? ` · engineer ${p.engineer}` : ""}{cleanChecks(p.findings).some((k) => k.problem) ? ` · PROBLEM: ${cleanChecks(p.findings).filter((k) => k.problem).map(checkText).join("; ")}` : ""}{p.reference ? ` · No. ${p.reference}` : ""} <span className="text-slate-500">(replaced {uk(p.replacedOn)}{p.replacedBy ? ` by ${p.replacedBy}` : ""})</span></span>
                         {p.certUrl && <button type="button" onClick={() => openPdf(p.certUrl, p.certPath, p.certFileName)} className="text-xs font-semibold text-teal-300 underline">Open</button>}
                       </li>
                     ))}

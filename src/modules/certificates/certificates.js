@@ -27,8 +27,47 @@ const typeOf = (key) => CERT_TYPES.find((t) => t.key === key) || CERT_TYPES.at(-
 
 export const certLabel = (cert) => (cert?.type === "other" && trim(cert?.name, 80)) || typeOf(cert?.type).label;
 
+// ---------- the checks a certificate records ----------
+// Besides who and when, many certificates record RESULTS: the engineer who did it, and pass/fail or yes/no checks ("Gas supply tightness test: Pass", "Boiler safe to use: No").
+// A check is { label, answer, problem }: what it is called on the document, the answer as written, and whether that answer means something is wrong. A certificate with a problem
+// check is flagged however far off its expiry is, because "boiler safe to use: No" is not made better by being in date.
+export const ANSWERS = ["Yes", "No", "Pass", "Fail", "Satisfactory", "Unsatisfactory", "Safe", "Unsafe", "None", "N/A"];
+export const COMMON_CHECKS = ["Gas supply tightness test", "Boiler safe to use", "Appliance safe to use", "Flue and ventilation satisfactory", "Carbon monoxide alarm fitted", "Overall assessment", "Defects found", "Panel fault found"];
+export const MAX_CHECKS = 12;
+
+const words = (text) => String(text ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const NEGATIVE_ANSWER = /^(fail|failed|failure|unsafe|unsatisfactory|not satisfactory|not safe|not safe to use|dangerous|immediately dangerous|at risk|danger present|potentially dangerous)( |$)/;
+// a plain pass; "Satisfactory with advisories" and the like are NOT plain, so they are left to the AI's reading
+const POSITIVE_ANSWER = /^(pass|passed)( |$)|^(satisfactory|safe|safe to use|ok|compliant|none|n a|not applicable|nil)$/;
+const GOOD_THING = /\b(safe|satisfactory|pass|passed|compliant|working|operating|serviceable|fit|acceptable|tight|sound)\b/;
+const BAD_THING = /\b(defect|defects|fault|faults|leak|leaks|danger|dangerous|fail|failed|unsafe|escape|spillage|damage|corrosion|remedial|action required|requiring action|requires action|non compliant|noncompliant)\b/;
+
+// Does this answer mean something is wrong? Unambiguous answers decide it ("Fail", "Unsatisfactory", "Pass"); a yes or no depends on what was asked ("Boiler safe to use: No" is a problem,
+// "Panel fault found: No" is not, "Defects found: Yes" is); anything else is left to `modelSays` (the AI's own reading), else it is not a problem. The same rule is on the server (checked by a test).
+export function judgeCheck(label, answer, modelSays = null) {
+  const a = words(answer);
+  const l = words(label);
+  if (NEGATIVE_ANSWER.test(a)) return true;
+  if (POSITIVE_ANSWER.test(a)) return false;
+  if (a === "no" || a.startsWith("no ") || a === "not") return GOOD_THING.test(l) && !BAD_THING.test(l);
+  if (a === "yes" || a.startsWith("yes ")) return BAD_THING.test(l);
+  return modelSays === true;
+}
+
+// a clean list of checks: wording trimmed, answers kept short, at most MAX_CHECKS, and nothing without a name
+export function cleanChecks(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((c) => ({ label: trim(c?.label, 80), answer: trim(c?.answer, 30), problem: c?.problem === true }))
+    .filter((c) => c.label && c.answer)
+    .slice(0, MAX_CHECKS);
+}
+export const problemChecks = (cert) => cleanChecks(cert?.findings).filter((c) => c.problem);
+export const hasProblem = (cert) => problemChecks(cert).length > 0;
+export const checkText = (c) => `${c.label}: ${c.answer}`;
+
 export const emptyCertificate = () => ({
-  id: "", type: "gas_safety", name: "", site: "", provider: "", reference: "", completedOn: "", expiryDate: "",
+  id: "", type: "gas_safety", name: "", site: "", provider: "", engineer: "", findings: [], reference: "", completedOn: "", expiryDate: "",
   certUrl: "", certPath: "", certFileName: "", active: true, previous: [],
 });
 
@@ -40,6 +79,8 @@ export function normaliseCertificate(id, data = {}) {
     name: trim(data.name, 80),
     site: trim(data.site, 120),
     provider: trim(data.provider, 120),
+    engineer: trim(data.engineer, 80),
+    findings: cleanChecks(data.findings),
     reference: trim(data.reference, 80),
     completedOn: parseDateKey(data.completedOn) ? data.completedOn : "",
     expiryDate: parseDateKey(data.expiryDate) ? data.expiryDate : "",
@@ -75,7 +116,7 @@ export function validateCertificate(form) {
 export function toRecord(form) {
   const c = normaliseCertificate(form.id, form);
   return {
-    type: c.type, name: c.type === "other" ? c.name : "", site: c.site, provider: c.provider, reference: c.reference,
+    type: c.type, name: c.type === "other" ? c.name : "", site: c.site, provider: c.provider, engineer: c.engineer, findings: c.findings, reference: c.reference,
     completedOn: c.completedOn, expiryDate: c.expiryDate, certUrl: c.certUrl, certPath: c.certPath, certFileName: c.certFileName, active: c.active,
   };
 }
@@ -107,8 +148,9 @@ export function expiryText(cert, now = new Date()) {
 }
 
 const RANK = { expired: 0, missing: 1, "due-soon": 2, ok: 3 };
+const rankOf = (c, now) => (hasProblem(c) ? -1 : RANK[certStatus(c, now)]);
 export function sortCertificates(list, now = new Date()) {
-  return [...list].sort((a, b) => RANK[certStatus(a, now)] - RANK[certStatus(b, now)] || (a.expiryDate || "9999").localeCompare(b.expiryDate || "9999") || certLabel(a).localeCompare(certLabel(b)));
+  return [...list].sort((a, b) => rankOf(a, now) - rankOf(b, now) || (a.expiryDate || "9999").localeCompare(b.expiryDate || "9999") || certLabel(a).localeCompare(certLabel(b)));
 }
 
 export function certSummary(list, now = new Date()) {
@@ -116,12 +158,15 @@ export function certSummary(list, now = new Date()) {
   const count = (status) => live.filter((c) => certStatus(c, now) === status).length;
   const expired = count("expired") + count("missing");
   const dueSoon = count("due-soon");
-  return { total: live.length, expired, dueSoon, noPdf: live.filter((c) => !c.certUrl).length, ok: count("ok"), needsAttention: expired + dueSoon };
+  const problems = live.filter(hasProblem).length;
+  // needing attention: expired, missing a date, running out, or recording a problem (counted once)
+  const needsAttention = live.filter((c) => certStatus(c, now) !== "ok" || hasProblem(c)).length;
+  return { total: live.length, expired, dueSoon, problems, noPdf: live.filter((c) => !c.certUrl).length, ok: count("ok"), needsAttention };
 }
 
 // A renewal: the new date it was done and next due, a new PDF, and the old one kept as history.
 //   { patch, previousEntry } the caller writes patch and appends previousEntry to `previous`
-export function renewal(cert, { completedOn, expiryDate, provider, reference, certUrl, certPath, certFileName }, actor = {}, now = new Date()) {
+export function renewal(cert, { completedOn, expiryDate, provider, reference, engineer = "", findings = [], certUrl, certPath, certFileName }, actor = {}, now = new Date()) {
   const problems = [];
   if (!parseDateKey(completedOn)) problems.push("Enter the date it was done.");
   if (!parseDateKey(expiryDate)) problems.push("Set the new date it runs out.");
@@ -131,20 +176,21 @@ export function renewal(cert, { completedOn, expiryDate, provider, reference, ce
   if (problems.length) throw new Error(problems[0]);
   const by = trim(actor.displayName || actor.name || actor.email, 80) || "Unknown";
   return {
-    patch: { completedOn, expiryDate, provider: trim(provider, 120) || cert.provider, reference: trim(reference, 80), certUrl, certPath, certFileName, lastRenewedByName: by, lastRenewedOn: dateKey(now) },
-    previousEntry: { completedOn: cert.completedOn || "", expiryDate: cert.expiryDate || "", provider: cert.provider || "", reference: cert.reference || "", certUrl: cert.certUrl || "", certPath: cert.certPath || "", certFileName: cert.certFileName || "", replacedOn: dateKey(now), replacedBy: by },
+    patch: { completedOn, expiryDate, provider: trim(provider, 120) || cert.provider, reference: trim(reference, 80), engineer: trim(engineer, 80), findings: cleanChecks(findings), certUrl, certPath, certFileName, lastRenewedByName: by, lastRenewedOn: dateKey(now) },
+    previousEntry: { completedOn: cert.completedOn || "", expiryDate: cert.expiryDate || "", provider: cert.provider || "", engineer: cert.engineer || "", findings: cleanChecks(cert.findings), reference: cert.reference || "", certUrl: cert.certUrl || "", certPath: cert.certPath || "", certFileName: cert.certFileName || "", replacedOn: dateKey(now), replacedBy: by },
   };
 }
 
 export function searchCertificates(list, text) {
   const words = String(text || "").toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return list;
-  return list.filter((c) => words.every((w) => `${certLabel(c)} ${c.provider} ${c.site} ${c.reference}`.toLowerCase().includes(w)));
+  return list.filter((c) => words.every((w) => `${certLabel(c)} ${c.provider} ${c.engineer || ""} ${c.site} ${c.reference}`.toLowerCase().includes(w)));
 }
 
 // the register on paper: one row per certificate, for the inspector or the contractor
 export function registerRows(list, now = new Date()) {
   return sortCertificates(list.filter((c) => c.active !== false), now).map((c) => ({
-    what: certLabel(c), site: c.site, provider: c.provider, reference: c.reference, done: c.completedOn, expires: c.expiryDate, status: STATUS_LABEL[certStatus(c, now)], hasPdf: Boolean(c.certUrl),
+    what: certLabel(c), site: c.site, provider: c.provider, engineer: c.engineer || "", reference: c.reference, done: c.completedOn, expires: c.expiryDate, status: STATUS_LABEL[certStatus(c, now)], hasPdf: Boolean(c.certUrl),
+    problem: hasProblem(c), result: hasProblem(c) ? `PROBLEM: ${problemChecks(c).map(checkText).join("; ")}` : cleanChecks(c.findings).length ? "No problems recorded" : "",
   }));
 }

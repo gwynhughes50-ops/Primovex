@@ -53,8 +53,9 @@ export function demoCertificates() {
     certUrl: "", certPath: "", certFileName: "", active: true, demo: true, ...extra,
   });
   return [
-    cert("demo-cert-1", "gas_safety", "Demo Gas Services", -330, 35),
-    cert("demo-cert-2", "eicr", "Demo Electrical Ltd", -900, 925),
+    cert("demo-cert-1", "gas_safety", "Demo Gas Services", -330, 35, { engineer: "A. Demo", findings: [{ label: "Gas supply tightness test", answer: "Pass", problem: false }, { label: "Boiler: safe to use", answer: "Yes", problem: false }] }),
+    // a certificate that records a failed result, so a demo or training session can show what one looks like
+    cert("demo-cert-2", "eicr", "Demo Electrical Ltd", -900, 925, { engineer: "B. Demo", findings: [{ label: "Overall assessment of the installation", answer: "Unsatisfactory", problem: true }] }),
     cert("demo-cert-3", "fire_extinguisher_service", "Demo Fire Protection", -380, -15),
     cert("demo-cert-4", "legionella_risk_assessment", "Demo Water Hygiene", -100, 630),
   ];

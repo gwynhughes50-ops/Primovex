@@ -5,7 +5,7 @@
 
 import { concernDeadline, concernOpen, sarDays, sarOpen } from "../../ai/management/managementAsk.js";
 import { reviewSummary, reviewStatus } from "../coshh/coshh.js";
-import { certLabel, certStatus, certSummary } from "../certificates/certificates.js";
+import { certLabel, certStatus, certSummary, checkText, hasProblem, problemChecks } from "../certificates/certificates.js";
 import { STATUS, courseSummary, tally, buildMatrix } from "../training/training.js";
 import { isOpen as incidentOpen, isPanelFault, isPatFail, assetGroup } from "../compliance/complianceIncidents.js";
 import { reviewStatus as caseReviewStatus } from "../governance/concernCase.js";
@@ -285,12 +285,14 @@ export function certificatesSection({ certificates, now, available }) {
   const expired = live.filter((c) => ["expired", "missing"].includes(certStatus(c, now)));
   const soon = live.filter((c) => certStatus(c, now) === "due-soon");
   const gaps = [];
+  const problems = live.filter(hasProblem);
+  if (problems.length) gaps.push(`${plural(problems.length, "certificate")} ${problems.length === 1 ? "records" : "record"} a failed or unsafe result: ${problems.slice(0, 4).map((c) => `${certLabel(c)} (${problemChecks(c).map(checkText).join("; ")})`).join(", ")}${problems.length > 4 ? " and more" : ""}.`);
   if (expired.length) gaps.push(`${plural(expired.length, "certificate")} expired or without a date: ${expired.slice(0, 4).map(certLabel).join(", ")}${expired.length > 4 ? " and more" : ""}.`);
   if (summary.noPdf) gaps.push(`${plural(summary.noPdf, "certificate")} without the PDF attached.`);
   if (soon.length) gaps.push(`${plural(soon.length, "certificate")} running out in the next 60 days: ${soon.slice(0, 4).map(certLabel).join(", ")}${soon.length > 4 ? " and more" : ""}.`);
   return section("certificates", "Certificates and servicing", gaps.length ? "attention" : "ok",
     `${plural(live.length, "certificate")} on the register; ${summary.expired} expired, ${summary.dueSoon} running out soon.`,
-    [["In date", String(summary.ok)], ["Running out in the next 60 days", String(summary.dueSoon)], ["Expired or without a date", String(summary.expired)], ["With the certificate PDF held", `${live.length - summary.noPdf} of ${live.length}`]], gaps);
+    [["Recording a failed or unsafe result", String(summary.problems)], ["In date", String(summary.ok)], ["Running out in the next 60 days", String(summary.dueSoon)], ["Expired or without a date", String(summary.expired)], ["With the certificate PDF held", `${live.length - summary.noPdf} of ${live.length}`]], gaps);
 }
 
 // ---- clinical waste: collections on record, counts and dates only ---------------------------------------------------

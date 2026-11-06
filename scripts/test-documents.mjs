@@ -28,19 +28,22 @@ const cert = (o) => ({
 
 const q = (iso, quote) => ({ iso, quote });
 const pick = (key, quote) => ({ key, quote });
+// a check the certificate records: what it is called, the answer, and whether that answer is a PROBLEM; the quote is the line as it is on the page
+const chk = (label, answer, problem = false) => ({ label, answer, problem, quote: `${label}: ${answer}` });
+const eng = (value, quote) => ({ value, quote });
 
 // ---------- certificates and service records (PDF) ----------
 export const DOCUMENTS = [
   { file: "01-gas-safety-record-2025-OLD.pdf", ...cert({
     issuer: "Northgate Gas Services Ltd", title: "Landlord / Homeowner Gas Safety Record",
     rows: [["Record number", "GSR-31877"], ["Date of inspection", "14/10/2025"], ["Next inspection due by", "13/10/2026"], ["Engineer", "A. Sample (registration 000000, invented)"], ["Gas supply tightness test", "Pass"], ["Boiler: safe to use", "Yes"]],
-    expected: { type: "gas_safety", provider: "Northgate Gas Services Ltd", reference: "GSR-31877", completedOn: q("2025-10-14", "Date of inspection: 14/10/2025"), expiryDate: q("2026-10-13", "Next inspection due by: 13/10/2026") },
-    tests: "A normal gas safety record. Last year's, so it has just run out: add it first, then drop file 08 to try the Renew offer.",
+    expected: { type: "gas_safety", provider: "Northgate Gas Services Ltd", reference: "GSR-31877", completedOn: q("2025-10-14", "Date of inspection: 14/10/2025"), expiryDate: q("2026-10-13", "Next inspection due by: 13/10/2026"), engineer: eng("A. Sample", "Engineer: A. Sample (registration 000000, invented)"), findings: [chk("Gas supply tightness test", "Pass"), chk("Boiler: safe to use", "Yes")] },
+    tests: "A normal gas safety record. Last year's, so it has just run out: add it first, then drop file 08 to try the Renew offer. It also has the ENGINEER and two CHECKS (gas supply tightness test: Pass; boiler safe to use: Yes), which should be read onto the form and shown as green chips on the register.",
   }) },
   { file: "02-eicr-electrical-test.pdf", ...cert({
     issuer: "Brightspark Electrical Contractors Ltd", title: "Electrical Installation Condition Report (EICR)",
     rows: [["Report number", "EICR-2026-0377"], ["Date of inspection", "2 September 2026"], ["Recommended date for next inspection", "2 September 2031"], ["Overall assessment of the installation", "SATISFACTORY"]],
-    expected: { type: "eicr", provider: "Brightspark Electrical Contractors Ltd", reference: "EICR-2026-0377", completedOn: q("2026-09-02", "Date of inspection: 2 September 2026"), expiryDate: q("2031-09-02", "Recommended date for next inspection: 2 September 2031") },
+    expected: { type: "eicr", provider: "Brightspark Electrical Contractors Ltd", reference: "EICR-2026-0377", completedOn: q("2026-09-02", "Date of inspection: 2 September 2026"), expiryDate: q("2031-09-02", "Recommended date for next inspection: 2 September 2031"), findings: [chk("Overall assessment of the installation", "SATISFACTORY")] },
     tests: "Dates written as words. A five-year certificate.",
   }) },
   { file: "03-fire-extinguisher-service.pdf", ...cert({
@@ -70,20 +73,26 @@ export const DOCUMENTS = [
   { file: "07-lift-inspection-LOLER.pdf", ...cert({
     issuer: "Liftsafe Inspections Ltd", title: "Report of Thorough Examination of a Lift (LOLER)",
     rows: [["Report number", "LE-1204"], ["Date of examination", "3rd November 2026"], ["Next examination due by", "3rd May 2027"], ["Defects requiring action", "None"]],
-    expected: { type: "lift_loler", provider: "Liftsafe Inspections Ltd", reference: "LE-1204", completedOn: q("2026-11-03", "Date of examination: 3rd November 2026"), expiryDate: q("2027-05-03", "Next examination due by: 3rd May 2027") },
+    expected: { type: "lift_loler", provider: "Liftsafe Inspections Ltd", reference: "LE-1204", completedOn: q("2026-11-03", "Date of examination: 3rd November 2026"), expiryDate: q("2027-05-03", "Next examination due by: 3rd May 2027"), findings: [chk("Defects requiring action", "None")] },
     tests: "Dates with 'rd' after the day. A six-month certificate.",
   }) },
   { file: "08-gas-safety-record-2026-RENEWAL.pdf", ...cert({
     issuer: "Northgate Gas Services Ltd", title: "Landlord / Homeowner Gas Safety Record",
     rows: [["Record number", "GSR-48213"], ["Date of inspection", "14/10/2026"], ["Next inspection due by", "13/10/2027"], ["Engineer", "A. Sample (registration 000000, invented)"], ["Gas supply tightness test", "Pass"], ["Boiler: safe to use", "Yes"]],
-    expected: { type: "gas_safety", provider: "Northgate Gas Services Ltd", reference: "GSR-48213", completedOn: q("2026-10-14", "Date of inspection: 14/10/2026"), expiryDate: q("2027-10-13", "Next inspection due by: 13/10/2027") },
+    expected: { type: "gas_safety", provider: "Northgate Gas Services Ltd", reference: "GSR-48213", completedOn: q("2026-10-14", "Date of inspection: 14/10/2026"), expiryDate: q("2027-10-13", "Next inspection due by: 13/10/2027"), engineer: eng("A. Sample", "Engineer: A. Sample (registration 000000, invented)"), findings: [chk("Gas supply tightness test", "Pass"), chk("Boiler: safe to use", "Yes")] },
     tests: "The renewal of file 01. Once 01 is saved, Primovex should say 'This looks like a renewal' and offer Renew, rather than adding a second gas record.",
   }) },
   { file: "09-photo-of-fire-alarm-certificate.png", format: "photo-png", ...cert({
     issuer: "Ember Fire & Security Ltd", title: "Fire Detection and Alarm System: Service Certificate",
     rows: [["Certificate number", "FA-20418"], ["Date of service", "08/10/2026"], ["Next service due", "08/04/2027"], ["Panel fault found", "No"]],
-    expected: { type: "fire_alarm_service", provider: "Ember Fire & Security Ltd", reference: "FA-20418", completedOn: q("2026-10-08", "Date of service: 08/10/2026"), expiryDate: q("2027-04-08", "Next service due: 08/04/2027") },
-    tests: "A PHOTO (a slightly tilted picture of a page on a table), as if taken on a phone. It is turned into a PDF on your device and read. A six-month certificate.",
+    expected: { type: "fire_alarm_service", provider: "Ember Fire & Security Ltd", reference: "FA-20418", completedOn: q("2026-10-08", "Date of service: 08/10/2026"), expiryDate: q("2027-04-08", "Next service due: 08/04/2027"), findings: [chk("Panel fault found", "No")] },
+    tests: "A PHOTO (a slightly tilted picture of a page on a table), as if taken on a phone. It is turned into a PDF on your device and read. A six-month certificate. 'Panel fault found: No' is a NO that is fine, so it must NOT be flagged as a problem.",
+  }) },
+  { file: "23-gas-safety-record-UNSAFE-BOILER-FAILED.pdf", ...cert({
+    issuer: "Northgate Gas Services Ltd", title: "Landlord / Homeowner Gas Safety Record",
+    rows: [["Record number", "GSR-60214"], ["Date of inspection", "21/10/2026"], ["Next inspection due by", "20/10/2027"], ["Engineer", "R. Example (registration 000000, invented)"], ["Gas supply tightness test", "Fail"], ["Boiler: safe to use", "No"], ["Carbon monoxide alarm fitted", "Yes"]],
+    expected: { type: "gas_safety", provider: "Northgate Gas Services Ltd", reference: "GSR-60214", completedOn: q("2026-10-21", "Date of inspection: 21/10/2026"), expiryDate: q("2027-10-20", "Next inspection due by: 20/10/2027"), engineer: eng("R. Example", "Engineer: R. Example (registration 000000, invented)"), findings: [chk("Gas supply tightness test", "Fail", true), chk("Boiler: safe to use", "No", true), chk("Carbon monoxide alarm fitted", "Yes")] },
+    tests: "A gas record that records a FAILURE: the tightness test failed and the boiler is NOT safe to use. Primovex should put both on the form and show a big red warning that it is not a pass; after saving, the certificate shows red at the top of the register, in the compliance 'needs attention' list and on the phone, even though its dates are fine. The carbon monoxide alarm 'Yes' is fine.",
   }) },
   { file: "10-emergency-lighting-DATES-CONFLICT.pdf", ...cert({
     issuer: "Beacon Emergency Lighting Ltd", title: "Emergency Lighting Annual Test Certificate",
@@ -184,3 +193,6 @@ export function emailText(doc) {
 }
 
 export const kindOf = (doc) => doc.kind;
+
+// the checks and engineer a document is expected to give (certificates only)
+export const expectedChecks = (doc) => (doc.expected?.findings || []);

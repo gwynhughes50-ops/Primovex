@@ -1,4 +1,4 @@
-import { CERT_TYPES, emptyCertificate, suggestedExpiry } from "../certificates/certificates.js";
+import { CERT_TYPES, cleanChecks, emptyCertificate, suggestedExpiry } from "../certificates/certificates.js";
 import { FIRST_AID_OPTIONS, HAZARD_TYPES, PPE_OPTIONS, emptySubstance, firstAidLabel, hazardLabel, nextReviewFrom, dateKey, ppeLabel } from "../coshh/coshh.js";
 
 // Document intake, the app's side: turn what the server read from a dropped certificate or COSHH safety data sheet into a pre-filled form
@@ -60,6 +60,10 @@ export function certificateCard(result, { siteNames = [], supplierNames = [] } =
     completedOn: f.completedOn?.value || "",
     expiryDate: f.expiryDate?.value || "",
     site,
+    engineer: f.engineer?.value || "",
+    // The checks the certificate records. One that is a PROBLEM is always put on the form, confirmed or not: missing a failed or unsafe result is the dangerous mistake, and a false
+    // alarm is easy to remove. One that is fine is put on only when the document's own words back it.
+    findings: cleanChecks((f.findings || []).filter((c) => c.problem || c.verified)),
   };
   const typeLabel = typeKnown ? CERT_TYPES.find((t) => t.key === f.type.value).label : "";
   const rows = [
@@ -71,12 +75,23 @@ export function certificateCard(result, { siteNames = [], supplierNames = [] } =
     { ...row("premises", "Site or address on it", f.premises, f.premises?.value), note: f.premises?.value ? (site ? `Matched to your site "${site}".` : "Not matched to one of your sites: choose the site yourself.") : "" },
   ];
   // No expiry written on it: the form's own usual length for this kind is filled in so there is something to check, and it is said plainly that it is not from the document
+  rows.push(row("engineer", "Engineer", f.engineer, f.engineer?.value));
+  const checks = f.findings || [];
+  for (const [i, c] of checks.entries()) {
+    rows.push({
+      key: `check:${i}`, label: c.label, status: c.verified ? "found" : "check", display: c.problem ? `${c.answer}: this is a problem` : c.answer, evidence: c.evidence || "",
+      note: c.problem ? (c.verified ? "This answer means something is wrong, unsafe or failed. It has been added to the form." : "This looks like a problem, but the document's words do not confirm it. It has been added to the form: check the document.")
+        : c.verified ? "" : "Not added for you, because the document's words do not back it. Add it yourself if it is on the document.",
+    });
+  }
   if (!f.expiryDate?.value) {
     const suggested = typeKnown && initial.completedOn ? suggestedExpiry(initial.type, initial.completedOn) : "";
     initial.expiryDate = suggested;
     rows[4] = { ...rows[4], status: suggested ? "check" : "missing", display: suggested ? ukDay(suggested) : "", note: suggested ? "No expiry or next-due date is written on the document. This is the usual length for this kind, worked out from the date it was done: check it." : "No expiry or next-due date is written on the document. Set it yourself." };
   }
-  return { kind: "certificate", initial, evidence: { kind: "certificate", title: "What was read from the certificate", rows, warnings: result?.warnings || [], fileName: result?.fileName || "" } };
+  // a failed or unsafe result is said loudly, above everything else
+  const alerts = checks.filter((c) => c.problem).map((c) => `${c.label}: ${c.answer}`);
+  return { kind: "certificate", initial, evidence: { kind: "certificate", title: "What was read from the certificate", rows, warnings: (result?.warnings || []).filter((w) => !/failed or unsafe result/.test(w)), alerts, fileName: result?.fileName || "" } };
 }
 
 // ---------- a COSHH safety data sheet ----------

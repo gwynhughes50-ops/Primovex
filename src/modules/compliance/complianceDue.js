@@ -6,7 +6,7 @@ import { dueSummary as patDueSummary } from "../pat/pat.js";
 import { isOpen as incidentOpen, ageText, closesWithoutRecheck, isPanelFault } from "./complianceIncidents.js";
 import { issueSummary } from "../maintenance/maintenance.js";
 import { reviewSummary } from "../coshh/coshh.js";
-import { certLabel, certStatus, daysUntilExpiry } from "../certificates/certificates.js";
+import { certLabel, certStatus, checkText, daysUntilExpiry, hasProblem, problemChecks } from "../certificates/certificates.js";
 
 const DAY = 86400000;
 // which part of the Overview an asset is listed under, so "Open" can take the person to it
@@ -97,6 +97,9 @@ export function dueList({ assets = [], incidents = [], patSessions = [], patAsse
     const expired = live.filter((c) => ["expired", "missing"].includes(certStatus(c, now)));
     const soon = live.filter((c) => certStatus(c, now) === "due-soon").sort((a, b) => daysUntilExpiry(a, now) - daysUntilExpiry(b, now));
     const names = (list) => `${list.slice(0, 3).map(certLabel).join(", ")}${list.length > 3 ? ` and ${list.length - 3} more` : ""}`;
+    // a certificate that records a failed or unsafe result comes first, whatever its dates
+    const problems = live.filter(hasProblem);
+    if (problems.length) items.push({ key: "certs-problem", tone: "critical", label: `${plural(problems.length, "certificate")} ${problems.length === 1 ? "records" : "record"} a failed or unsafe result`, detail: problems.slice(0, 3).map((c) => `${certLabel(c)} (${problemChecks(c).map(checkText).join("; ")})`).join(", ") + (problems.length > 3 ? ` and ${problems.length - 3} more` : ""), action: { type: "tab", tab: "certificates" } });
     if (expired.length) items.push({ key: "certs-expired", tone: "critical", label: `${plural(expired.length, "certificate")} expired`, detail: names(expired), action: { type: "tab", tab: "certificates" } });
     if (soon.length) items.push({ key: "certs-soon", tone: "warning", label: `${plural(soon.length, "certificate")} running out soon`, detail: `${names(soon)}. The first runs out in ${plural(daysUntilExpiry(soon[0], now), "day")}.`, action: { type: "tab", tab: "certificates" } });
   }

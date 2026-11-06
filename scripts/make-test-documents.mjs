@@ -140,13 +140,13 @@ for (const doc of DOCUMENTS.filter((d) => d.format === "eml-with-attachment")) s
 const csv = (cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`;
 const label = (e) => (e ? (typeof e === "string" ? e : e.iso || "") : "");
 const names = (list) => (list || []).map((x) => x.key).join(", ");
-const rows = [["File", "What it tests", "Kind it should be", "Done by", "Reference", "Done on (yyyy-mm-dd)", "Runs out / next due (yyyy-mm-dd)", "Hazards / protection / first aid (keys)", "Notes"]];
+const rows = [["File", "What it tests", "Kind it should be", "Done by", "Reference", "Done on (yyyy-mm-dd)", "Runs out / next due (yyyy-mm-dd)", "Hazards / protection / first aid (keys)", "Engineer", "Checks it records (PROBLEM = should be flagged red)", "Notes"]];
 for (const d of DOCUMENTS) {
   const e = d.expected || {};
   const detail = d.kind === "coshh" ? `hazards: ${e.notHazardous ? "none (the sheet says not hazardous)" : names(e.hazards)}; protection: ${names(e.ppe)}; first aid: ${names(e.firstAid)}` : "";
   const expiry = e.expiryDate === null ? `none written (form suggests ${e.suggestedExpiry})` : label(e.expiryDate);
   const kind = d.kind === "coshh" ? "COSHH data sheet" : e.type || (e.kind === "other" ? "not a certificate" : e.refused ? "refused" : e.usesAttachment ? "(as file 07)" : "");
-  rows.push([d.file, d.tests, kind, d.kind === "coshh" ? `${e.supplier?.quote?.replace(/^Supplier: /, "") || ""}` : e.provider || "", d.kind === "coshh" ? (e.productName?.quote || "").replace(/^Product name: /, "") : e.reference || "", label(e.completedOn), expiry, detail, d.notes || ""]);
+  rows.push([d.file, d.tests, kind, d.kind === "coshh" ? `${e.supplier?.quote?.replace(/^Supplier: /, "") || ""}` : e.provider || "", d.kind === "coshh" ? (e.productName?.quote || "").replace(/^Product name: /, "") : e.reference || "", label(e.completedOn), expiry, detail, e.engineer?.value || "", (e.findings || []).map((c) => `${c.problem ? "PROBLEM: " : ""}${c.label}: ${c.answer}`).join("; "), d.notes || ""]);
 }
 written.push("ANSWERS.csv");
 writeFileSync(path.join(out, "ANSWERS.csv"), `\ufeff${rows.map((r) => r.map(csv).join(",")).join("\r\n")}\r\n`);
@@ -165,6 +165,8 @@ writeFileSync(path.join(out, "READ ME FIRST.txt"), [
   "  5. 12 (a lunch menu). It should say it could not tell what the document is.",
   "  6. 13 to 16 (COSHH data sheets). Each hazard and protective item should show the words from the sheet that back it. Anything not backed is shown but NOT ticked for you.",
   "  7. 09 (a photo), 17 (Word), 21 (Excel), 18 and 19 (emails), 20 (text). 22 (an old .doc) should be refused with what to do.",
+  "  8. 23 (a gas record where the tightness test FAILED and the boiler is NOT safe to use). A red warning should appear and both checks should be on the form. After saving, it should be red at the top of the Certificates list, in the compliance needs-attention list, and on the phone.",
+  "  Also look at 01 and 08: the engineer and two checks (tightness test: Pass, boiler safe to use: Yes) should be read onto the form, and show as green chips.",
   "",
   "ANSWERS.csv lists what each file should give. Please tell me anything that comes out wrong, missing, or ticked when it should not be.",
   "",

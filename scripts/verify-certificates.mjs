@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  CERT_TYPES, WARN_DAYS, certLabel, certStatus, certSummary, daysUntilExpiry, emptyCertificate, expiryText, normaliseCertificate, registerRows, renewal, searchCertificates,
+  ANSWERS, CERT_TYPES, MAX_CHECKS, WARN_DAYS, certLabel, checkText, cleanChecks, hasProblem, judgeCheck, problemChecks, certStatus, certSummary, daysUntilExpiry, emptyCertificate, expiryText, normaliseCertificate, registerRows, renewal, searchCertificates,
   sortCertificates, suggestedExpiry, toRecord, validateCertificate,
 } from "../src/modules/certificates/certificates.js";
 import { certificatesRegisterHtml } from "../src/modules/certificates/certificatesReport.js";
@@ -105,7 +105,7 @@ t("the most urgent comes first and the summary counts what needs attention; reti
     { ...good, id: "none", expiryDate: "" }, { ...good, id: "retired", expiryDate: day(-99), active: false }, { ...good, id: "nopdf", expiryDate: day(100), certUrl: "" },
   ];
   assert.deepEqual(sortCertificates(list, now).map((c) => c.id), ["retired", "old", "none", "soon", "nopdf", "ok"]);
-  assert.deepEqual(certSummary(list, now), { total: 5, expired: 2, dueSoon: 1, noPdf: 1, ok: 2, needsAttention: 3 });
+  assert.deepEqual(certSummary(list, now), { total: 5, expired: 2, dueSoon: 1, problems: 0, noPdf: 1, ok: 2, needsAttention: 3 });
   assert.equal(searchCertificates(list, "gas safe").length, 6);
   assert.equal(searchCertificates(list, "zzz").length, 0);
 });
@@ -138,7 +138,7 @@ t("the inspection sheet has a certificates section that names what is expired, m
   assert.equal(certificatesSection(data([], false)).status, "unavailable");
   const fine = certificatesSection(data([{ ...good, expiryDate: day(200) }]));
   assert.equal(fine.status, "ok");
-  assert.deepEqual(fine.rows.map((r) => r[1]), ["1", "0", "0", "1 of 1"]);
+  assert.deepEqual(fine.rows.map((r) => r[1]), ["0", "1", "0", "0", "1 of 1"]);
   const bad = certificatesSection(data([{ ...good, id: "a", expiryDate: day(-4) }, { ...good, id: "b", type: "eicr", expiryDate: day(20), certUrl: "" }, { ...good, id: "c", type: "boiler_service", expiryDate: day(300) }]));
   assert.equal(bad.status, "attention");
   assert.match(bad.gaps[0], /1 certificate expired or without a date: Gas safety certificate/);
@@ -156,6 +156,98 @@ t("the 'what needs doing' list puts an expired certificate with the failures and
   assert.equal(list[0].action.tab, "certificates");
   assert.deepEqual(dueList({ certificates: [{ ...good, expiryDate: day(400) }], now }), []);
   assert.deepEqual(dueList({ certificates: null, now }), [], "someone who can't see the register isn't shown it");
+});
+
+t("an answer is judged a problem by what was asked: 'Boiler safe to use: No' is, 'Panel fault found: No' is not", () => {
+  const bad = [["Boiler safe to use", "No"], ["Boiler: safe to use", "NO"], ["Gas supply tightness test", "Fail"], ["Gas supply tightness test", "Failed"], ["Overall assessment", "Unsatisfactory"], ["Appliance", "Unsafe"],
+    ["Defects found", "Yes"], ["Defects requiring action", "Yes"], ["Gas leak found", "Yes"], ["Flue and ventilation satisfactory", "No"], ["Installation", "Immediately dangerous"], ["Carbon monoxide alarm working", "No"]];
+  const fine = [["Gas supply tightness test", "Pass"], ["Boiler safe to use", "Yes"], ["Boiler safe to use", "YES"], ["Overall assessment", "SATISFACTORY"], ["Defects found", "No"], ["Defects found", "None"], ["Panel fault found", "No"],
+    ["Gas leak found", "No"], ["Appliance safe to use", "Safe"], ["Smoke detectors tested", "Yes"], ["Extinguishers serviced", "14"], ["Appliance", "N/A"]];
+  for (const [l, a] of bad) assert.equal(judgeCheck(l, a), true, `${l}: ${a}`);
+  for (const [l, a] of fine) assert.equal(judgeCheck(l, a), false, `${l}: ${a}`);
+});
+
+t("an answer the rule cannot judge is left to the AI's reading, and the rule's own judgement beats the AI when the answer is plain", () => {
+  assert.equal(judgeCheck("Overall result", "Satisfactory with advisories", true), true);
+  assert.equal(judgeCheck("Overall result", "Satisfactory with advisories", false), false);
+  assert.equal(judgeCheck("Overall result", "Satisfactory with advisories"), false, "nothing says it is a problem");
+  assert.equal(judgeCheck("Gas supply tightness test", "Pass", true), false, "the AI cannot call a Pass a problem");
+  assert.equal(judgeCheck("Boiler safe to use", "No", false), true, "the AI cannot call a No on 'safe to use' fine");
+  assert.ok(ANSWERS.includes("Yes") && ANSWERS.includes("Unsatisfactory"));
+});
+
+t("checks are cleaned: named, short, at most twelve; a certificate keeps its engineer and checks", () => {
+  const clean = cleanChecks([{ label: "  Boiler   safe to use ", answer: " NO ", problem: true }, { label: "", answer: "Yes" }, { label: "No answer", answer: "" }, null, { label: "Tight", answer: "Pass", problem: "yes" }]);
+  assert.deepEqual(clean, [{ label: "Boiler safe to use", answer: "NO", problem: true }, { label: "Tight", answer: "Pass", problem: false }], "only a real true counts as a problem");
+  assert.equal(cleanChecks(Array.from({ length: 30 }, (_, i) => ({ label: `c${i}`, answer: "Yes" }))).length, MAX_CHECKS);
+  assert.deepEqual(cleanChecks("not a list"), []);
+  const c = normaliseCertificate("c1", { type: "gas_safety", engineer: "  A. Sample  ", findings: [{ label: "Boiler safe to use", answer: "No", problem: true }], expiryDate: "2026-12-01" });
+  assert.equal(c.engineer, "A. Sample");
+  assert.deepEqual(problemChecks(c).map(checkText), ["Boiler safe to use: No"]);
+  assert.equal(hasProblem(c), true);
+  assert.equal(hasProblem(normaliseCertificate("c2", { type: "eicr" })), false);
+  const saved = toRecord({ ...c, id: "c1" });
+  assert.equal(saved.engineer, "A. Sample");
+  assert.deepEqual(saved.findings, [{ label: "Boiler safe to use", answer: "No", problem: true }]);
+  assert.equal(emptyCertificate().engineer, "");
+  assert.deepEqual(emptyCertificate().findings, []);
+});
+
+t("a certificate that records a problem comes first, and is counted as needing attention even when it is well in date", () => {
+  const fine = normaliseCertificate("a", { type: "gas_safety", site: "Main", provider: "X", expiryDate: "2027-09-01", certUrl: "u" });
+  const unsafe = normaliseCertificate("b", { type: "gas_safety", site: "Main", provider: "X", expiryDate: "2027-09-01", certUrl: "u", findings: [{ label: "Boiler safe to use", answer: "No", problem: true }] });
+  const expired = normaliseCertificate("c", { type: "eicr", site: "Main", provider: "X", expiryDate: "2026-01-01", certUrl: "u" });
+  assert.equal(certStatus(unsafe, now), "ok", "its dates are fine");
+  assert.deepEqual(sortCertificates([fine, expired, unsafe], now).map((c) => c.id), ["b", "c", "a"], "the problem before the expired one");
+  const summary = certSummary([fine, expired, unsafe], now);
+  assert.equal(summary.problems, 1);
+  assert.equal(summary.needsAttention, 2, "the expired one and the problem one, each counted once");
+  const both = normaliseCertificate("d", { type: "eicr", expiryDate: "2026-01-01", findings: [{ label: "Overall", answer: "Unsatisfactory", problem: true }] });
+  assert.equal(certSummary([both], now).needsAttention, 1, "expired AND a problem is still one certificate");
+});
+
+t("a renewal brings the new certificate's engineer and checks, and the old ones go into the history", () => {
+  const old = normaliseCertificate("a", { type: "gas_safety", site: "Main", provider: "Northgate", engineer: "Old Engineer", completedOn: "2025-10-14", expiryDate: "2026-10-13", certUrl: "u", findings: [{ label: "Boiler safe to use", answer: "No", problem: true }] });
+  const out = renewal(old, { completedOn: "2026-10-14", expiryDate: "2027-10-13", provider: "Northgate", reference: "GSR-2", engineer: "New Engineer", findings: [{ label: "Boiler safe to use", answer: "Yes", problem: false }], certUrl: "u2", certPath: "p2", certFileName: "f2" }, { displayName: "Gwyn" }, now);
+  assert.equal(out.patch.engineer, "New Engineer");
+  assert.deepEqual(out.patch.findings, [{ label: "Boiler safe to use", answer: "Yes", problem: false }]);
+  assert.equal(out.previousEntry.engineer, "Old Engineer");
+  assert.deepEqual(out.previousEntry.findings, [{ label: "Boiler safe to use", answer: "No", problem: true }], "last year's problem stays in its history");
+  const bare = renewal(old, { completedOn: "2026-10-14", expiryDate: "2027-10-13", certUrl: "u2" }, { displayName: "Gwyn" }, now);
+  assert.equal(bare.patch.engineer, "", "last year's engineer and results do not carry over to a certificate that says nothing about them");
+  assert.deepEqual(bare.patch.findings, []);
+});
+
+t("the printed register shows the engineer and the result, a problem in red, and search finds an engineer", () => {
+  const unsafe = normaliseCertificate("b", { type: "gas_safety", site: "Main", provider: "Northgate", engineer: "A. Sample", expiryDate: "2027-09-01", certUrl: "u", findings: [{ label: "Boiler safe to use", answer: "No", problem: true }, { label: "Tightness test", answer: "Pass", problem: false }] });
+  const fine = normaliseCertificate("a", { type: "eicr", site: "Main", provider: "Spark", expiryDate: "2027-09-01", certUrl: "u", findings: [{ label: "Overall", answer: "Satisfactory", problem: false }] });
+  const plain = normaliseCertificate("p", { type: "boiler_service", site: "Main", provider: "Heat", expiryDate: "2027-09-01", certUrl: "u" });
+  const rows = registerRows([unsafe, fine, plain], now);
+  assert.equal(rows[0].what, certLabel(unsafe), "the problem is first");
+  assert.equal(rows[0].problem, true);
+  assert.equal(rows[0].result, "PROBLEM: Boiler safe to use: No");
+  assert.equal(rows.find((r) => r.what === certLabel(fine)).result, "No problems recorded");
+  assert.equal(rows.find((r) => r.what === certLabel(plain)).result, "", "nothing recorded, nothing said");
+  const html = certificatesRegisterHtml(rows, {});
+  assert.match(html, /A\. Sample/);
+  assert.match(html, /PROBLEM: Boiler safe to use: No/);
+  assert.match(html, /class="bad"/);
+  assert.equal(searchCertificates([unsafe, fine], "sample").length, 1, "search by the engineer");
+});
+
+t("the compliance list and the inspection summary say plainly that a certificate records a problem", () => {
+  const unsafe = normaliseCertificate("b", { type: "gas_safety", site: "Main", provider: "Northgate", expiryDate: "2027-09-01", certUrl: "u", findings: [{ label: "Boiler safe to use", answer: "No", problem: true }] });
+  const fine = normaliseCertificate("a", { type: "eicr", site: "Main", provider: "Spark", expiryDate: "2027-09-01", certUrl: "u" });
+  const items = dueList({ certificates: [unsafe, fine], now });
+  const problem = items.find((i) => i.key === "certs-problem");
+  assert.ok(problem, "a problem item");
+  assert.equal(problem.tone, "critical");
+  assert.match(problem.label, /1 certificate records a failed or unsafe result/);
+  assert.match(problem.detail, /Boiler safe to use: No/);
+  assert.equal(dueList({ certificates: [fine], now }).some((i) => i.key === "certs-problem"), false);
+  const section = certificatesSection({ certificates: [unsafe, fine], now, available: { certs: true } });
+  assert.equal(section.status, "attention");
+  assert.ok(section.gaps.some((g) => /records a failed or unsafe result.*Boiler safe to use: No/.test(g)), JSON.stringify(section.gaps));
 });
 
 console.log(`\n${n} passed`);

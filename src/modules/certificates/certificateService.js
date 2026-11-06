@@ -68,9 +68,9 @@ export async function saveCertificate(form, { pendingFile = null, actor = {} } =
 }
 
 // Record a renewal: the new dates and PDF replace the old, and the old one is kept in the history (its file is kept too).
-export async function renewCertificate(cert, { completedOn, expiryDate, provider, reference, file, actor = {} }) {
+export async function renewCertificate(cert, { completedOn, expiryDate, provider, reference, engineer = "", findings = [], file, actor = {} }) {
   const sheet = file ? await uploadCertificate(cert.id, file) : { certUrl: "", certPath: "", certFileName: "" };
-  const { patch, previousEntry } = renewal(cert, { completedOn, expiryDate, provider, reference, ...sheet }, actor);
+  const { patch, previousEntry } = renewal(cert, { completedOn, expiryDate, provider, reference, engineer, findings, ...sheet }, actor);
   await updateDoc(doc(db, COLLECTION, cert.id), { ...patch, previous: arrayUnion(previousEntry), lastRenewedAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedByName: who(actor) });
 }
 

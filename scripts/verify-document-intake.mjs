@@ -15,6 +15,11 @@ const certResult = (over = {}) => ({
   fields: {
     type: f("gas_safety", "GAS SAFETY RECORD"), provider: f("Northern Gas Services", "Carried out by: Northern Gas Services"), reference: f("GSR-48213", "Certificate number: GSR-48213"),
     completedOn: f("2026-10-14", "Date of inspection: 14/10/2026"), expiryDate: f("2027-10-13", "Next inspection due by: 13 October 2027"), premises: f("Main Surgery, 1 High Street", "Premises: Main Surgery, 1 High Street"),
+    engineer: f("A. Sample", "Engineer: A. Sample"),
+    findings: [
+      { label: "Gas supply tightness test", answer: "Pass", problem: false, evidence: "Gas supply tightness test: Pass", verified: true },
+      { label: "Boiler safe to use", answer: "Yes", problem: false, evidence: "Boiler safe to use: Yes", verified: true },
+    ],
     ...over,
   },
 });
@@ -40,6 +45,44 @@ await t("a certificate pre-fills the register form, matching your own supplier a
   assert.ok(card.evidence.rows.every((r) => r.status === "found"));
   assert.equal(needsChecking(card.evidence), 0);
   assert.equal(card.evidence.rows.find((r) => r.key === "completedOn").display, "14/10/2026");
+});
+
+await t("the engineer and the checks the certificate records are put on the form, each with the words they came from", () => {
+  const card = certificateCard(certResult(), { siteNames: SITES, supplierNames: SUPPLIERS });
+  assert.equal(card.initial.engineer, "A. Sample");
+  assert.deepEqual(card.initial.findings, [{ label: "Gas supply tightness test", answer: "Pass", problem: false }, { label: "Boiler safe to use", answer: "Yes", problem: false }]);
+  const check = card.evidence.rows.find((r) => r.key === "check:1");
+  assert.deepEqual([check.label, check.display, check.status, check.evidence], ["Boiler safe to use", "Yes", "found", "Boiler safe to use: Yes"]);
+  assert.equal(card.evidence.rows.find((r) => r.key === "engineer").evidence, "Engineer: A. Sample");
+  assert.deepEqual(card.evidence.alerts, [], "nothing wrong, nothing shouted");
+});
+
+await t("a failed or unsafe result is put on the form and shouted about, even when the document's words could not confirm it", () => {
+  const card = certificateCard(certResult({ findings: [
+    { label: "Gas supply tightness test", answer: "Fail", problem: true, evidence: "Gas supply tightness test: Fail", verified: true },
+    { label: "Boiler safe to use", answer: "No", problem: true, evidence: null, verified: false },
+    { label: "Smoke alarm tested", answer: "Yes", problem: false, evidence: null, verified: false },
+  ] }), { siteNames: SITES, supplierNames: SUPPLIERS });
+  assert.deepEqual(card.initial.findings.map((c) => [c.label, c.problem]), [["Gas supply tightness test", true], ["Boiler safe to use", true]], "both problems are on the form; the unconfirmed fine one is not");
+  assert.deepEqual(card.evidence.alerts, ["Gas supply tightness test: Fail", "Boiler safe to use: No"]);
+  const unconfirmed = card.evidence.rows.find((r) => r.key === "check:1");
+  assert.equal(unconfirmed.status, "check");
+  assert.match(unconfirmed.note, /looks like a problem.*do not confirm it.*added to the form/);
+  assert.match(card.evidence.rows.find((r) => r.key === "check:0").display, /Fail: this is a problem/);
+  const fine = card.evidence.rows.find((r) => r.key === "check:2");
+  assert.match(fine.note, /Not added for you/);
+  assert.ok(needsChecking(card.evidence) >= 2);
+});
+
+await t("a document with no engineer or checks gives none, says so plainly, and the server's own warning is not repeated", () => {
+  const card = certificateCard(certResult({ engineer: f(null, null, false), findings: [] }), { siteNames: SITES, supplierNames: SUPPLIERS });
+  assert.equal(card.initial.engineer, "");
+  assert.deepEqual(card.initial.findings, []);
+  assert.equal(card.evidence.rows.find((r) => r.key === "engineer").status, "missing");
+  assert.equal(card.evidence.rows.some((r) => r.key.startsWith("check:")), false);
+  const warned = certificateCard(certResult({ findings: [{ label: "Boiler safe to use", answer: "No", problem: true, evidence: "Boiler safe to use: No", verified: true }] }), {});
+  const withServerWarning = certificateCard({ ...certResult(), warnings: ["This document records a failed or unsafe result: x. Do not treat it as a pass.", "Another warning"], fields: { ...certResult().fields, findings: warned.initial.findings.map((c) => ({ ...c, evidence: "q", verified: true })) } }, {});
+  assert.deepEqual(withServerWarning.evidence.warnings, ["Another warning"], "the red box says it; the plain list does not say it twice");
 });
 
 await t("an unrecognised kind becomes 'Other', so the person has to name it; an unmatched site or supplier is left for them to choose", () => {
