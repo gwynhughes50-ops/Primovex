@@ -2,6 +2,7 @@
 // the local Firestore emulator (no production data touched). Simulates
 // low-privilege / malicious auth contexts and attempts privilege escalation,
 // IDOR and tenant-isolation bypasses.
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
@@ -1987,6 +1988,9 @@ async function main() {
   console.log("\n=== 30. Concern history, audit lines and notifications (governance_concern_timeline, users/{uid}/notifications) ===");
   const HISTORY = "governance_concern_timeline";
   const historyOf = (who, concernId) => getDocs(query(collection(who, HISTORY), where("concernId", "==", concernId)));
+  // what the screens ask for when the person is not the concerns team: every line except the audit lines
+  const caseTimelineOf = (who, concernId) => getDocs(query(collection(who, HISTORY), where("concernId", "==", concernId), where("type", "!=", "audit")));
+  const auditLinesOf = (who, concernId) => getDocs(query(collection(who, HISTORY), where("concernId", "==", concernId), where("type", "==", "audit")));
   const line = (extra = {}) => ({ concernId: "concern-1", type: "note", title: "Note added", message: "hello", actorUid: "user-uid", actorName: "A Person", createdAt: serverTimestamp(), ...extra });
   const auditLine = (extra = {}) => line({ type: "audit", title: "Case record changed", message: "Priority: Low -> High", changes: [{ label: "Priority", from: "Low", to: "High", hidden: false }], actorUid: "reception-uid", actorName: "Reception", ...extra });
   await seed(async (db) => {
@@ -2016,8 +2020,26 @@ async function main() {
       await assertFails(deleteDoc(doc(who, HISTORY, "tl-seed")));
     }
   });
-  await check("The concerns team, an administrator, a partner and someone involved CAN list a case's history", async () => {
-    for (const who of [reception, admin, partner, user]) await assertSucceeds(historyOf(who, "concern-1"));
+  await check("The concerns team and an administrator CAN list a case's whole history, audit lines included", async () => {
+    for (const who of [reception, admin]) {
+      const all = await assertSucceeds(historyOf(who, "concern-1"));
+      assert.ok(all.docs.some((d) => d.data().type === "audit"), "the audit lines are in what they read");
+      await assertSucceeds(caseTimelineOf(who, "concern-1"));
+      await assertSucceeds(auditLinesOf(who, "concern-1"));
+    }
+  });
+  await check("A partner and someone involved CAN list a case's timeline (every line except audit lines), and what comes back holds no audit line", async () => {
+    for (const who of [partner, user]) {
+      const shown = await assertSucceeds(caseTimelineOf(who, "concern-1"));
+      assert.ok(shown.docs.length > 0, "they do see the case's timeline");
+      assert.ok(shown.docs.every((d) => d.data().type !== "audit"), "none of it is an audit line");
+    }
+  });
+  await check("A partner and someone involved CANNOT list a case's whole history, because it holds audit lines: the database refuses the query, it does not just hide them", async () => {
+    for (const who of [partner, user]) await assertFails(historyOf(who, "concern-1"));
+  });
+  await check("Nobody but the concerns team and an administrator CAN list audit lines: a partner, someone involved, a read-only user and anonymous are all refused", async () => {
+    for (const who of [partner, user, readonly, anon]) await assertFails(auditLinesOf(who, "concern-1"));
   });
   await check("An uninvolved read-only user and anonymous CANNOT read or list a case's history", async () => {
     await assertFails(historyOf(readonly, "concern-1"));
@@ -2028,8 +2050,18 @@ async function main() {
     await assertFails(getDoc(doc(user, HISTORY, "tl-other")));
     await assertFails(historyOf(user, "concern-other"));
   });
-  await check("KNOWN GAP (SR-14): someone merely involved in a case CAN read its audit lines through the database; the screen shows the Audit trail to the concerns team only", async () => {
-    await assertSucceeds(getDoc(doc(user, HISTORY, "tl-audit-seed")));
+  await check("SR-14 closed: an audit line CANNOT be read directly by a partner or someone involved in the case (the Audit trail is for the concerns team, here and on screen); the concerns team CAN", async () => {
+    for (const who of [partner, user, readonly, anon]) await assertFails(getDoc(doc(who, HISTORY, "tl-audit-seed")));
+    for (const who of [reception, admin]) await assertSucceeds(getDoc(doc(who, HISTORY, "tl-audit-seed")));
+  });
+  await check("A partner and someone involved CAN still read an ordinary line of the timeline directly; someone uninvolved cannot", async () => {
+    for (const who of [partner, user, reception]) await assertSucceeds(getDoc(doc(who, HISTORY, "tl-seed")));
+    for (const who of [readonly, anon]) await assertFails(getDoc(doc(who, HISTORY, "tl-seed")));
+  });
+  await check("The timeline query cannot be turned into a way to read another case's lines, or another case's audit lines", async () => {
+    await assertFails(caseTimelineOf(user, "concern-other"));
+    await assertFails(auditLinesOf(user, "concern-other"));
+    await assertFails(getDoc(doc(user, HISTORY, "tl-other")));
   });
   await check("Notifications: a person CAN read, mark and clear their own", async () => {
     await assertSucceeds(getDoc(doc(nurse, "users", "nurse-uid", "notifications", "n1")));

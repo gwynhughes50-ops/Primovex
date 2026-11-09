@@ -99,8 +99,8 @@ export default function UsageReportPanel({ onClose }) {
             <span className="grid h-11 w-11 place-items-center rounded-2xl bg-sky-500/15 text-sky-200"><Users className="h-5 w-5" /></span>
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-sky-300">Sign-in &amp; activity report</p>
-              <h2 className="mt-1 text-xl font-semibold">Who was in, what they used, and for how long</h2>
-              <p className="mt-1 text-sm text-slate-400">Times come from the server. Only areas of the app are recorded, never patient records, searches or anything typed.</p>
+              <h2 className="mt-1 text-xl font-semibold">Who was in, on what device, and which areas they used</h2>
+              <p className="mt-1 text-sm text-slate-400">Times come from the server. Only areas of the app are recorded (how many times each was visited, not how long anyone spent in it), never patient records, searches or anything typed.</p>
             </div>
           </div>
           <button type="button" onClick={onClose} className="rounded-xl border border-slate-700 p-2 text-slate-300" aria-label="Close report"><X className="h-5 w-5" /></button>
@@ -123,7 +123,7 @@ export default function UsageReportPanel({ onClose }) {
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Stat icon={Users} label="People signed in" value={totals.people} note={rangeLabel} />
               <Stat icon={Clock} label="Sign-ins" value={totals.sessions} note="Each time someone started a session" />
-              <Stat icon={Clock} label="Time in the app" value={formatDuration(totals.activeSeconds)} note="Active time only; idle time isn't counted" />
+              <Stat icon={Clock} label="Area visits" value={totals.visits} note="How many times an area was opened. Time spent in an area is not recorded" />
               <Stat icon={AlertTriangle} label="Worth a look" value={totals.flagged} note="People with a flag below" tone={totals.flagged ? "text-amber-200" : "text-emerald-200"} />
             </div>
 
@@ -138,7 +138,7 @@ export default function UsageReportPanel({ onClose }) {
               <div className="mt-4 overflow-auto rounded-2xl border border-slate-800">
                 <table className="w-full min-w-[820px] text-left text-sm">
                   <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-400">
-                    <tr><th className="w-8 p-3" /><th className="p-3">Person</th><th className="p-3">Last signed in</th><th className="p-3">Sign-ins</th><th className="p-3">Days</th><th className="p-3">Time in app</th><th className="p-3">Mostly used</th></tr>
+                    <tr><th className="w-8 p-3" /><th className="p-3">Person</th><th className="p-3">Last signed in</th><th className="p-3">Sign-ins</th><th className="p-3">Days</th><th className="p-3">Mostly used</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800">
                     {shown.map((user) => {
@@ -155,24 +155,22 @@ export default function UsageReportPanel({ onClose }) {
                             <td className="p-3 text-slate-300">{dateTime(user.lastSignIn)}</td>
                             <td className="p-3">{user.sessionCount}</td>
                             <td className="p-3">{user.daysActive}</td>
-                            <td className="p-3">{formatDuration(user.activeSeconds)}</td>
-                            <td className="p-3 text-slate-300">{user.topAreas.length ? user.topAreas.map((a) => `${a.label} (${formatDuration(a.seconds)})`).join(", ") : "—"}</td>
+                            <td className="p-3 text-slate-300">{user.topAreas.length ? user.topAreas.map((a) => `${a.label} (${a.visits})`).join(", ") : "—"}</td>
                           </tr>
                           {isOpen && (
                             <tr>
                               <td />
-                              <td colSpan={6} className="bg-slate-900/40 p-3">
+                              <td colSpan={5} className="bg-slate-900/40 p-3">
                                 <table className="w-full text-left text-xs">
-                                  <thead className="text-slate-500"><tr><th className="py-1.5 pr-3">Signed in</th><th className="pr-3">Ended</th><th className="pr-3">In session</th><th className="pr-3">Active</th><th className="pr-3">Device</th><th>Areas used</th></tr></thead>
+                                  <thead className="text-slate-500"><tr><th className="py-1.5 pr-3">Signed in</th><th className="pr-3">Ended</th><th className="pr-3">In session</th><th className="pr-3">Device</th><th>Areas used</th></tr></thead>
                                   <tbody className="divide-y divide-slate-800/70">
                                     {user.sessions.map((s) => (
                                       <tr key={s.id} className="align-top">
                                         <td className="py-2 pr-3 text-slate-200">{dateTime(s.startedAt)}{s.flags.map((flag) => <span key={flag} className="block text-amber-200">{flag}</span>)}</td>
                                         <td className="pr-3"><span className={`rounded-full px-2 py-0.5 ${STATUS_STYLE[s.status]}`}>{endText(s)}</span>{s.status !== "active" && <span className="mt-1 block text-slate-500">{dateTime(s.endedAt || s.lastSeenAt)}</span>}</td>
                                         <td className="pr-3">{formatDuration(s.spanSeconds)}</td>
-                                        <td className="pr-3">{formatDuration(s.activeSeconds)}</td>
                                         <td className="pr-3 text-slate-400">{[s.client, s.platform].filter(Boolean).join(" · ") || "—"}</td>
-                                        <td className="text-slate-300">{s.pages.length ? s.pages.map((p) => `${areaLabel(p.path)} (${formatDuration(p.seconds)})`).join(", ") : "—"}</td>
+                                        <td className="text-slate-300">{s.pages.length ? s.pages.map((p) => `${areaLabel(p.path)} (${p.visits})`).join(", ") : "—"}</td>
                                       </tr>
                                     ))}
                                   </tbody>

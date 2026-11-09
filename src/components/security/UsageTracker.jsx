@@ -8,8 +8,7 @@ import { endUsageSession, startUsageTracking, trackUsagePath } from "@/services/
 // session the person already had.
 const FRESH_SIGN_IN_MS = 2 * 60 * 1000;
 
-// Renders nothing. Starts reporting where a signed-in person is in the app, and
-// for how long, so administrators can review sign-ins and activity.
+// Renders nothing. Starts reporting which areas a signed-in person visits (not for how long), so administrators can review sign-ins and activity.
 export default function UsageTracker() {
   const { user, isSyntheticMode } = useAuth();
   const { pathname } = useLocation();

@@ -200,12 +200,19 @@ export async function fetchConcernPrintData(concernId) {
     getDocs(query(collection(db, CONCERN_TIMELINE_COLLECTION), where("concernId", "==", concernId), orderBy("createdAt", "desc"), limit(1000))),
     getDocs(query(collection(db, CONCERN_STEPS_COLLECTION), where("concernId", "==", concernId))),
   ]);
+  // Only the concerns team may read audit lines. Anyone else who can print a case is refused the full read, so they get the same timeline without them.
+  let timelineResult = timeline;
+  if (timeline.status === "rejected" && timeline.reason?.code === "permission-denied") {
+    timelineResult = await Promise.allSettled([getDocs(query(collection(db, CONCERN_TIMELINE_COLLECTION), where("concernId", "==", concernId), where("type", "!=", "audit")))]).then(([r]) => r);
+  }
   const toRows = (result) => (result.status === "fulfilled" ? result.value.docs.map((d) => ({ id: d.id, ...d.data() })) : null);
   const meetingRows = toRows(meetings);
   if (meetingRows) {
     meetingRows.sort((a, b) => String(b.requestedDate || "").localeCompare(String(a.requestedDate || "")));
   }
-  return { meetings: meetingRows, timeline: toRows(timeline), steps: toRows(steps) };
+  const timelineRows = toRows(timelineResult);
+  if (timelineRows && timelineResult !== timeline) timelineRows.sort((a, b) => ((b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0)));
+  return { meetings: meetingRows, timeline: timelineRows, steps: toRows(steps) };
 }
 
 // Prints through a hidden frame rather than a pop-up window: no pop-up

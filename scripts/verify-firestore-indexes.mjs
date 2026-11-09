@@ -24,6 +24,17 @@ t("the concern and significant event histories have the index their queries need
   assert.ok(have.has("governance_se_timeline|seId ASCENDING,createdAt DESCENDING"));
 });
 
+t("the case timeline that everyone but the concerns team reads (every line except audit lines) has its index, and is the query the code and the database rule use", () => {
+  assert.ok(have.has("governance_concern_timeline|concernId ASCENDING,type ASCENDING"));
+  assert.match(read("src/modules/governance/services/concernService.js"), /CONCERN_TIMELINE_COLLECTION\), where\("concernId", "==", concernId\), where\("type", "!=", AUDIT_TYPE\)/);
+  assert.match(read("src/modules/governance/services/concernPrint.js"), /where\("concernId", "==", concernId\), where\("type", "!=", "audit"\)/);
+  const rules = read("firestore.rules");
+  const block = rules.slice(rules.indexOf("match /governance_concern_timeline/{timelineId}"), rules.indexOf("match /governance_concern_learning_actions"));
+  assert.match(block, /isConcernsTeam\(\)\s*\|\| \(resource\.data\.type != "audit"/, "only the concerns team reads audit lines");
+  assert.match(block, /resource\.data\.type != "audit" && \(\s*isGovernancePartner\(\)\s*\|\|\s*isInvolvedInConcern/, "partners and involved people are allowed only the lines that are not audit lines");
+  assert.doesNotMatch(block.split("allow create")[0], /signedIn\(\) && \(\s*isConcernsTeam\(\) \|\| isGovernancePartner\(\)/, "the old rule, which gave partners everything, is gone");
+});
+
 t("each of those indexes matches a query that is really in the code", () => {
   const service = read("src/modules/governance/services/concernService.js");
   assert.match(service, /CONCERN_TIMELINE_COLLECTION\), where\("concernId", "==", concernId\), orderBy\("createdAt", "desc"\)/);

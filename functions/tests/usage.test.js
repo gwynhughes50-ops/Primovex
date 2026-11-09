@@ -29,55 +29,64 @@ test("only areas of the app are kept: no queries, no ids, at most two levels", (
   assert.equal(cleanPath("/#/anything"), "/");
 });
 
-test("pages add up by area, busiest first", () => {
-  const { pages, credited } = mergePages(
-    [{ path: "/inventory", seconds: 100, visits: 2 }],
-    [{ path: "/inventory", seconds: 50, visits: 1 }, { path: "/alerts", seconds: 200, visits: 1 }],
-    1000
+test("pages add up by area, most visited first", () => {
+  const { pages } = mergePages(
+    [{ path: "/inventory", visits: 2 }],
+    [{ path: "/inventory", visits: 1 }, { path: "/alerts", visits: 5 }]
   );
-  assert.deepEqual(pages, [{ path: "/alerts", seconds: 200, visits: 1 }, { path: "/inventory", seconds: 150, visits: 3 }]);
-  assert.equal(credited, 250);
+  assert.deepEqual(pages, [{ path: "/alerts", visits: 5 }, { path: "/inventory", visits: 3 }]);
 });
 
-test("time is capped to what has actually passed, shared across the areas reported", () => {
-  const { pages, credited } = mergePages([], [{ path: "/a", seconds: 500, visits: 1 }, { path: "/b", seconds: 500, visits: 1 }], 600);
-  assert.equal(credited, 600);
-  assert.deepEqual(pages.map((p) => [p.path, p.seconds]), [["/a", 500], ["/b", 100]]);
+test("TIME is never kept: seconds an older app still sends are ignored, and seconds already in a stored record are dropped when it is next reported", () => {
+  const { pages } = mergePages(
+    [{ path: "/inventory", seconds: 4000, visits: 2 }],
+    [{ path: "/inventory", seconds: 50, visits: 1 }, { path: "/alerts", seconds: 200, visits: 1 }, { path: "/time-only", seconds: 900 }]
+  );
+  assert.deepEqual(pages, [{ path: "/inventory", visits: 3 }, { path: "/alerts", visits: 1 }]);
+  for (const row of pages) assert.deepEqual(Object.keys(row).sort(), ["path", "visits"], "nothing but the area and the number of visits");
 });
 
 test("junk in a report is neutralised: negative, fractional, huge or non-numeric values", () => {
-  const { pages } = mergePages([], [{ path: "/a", seconds: -50, visits: -3 }, { path: "/b", seconds: "x", visits: 1 }, { path: "/c", seconds: 99999999, visits: 9999 }], 999999);
-  assert.deepEqual(pages.map((p) => [p.path, p.seconds, p.visits]), [["/c", 86400, 200], ["/b", 0, 1]]);
+  const { pages } = mergePages([], [{ path: "/a", visits: -3 }, { path: "/b", visits: "x" }, { path: "/c", visits: 9999 }, { path: "/d", visits: 2.9 }]);
+  assert.deepEqual(pages.map((p) => [p.path, p.visits]), [["/c", 200], ["/d", 2]]);
 });
 
 test("a record can't grow without limit", () => {
-  const existing = Array.from({ length: MAX_PAGES }, (_, i) => ({ path: `/p${i}`, seconds: 1, visits: 1 }));
-  const { pages } = mergePages(existing, [{ path: "/brand-new", seconds: 5, visits: 1 }, { path: "/p0", seconds: 5, visits: 1 }], 100);
+  const existing = Array.from({ length: MAX_PAGES }, (_, i) => ({ path: `/p${i}`, visits: 1 }));
+  const { pages } = mergePages(existing, [{ path: "/brand-new", visits: 1 }, { path: "/p0", visits: 5 }]);
   assert.equal(pages.length, MAX_PAGES);
   assert.ok(!pages.some((p) => p.path === "/brand-new"));
-  assert.equal(pages.find((p) => p.path === "/p0").seconds, 6);
+  assert.equal(pages.find((p) => p.path === "/p0").visits, 6);
 });
 
-test("the first report starts the session on the server clock and credits no time", () => {
+test("the first report starts the session on the server clock and keeps visits only", () => {
   const { record } = applyUsageReport({ existing: null, caller: "hca", profile, now: T0, data: { client: "tauri", platform: "windows", deviceId: "pvx-1234-abcd", pages: [{ path: "/dashboard", seconds: 9999, visits: 1 }] } });
   assert.equal(record.uid, "hca");
   assert.equal(record.displayName, "Hayley");
   assert.equal(record.role, "HCA");
   assert.equal(record.startedAt.toMillis(), T0.getTime());
-  assert.equal(record.activeSeconds, 0);
-  assert.deepEqual(record.pages, [{ path: "/dashboard", seconds: 0, visits: 1 }]);
+  assert.deepEqual(record.pages, [{ path: "/dashboard", visits: 1 }]);
+  assert.equal("activeSeconds" in record, false, "no running total of time");
   assert.equal(record.endedAt, undefined);
 });
 
-test("later reports add time up to the time that has really passed, and move last seen on", () => {
+test("later reports add visits and move last seen on; no time is ever stored, however much is claimed", () => {
   const first = applyUsageReport({ existing: null, caller: "hca", profile, now: T0, data: {} }).record;
   const second = applyUsageReport({ existing: first, caller: "hca", profile, now: at(300), data: { pages: [{ path: "/inventory", seconds: 280, visits: 2 }] } }).record;
-  assert.equal(second.activeSeconds, 280);
   assert.equal(second.lastSeenAt.toMillis(), at(300).getTime());
   assert.equal(second.startedAt.toMillis(), T0.getTime());
-  // claiming an hour of activity five minutes later is cut to 5 minutes (+ slack)
   const greedy = applyUsageReport({ existing: second, caller: "hca", profile, now: at(600), data: { pages: [{ path: "/inventory", seconds: 3600, visits: 1 }] } }).record;
-  assert.equal(greedy.activeSeconds, 280 + 330);
+  assert.deepEqual(greedy.pages, [{ path: "/inventory", visits: 3 }]);
+  assert.equal("activeSeconds" in greedy, false);
+  assert.deepEqual(Object.keys(greedy).filter((k) => /second|duration|minute|active/i.test(k)), [], "no field that holds time spent");
+  for (const page of greedy.pages) assert.deepEqual(Object.keys(page).sort(), ["path", "visits"]);
+});
+
+test("an older record that has time on it loses that time the next time it is reported", () => {
+  const old = { startedAt: { toMillis: () => T0.getTime() }, lastSeenAt: { toMillis: () => T0.getTime() }, activeSeconds: 5400, pages: [{ path: "/inventory", seconds: 5000, visits: 4 }], reports: 9 };
+  const { record } = applyUsageReport({ existing: old, caller: "hca", profile, now: at(60), data: { pages: [{ path: "/alerts", visits: 1 }] } });
+  assert.equal("activeSeconds" in record, false);
+  assert.deepEqual(record.pages, [{ path: "/inventory", visits: 4 }, { path: "/alerts", visits: 1 }]);
 });
 
 test("ending a session records when and why; an unknown reason becomes 'closed'", () => {
@@ -91,7 +100,7 @@ test("ending a session records when and why; an unknown reason becomes 'closed'"
 test("a finished session can't be added to or re-ended", () => {
   const first = applyUsageReport({ existing: null, caller: "hca", profile, now: T0, data: {} }).record;
   const ended = applyUsageReport({ existing: first, caller: "hca", profile, now: at(60), data: { ended: true, endReason: "signed_out" } }).record;
-  assert.deepEqual(applyUsageReport({ existing: ended, caller: "hca", profile, now: at(120), data: { pages: [{ path: "/x", seconds: 50, visits: 1 }] } }), { ignored: true });
+  assert.deepEqual(applyUsageReport({ existing: ended, caller: "hca", profile, now: at(120), data: { pages: [{ path: "/x", visits: 1 }] } }), { ignored: true });
 });
 
 test("identity comes from the account, not the request", () => {
@@ -106,12 +115,13 @@ test("recording stores one record per person per session, keyed by who they are"
   await recordUsage({ db, callerUid: "hca", profile, now: T0, data: { sessionId: "sess-12345678" } });
   await recordUsage({ db, callerUid: "hca", profile, now: at(100), data: { sessionId: "sess-12345678", pages: [{ path: "/alerts", seconds: 90, visits: 1 }] } });
   assert.deepEqual(Object.keys(db.docs), ["hca_sess-12345678"]);
-  assert.equal(db.docs["hca_sess-12345678"].activeSeconds, 90);
+  assert.deepEqual(db.docs["hca_sess-12345678"].pages, [{ path: "/alerts", visits: 1 }]);
   assert.equal(db.docs["hca_sess-12345678"].reports, 2);
+  assert.equal("activeSeconds" in db.docs["hca_sess-12345678"], false);
   // someone else using the same session id gets their own record, never the first person's
-  await recordUsage({ db, callerUid: "liz", profile: { ...profile, displayName: "Liz" }, now: at(200), data: { sessionId: "sess-12345678", pages: [{ path: "/x", seconds: 500, visits: 1 }] } });
-  assert.equal(db.docs["hca_sess-12345678"].activeSeconds, 90);
-  assert.equal(db.docs["liz_sess-12345678"].activeSeconds, 0);
+  await recordUsage({ db, callerUid: "liz", profile: { ...profile, displayName: "Liz" }, now: at(200), data: { sessionId: "sess-12345678", pages: [{ path: "/x", visits: 1 }] } });
+  assert.deepEqual(db.docs["hca_sess-12345678"].pages, [{ path: "/alerts", visits: 1 }]);
+  assert.deepEqual(db.docs["liz_sess-12345678"].pages, [{ path: "/x", visits: 1 }]);
 });
 
 test("a missing or malformed session id is refused", async () => {

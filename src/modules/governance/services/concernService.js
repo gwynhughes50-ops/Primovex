@@ -778,7 +778,13 @@ export function subscribeConcerns(callback, onError, { involvedUid } = {}) {
   }, onError);
 }
 
-// includeAudit is for the concerns team's Audit trail, which shows every line; the case timeline leaves the audit lines out
+// When a case's history was added to, newest first. A line this device has just written has no server time yet, so it counts as newest.
+const createdMs = (event) => { const v = event?.createdAt; return v?.toMillis ? v.toMillis() : v?.seconds ? v.seconds * 1000 : v instanceof Date ? v.getTime() : v ? Number(v) || 0 : Number.MAX_SAFE_INTEGER; };
+export const newestFirst = (events) => [...events].sort((a, b) => createdMs(b) - createdMs(a));
+
+// The case timeline: every line EXCEPT the audit lines. The database lets only the concerns team read audit lines (who changed what on a case), so this asks for exactly what everyone
+// else may read (type != "audit"), and the database refuses any query that could return an audit line. Needs the (concernId, type) index in firestore.indexes.json.
+// includeAudit is for the concerns team's Audit trail, which reads every line: only the concerns team can.
 export function subscribeConcernTimeline(concernId, callback, onError, { includeAudit = false } = {}) {
   if (isSafeSyntheticMode()) {
     const rows = demoConcernTimeline[concernId] || [
@@ -788,9 +794,12 @@ export function subscribeConcernTimeline(concernId, callback, onError, { include
     return () => clearTimeout(timer);
   }
   if (!concernId) return () => {};
-  const q = query(collection(db, CONCERN_TIMELINE_COLLECTION), where("concernId", "==", concernId), orderBy("createdAt", "desc"));
+  const q = includeAudit
+    ? query(collection(db, CONCERN_TIMELINE_COLLECTION), where("concernId", "==", concernId), orderBy("createdAt", "desc"))
+    : query(collection(db, CONCERN_TIMELINE_COLLECTION), where("concernId", "==", concernId), where("type", "!=", AUDIT_TYPE));
   return onSnapshot(q, (snapshot) => {
-    callback(snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })).filter((event) => includeAudit || event.type !== AUDIT_TYPE)); // the plain case timeline leaves the audit lines out
+    const rows = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() })).filter((event) => includeAudit || event.type !== AUDIT_TYPE);
+    callback(includeAudit ? rows : newestFirst(rows)); // the plain query cannot be sorted by time in the database (it filters on type), so it is sorted here // the plain case timeline leaves the audit lines out
   }, onError);
 }
 

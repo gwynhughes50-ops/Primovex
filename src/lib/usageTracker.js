@@ -1,11 +1,7 @@
-// Counts how long someone actively spends in each area of the app, ready to be
-// reported to the server. Pure (the clock is passed in), so it can be tested.
+// Counts how many times someone visits each area of the app, ready to be reported to the server. Pure, so it can be tested.
 //
-// Time only counts while the window is visible and the person has touched the
-// screen or keyboard in the last few minutes - a tab left open overnight, or a
-// locked screen, isn't "time spent".
-
-export const IDLE_AFTER_MS = 5 * 60 * 1000;
+// It counts VISITS only. How long a person spends in an area is NOT recorded (a decision of 9 November 2026: time-per-area reads as productivity monitoring, and the security
+// review does not need it). The sign-in session's start, last report and end are still kept, because "who signed in, when, on which device" is what the review is for.
 
 // An area of the app, never a record: no query string, at most two path levels,
 // nothing that looks like an id. (The server applies the same rule again.)
@@ -21,69 +17,29 @@ export function areaOf(pathname) {
   return `/${segments.join("/")}`;
 }
 
-export function createUsageTracker({ now = () => Date.now(), idleAfterMs = IDLE_AFTER_MS } = {}) {
+export function createUsageTracker() {
   let path = null;
-  let visible = true;
-  let lastTickAt = now();
-  let lastInteractionAt = now();
-  const pending = new Map(); // area -> { seconds (ms internally), visits }
-
-  const row = (area) => {
-    if (!pending.has(area)) pending.set(area, { ms: 0, visits: 0 });
-    return pending.get(area);
-  };
-
-  // Credit the time since the last tick to the current area, if it was active time.
-  function tick() {
-    const t = now();
-    if (path && visible) {
-      const activeUntil = lastInteractionAt + idleAfterMs;
-      const credited = Math.max(0, Math.min(t, activeUntil) - lastTickAt);
-      if (credited > 0) row(path).ms += credited;
-    }
-    lastTickAt = t;
-  }
+  const pending = new Map(); // area -> visits not yet sent
 
   return {
-    tick,
-    // The person moved to an area (or the first one on sign-in).
+    // The person moved to an area (or the first one on sign-in). Staying in the same area is not a new visit.
     setPath(pathname) {
       const area = areaOf(pathname);
-      tick();
       if (area === path) return;
       path = area;
-      row(area).visits += 1;
-      lastInteractionAt = Math.max(lastInteractionAt, now() - 1); // moving counts as being there
+      pending.set(area, (pending.get(area) || 0) + 1);
     },
-    interact() {
-      tick();
-      lastInteractionAt = now();
-    },
-    setVisible(isVisible) {
-      tick();
-      visible = Boolean(isVisible);
-      if (visible) lastTickAt = now();
-    },
-    // What to send now: whole seconds per area. Anything under a second stays
-    // behind so it isn't lost to rounding.
+    // What to send now: visits per area. Nothing else is in it.
     drain() {
-      tick();
-      const pages = [];
-      for (const [area, value] of pending) {
-        const seconds = Math.floor(value.ms / 1000);
-        if (!seconds && !value.visits) continue;
-        pages.push({ path: area, seconds, visits: value.visits });
-        value.ms -= seconds * 1000;
-        value.visits = 0;
-      }
+      const pages = [...pending].filter(([, visits]) => visits > 0).map(([area, visits]) => ({ path: area, visits }));
+      pending.clear();
       return pages;
     },
     // A report that couldn't be sent goes back to be sent with the next one.
     restore(pages = []) {
       pages.forEach((page) => {
-        const value = row(areaOf(page.path));
-        value.ms += (Number(page.seconds) || 0) * 1000;
-        value.visits += Number(page.visits) || 0;
+        const area = areaOf(page.path);
+        pending.set(area, (pending.get(area) || 0) + (Math.max(0, Math.floor(Number(page.visits))) || 0));
       });
     },
     current: () => path,

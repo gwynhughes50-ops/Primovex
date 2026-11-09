@@ -4,14 +4,12 @@ import { db, functions } from "@/lib/firebase";
 import { getDeviceId } from "@/services/deviceSessionService";
 import { createUsageTracker } from "@/lib/usageTracker";
 
-// Reports which area of the app the signed-in person is in, and for how long, to
-// the server (the recordUsage function), so an administrator can see who signed
-// in, when, what they used and for how long. Areas only: never a record, a search
-// or anything typed. Failures are silent - this must never get in anyone's way.
+// Reports which areas of the app the signed-in person visits, and how often, to the server (the recordUsage function), so an administrator can see who signed in, when, on
+// what device, and which areas were used. Areas only: never a record, a search or anything typed. How LONG someone spends in an area is not recorded or sent.
+// Failures are silent - this must never get in anyone's way.
 
 const SESSION_KEY = "primovex.usage.session.v1";
 const FLUSH_EVERY_MS = 4 * 60 * 1000;
-const TICK_EVERY_MS = 15 * 1000;
 const APP_VERSION = typeof __PRIMOVEX_VERSION__ !== "undefined" ? __PRIMOVEX_VERSION__ : "dev";
 
 let active = null; // { uid, sessionId, tracker, timers, sending, ended }
@@ -74,15 +72,9 @@ export function startUsageTracking(uid) {
     target.addEventListener(name, handler, options);
     session.cleanup.push(() => target.removeEventListener(name, handler, options));
   };
-  const interact = () => tracker.interact();
-  ["pointerdown", "keydown", "touchstart", "wheel"].forEach((name) => on(window, name, interact, { passive: true }));
-  on(document, "visibilitychange", () => {
-    tracker.setVisible(document.visibilityState !== "hidden");
-    if (document.visibilityState === "hidden") flush(session);
-  });
+  on(document, "visibilitychange", () => { if (document.visibilityState === "hidden") flush(session); });
   on(window, "pagehide", () => flush(session));
 
-  session.timers.push(setInterval(() => tracker.tick(), TICK_EVERY_MS));
   session.timers.push(setInterval(() => flush(session), FLUSH_EVERY_MS));
   tracker.setPath(globalThis.location?.pathname || "/");
   // The first report anchors the session's start on the server clock.

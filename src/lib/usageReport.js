@@ -1,5 +1,5 @@
 // Turns the stored sign-in sessions into what an administrator reads: who was in,
-// when, what areas they used and for how long, and anything unusual. Pure, so it
+// when, which areas they used and how many times (never for how long), and anything unusual. Pure, so it
 // can be tested.
 
 export const ACTIVE_WITHIN_MS = 10 * 60 * 1000;
@@ -91,12 +91,12 @@ export function describeSession(raw, now = new Date()) {
     endReason: raw.endReason || "",
     status,
     spanSeconds,
-    activeSeconds: Number(raw.activeSeconds) || 0,
     client: raw.client || "",
     platform: raw.platform || "",
     deviceId: raw.deviceId || "",
     appVersion: raw.appVersion || "",
-    pages: Array.isArray(raw.pages) ? raw.pages : [],
+    // the areas visited and how many times; any time an older record still holds is not shown
+    pages: (Array.isArray(raw.pages) ? raw.pages : []).map((p) => ({ path: p?.path, visits: Number(p?.visits) || 0 })).filter((p) => typeof p.path === "string"),
     flags,
   };
 }
@@ -127,14 +127,14 @@ export function simultaneousDevicePairs(sessions = []) {
   return pairs;
 }
 
-// Per person: how often and how long they were in, where they spent it, and flags.
+// Per person: how often they signed in, which areas they visited (how many times, never for how long), and flags.
 export function summariseUsers(rawSessions = [], now = new Date()) {
   const sessions = rawSessions.map((raw) => describeSession(raw, now)).filter((s) => s.startedAt);
   const people = new Map();
 
   sessions.forEach((session) => {
     if (!people.has(session.uid)) {
-      people.set(session.uid, { uid: session.uid, name: session.name, role: session.role, sessions: [], days: new Set(), areaSeconds: new Map(), devices: new Set() });
+      people.set(session.uid, { uid: session.uid, name: session.name, role: session.role, sessions: [], days: new Set(), areaVisits: new Map(), devices: new Set() });
     }
     const person = people.get(session.uid);
     person.sessions.push(session);
@@ -143,7 +143,7 @@ export function summariseUsers(rawSessions = [], now = new Date()) {
     if (session.deviceId) {
       person.devices.add(session.deviceId);
     }
-    session.pages.forEach((page) => person.areaSeconds.set(page.path, (person.areaSeconds.get(page.path) || 0) + (Number(page.seconds) || 0)));
+    session.pages.forEach((page) => person.areaVisits.set(page.path, (person.areaVisits.get(page.path) || 0) + page.visits));
   });
 
   return [...people.values()]
@@ -156,17 +156,17 @@ export function summariseUsers(rawSessions = [], now = new Date()) {
       if (long) flags.push(`${long} session${long === 1 ? "" : "s"} over ${LONG_SESSION_HOURS} hours`);
       const together = simultaneousDevicePairs(sorted);
       if (together) flags.push(`In on two devices at the same time on ${together} occasion${together === 1 ? "" : "s"}`);
-      const topAreas = [...person.areaSeconds.entries()]
+      const topAreas = [...person.areaVisits.entries()]
         .sort((a, b) => b[1] - a[1])
         .slice(0, 4)
-        .map(([path, seconds]) => ({ path, label: areaLabel(path), seconds }));
+        .map(([path, visits]) => ({ path, label: areaLabel(path), visits }));
       return {
         uid: person.uid,
         name: person.name,
         role: person.role,
         sessionCount: sorted.length,
         daysActive: person.days.size,
-        activeSeconds: sorted.reduce((total, s) => total + s.activeSeconds, 0),
+        visits: sorted.reduce((total, s) => total + s.pages.reduce((n, p) => n + p.visits, 0), 0),
         lastSignIn: sorted[0].startedAt,
         lastSeen: sorted.reduce((latest, s) => (s.lastSeenAt > latest ? s.lastSeenAt : latest), sorted[0].lastSeenAt),
         deviceCount: person.devices.size,
@@ -183,7 +183,7 @@ export function overview(users = []) {
   return {
     people: users.length,
     sessions: users.reduce((n, u) => n + u.sessionCount, 0),
-    activeSeconds: users.reduce((n, u) => n + u.activeSeconds, 0),
+    visits: users.reduce((n, u) => n + u.visits, 0),
     flagged: users.filter((u) => u.flags.length).length,
   };
 }
@@ -195,9 +195,9 @@ const csvCell = (value) => {
   return `"${safe.replaceAll('"', '""')}"`;
 };
 
-// One row per session; the areas used are listed with their times.
+// One row per session; the areas used are listed with how many times each was visited.
 export function sessionsToCsv(users = []) {
-  const header = ["Name", "Role", "Signed in", "Last active", "Ended", "How it ended", "Time in session", "Active time", "Device", "Areas used (time)", "Flags"];
+  const header = ["Name", "Role", "Signed in", "Last active", "Ended", "How it ended", "Time signed in", "Device", "Areas used (visits)", "Flags"];
   const rows = [];
   users.forEach((user) => user.sessions.forEach((s) => {
     rows.push([
@@ -208,9 +208,8 @@ export function sessionsToCsv(users = []) {
       s.endedAt?.toISOString() || "",
       endText(s),
       formatDuration(s.spanSeconds),
-      formatDuration(s.activeSeconds),
       [s.client, s.platform].filter(Boolean).join(" / "),
-      s.pages.map((p) => `${areaLabel(p.path)} (${formatDuration(p.seconds)})`).join("; "),
+      s.pages.map((p) => `${areaLabel(p.path)} (${p.visits})`).join("; "),
       s.flags.join("; "),
     ]);
   }));

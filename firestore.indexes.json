@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "governance_concern_timeline",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "concernId", "order": "ASCENDING" },
+        { "fieldPath": "type", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "temperature_logs",
       "queryScope": "COLLECTION",
       "fields": [

@@ -7,7 +7,7 @@ const t = (name, fn) => { fn(); n++; console.log("ok  " + name); };
 
 const NOW = new Date(2026, 9, 5, 12, 0, 0);
 const at = (d, h, m = 0) => new Date(2026, 9, d, h, m, 0);
-const session = (over) => ({ id: "s", uid: "hca", displayName: "Hayley", role: "HCA", startedAt: at(5, 9), lastSeenAt: at(5, 10), activeSeconds: 2400, deviceId: "pvx-1", client: "tauri", platform: "windows", pages: [], ...over });
+const session = (over) => ({ id: "s", uid: "hca", displayName: "Hayley", role: "HCA", startedAt: at(5, 9), lastSeenAt: at(5, 10), deviceId: "pvx-1", client: "tauri", platform: "windows", pages: [], ...over });
 
 t("durations read naturally", () => {
   assert.equal(formatDuration(0), "0s");
@@ -45,20 +45,36 @@ t("out-of-hours sign-ins and very long sessions are flagged", () => {
   assert.deepEqual(describeSession(session(), NOW).flags, []);
 });
 
-t("people are summarised: sessions, days, time, where it went, most recent first", () => {
+t("people are summarised: sessions, days, areas visited and how often, most recent first", () => {
   const users = summariseUsers([
-    session({ id: "1", startedAt: at(5, 9), lastSeenAt: at(5, 10), activeSeconds: 1000, pages: [{ path: "/inventory", seconds: 800, visits: 3 }, { path: "/alerts", seconds: 200, visits: 1 }] }),
-    session({ id: "2", startedAt: at(4, 9), lastSeenAt: at(4, 9, 30), activeSeconds: 500, pages: [{ path: "/inventory", seconds: 500, visits: 1 }] }),
-    session({ id: "3", uid: "liz", displayName: "Liz", role: "Practice Manager", startedAt: at(5, 8), lastSeenAt: at(5, 8, 20), activeSeconds: 100 }),
+    session({ id: "1", startedAt: at(5, 9), lastSeenAt: at(5, 10), pages: [{ path: "/inventory", visits: 3 }, { path: "/alerts", visits: 1 }] }),
+    session({ id: "2", startedAt: at(4, 9), lastSeenAt: at(4, 9, 30), pages: [{ path: "/inventory", visits: 1 }] }),
+    session({ id: "3", uid: "liz", displayName: "Liz", role: "Practice Manager", startedAt: at(5, 8), lastSeenAt: at(5, 8, 20) }),
   ], NOW);
   assert.deepEqual(users.map((u) => u.name), ["Hayley", "Liz"]);
   const hayley = users[0];
   assert.equal(hayley.sessionCount, 2);
   assert.equal(hayley.daysActive, 2);
-  assert.equal(hayley.activeSeconds, 1500);
-  assert.deepEqual(hayley.topAreas.map((a) => [a.label, a.seconds]), [["Inventory", 1300], ["Alerts", 200]]);
+  assert.deepEqual(hayley.topAreas.map((a) => [a.label, a.visits]), [["Inventory", 4], ["Alerts", 1]]);
+  assert.equal(hayley.visits, 5);
   assert.equal(hayley.sessions[0].id, "1");
-  assert.deepEqual(overview(users), { people: 2, sessions: 3, activeSeconds: 1600, flagged: 0 });
+  assert.deepEqual(overview(users), { people: 2, sessions: 3, visits: 5, flagged: 0 });
+});
+
+t("time spent in an area never reaches the report, even from an older record that still holds it", () => {
+  const users = summariseUsers([
+    session({ id: "1", activeSeconds: 9000, pages: [{ path: "/inventory", seconds: 8000, visits: 2 }] }),
+  ], NOW);
+  const person = users[0];
+  assert.equal("activeSeconds" in person, false);
+  assert.equal("activeSeconds" in person.sessions[0], false);
+  assert.deepEqual(person.sessions[0].pages, [{ path: "/inventory", visits: 2 }], "the seconds are dropped");
+  assert.deepEqual(person.topAreas, [{ path: "/inventory", label: "Inventory", visits: 2 }]);
+  assert.equal(JSON.stringify(overview(users)).includes("activeSeconds"), false);
+  const csv = sessionsToCsv(users);
+  assert.doesNotMatch(csv, /Active time|\(\d+ min\)|9000|8000|2 h/);
+  assert.match(csv, /"Time signed in"/, "how long the person was signed in is still reported: it is the sign-in session");
+  assert.match(csv, /Areas used \(visits\)/);
 });
 
 t("signing in at night flags the person", () => {
@@ -107,15 +123,15 @@ t("a brief overlap, the same device twice, or no recorded device isn't flagged",
   assert.deepEqual(unknown.flags, []);
 });
 
-t("the CSV has one row per session with the areas and times, and can't run as a formula", () => {
+t("the CSV has one row per session with the areas and visit counts, and can't run as a formula", () => {
   const users = summariseUsers([
-    session({ displayName: "=HYPERLINK(\"x\")", pages: [{ path: "/inventory", seconds: 600, visits: 1 }], endedAt: at(5, 10), endReason: "signed_out" }),
+    session({ displayName: "=HYPERLINK(\"x\")", pages: [{ path: "/inventory", visits: 1 }], endedAt: at(5, 10), endReason: "signed_out" }),
   ], NOW);
   const lines = sessionsToCsv(users).split("\n");
   assert.equal(lines.length, 2);
   assert.match(lines[0], /^"Name","Role","Signed in"/);
   assert.match(lines[1], /^"'=HYPERLINK\(""x""\)"/);
-  assert.match(lines[1], /Inventory \(10 min\)/);
+  assert.match(lines[1], /Inventory \(1\)/);
   assert.match(lines[1], /Signed out/);
 });
 

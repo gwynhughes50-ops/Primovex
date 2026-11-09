@@ -638,7 +638,7 @@ export const HELP_ARTICLES = [
     steps: [
       "Go to Security in the left menu.",
       "Press \"Sign-in & activity report\" and choose the period.",
-      "You'll see each person's sign-ins, time in the app and the areas they used. Click a name for each session. Anything unusual (a sign-in at night, a very long session, two devices at once) is flagged.",
+      "You'll see each person's sign-ins and the areas they used, with how many times each was opened (how long someone spent in an area is not recorded). Click a name for each session. Anything unusual (a sign-in at night, a very long session, two devices at once) is flagged.",
       "\"Export CSV\" saves it. Viewing and exporting are themselves recorded.",
     ],
     tip: "It records the areas of the app, never what was typed or which record was opened.",

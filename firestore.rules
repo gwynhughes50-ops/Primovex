@@ -362,10 +362,15 @@ match /governance_concern_contacts/{concernId} {
   allow delete: if isConcernsTeam();
 }
 
+// A case's history. The concerns team reads all of it. Partners and people named on the case read everything EXCEPT the audit lines (who changed what on the case, and when): those
+// are for the concerns team only (security review SR-14, closed on 9 November 2026). A query from anyone else must say type != "audit", or the database refuses it.
 match /governance_concern_timeline/{timelineId} {
   allow get, list: if signedIn() && (
-    isConcernsTeam() || isGovernancePartner()
-    || isInvolvedInConcern(get(/databases/$(database)/documents/governance_concerns/$(resource.data.concernId)).data)
+    isConcernsTeam()
+    || (resource.data.type != "audit" && (
+      isGovernancePartner()
+      || isInvolvedInConcern(get(/databases/$(database)/documents/governance_concerns/$(resource.data.concernId)).data)
+    ))
   );
   allow create: if signedIn() && (
     isConcernsTeam()

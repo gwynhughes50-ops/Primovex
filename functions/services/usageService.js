@@ -1,22 +1,17 @@
 const { FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { HttpsError } = require("firebase-functions/v2/https");
 
-// Who was signed in, when, on what, and for how long - the server side.
+// Who was signed in, when, and on what - the server side.
 //
-// The app reports which area the person is in and how long they spent there;
-// this service is what makes those reports trustworthy enough for a security
-// review. It takes the person's identity, role and name from their own account,
-// takes every time from the server clock, refuses to credit more active time
-// than has actually passed since the last report, and stores areas of the app
-// only (never a record, search or anything typed). Clients can't read or write
-// these records directly - the rules only let administrators and audit readers
-// read them.
+// The app reports which areas the person visits; this service is what makes those reports trustworthy enough for a security review. It takes the person's identity, role and
+// name from their own account, takes every time from the server clock, and stores areas of the app only (never a record, search or anything typed). It stores VISIT COUNTS per
+// area and does NOT store how long anyone spent in an area: a figure of seconds sent by an older app is ignored, not kept (a decision of 9 November 2026). Clients can't read or
+// write these records directly - the rules only let administrators and audit readers read them.
 
 const SESSION_ID = /^[A-Za-z0-9-]{8,64}$/;
 const DEVICE_ID = /^[A-Za-z0-9-]{8,64}$/;
 const MAX_PAGES = 80;
 const MAX_VISITS_PER_REPORT = 40;
-const SLACK_SECONDS = 30;
 const END_REASONS = ["signed_out", "session_timeout", "closed"];
 const CLIENTS = ["tauri", "web"];
 const PLATFORMS = ["android", "windows", "ios", "browser"];
@@ -38,34 +33,25 @@ function cleanPath(raw) {
   return `/${segments.join("/")}`;
 }
 
-// Fold the pages reported now into the pages already stored, adding time and
-// visit counts per area. Seconds are whole numbers, each report is capped, and
-// the whole list is capped so a misbehaving client can't grow a record forever.
-function mergePages(existing = [], incoming = [], maxSeconds = Infinity) {
+// Fold the pages reported now into the pages already stored, adding visit counts per area. Each report is capped, and the whole list is capped so a misbehaving client can't grow
+// a record forever. Only the area and the number of visits are kept: any time an app sends, and any time already stored in an older record, is dropped here.
+function mergePages(existing = [], incoming = []) {
   const byPath = new Map();
   (Array.isArray(existing) ? existing : []).forEach((row) => {
-    if (row && typeof row.path === "string") byPath.set(row.path, { path: row.path, seconds: Number(row.seconds) || 0, visits: Number(row.visits) || 0 });
+    if (row && typeof row.path === "string") byPath.set(row.path, { path: row.path, visits: Number(row.visits) || 0 });
   });
 
-  let budget = Math.max(0, Math.floor(maxSeconds));
-  let credited = 0;
   (Array.isArray(incoming) ? incoming : []).slice(0, MAX_VISITS_PER_REPORT).forEach((visit) => {
     const path = cleanPath(visit?.path);
-    const wanted = Math.max(0, Math.min(Math.floor(Number(visit?.seconds) || 0), 86400));
-    const seconds = Math.min(wanted, budget);
     const visits = Math.max(0, Math.min(Math.floor(Number(visit?.visits) || 0), 200));
-    if (!seconds && !visits) return;
+    if (!visits) return;
     if (!byPath.has(path) && byPath.size >= MAX_PAGES) return;
-    const row = byPath.get(path) || { path, seconds: 0, visits: 0 };
-    row.seconds += seconds;
+    const row = byPath.get(path) || { path, visits: 0 };
     row.visits += visits;
     byPath.set(path, row);
-    budget -= seconds;
-    credited += seconds;
   });
 
-  const pages = [...byPath.values()].sort((a, b) => b.seconds - a.seconds || a.path.localeCompare(b.path));
-  return { pages, credited };
+  return { pages: [...byPath.values()].sort((a, b) => b.visits - a.visits || a.path.localeCompare(b.path)) };
 }
 
 function millis(value) {
@@ -84,10 +70,7 @@ function applyUsageReport({ existing, caller, profile, data, now }) {
   if (existing && existing.endedAt) return { ignored: true };
 
   const startedAtMs = existing ? millis(existing.startedAt) || nowMs : nowMs;
-  const lastSeenMs = existing ? millis(existing.lastSeenAt) || startedAtMs : nowMs;
-  // No more active time can be credited than has passed since the last report.
-  const elapsedSeconds = Math.max(0, Math.round((nowMs - lastSeenMs) / 1000)) + SLACK_SECONDS;
-  const { pages, credited } = mergePages(existing?.pages, data.pages, existing ? elapsedSeconds : 0);
+  const { pages } = mergePages(existing?.pages, data.pages);
 
   const record = {
     uid: caller,
@@ -101,7 +84,6 @@ function applyUsageReport({ existing, caller, profile, data, now }) {
     appVersion: tidy(data.appVersion, 20) || existing?.appVersion || "",
     startedAt: existing?.startedAt || Timestamp.fromMillis(startedAtMs),
     lastSeenAt: Timestamp.fromMillis(nowMs),
-    activeSeconds: (Number(existing?.activeSeconds) || 0) + credited,
     pages,
     reports: (Number(existing?.reports) || 0) + 1,
   };
@@ -130,4 +112,8 @@ async function recordUsage({ db, callerUid, profile, data = {}, now = new Date()
   });
 }
 
-module.exports = { cleanPath, mergePages, applyUsageReport, recordUsage, END_REASONS, MAX_PAGES };
+// the fields that hold time spent in an area, which are no longer kept (used by the retention job to remove them from older records)
+const TIME_FIELDS = ["activeSeconds"];
+const stripTimeFromPages = (pages) => (Array.isArray(pages) ? pages.map((p) => ({ path: p?.path, visits: Number(p?.visits) || 0 })).filter((p) => typeof p.path === "string") : []);
+
+module.exports = { cleanPath, mergePages, applyUsageReport, recordUsage, stripTimeFromPages, TIME_FIELDS, END_REASONS, MAX_PAGES };
