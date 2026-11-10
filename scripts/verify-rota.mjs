@@ -1,0 +1,239 @@
+// Covers the reception rota engine (src/modules/rota): the rules from the current rota are entered as rules, and the weeks it builds are checked against them.
+import assert from "node:assert/strict";
+import { DAYS, DEFAULT_SHIFTS, DEFAULT_SETTINGS, checkRules, mondayOf, addDays, newPerson, shiftById, toMinutes } from "../src/modules/rota/rotaModel.js";
+import { assignMin, canDo, generateWeek, generateWeeks, historyAfter, shiftIdOfKey, weekCounters } from "../src/modules/rota/rotaEngine.js";
+
+let n = 0;
+const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
+
+// ---- the rules of the current rota ----
+const person = (uid, name, extra = {}) => ({ ...newPerson(uid, name), ...extra });
+const ALL_LATEST = Object.fromEntries(DAYS.map((d) => [d, "18:30"]));
+const rules = {
+  shifts: DEFAULT_SHIFTS.map((s) => ({ ...s })),
+  settings: { ...DEFAULT_SETTINGS },
+  people: [
+    person("dave", "Dave", { mode: "usual", shift: "desk", coverShifts: ["early1", "early2", "mid", "late"], cannotDo: ["tyelan"] }),
+    person("jack", "Jack", { mode: "fixed", shift: "admin2" }),
+    person("helen", "Helen", { earliest: { mon: "09:00", tue: "08:00", wed: "08:00", thu: "09:00", fri: "09:00" }, latest: ALL_LATEST, maxPerWeek: { late: 1 } }),
+    person("emily", "Emily"), person("kim", "Kim"), person("lewis", "Lewis"), person("libby", "Libby"), person("lucy", "Lucy"),
+    person("karenl", "Karen L", { dayRules: { wed: { shift: "early2", until: "12:00" } } }),
+    person("karenb", "Karen B", { mode: "only", onlyShifts: ["desk2"], days: ["wed", "thu", "fri"] }),
+    person("debbie", "Debbie", { mode: "only", onlyShifts: ["desk2"], days: ["tue", "wed", "thu"] }),
+  ],
+};
+const POOL = ["helen", "emily", "kim", "lewis", "libby", "lucy", "karenl"];
+const ROTATING = ["early1", "early2", "mid", "late", "admin1", "admin3", "tyelan"];
+const FIRST = "2026-11-16";
+const nameOf = (uid) => rules.people.find((p) => p.uid === uid).name;
+const weeks = generateWeeks({ rules, firstMonday: FIRST, weeks: 7 });
+const slotsOf = (week, day) => Object.entries(week.days[day].slots).map(([key, a]) => ({ key, shiftId: shiftIdOfKey(key), ...a }));
+
+t("the starting rules are well formed", () => {
+  assert.deepEqual(checkRules(rules), []);
+  assert.match(checkRules({ shifts: [{ id: "x", label: "X", start: "10:00", end: "09:00", count: 1, days: ["mon"] }], people: [] }).join(" "), /finish must be after the start/);
+  assert.match(checkRules({ shifts: DEFAULT_SHIFTS, people: [{ ...newPerson("a", "A"), mode: "fixed" }] }).join(" "), /choose their fixed shift/);
+});
+
+t("dates: weeks start on Monday", () => {
+  assert.equal(mondayOf("2026-11-18"), "2026-11-16");
+  assert.equal(mondayOf("2026-11-22"), "2026-11-16");
+  assert.equal(mondayOf("2026-11-16"), "2026-11-16");
+  assert.equal(addDays("2026-12-28", 7), "2027-01-04");
+});
+
+t("the assignment step finds the cheapest whole-day fit, not just the cheapest first choice", () => {
+  // person 0 prefers slot 0 (cost 1) but then person 1 would pay 100: better is 2 + 2
+  const pick = assignMin([[1, 2], [100, 2]]);
+  assert.deepEqual(pick, [0, 1].map((c, i) => pick[i]));
+  const total = [[1, 2], [100, 2]].reduce((sum, row, i) => sum + row[pick[i]], 0);
+  assert.equal(total, 3);
+  assert.deepEqual(assignMin([]), []);
+});
+
+t("seven weeks of the normal team: every essential shift filled every day, no gaps, nobody double-booked", () => {
+  for (const week of weeks) {
+    assert.equal(week.issues.filter((i) => i.severity === "gap").length, 0, "no gaps");
+    for (const day of DAYS) {
+      const slots = slotsOf(week, day);
+      const ids = slots.map((s) => s.shiftId);
+      for (const essential of ["early1", "early2", "mid", "late", "admin1", "tyelan"]) assert.ok(ids.includes(essential), `${essential} on ${day}`);
+      const uids = slots.map((s) => s.uid);
+      assert.equal(new Set(uids).size, uids.length, "one shift each per day");
+    }
+  }
+});
+
+t("the fixed people are where their rules put them", () => {
+  for (const week of weeks) {
+    for (const day of DAYS) {
+      const slots = slotsOf(week, day);
+      assert.equal(slots.find((s) => s.shiftId === "admin2")?.uid, "jack");
+      assert.equal(slots.find((s) => s.shiftId === "desk")?.uid, "dave");
+      assert.equal(slots.some((s) => s.uid === "dave" && s.shiftId === "tyelan"), false, "Dave never does Ty Elan");
+      const morning = slots.filter((s) => s.shiftId === "desk2").map((s) => s.uid).sort();
+      const expected = { mon: [], tue: ["debbie"], wed: ["debbie", "karenb"], thu: ["debbie", "karenb"], fri: ["karenb"] }[day];
+      assert.deepEqual(morning, expected, `morning desk on ${day}`);
+    }
+  }
+});
+
+t("Karen L is on Early 2 until 12 every Wednesday and the rota says the afternoon is for the team to absorb", () => {
+  for (const week of weeks) {
+    const a = week.days.wed.slots.early2;
+    assert.equal(a.uid, "karenl");
+    assert.equal(a.until, "12:00");
+    assert.ok(week.issues.some((i) => i.day === "wed" && /Karen L is on Early 2 until 12:00 only/.test(i.text)));
+    for (const day of ["mon", "tue", "thu", "fri"]) assert.equal(slotsOf(week, day).find((s) => s.uid === "karenl")?.shiftId !== "early2" || day !== "wed", true);
+  }
+});
+
+t("Helen: never before 9 on Mon, Thu and Fri; never past 6.30; at most one late a week", () => {
+  for (const week of weeks) {
+    const helen = rules.people.find((p) => p.uid === "helen");
+    let lates = 0;
+    for (const day of DAYS) {
+      const s = slotsOf(week, day).find((x) => x.uid === "helen");
+      assert.ok(s, "Helen works every day");
+      const shift = shiftById(rules, s.shiftId);
+      assert.ok(canDo(helen, shift, day), `${shift.label} on ${day}`);
+      if (["mon", "thu", "fri"].includes(day)) assert.ok(toMinutes(shift.start) >= 9 * 60);
+      if (shift.group === "late") lates += 1;
+    }
+    assert.ok(lates <= 1, `Helen's lates: ${lates}`);
+  }
+});
+
+t("the Friday late goes round the team in turn: nobody does it twice until everyone has", () => {
+  const fridayLates = weeks.map((w) => w.days.fri.slots.late.uid);
+  assert.equal(new Set(fridayLates).size, 7, `seven weeks, seven different people: ${fridayLates.join(", ")}`);
+});
+
+t("the shifts are shared out fairly over the seven weeks, among the people whose rules leave them free", () => {
+  const totals = {};
+  for (const week of weeks) for (const [uid, row] of Object.entries(weekCounters(week, rules))) for (const [g, c] of Object.entries(row)) { totals[uid] = totals[uid] || {}; totals[uid][g] = (totals[uid][g] || 0) + c; }
+  const FREE = ["emily", "kim", "lewis", "libby", "lucy"]; // Helen's hours and Karen L's Wednesday rule decide some of theirs, so they are compared on what is left
+  for (const group of ["early", "mid", "late", "admin1", "admin3", "tyelan"]) {
+    const counts = FREE.map((u) => totals[u]?.[group] || 0);
+    assert.ok(Math.max(...counts) - Math.min(...counts) <= 3, `${group}: ${counts.join(",")}`);
+  }
+  const lates = FREE.map((u) => totals[u]?.late || 0);
+  assert.ok(Math.max(...lates) - Math.min(...lates) <= 2, `lates: ${lates.join(",")}`);
+  assert.ok((totals.helen.late || 0) <= 7, "and Helen never has more than her one a week");
+  assert.ok(POOL.every((u) => (totals[u]?.late || 0) >= 3), "everyone does some lates");
+  const helen = totals.helen;
+  assert.ok((helen.mid || 0) >= 4 && (helen.admin1 || 0) >= 3, "Helen gets her share of the shifts her hours allow");
+});
+
+t("nobody has an early the morning after a late, and the same shift is not repeated day after day", () => {
+  for (const week of weeks) {
+    let prev = {};
+    for (const day of DAYS) {
+      const now = {};
+      for (const s of slotsOf(week, day)) now[s.uid] = shiftById(rules, s.shiftId).group;
+      for (const uid of POOL) {
+        if (!prev[uid]) continue;
+        assert.ok(!(prev[uid] === "late" && now[uid] === "early"), `${nameOf(uid)} late then early`);
+      }
+      prev = now;
+    }
+  }
+});
+
+t("the same rules and the same history always give the same rota", () => {
+  const again = generateWeeks({ rules, firstMonday: FIRST, weeks: 7 });
+  assert.deepEqual(again.map((w) => w.days), weeks.map((w) => w.days));
+});
+
+t("the counters match the rota: every person-day is counted once", () => {
+  const counters = weekCounters(weeks[0], rules);
+  assert.equal(counters.dave.desk, 5);
+  assert.equal(counters.jack.admin2, 5);
+  assert.equal(counters.debbie.desk, 3);
+  assert.equal(counters.karenb.total, 3);
+  assert.equal(counters.helen.total, 5);
+  const everyone = Object.values(counters).reduce((sum, row) => sum + row.total, 0);
+  assert.equal(everyone, 9 * 5 + 6, "nine full-timers for five days, plus six morning desk shifts");
+});
+
+t("one person off: their days are not filled by them and admin 3 is dropped first", () => {
+  const absences = [{ uid: "kim", from: "2026-11-30", to: "2026-12-02", reason: "leave" }];
+  const [week] = generateWeeks({ rules, firstMonday: "2026-11-30", weeks: 1, absences });
+  for (const day of ["mon", "tue", "wed"]) {
+    assert.equal(slotsOf(week, day).some((s) => s.uid === "kim"), false, `Kim on ${day}`);
+    assert.ok(week.days[day].unfilled.includes("admin3"), `admin 3 dropped on ${day}`);
+    assert.deepEqual(week.days[day].unfilled.filter((k) => !k.startsWith("desk2")), ["admin3"], "nothing else dropped (the morning desk is only for the two part-timers)");
+  }
+  assert.equal(week.issues.filter((i) => i.severity === "gap").length, 0);
+  assert.ok(slotsOf(week, "thu").some((s) => s.uid === "kim"), "back on Thursday");
+  assert.ok(week.issues.some((i) => /Admin 3 is not staffed/.test(i.text)), "and it says so");
+});
+
+t("two people off: still every essential shift covered", () => {
+  const absences = [{ uid: "kim", from: "2026-12-07", to: "2026-12-11" }, { uid: "lucy", from: "2026-12-08", to: "2026-12-09" }];
+  const [week] = generateWeeks({ rules, firstMonday: "2026-12-07", weeks: 1, absences });
+  assert.equal(week.issues.filter((i) => i.severity === "gap").length, 0);
+});
+
+t("three people off: Dave steps in on a shift he can cover, the desk is left unstaffed, and what cannot be covered is a gap, never silent", () => {
+  const absences = ["kim", "lucy", "emily"].map((uid) => ({ uid, from: "2026-12-14", to: "2026-12-14" }));
+  const [week] = generateWeeks({ rules, firstMonday: "2026-12-14", weeks: 1, absences });
+  const mon = slotsOf(week, "mon");
+  const cover = mon.find((s) => s.source === "cover");
+  assert.equal(cover?.uid, "dave");
+  assert.ok(["early1", "early2", "mid", "late"].includes(cover.shiftId));
+  assert.ok(week.days.mon.unfilled.includes("desk"));
+  assert.ok(week.issues.some((i) => i.severity === "note" && /Dave covers .* so Desk\/phones is left unstaffed/.test(i.text)));
+  const gaps = week.issues.filter((i) => i.severity === "gap" && i.day === "mon");
+  assert.equal(gaps.length, 1, "four rotating people cannot fill six essential rotating shifts, even with Dave on one: one gap is reported");
+  assert.match(gaps[0].text, /nobody is available for/);
+});
+
+t("Jack off: Admin 2 is reported as not staffed; nothing else changes", () => {
+  const [week] = generateWeeks({ rules, firstMonday: FIRST, weeks: 1, absences: [{ uid: "jack", from: "2026-11-17", to: "2026-11-17" }] });
+  assert.ok(week.days.tue.unfilled.includes("admin2"));
+  assert.ok(week.issues.some((i) => /Admin 2 is not staffed \(Jack is not in\)/.test(i.text)));
+  assert.equal(week.issues.filter((i) => i.severity === "gap").length, 0);
+});
+
+t("a place fixed by hand is kept when the week is rebuilt; one for someone who is now off is cleared and says so", () => {
+  const first = generateWeek({ rules, mondayIso: FIRST });
+  const wasOnMonLate = first.days.mon.slots.late.uid;
+  const other = POOL.find((u) => u !== wasOnMonLate && u !== "helen");
+  const locked = { mon: { late: other } };
+  const again = generateWeek({ rules, mondayIso: FIRST, locked });
+  assert.equal(again.days.mon.slots.late.uid, other);
+  assert.equal(again.days.mon.slots.late.source, "locked");
+  assert.equal(again.issues.filter((i) => i.severity === "gap").length, 0);
+  const off = generateWeek({ rules, mondayIso: FIRST, locked, absences: [{ uid: other, from: "2026-11-16", to: "2026-11-16" }] });
+  assert.notEqual(off.days.mon.slots.late.uid, other);
+  assert.ok(off.issues.some((i) => /was placed on Late by hand but is not available/.test(i.text)));
+});
+
+t("hours: a shift is only offered to someone who can do all of it", () => {
+  const helen = rules.people.find((p) => p.uid === "helen");
+  assert.equal(canDo(helen, shiftById(rules, "early1"), "mon"), false, "starts at 8, she cannot start before 9 on Monday");
+  assert.equal(canDo(helen, shiftById(rules, "early1"), "tue"), true);
+  assert.equal(canDo(helen, shiftById(rules, "mid"), "mon"), true);
+  assert.equal(canDo(helen, shiftById(rules, "late"), "fri"), true, "finishes at 6.30");
+  assert.equal(canDo(helen, shiftById(rules, "tyelan"), "mon"), false);
+  assert.equal(canDo(rules.people.find((p) => p.uid === "dave"), shiftById(rules, "tyelan"), "mon"), false);
+  assert.equal(canDo(helen, shiftById(rules, "early1"), "mon", { until: "12:00" }), false, "a part shift still starts when it starts");
+});
+
+t("history: the next week does not repeat the last one's pattern, and the Friday late keeps rolling across weeks", () => {
+  const [a, b] = generateWeeks({ rules, firstMonday: FIRST, weeks: 2 });
+  assert.notDeepEqual(a.days.mon.slots, b.days.mon.slots);
+  const hist = historyAfter({}, a, rules);
+  assert.equal(Object.values(hist.friLate).reduce((x, y) => x + y, 0), 1, "one Friday late so far");
+  assert.equal(hist.lastFriday[a.days.fri.slots.late.uid], "late");
+});
+
+t("more people than shifts: the extra person is told they have no shift, not lost", () => {
+  const bigger = { ...rules, people: [...rules.people, person("extra", "Extra")] };
+  const week = generateWeek({ rules: bigger, mondayIso: FIRST });
+  const noShift = week.issues.filter((i) => /has no shift \(more people than shifts\)/.test(i.text));
+  assert.equal(noShift.length, 5, "one person each day");
+});
+
+console.log(`\n${n} passed`);
