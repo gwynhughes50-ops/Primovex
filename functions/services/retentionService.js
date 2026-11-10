@@ -46,11 +46,18 @@ async function removeStoredTime({ db, batchSize = BATCH, maxBatches = 25, fieldD
   return cleaned;
 }
 
+// How many sign-in sessions still hold a stored time. After a run this should be 0: it is the check that the clean-up has done its job (a limit of 1 is enough to know).
+async function countStoredTime({ db }) {
+  const snap = await db.collection("usage_sessions").where("activeSeconds", ">=", 0).limit(1).get();
+  return snap.size;
+}
+
 async function runRetention({ db, now = new Date(), fieldDelete }) {
   const usage = await deleteOlderThan({ db, collection: "usage_sessions", field: "startedAt", cutoff: Timestamp.fromMillis(now.getTime() - USAGE_SESSION_DAYS * DAY_MS) });
   const orb = await deleteOlderThan({ db, collection: "orb_ai_usage", field: "updatedAtMs", cutoff: now.getTime() - ORB_USAGE_DAYS * DAY_MS });
   const timeRemoved = await removeStoredTime({ db, fieldDelete });
-  return { usageSessionsDeleted: usage, orbUsageDeleted: orb, usageTimeRemoved: timeRemoved };
+  const stillHoldingTime = (await countStoredTime({ db })) > 0;
+  return { usageSessionsDeleted: usage, orbUsageDeleted: orb, usageTimeRemoved: timeRemoved, stillHoldingTime, ranAt: now.toISOString() };
 }
 
 module.exports = { USAGE_SESSION_DAYS, ORB_USAGE_DAYS, deleteOlderThan, removeStoredTime, runRetention };

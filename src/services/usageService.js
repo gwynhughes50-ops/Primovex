@@ -106,6 +106,14 @@ export async function endUsageSession(reason = "signed_out") {
 
 // ---- reading it back (administrators and audit readers) -------------------------
 
+// An administrator runs the retention clean-up now instead of waiting for Sunday: deletes sign-in records older than 12 months and removes any time already stored on older records.
+// Returns what the server did, including whether any session still holds a stored time afterwards (it should not).
+export async function runUsageCleanup() {
+  const call = httpsCallable(functions, "runRetentionNow", { timeout: 120000 });
+  const result = await call();
+  return result.data || {};
+}
+
 export function subscribeUsageSessions({ practiceId = "primary", since = null, until = null, max = 1000 } = {}, onData, onError) {
   const clauses = [collection(db, "usage_sessions"), where("practiceId", "==", practiceId || "primary")];
   if (since instanceof Date && !Number.isNaN(since.getTime())) clauses.push(where("startedAt", ">=", Timestamp.fromDate(since)));

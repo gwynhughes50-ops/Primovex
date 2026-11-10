@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, Clock, Download, RefreshCw, Search, Users, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { AUDIT_RANGE_PRESETS, resolveAuditRange, writeAuditEvent } from "@/core/identity/auditService";
-import { subscribeUsageSessions } from "@/services/usageService";
+import { runUsageCleanup, subscribeUsageSessions } from "@/services/usageService";
 import { areaLabel, endText, formatDuration, overview, sessionsToCsv, summariseUsers } from "@/lib/usageReport";
 
 const dateTime = (date) => (date ? date.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—");
@@ -35,6 +35,7 @@ export default function UsageReportPanel({ onClose }) {
   const [open, setOpen] = useState(() => new Set());
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [cleanup, setCleanup] = useState({ step: "idle", result: null, message: "" }); // idle | confirm | running | done | error
   const practiceId = profile?.practiceId || profile?.organisationId || profile?.organizationId || "primary";
   const permitted = isAdmin || can?.("audit.read");
   const { since, until } = useMemo(() => resolveAuditRange(rangePreset, customFrom, customTo), [rangePreset, customFrom, customTo]);
@@ -70,6 +71,26 @@ export default function UsageReportPanel({ onClose }) {
 
   function toggle(uid) {
     setOpen((current) => { const next = new Set(current); if (next.has(uid)) next.delete(uid); else next.add(uid); return next; });
+  }
+
+  async function runCleanup() {
+    setCleanup({ step: "running", result: null, message: "" });
+    try {
+      const result = await runUsageCleanup();
+      writeAuditEvent({
+        action: "audit.usage.cleanup",
+        module: "security",
+        targetType: "usage_report",
+        targetId: practiceId,
+        summary: "Sign-in and activity clean-up run now",
+        classification: "security",
+        disclosureLevel: "restricted",
+        metadata: { sessionsDeleted: result.usageSessionsDeleted ?? 0, timeRemoved: result.usageTimeRemoved ?? 0, stillHoldingTime: Boolean(result.stillHoldingTime) },
+      }).catch(() => {});
+      setCleanup({ step: "done", result, message: "" });
+    } catch (err) {
+      setCleanup({ step: "error", result: null, message: err?.code === "functions/permission-denied" || err?.code === "permission-denied" ? "Only an administrator can run the clean-up." : err?.message || "The clean-up could not be run." });
+    }
   }
 
   function exportCsv() {
@@ -132,6 +153,29 @@ export default function UsageReportPanel({ onClose }) {
               <label className="flex items-center gap-2 rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-300"><input type="checkbox" checked={flaggedOnly} onChange={(event) => setFlaggedOnly(event.target.checked)} /> Only people with a flag</label>
               <button type="button" onClick={exportCsv} disabled={!shown.length} className="flex items-center justify-center gap-2 rounded-xl bg-sky-500 px-3 py-2 text-sm font-semibold text-slate-950 disabled:opacity-40"><Download className="h-4 w-4" /> Export CSV</button>
             </div>
+
+            {isAdmin && (
+              <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900/50 p-4 text-sm">
+                <p className="font-semibold text-slate-200">Clean up records now</p>
+                <p className="mt-1 text-xs text-slate-400">Deletes sign-in records older than 12 months and removes any time already stored on older records (time in an area is no longer recorded). It also runs by itself every Sunday. Safe to run again.</p>
+                {cleanup.step === "idle" && <button type="button" onClick={() => setCleanup({ step: "confirm", result: null, message: "" })} className="mt-3 rounded-xl border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-200">Clean up now</button>}
+                {cleanup.step === "confirm" && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-amber-200">This deletes records and cannot be undone.</span>
+                    <button type="button" onClick={runCleanup} className="rounded-xl bg-amber-400 px-3 py-2 text-xs font-semibold text-slate-950">Yes, clean up</button>
+                    <button type="button" onClick={() => setCleanup({ step: "idle", result: null, message: "" })} className="rounded-xl border border-slate-600 px-3 py-2 text-xs text-slate-300">Cancel</button>
+                  </div>
+                )}
+                {cleanup.step === "running" && <p className="mt-3 flex items-center gap-2 text-xs text-slate-400"><RefreshCw className="h-3.5 w-3.5 animate-spin" /> Cleaning up…</p>}
+                {cleanup.step === "done" && (
+                  <p className={`mt-3 rounded-xl border p-3 text-xs ${cleanup.result?.stillHoldingTime ? "border-amber-400/20 bg-amber-500/10 text-amber-100" : "border-emerald-400/20 bg-emerald-500/10 text-emerald-100"}`}>
+                    Done{cleanup.result?.ranAt ? ` at ${new Date(cleanup.result.ranAt).toLocaleString("en-GB")}` : ""}: {cleanup.result?.usageTimeRemoved ?? 0} record{(cleanup.result?.usageTimeRemoved ?? 0) === 1 ? "" : "s"} had stored time removed, {cleanup.result?.usageSessionsDeleted ?? 0} older than 12 months deleted.{" "}
+                    {cleanup.result?.stillHoldingTime ? "Some records still hold a time: run it again." : "Checked afterwards: no record holds a stored time."}
+                  </p>
+                )}
+                {cleanup.step === "error" && <p className="mt-3 rounded-xl border border-rose-400/20 bg-rose-500/10 p-3 text-xs text-rose-100">{cleanup.message}</p>}
+              </div>
+            )}
 
             {error && <p className="mt-4 rounded-xl border border-rose-400/20 bg-rose-500/10 p-3 text-sm text-rose-100">{error}</p>}
             {loading ? <p className="mt-5 flex items-center gap-2 text-sm text-slate-400"><RefreshCw className="h-4 w-4 animate-spin" /> Loading…</p> : (

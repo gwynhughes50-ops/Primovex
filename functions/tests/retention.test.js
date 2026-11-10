@@ -85,6 +85,18 @@ test("time already stored on older sign-in sessions is removed, and the areas an
   assert.equal(data.usage_sessions.a.reports, 9, "everything else on the record is untouched");
   assert.deepEqual(data.usage_sessions.already.pages, [{ path: "/inventory", visits: 2 }]);
   assert.deepEqual(db.deleted, [], "nothing was deleted, only cleaned");
+  assert.equal(result.stillHoldingTime, false, "the run checks afterwards that no session still holds a time");
+  assert.equal(result.ranAt, NOW.toISOString());
+});
+
+test("if a run could not finish, it says time is still held rather than claiming success", async () => {
+  const many = {};
+  for (let i = 0; i < 30; i += 1) many[`s${i}`] = { startedAt: ts(NOW.getTime() - DAY), activeSeconds: 60, pages: [{ path: "/x", seconds: 60, visits: 1 }] };
+  const db = fakeDb({ usage_sessions: many });
+  const first = await removeStoredTime({ db, fieldDelete: () => GONE, batchSize: 10, maxBatches: 1 });
+  assert.equal(first, 10);
+  const result = await runRetention({ db, now: NOW, fieldDelete: () => GONE });
+  assert.equal(result.stillHoldingTime, false, "a full run finishes the rest");
 });
 
 test("removing time can be run again and again: the second run finds nothing", async () => {

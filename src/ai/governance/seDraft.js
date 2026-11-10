@@ -146,12 +146,12 @@ const clip = (text, n) => (text.length > n ? `${text.slice(0, n - 1)}…` : text
 
 export function buildSeReportDraft(question, { spaces = [], now = new Date() } = {}) {
   if (containsName(question)) {
-    return { text: "That looks like it has a person's name in it. Please don't type names into the Orb. Say it again using roles (the nurse, a receptionist) and, for a patient, their EMIS number only.", followUps: [] };
+    return { text: "That looks like it has a person's name in it. Please don't say or type names into the Orb. Say it again using roles (the nurse, a receptionist) and leave the patient out: you can add them on the form before you send it.", followUps: [] };
   }
   const parsed = parseSeReport(question, { spaces, now });
   if (parsed.description.length < 12) {
     return {
-      text: "Tell me what happened, in a sentence or two, and I'll set it up for you to confirm. For example: \"Report a significant event: the wrong vaccine was drawn up in Treatment Room 1 yesterday, no harm.\" No names please, and use an EMIS number for any patient.",
+      text: "Tell me what happened, in a sentence or two, and I'll set it up for you to confirm. For example: \"Report a significant event: the wrong vaccine was drawn up in Treatment Room 1 yesterday, no harm.\" No names please, and no patient details: add the patient on the form afterwards.",
       followUps: [],
     };
   }

@@ -1,5 +1,6 @@
 // Covers the sign-in and activity report maths (src/lib/usageReport.js).
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { areaLabel, describeSession, formatDuration, outOfHours, overview, sessionsToCsv, summariseUsers } from "../src/lib/usageReport.js";
 
 let n = 0;
@@ -137,6 +138,18 @@ t("the CSV has one row per session with the areas and visit counts, and can't ru
 
 t("a session with no start time is ignored rather than breaking the report", () => {
   assert.deepEqual(summariseUsers([{ id: "x", uid: "u" }], NOW), []);
+});
+
+t("the clean-up-now button is for administrators only, asks twice, says what it checked, and calls the server's administrator-only function", () => {
+  const panel = readFileSync(new URL("../src/components/security/UsageReportPanel.jsx", import.meta.url), "utf8");
+  const service = readFileSync(new URL("../src/services/usageService.js", import.meta.url), "utf8");
+  const server = readFileSync(new URL("../functions/index.js", import.meta.url), "utf8");
+  assert.match(panel, /\{isAdmin && \(\s*<div[^>]*>\s*<p[^>]*>Clean up records now/, "only an administrator sees it");
+  assert.match(panel, /step: "confirm"/, "it asks before deleting");
+  assert.match(panel, /stillHoldingTime/, "it reports whether any record still holds a time");
+  assert.match(panel, /audit\.usage\.cleanup/, "running it is audited");
+  assert.match(service, /httpsCallable\(functions, "runRetentionNow"/);
+  assert.match(server, /exports\.runRetentionNow[\s\S]{0,200}assertAdmin\(request\)/, "the server checks the person is an administrator");
 });
 
 console.log(`\n${n} passed`);
