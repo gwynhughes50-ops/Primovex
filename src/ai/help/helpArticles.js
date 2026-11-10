@@ -1320,4 +1320,23 @@ export const HELP_ARTICLES = [
     ],
     related: ["reset-password"],
   },
+  {
+    id: "reception-rota",
+    title: "Build the reception rota",
+    topic: "Timesheets",
+    asks: ["how do i build the reception rota", "reception rota", "make the rota", "work out the rota", "who is off on the rota", "rota rules", "friday late rota", "print the rota", "rota to excel"],
+    keywords: ["rota", "reception", "shift", "early", "late", "mid", "admin", "ty elan"],
+    where: "desktop",
+    steps: [
+      "Open Operations, Reception rota. You need the Reception rota permission (the Practice Manager has it; an administrator can give it to the person who builds the rota).",
+      "First time only: under \"People and rules\", add each member of the reception team from the staff list. Open a person to set the days they work, how they take part (rotate through the shifts, always one shift, a usual shift with cover, or only certain shifts), the shifts they never do, their earliest start and latest finish for each day, a weekly limit such as one late, and a day when they do one shift until a set time. Press \"Save the rules\".",
+      "Under \"Who is off\", pick the person, the first and last day and the reason, then press \"Add\". Sickness is entered as \"Off\": the rota doesn't keep why someone is off sick.",
+      "On the Rota tab, choose how many weeks and press \"Build the rota\". Primovex fills every shift, shares the shifts out fairly over the weeks, and rolls the Friday late round the team.",
+      "To change a place, pick another person in that box. Primovex checks the change straight away (a double booking, someone who is off, hours, a weekly limit, an empty essential shift) and keeps it when the week is built again. If a shift can't be covered it says so under \"Things to know about this week\".",
+      "If you add someone being off after a week was built, the rota marks the weeks affected: press \"Rebuild\" to fix them.",
+      "Print a week, or take this week or every built week to Excel, with the shift counter beside it.",
+    ],
+    tip: "Only the person who builds the rota and the Practice Manager can see it. It holds who is on which shift and who is off, never why.",
+    open: { label: "Open the reception rota", route: "/reception-rota" },
+  },
 ];

@@ -2,6 +2,9 @@
 import assert from "node:assert/strict";
 import { DAYS, DEFAULT_SHIFTS, DEFAULT_SETTINGS, checkRules, mondayOf, addDays, newPerson, shiftById, toMinutes } from "../src/modules/rota/rotaModel.js";
 import { assignMin, canDo, generateWeek, generateWeeks, historyAfter, shiftIdOfKey, weekCounters } from "../src/modules/rota/rotaEngine.js";
+import { checkWeek, historyBefore, lockedOf, setPlace, withNames } from "../src/modules/rota/rotaWeek.js";
+import { buildRotaHtml, buildRotaXlsx, placeText, weekSheet } from "../src/modules/rota/rotaExport.js";
+import { unzipSync, strFromU8 } from "fflate";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
@@ -234,6 +237,67 @@ t("more people than shifts: the extra person is told they have no shift, not los
   const week = generateWeek({ rules: bigger, mondayIso: FIRST });
   const noShift = week.issues.filter((i) => /has no shift \(more people than shifts\)/.test(i.text));
   assert.equal(noShift.length, 5, "one person each day");
+});
+
+t("saved weeks: history for a new week comes from the weeks before it, and places fixed by hand are found again", () => {
+  const saved = Object.fromEntries(weeks.slice(0, 3).map((w) => [w.mondayIso, w]));
+  const h = historyBefore(saved, weeks[3].mondayIso, rules);
+  assert.ok(h.counts.helen.late >= 1);
+  assert.equal(Object.values(h.friLate).reduce((a, b) => a + b, 0), 3);
+  assert.deepEqual(historyBefore(saved, weeks[0].mondayIso, rules).counts, {}, "nothing before the first week");
+  const edited = setPlace({ ...weeks[0] }, rules, "mon", "late", "kim");
+  assert.deepEqual(lockedOf(edited), { mon: { late: "kim" } });
+  assert.equal(edited.days.mon.slots.late.name, "Kim");
+  assert.equal(edited.edited["mon|late"], true);
+  const cleared = setPlace(edited, rules, "mon", "late", "");
+  assert.equal(cleared.days.mon.slots.late, undefined);
+  assert.ok(cleared.days.mon.unfilled.includes("late"));
+});
+
+t("checking a week after changes by hand: double bookings, people who are off, hours and limits, empty shifts", () => {
+  const week = weeks[0];
+  assert.deepEqual(checkWeek(rules, week, []).filter((i) => i.severity === "gap"), [], "a built week has no gaps");
+  const helenMon = setPlace(week, rules, "mon", "early1", "helen");
+  assert.ok(checkWeek(rules, helenMon, []).some((i) => /Helen cannot do Early 1/.test(i.text)));
+  const twice = setPlace(week, rules, "tue", "early1", week.days.tue.slots.mid.uid);
+  assert.ok(checkWeek(rules, twice, []).some((i) => /is on 2 shifts/.test(i.text)));
+  const off = checkWeek(rules, week, [{ uid: week.days.wed.slots.mid.uid, from: "2026-11-18", to: "2026-11-18" }]);
+  assert.ok(off.some((i) => i.day === "wed" && /but is off/.test(i.text)));
+  const empty = setPlace(week, rules, "thu", "tyelan", "");
+  assert.ok(checkWeek(rules, empty, []).some((i) => i.severity === "gap" && /nobody is on Ty Elan/.test(i.text)));
+  const adminEmpty = setPlace(week, rules, "thu", "admin3", "");
+  assert.ok(checkWeek(rules, adminEmpty, []).every((i) => i.severity !== "gap"), "an empty Admin 3 is only a note");
+  const twoLates = setPlace(setPlace(week, rules, "mon", "late", "helen"), rules, "tue", "late", "helen");
+  assert.ok(checkWeek(rules, twoLates, []).some((i) => /Helen has more than 1 late shift this week/.test(i.text)));
+});
+
+t("the Excel file: one sheet per week laid out like the current rota, with the counters, and nothing else", () => {
+  const named = weeks.slice(0, 2).map((w) => withNames(w, rules));
+  const files = unzipSync(buildRotaXlsx(named, rules));
+  assert.ok(files["xl/workbook.xml"] && files["xl/worksheets/sheet1.xml"] && files["xl/worksheets/sheet2.xml"] && files["[Content_Types].xml"]);
+  const wb = strFromU8(files["xl/workbook.xml"]);
+  assert.match(wb, /name="w\.c\. 16 Nov"/);
+  assert.match(wb, /name="w\.c\. 23 Nov"/);
+  const sheet = strFromU8(files["xl/worksheets/sheet1.xml"]);
+  assert.match(sheet, />Karen L \(till 12\)</);
+  assert.match(sheet, />Early 1 8-16\.30</);
+  const { rows, counterRows } = weekSheet(named[0], rules);
+  assert.equal(rows[0][0], "w.c. 16 Nov");
+  assert.equal(rows.length, 1 + 11, "a row for each of the eleven places");
+  assert.equal(counterRows[0][counterRows[0].length - 1], "Total");
+  assert.equal(placeText({ name: "Debbie", until: "10:00" }), "Debbie (till 10)");
+  assert.equal(placeText(undefined), "");
+  assert.doesNotMatch(sheet, /sickness|reason/i);
+});
+
+t("the printed rota names people and shifts, escapes what it prints, and carries no reasons for absence", () => {
+  const named = withNames(weeks[0], rules);
+  named.days.mon.slots.late = { ...named.days.mon.slots.late, name: "<b>Kim</b>" };
+  const html = buildRotaHtml([named], rules, { printedBy: "Her", printedAt: new Date("2026-11-10T10:00:00Z") });
+  assert.match(html, /Reception rota: week commencing 16 November 2026/);
+  assert.match(html, /&lt;b&gt;Kim&lt;\/b&gt;/);
+  assert.doesNotMatch(html, /<b>Kim<\/b>/);
+  assert.doesNotMatch(html, /sickness/i);
 });
 
 console.log(`\n${n} passed`);

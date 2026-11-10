@@ -2202,6 +2202,68 @@ async function main() {
     await assertFails(getDoc(doc(anon, TL, "t-d")));
   });
 
+  console.log("\n=== 33. Reception rota: the rules, the weeks and who is off (reception_rota_rules, reception_rota_weeks, reception_rota_absences) ===");
+  const rotaLead = testEnv.authenticatedContext("rotalead-uid").firestore(); // a custom role with rota.manage only (given to the person who builds the rota)
+  const rotaView = testEnv.authenticatedContext("rotaview-uid").firestore(); // a custom role with rota.read only
+  const RR = "reception_rota_rules", RW = "reception_rota_weeks", RA = "reception_rota_absences";
+  const rulesDoc = (extra = {}) => ({ shifts: [{ id: "early1", label: "Early 1" }], people: [{ uid: "u1", name: "Kim" }], settings: {}, updatedAt: new Date(), updatedByUid: "rotalead-uid", updatedByName: "Lead", ...extra });
+  const weekDoc = (extra = {}) => ({ mondayIso: "2026-11-16", days: { mon: { iso: "2026-11-16", slots: {}, unfilled: [] } }, issues: [], edited: {}, updatedAt: new Date(), updatedByUid: "rotalead-uid", updatedByName: "Lead", ...extra });
+  const absenceDoc = (extra = {}) => ({ uid: "u1", name: "Kim", from: "2026-11-30", to: "2026-12-02", reason: "leave", createdAt: new Date(), createdByUid: "rotalead-uid", createdByName: "Lead", ...extra });
+  await seed(async (db) => {
+    await setDoc(doc(db, "roles", "Rota Lead"), { name: "Rota Lead", capabilities: ["rota.manage", "dashboard.read"], builtIn: false });
+    await setDoc(doc(db, "roles", "Rota Viewer"), { name: "Rota Viewer", capabilities: ["rota.read", "dashboard.read"], builtIn: false });
+    await setDoc(doc(db, "users", "rotalead-uid"), { role: "Rota Lead", displayName: "Lead" });
+    await setDoc(doc(db, "users", "rotaview-uid"), { role: "Rota Viewer", displayName: "Viewer" });
+    await setDoc(doc(db, RR, "main"), rulesDoc());
+    await setDoc(doc(db, RW, "2026-11-23"), weekDoc({ mondayIso: "2026-11-23" }));
+    await setDoc(doc(db, RA, "a-seed"), absenceDoc());
+  });
+  await check("The person with rota.manage, the Practice Manager and an administrator CAN read and change the rules, and build and change a week", async () => {
+    for (const [who, uid] of [[rotaLead, "rotalead-uid"], [pm, "pm-uid"], [admin, "admin-uid"]]) {
+      await assertSucceeds(getDoc(doc(who, RR, "main")));
+      await assertSucceeds(setDoc(doc(who, RR, "main"), rulesDoc({ updatedByUid: uid })));
+      await assertSucceeds(getDocs(collection(who, RW)));
+    }
+    await assertSucceeds(setDoc(doc(rotaLead, RW, "2026-11-16"), weekDoc()));
+    await assertSucceeds(setDoc(doc(pm, RW, "2026-11-23"), weekDoc({ mondayIso: "2026-11-23" })));
+  });
+  await check("Someone with rota.read CAN see the rules, the weeks and the absences but CANNOT change any of them", async () => {
+    await assertSucceeds(getDoc(doc(rotaView, RR, "main")));
+    await assertSucceeds(getDocs(collection(rotaView, RW)));
+    await assertSucceeds(getDocs(collection(rotaView, RA)));
+    await assertFails(setDoc(doc(rotaView, RR, "main"), rulesDoc()));
+    await assertFails(setDoc(doc(rotaView, RW, "2026-11-30"), weekDoc({ mondayIso: "2026-11-30" })));
+    await assertFails(addDoc(collection(rotaView, RA), absenceDoc({ createdByUid: "rotaview-uid" })));
+    await assertFails(deleteDoc(doc(rotaView, RA, "a-seed")));
+  });
+  await check("Nobody else CAN see or change the rota: a nurse, reception staff, a read-only user, a partner and an anonymous visitor are all refused", async () => {
+    for (const who of [nurse, reception, readonly, partner, user, anon]) {
+      await assertFails(getDoc(doc(who, RR, "main")));
+      await assertFails(getDocs(collection(who, RW)));
+      await assertFails(getDocs(collection(who, RA)));
+      await assertFails(setDoc(doc(who, RR, "main"), rulesDoc()));
+      await assertFails(addDoc(collection(who, RA), absenceDoc({ createdByUid: "x" })));
+    }
+  });
+  await check("An absence holds 'leave' or 'other' only: sickness (health data) is refused as a reason, and it can only be recorded as yourself", async () => {
+    await assertSucceeds(addDoc(collection(rotaLead, RA), absenceDoc()));
+    await assertSucceeds(addDoc(collection(rotaLead, RA), absenceDoc({ reason: "other" })));
+    await assertFails(addDoc(collection(rotaLead, RA), absenceDoc({ reason: "sickness" })));
+    await assertFails(addDoc(collection(rotaLead, RA), absenceDoc({ reason: "Cancer treatment" })));
+    await assertFails(addDoc(collection(rotaLead, RA), absenceDoc({ createdByUid: "someone-else" })));
+    await assertSucceeds(deleteDoc(doc(rotaLead, RA, "a-seed")));
+  });
+  await check("The rules and a week CANNOT carry extra fields, and a week must be named by a date", async () => {
+    await assertFails(setDoc(doc(rotaLead, RR, "main"), rulesDoc({ notes: "extra" })));
+    await assertFails(setDoc(doc(rotaLead, RW, "2026-12-07"), weekDoc({ mondayIso: "2026-12-07", sickness: "Kim" })));
+    await assertFails(setDoc(doc(rotaLead, RW, "next-week"), weekDoc()));
+  });
+  await check("Only an administrator CAN remove the rules; the person with rota.manage CAN remove a week", async () => {
+    await assertFails(deleteDoc(doc(rotaLead, RR, "main")));
+    await assertSucceeds(deleteDoc(doc(rotaLead, RW, "2026-11-23")));
+    await assertSucceeds(deleteDoc(doc(admin, RR, "main")));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);

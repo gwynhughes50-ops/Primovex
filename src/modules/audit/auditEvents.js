@@ -97,6 +97,20 @@ export function laptopEvent(type, { laptopId = "", assetCode = "", summary = "",
   return event(`it.laptop.${text(type, 30)}`, "it", "it_laptop", laptopId, summary || `${text(assetCode, 40)}: ${text(type, 30)}`, { assetCode: text(assetCode, 40) });
 }
 
+// Reception rota. The ledger records that the rota was set up, built or changed, and that an absence was entered or removed. It never holds who was off, or why.
+export function rotaEvent(type, { mondayIso = "" } = {}) {
+  const week = text(mondayIso, 12);
+  const lines = {
+    rules_saved: "Reception rota rules saved",
+    week_built: `Reception rota built for the week of ${week}`,
+    week_changed: `Reception rota changed by hand for the week of ${week}`,
+    week_removed: `Reception rota removed for the week of ${week}`,
+    absence_added: "Reception rota: an absence was entered",
+    absence_removed: "Reception rota: an absence was removed",
+  };
+  return event(`rota.${text(type, 30)}`, "rota", "reception_rota", week || null, lines[type] || "Reception rota changed", week ? { week } : {});
+}
+
 // ---- fridge temperature readings (archived with a reason, never deleted; the typed note is not copied here) ----
 export function temperatureReadingEvent(step, { reading = {}, reasonKey = "" } = {}) {
   const unit = text(reading.unitName || "a fridge", 80);

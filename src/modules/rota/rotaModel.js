@@ -13,7 +13,8 @@ export const MODES = {
   only: "Only works particular shifts",
 };
 
-export const ABSENCE_REASONS = { leave: "Annual leave", sickness: "Sickness", other: "Other absence" };
+// Only "leave" or "off" is kept. Why someone is off sick is health information and the rota does not need it, so there is no "sickness" choice: sickness is entered as "Off (any other reason)".
+export const ABSENCE_REASONS = { leave: "Annual leave", other: "Off (sickness or any other reason)" };
 
 // "08:30" to minutes, so times can be compared.
 export const toMinutes = (hhmm) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || "")); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };

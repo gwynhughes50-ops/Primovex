@@ -79,6 +79,10 @@ export const CAPABILITIES = {
     read: "itAssets.read",
     manage: "itAssets.manage",
   },
+  rota: {
+    read: "rota.read",
+    manage: "rota.manage",
+  },
   waste: {
     read: "waste.read",
     manage: "waste.manage",
@@ -215,6 +219,8 @@ export const CAPABILITY_CATALOG = [
   { id: "timesheets.manage", label: "Timesheets: set up everyone's working pattern and hours, and see and update their timesheets", group: "Staff" },
   { id: "itAssets.read", label: "IT equipment: see the laptop register and who has each laptop", group: "IT" },
   { id: "itAssets.manage", label: "IT equipment: add laptops, loan them out, record returns and updates, and print their QR labels", group: "IT" },
+  { id: "rota.read", label: "Reception rota: see the rota, the rules and who is off", group: "Staff" },
+  { id: "rota.manage", label: "Reception rota: set the rules, enter who is off, build the rota and change it", group: "Staff" },
   { id: "timesheets.payroll", label: "Timesheets: the payroll team. See signed-off timesheets and send them to payroll, or return one with a reason", group: "Staff" },
   { id: "waste.read", label: "Clinical waste: see the consignment notes and collection records", group: "Compliance" },
   { id: "waste.manage", label: "Clinical waste: add consignment notes (drop in the Stericycle PDF) and correct them", group: "Compliance" },
@@ -256,6 +262,7 @@ export const ROLE_TEMPLATES = {
     "waste.manage",
     "timesheets.manage",
     "itAssets.manage",
+    "rota.manage",
     "temperature.archive",
     "documents.intake",
     "clinflow.read",

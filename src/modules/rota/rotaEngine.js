@@ -113,7 +113,7 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
     const presentUids = new Set(present.map((p) => p.uid));
     const firstFree = (shiftId) => slots.find((s) => s.shift.id === shiftId && !assigned[s.key]);
     const put = (slot, uid, source, until = null) => {
-      assigned[slot.key] = { uid, source, ...(until ? { until } : {}) };
+      assigned[slot.key] = { uid, name: byUid[uid]?.name || "", source, ...(until ? { until } : {}) };
       used.add(uid);
       bump(weekCounts, uid, slot.shift.group);
     };
