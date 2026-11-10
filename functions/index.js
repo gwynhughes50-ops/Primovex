@@ -613,7 +613,8 @@ exports.listStaffDirectory = onCall({ region: "europe-west2" }, async (request) 
       || hasCapability(capabilities, "training.manage") // linking staff training records to accounts
       || hasCapability(capabilities, "training.manageClinical")
       || hasCapability(capabilities, "timesheets.manage") // linking timesheet staff to accounts and choosing line managers
-      || hasCapability(capabilities, "itAssets.manage"); // choosing who a laptop is assigned or lent to
+      || hasCapability(capabilities, "itAssets.manage") // choosing who a laptop is assigned or lent to
+      || hasCapability(capabilities, "rota.manage"); // choosing the reception team for the rota
     if (!allowed) throw new HttpsError("permission-denied", "You need SAR, concerns, fridge, admin or stock-verification access to list staff.");
   }
   return { staff: await listStaffDirectory({ db }) };

@@ -140,10 +140,14 @@ export default function RotaRulesPanel({ rules, actor, canManage }) {
   const [draft, setDraft] = useState(() => clone(rules));
   const [dirty, setDirty] = useState(false);
   const [staff, setStaff] = useState([]);
+  const [staffProblem, setStaffProblem] = useState("");
   const [pick, setPick] = useState("");
   const [state, setState] = useState({ busy: false, error: "", saved: false });
   useEffect(() => { if (!dirty) setDraft(clone(rules)); }, [rules]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (canManage) listStaffDirectory().then(setStaff).catch(() => setStaff([])); }, [canManage]);
+  useEffect(() => {
+    if (!canManage) return;
+    listStaffDirectory().then((rows) => { setStaff(rows); setStaffProblem(rows.length ? "" : "The staff list is empty. Staff are added in Practice Admin."); }).catch((e) => { setStaff([]); setStaffProblem(`The staff list could not be loaded${e?.message ? `: ${e.message}` : "."}`); });
+  }, [canManage]);
 
   const change = (next) => { setDraft(next); setDirty(true); setState((s) => ({ ...s, saved: false })); };
   const onRota = new Set(draft.people.map((p) => p.uid));
@@ -163,6 +167,7 @@ export default function RotaRulesPanel({ rules, actor, canManage }) {
         {canManage && (
           <div className="mt-3 flex flex-wrap items-end gap-2">
             <label className="text-xs font-bold">Add to the rota<select value={pick} onChange={(e) => setPick(e.target.value)} className={`${FIELD} mt-1 block min-w-60 font-normal`}><option value="">Choose from the staff list</option>{choices.map((s) => <option key={s.id} value={s.id}>{s.label}{s.role ? ` · ${s.role}` : ""}</option>)}</select></label>
+            {staffProblem && <p className="basis-full text-sm text-rose-200">{staffProblem}</p>}
             <button type="button" className={PRIMARY} disabled={!pick} onClick={() => { const s = staff.find((x) => x.id === pick); if (s) { change({ ...draft, people: [...draft.people, newPerson(s.id, s.label)] }); setPick(""); } }}>Add</button>
           </div>
         )}

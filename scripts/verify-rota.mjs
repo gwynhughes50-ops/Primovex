@@ -1,5 +1,6 @@
 // Covers the reception rota engine (src/modules/rota): the rules from the current rota are entered as rules, and the weeks it builds are checked against them.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { DAYS, DEFAULT_SHIFTS, DEFAULT_SETTINGS, checkRules, mondayOf, addDays, newPerson, shiftById, toMinutes } from "../src/modules/rota/rotaModel.js";
 import { assignMin, canDo, generateWeek, generateWeeks, historyAfter, shiftIdOfKey, weekCounters } from "../src/modules/rota/rotaEngine.js";
 import { checkWeek, historyBefore, lockedOf, setPlace, withNames } from "../src/modules/rota/rotaWeek.js";
@@ -298,6 +299,15 @@ t("the printed rota names people and shifts, escapes what it prints, and carries
   assert.match(html, /&lt;b&gt;Kim&lt;\/b&gt;/);
   assert.doesNotMatch(html, /<b>Kim<\/b>/);
   assert.doesNotMatch(html, /sickness/i);
+});
+
+t("the person who builds the rota can load the staff list to pick the team from (the server allows rota.manage), and a failure is shown, not swallowed", () => {
+  const server = readFileSync(new URL("../functions/index.js", import.meta.url), "utf8");
+  const block = server.slice(server.indexOf("exports.listStaffDirectory"), server.indexOf("exports.listStaffDirectory") + 2600);
+  assert.match(block, /hasCapability\(capabilities, "rota\.manage"\)/);
+  const panel = readFileSync(new URL("../src/components/rota/RotaRulesPanel.jsx", import.meta.url), "utf8");
+  assert.match(panel, /The staff list could not be loaded/);
+  assert.match(panel, /The staff list is empty/);
 });
 
 console.log(`\n${n} passed`);
