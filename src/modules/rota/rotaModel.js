@@ -36,6 +36,12 @@ export const DEFAULT_SHIFTS = [
   { id: "tyelan", label: "Ty Elan", group: "tyelan", start: "08:30", end: "17:00", essential: true, count: 1, days: DAYS },
 ];
 
+// The shifts in the usual order of the reception rota (the order of DEFAULT_SHIFTS). A shift that is not one of the usual ones keeps its place relative to the others and goes after them.
+export const inStandardOrder = (shifts = []) => {
+  const rank = new Map(DEFAULT_SHIFTS.map((s, i) => [s.id, i]));
+  return shifts.map((s, i) => ({ s, i })).sort((a, b) => ((rank.has(a.s.id) ? rank.get(a.s.id) : 1000 + a.i) - (rank.has(b.s.id) ? rank.get(b.s.id) : 1000 + b.i))).map((x) => x.s);
+};
+
 export const DEFAULT_SETTINGS = {
   avoidLateThenEarly: true, // not an early shift the morning after a late
   rollFridayLate: true, // the Friday late goes round the team in turn

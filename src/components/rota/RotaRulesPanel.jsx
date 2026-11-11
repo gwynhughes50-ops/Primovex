@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { listStaffDirectory } from "@/services/staffDirectoryService";
-import { DAYS, DAY_LABELS, DAY_SHORT, MODES, TIME_CHOICES, checkRules, groupLabel, groupsOf, newPerson, timeLabel } from "@/modules/rota/rotaModel";
+import { DAYS, DAY_LABELS, DAY_SHORT, MODES, TIME_CHOICES, checkRules, groupLabel, groupsOf, inStandardOrder, newPerson, timeLabel } from "@/modules/rota/rotaModel";
 import { saveRules } from "@/modules/rota/rotaService";
 
 // The rules, entered once. Each person: the days they work, how they take part (rotate / always one shift / a usual shift and cover / only certain shifts), shifts they never do, earliest start and
@@ -110,7 +110,8 @@ function ShiftsEditor({ rules, onChange, canManage }) {
   return (
     <section className="rounded-2xl border border-[var(--medtrak-border)] p-4">
       <h2 className="text-lg font-bold text-slate-50">The shifts</h2>
-      <p className="text-xs text-[var(--medtrak-muted)]">The order here is the order down the rota, in print and in Excel. Use the arrows to move a shift.</p>
+      <p className="text-xs text-[var(--medtrak-muted)]">The order here is the order down the rota, in print and in Excel. Use the arrows to move a shift, or put them all in the usual order in one go. Press "Save the rules" afterwards.</p>
+      {canManage && <button type="button" className={`${BTN} mt-2`} onClick={() => onChange({ ...rules, shifts: inStandardOrder(rules.shifts) })}>Put the shifts in the usual order (Early 1, Early 2, Mid, Late, Admin 1, 2, 3, Desk/phones, Desk/phones mornings, Ty Elan)</button>}
       <p className="text-xs text-[var(--medtrak-muted)]">An essential shift must be covered every day: if it can't be, the rota says so. A shift that is not essential is given up when there are too few people, the lowest "given up" number first.</p>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[820px] text-left text-sm">

@@ -1,7 +1,7 @@
 // Covers the reception rota engine (src/modules/rota): the rules from the current rota are entered as rules, and the weeks it builds are checked against them.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { ABSENCE_REASONS, DAYS, DEFAULT_SHIFTS, ruleCoversShift, DEFAULT_SETTINGS, checkRules, mondayOf, addDays, newPerson, shiftById, toMinutes } from "../src/modules/rota/rotaModel.js";
+import { ABSENCE_REASONS, DAYS, DEFAULT_SHIFTS, inStandardOrder, ruleCoversShift, DEFAULT_SETTINGS, checkRules, mondayOf, addDays, newPerson, shiftById, toMinutes } from "../src/modules/rota/rotaModel.js";
 import { assignMin, canDo, generateWeek, generateWeeks, historyAfter, shiftIdOfKey, weekCounters } from "../src/modules/rota/rotaEngine.js";
 import { checkWeek, historyBefore, lockedOf, setPlace, withNames } from "../src/modules/rota/rotaWeek.js";
 import { buildRotaHtml, buildRotaXlsx, placeText, runningCounters, totalRows, weekSheet } from "../src/modules/rota/rotaExport.js";
@@ -361,6 +361,18 @@ t("the running total adds every week up, in the Excel file and on the printout, 
   assert.doesNotMatch(buildRotaHtml(named.slice(0, 1), rules), /Running total/);
   const panel = readFileSync(new URL("../src/components/rota/RotaWeekPanel.jsx", import.meta.url), "utf8");
   assert.match(panel, /Running total \(/);
+});
+
+t("rules saved in the old order can be put in the usual order in one go: the usual shifts are sorted, any other shift keeps its place after them, nothing is lost", () => {
+  const old = ["early1", "early2", "mid", "late", "admin1", "tyelan", "admin2", "desk", "desk2", "admin3"].map((id) => ({ id, label: id }));
+  assert.deepEqual(inStandardOrder(old).map((x) => x.id), ["early1", "early2", "mid", "late", "admin1", "admin2", "admin3", "desk", "desk2", "tyelan"]);
+  const withOwn = [{ id: "extra1" }, ...old, { id: "extra2" }];
+  assert.deepEqual(inStandardOrder(withOwn).map((x) => x.id), ["early1", "early2", "mid", "late", "admin1", "admin2", "admin3", "desk", "desk2", "tyelan", "extra1", "extra2"]);
+  assert.equal(inStandardOrder(old).length, old.length);
+  assert.deepEqual(inStandardOrder([]), []);
+  const panel = readFileSync(new URL("../src/components/rota/RotaRulesPanel.jsx", import.meta.url), "utf8");
+  assert.match(panel, /Put the shifts in the usual order/);
+  assert.match(panel, /inStandardOrder\(rules\.shifts\)/);
 });
 
 console.log(`\n${n} passed`);
