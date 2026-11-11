@@ -4,12 +4,14 @@ import StatusBadge from "@/components/common/StatusBadge";
 import {
   MEETING_FURTHER_REQUESTS,
   addConcernMeeting,
+  cancelConcernMeeting,
   formatMeetingDate,
   getMeetingForm,
   getMeetingStatus,
   subscribeConcernMeetings,
   updateConcernMeeting,
 } from "@/modules/governance/services/concernService";
+import { MEETING_CANCEL_REASONS, cancelledText, isCancelled } from "@/modules/governance/concernMeetings";
 
 // One component for both the desktop page and the mobile sheet — only the
 // class names differ, so the two can't drift apart.
@@ -59,8 +61,10 @@ export default function ConcernMeetings({ concern, actor, isTeam, variant = "des
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [cancelling, setCancelling] = useState(null); // { id, reasonKey } while someone is cancelling a meeting
 
   useEffect(() => {
+    setCancelling(null);
     setForm(null);
     setEditing(null);
     setError("");
@@ -75,6 +79,20 @@ export default function ConcernMeetings({ concern, actor, isTeam, variant = "des
   const toggleRequest = (key) => update({
     furtherRequests: form.furtherRequests.includes(key) ? form.furtherRequests.filter((item) => item !== key) : [...form.furtherRequests, key],
   });
+
+  const confirmCancel = async (meeting) => {
+    setBusy(true);
+    setError("");
+    try {
+      await cancelConcernMeeting(concern, meeting, cancelling?.reasonKey, actor);
+      setCancelling(null);
+    } catch (err) {
+      console.error(err);
+      setError(err?.message || "Couldn't cancel the meeting.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const save = async () => {
     setBusy(true);
@@ -168,6 +186,7 @@ export default function ConcernMeetings({ concern, actor, isTeam, variant = "des
               </div>
               <div className="mt-2 space-y-1">
                 <p><span className={s.faint}>Requested:</span> {formatMeetingDate(meeting.requestedDate)} by {meeting.requestedBy || "not recorded"}</p>
+                {isCancelled(meeting) && <p className="font-semibold text-rose-400">{cancelledText(meeting)}</p>}
                 {meeting.attendees && <p><span className={s.faint}>Attending:</span> {meeting.attendees}</p>}
                 {meeting.outcome && <p><span className={s.faint}>Outcome:</span> <span className="whitespace-pre-wrap">{meeting.outcome}</span></p>}
               </div>
@@ -179,15 +198,37 @@ export default function ConcernMeetings({ concern, actor, isTeam, variant = "des
               )}
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                 <span className={`text-xs ${s.faint}`}>Logged by {meeting.createdByName || "Unknown"}</span>
-                {isTeam && !form && (
+                {isTeam && !form && !cancelling && (
                   <span className="flex flex-wrap gap-2">
-                    {(meeting.furtherRequests || []).includes("second_meeting") && (
-                      <button type="button" onClick={() => openNew({ requestedBy: meeting.requestedBy || "" })} className={s.secondary}>Arrange second meeting</button>
+                    {isCancelled(meeting) ? (
+                      <button type="button" onClick={() => openNew({ requestedBy: meeting.requestedBy || "" })} className={s.secondary}>Arrange a new meeting</button>
+                    ) : (
+                      <>
+                        {(meeting.furtherRequests || []).includes("second_meeting") && (
+                          <button type="button" onClick={() => openNew({ requestedBy: meeting.requestedBy || "" })} className={s.secondary}>Arrange second meeting</button>
+                        )}
+                        <button type="button" onClick={() => openEdit(meeting)} className={s.secondary}>Edit</button>
+                        <button type="button" onClick={() => { setCancelling({ id: meeting.id, reasonKey: "" }); setError(""); }} className={s.secondary}>Cancel meeting</button>
+                      </>
                     )}
-                    <button type="button" onClick={() => openEdit(meeting)} className={s.secondary}>Edit</button>
                   </span>
                 )}
               </div>
+              {cancelling?.id === meeting.id && (
+                <div className={`mt-3 border-t pt-3 ${s.divider}`}>
+                  <Field label="Why is the meeting being cancelled?" hint="Choose a reason. It is kept in the case history and the audit trail." styles={s}>
+                    <select value={cancelling.reasonKey} onChange={(e) => setCancelling({ ...cancelling, reasonKey: e.target.value })} className={s.field}>
+                      <option value="">Choose a reason</option>
+                      {MEETING_CANCEL_REASONS.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
+                    </select>
+                  </Field>
+                  {error && <p role="alert" className="mt-2 rounded-xl border border-rose-400/40 bg-rose-500/10 p-2 text-sm text-rose-400">{error}</p>}
+                  <div className="mt-3 flex flex-wrap justify-end gap-2">
+                    <button type="button" onClick={() => { setCancelling(null); setError(""); }} disabled={busy} className={s.secondary}>Keep the meeting</button>
+                    <button type="button" onClick={() => confirmCancel(meeting)} disabled={busy || !cancelling.reasonKey} className={s.primary}>{busy ? "Cancelling..." : "Cancel this meeting"}</button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

@@ -247,6 +247,13 @@ async function main() {
   await check("Partner CANNOT create or edit a meeting", () => assertFails(setDoc(doc(partner, "governance_concern_meetings", "m-y"), meeting())));
   await check("Uninvolved ReadOnly user CANNOT read a meeting", () => assertFails(getDoc(doc(readonly, "governance_concern_meetings", "m-seed"))));
   await check("Uninvolved ReadOnly user CANNOT create a meeting", () => assertFails(setDoc(doc(readonly, "governance_concern_meetings", "m-z"), meeting())));
+  const cancelPatch = (uid) => ({ cancelled: true, cancelReasonKey: "staff_unavailable", cancelReason: "The staff who were to attend were not available", cancelledByUid: uid, cancelledByName: "Reception", cancelledAt: new Date() });
+  await check("Concerns team CAN cancel a meeting with a reason (it stays on the case as cancelled)", async () => {
+    await assertSucceeds(updateDoc(doc(reception, "governance_concern_meetings", "m-seed"), cancelPatch("reception-uid")));
+  });
+  await check("Person involved in the case, a partner and an uninvolved user CANNOT cancel a meeting", async () => {
+    for (const who of [user, partner, readonly, anon]) await assertFails(updateDoc(doc(who, "governance_concern_meetings", "m-seed"), cancelPatch("x")));
+  });
   await check("Anonymous CANNOT read a meeting", () => assertFails(getDoc(doc(anon, "governance_concern_meetings", "m-seed"))));
   await check("Concerns team CANNOT delete a meeting (admin only)", () => assertFails(deleteDoc(doc(reception, "governance_concern_meetings", "m-new"))));
   await check("Admin CAN delete a meeting", () => assertSucceeds(deleteDoc(doc(admin, "governance_concern_meetings", "m-new"))));

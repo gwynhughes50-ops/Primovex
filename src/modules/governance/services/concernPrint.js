@@ -19,6 +19,7 @@ import {
   recordCasePrinted,
   toDate,
 } from "@/modules/governance/services/concernService";
+import { cancelledText } from "@/modules/governance/concernMeetings";
 
 // Every value that comes from a case is escaped before it goes into the print
 // document — case text is typed in by staff and must never be able to run as
@@ -98,6 +99,7 @@ export function buildConcernSummaryHtml({ concern = {}, meetings = null, timelin
       const booked = meeting.bookedDate ? `${formatMeetingDate(meeting.bookedDate)}${meeting.bookedTime ? ` at ${meeting.bookedTime}` : ""}` : "Not yet booked";
       return `<div class="meeting">
         <p><strong>${esc(status.label)}</strong> &middot; ${esc(booked)}</p>
+        ${meeting.cancelled ? `<p><strong>${esc(cancelledText(meeting))}</strong></p>` : ""}
         <p>Requested ${esc(formatMeetingDate(meeting.requestedDate))} by ${esc(meeting.requestedBy || "not recorded")}</p>
         ${meeting.attendees ? `<p>Attending: ${esc(meeting.attendees)}</p>` : ""}
         ${meeting.outcome ? `<p>Outcome: ${esc(meeting.outcome)}</p>` : ""}

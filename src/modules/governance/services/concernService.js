@@ -23,6 +23,7 @@ import { recordAudit } from "@/modules/audit/recordAudit";
 import { concernEvent } from "@/modules/audit/auditEvents";
 import { AUDIT_TYPE, auditEntry, cleanChanges } from "@/modules/governance/concernAudit";
 import { cleanContact, contactFromForm, hasContact, legacyContact } from "@/modules/governance/concernContact";
+import { cancelFields, cancelProblem, cancelTimelineMessage, isCancelled } from "@/modules/governance/concernMeetings";
 import { STEP_ACTIONS, WITHDRAWN, buildClosePatch, buildStep, buildWithdrawal, otherKey, partyOf, sentCount, ukDay } from "@/modules/governance/concernCase";
 import { demoGovernanceCases, demoConcernTimeline, demoLearningActions } from "@/data/demoDataset";
 
@@ -670,6 +671,7 @@ export function validateMeetingForm(form = {}) {
 
 // Where the meeting has got to, worked out from what's been filled in.
 export function getMeetingStatus(meeting = {}, now = new Date()) {
+  if (isCancelled(meeting)) return { key: "cancelled", label: "Cancelled", tone: "critical" };
   if (String(meeting.outcome || "").trim()) return { key: "held", label: "Outcome recorded", tone: "success" };
   if (meeting.bookedDate) {
     const when = new Date(`${meeting.bookedDate}T${meeting.bookedTime || "23:59"}`);
@@ -726,6 +728,7 @@ export async function addConcernMeeting(concernId, form, actor = {}) {
 // timeline can say what actually changed.
 export async function updateConcernMeeting(meeting, form, actor = {}) {
   if (isSafeSyntheticMode() || !meeting?.id) return;
+  if (isCancelled(meeting)) throw new Error("A cancelled meeting can't be edited. Arrange a new meeting instead.");
   const problem = validateMeetingForm(form);
   if (problem) throw new Error(problem);
   const fields = buildMeetingFields(form);
@@ -739,6 +742,22 @@ export async function updateConcernMeeting(meeting, form, actor = {}) {
     message: sentence.charAt(0).toUpperCase() + sentence.slice(1) + ".",
     actor,
   });
+}
+
+// Cancel a meeting, with a reason chosen from a list. The meeting is kept (it shows as cancelled, who cancelled it, when and why), the reason goes into the case history, which is what the audit trail
+// and the printed audit table are built from, and the governed ledger records that a meeting was cancelled. `concern` is the case, for the ledger line.
+export async function cancelConcernMeeting(concern, meeting, reasonKey, actor = {}) {
+  const problem = cancelProblem(meeting, reasonKey);
+  if (problem) throw new Error(problem);
+  if (isSafeSyntheticMode()) return;
+  await updateDoc(doc(db, CONCERN_MEETINGS_COLLECTION, meeting.id), { ...cancelFields(reasonKey, actor), cancelledAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  await addConcernTimeline(meeting.concernId || concern?.id, {
+    type: "meeting",
+    title: "Face-to-face meeting cancelled",
+    message: cancelTimelineMessage(meeting, reasonKey),
+    actor,
+  });
+  recordAudit(concernEvent("meeting_cancelled", { concern: { id: meeting.concernId || concern?.id, reference: concern?.reference }, action: reasonKey }));
 }
 
 // Filtered by concern only (no orderBy) so it needs no composite index; the
