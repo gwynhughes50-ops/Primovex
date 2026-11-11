@@ -81,7 +81,63 @@ export const mondayOf = (isoOrDate) => { const d = typeof isoOrDate === "string"
 export const weekDates = (mondayIso) => DAYS.map((day, i) => ({ day, iso: addDays(mondayIso, i) }));
 export const weekLabel = (mondayIso) => dateOf(mondayIso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
-// Is this person off on this date?
+// ---- time off, to the minute ----
+// An absence runs from a first day (and a time, blank means from the start of the day) to a last day (and a time, blank means to the end of the day). Anything in between is off all day.
+// So "Kim off from Monday 14:00 to Wednesday 10:00" is: Monday from 2pm, all of Tuesday, Wednesday until 10. A single day with a start time is "finishes early"; with an end time, "starts late".
+export const MIN_PART_MINUTES = 60; // someone who is in for less than an hour of a day is treated as off that day
+export const hhmm = (minutes) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+
+// the stretches of this date when the person is off, as [from, to] minutes, merged
+export function offWindows(absences, uid, iso) {
+  const raw = [];
+  for (const a of absences || []) {
+    const last = a.to || a.from;
+    if (a.uid !== uid || a.from > iso || iso > last) continue;
+    const start = iso === a.from && a.fromTime ? toMinutes(a.fromTime) : 0;
+    const end = iso === last && a.toTime ? toMinutes(a.toTime) : 1440;
+    if (start === null || end === null || end <= start) continue;
+    raw.push([start, end]);
+  }
+  raw.sort((x, y) => x[0] - y[0]);
+  const merged = [];
+  for (const w of raw) { const prev = merged[merged.length - 1]; if (prev && w[0] <= prev[1]) prev[1] = Math.max(prev[1], w[1]); else merged.push([...w]); }
+  return merged;
+}
+
+// When the person is in on this date: { from, until } in minutes (the longest stretch they are not off), or null when they are off for the day or in for less than an hour.
+export function availabilityOn(absences, uid, iso) {
+  const off = offWindows(absences, uid, iso);
+  if (!off.length) return { from: 0, until: 1440 };
+  const free = [];
+  let cursor = 0;
+  for (const [s, e] of off) { if (s > cursor) free.push([cursor, s]); cursor = Math.max(cursor, e); }
+  if (cursor < 1440) free.push([cursor, 1440]);
+  free.sort((x, y) => (y[1] - y[0]) - (x[1] - x[0]));
+  const best = free[0];
+  return best && best[1] - best[0] >= MIN_PART_MINUTES ? { from: best[0], until: best[1] } : null;
+}
+
+const shiftSpan = (shift) => [toMinutes(shift.start), toMinutes(shift.end)];
+export const fitsWhole = (avail, shift) => { const [s, e] = shiftSpan(shift); return Boolean(avail) && avail.from <= s && e <= avail.until; };
+export const overlapMinutes = (avail, shift) => { const [s, e] = shiftSpan(shift); return avail ? Math.max(0, Math.min(e, avail.until) - Math.max(s, avail.from)) : 0; };
+// the times to put on a place when someone is in for only part of the shift: { from, until } as "HH:MM", or null where the shift is whole
+export function partTimes(avail, shift) {
+  const [s, e] = shiftSpan(shift);
+  return { from: avail && avail.from > s ? hhmm(avail.from) : null, until: avail && avail.until < e ? hhmm(avail.until) : null };
+}
+// how a person's time off on a date reads: "" (not off), "all day", "from 14:00", "until 10:00" or "10:00–13:00"
+export function offText(absences, uid, iso) {
+  const off = offWindows(absences, uid, iso);
+  if (!off.length) return "";
+  if (off.length > 1) return off.map(([s, e]) => `${hhmm(s)}–${e === 1440 ? "end" : hhmm(e)}`).join(", ");
+  const [s, e] = off[0];
+  if (s === 0 && e === 1440) return "all day";
+  if (s === 0) return `until ${hhmm(e)}`;
+  if (e === 1440) return `from ${hhmm(s)}`;
+  return `${hhmm(s)}–${hhmm(e)}`;
+}
+
+// Is this person off, for the whole of this date? (Part days are handled by availabilityOn.)
 export const absentOn = (absences, uid, iso) => (absences || []).find((a) => a.uid === uid && a.from <= iso && iso <= (a.to || a.from)) || null;
 
 // ---- checking what has been entered on the rules page ----

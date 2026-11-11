@@ -1,7 +1,7 @@
 // Covers the reception rota engine (src/modules/rota): the rules from the current rota are entered as rules, and the weeks it builds are checked against them.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { ABSENCE_REASONS, DAYS, DEFAULT_SHIFTS, inStandardOrder, ruleCoversShift, DEFAULT_SETTINGS, checkRules, mondayOf, addDays, newPerson, shiftById, toMinutes } from "../src/modules/rota/rotaModel.js";
+import { ABSENCE_REASONS, DAYS, DEFAULT_SHIFTS, availabilityOn, fitsWhole, inStandardOrder, offText, partTimes, ruleCoversShift, DEFAULT_SETTINGS, checkRules, mondayOf, addDays, newPerson, shiftById, toMinutes } from "../src/modules/rota/rotaModel.js";
 import { assignMin, canDo, generateWeek, generateWeeks, historyAfter, shiftIdOfKey, weekCounters } from "../src/modules/rota/rotaEngine.js";
 import { checkWeek, historyBefore, lockedOf, setPlace, withNames } from "../src/modules/rota/rotaWeek.js";
 import { buildRotaHtml, buildRotaXlsx, placeText, runningCounters, totalRows, weekSheet } from "../src/modules/rota/rotaExport.js";
@@ -373,6 +373,118 @@ t("rules saved in the old order can be put in the usual order in one go: the usu
   const panel = readFileSync(new URL("../src/components/rota/RotaRulesPanel.jsx", import.meta.url), "utf8");
   assert.match(panel, /Put the shifts in the usual order/);
   assert.match(panel, /inStandardOrder\(rules\.shifts\)/);
+});
+
+const kimOff = (extra) => [{ uid: "kim", reason: "other", ...extra }];
+const kimOn = (week, day) => Object.entries(week.days[day].slots).find(([, a]) => a.uid === "kim");
+
+t("time off to the minute: finishing early, starting late, a gap in the middle, part days at each end, and too little time to count", () => {
+  const A = (a) => [{ uid: "kim", from: "2026-11-16", to: "2026-11-16", ...a }];
+  assert.deepEqual(availabilityOn([], "kim", "2026-11-16"), { from: 0, until: 1440 });
+  assert.deepEqual(availabilityOn(A({}), "kim", "2026-11-16"), null, "no times: off all day");
+  assert.deepEqual(availabilityOn(A({ fromTime: "14:00" }), "kim", "2026-11-16"), { from: 0, until: 840 }, "finishes early");
+  assert.deepEqual(availabilityOn(A({ toTime: "13:00" }), "kim", "2026-11-16"), { from: 780, until: 1440 }, "starts late");
+  assert.deepEqual(availabilityOn(A({ fromTime: "10:00", toTime: "13:00" }), "kim", "2026-11-16"), { from: 780, until: 1440 }, "off in the middle: the longer stretch is the one used");
+  assert.equal(availabilityOn(A({ fromTime: "00:30", toTime: "23:45" }), "kim", "2026-11-16"), null, "in for less than an hour counts as off");
+  const span = [{ uid: "kim", from: "2026-11-16", to: "2026-11-18", fromTime: "14:00", toTime: "10:00" }];
+  assert.deepEqual(availabilityOn(span, "kim", "2026-11-16"), { from: 0, until: 840 }, "Monday: until 2pm");
+  assert.equal(availabilityOn(span, "kim", "2026-11-17"), null, "Tuesday: off all day");
+  assert.deepEqual(availabilityOn(span, "kim", "2026-11-18"), { from: 600, until: 1440 }, "Wednesday: back at 10");
+  assert.deepEqual(availabilityOn(span, "kim", "2026-11-19"), { from: 0, until: 1440 }, "Thursday: in");
+  assert.equal(availabilityOn(span, "lucy", "2026-11-17").until, 1440, "someone else is not affected");
+  assert.equal(offText(span, "kim", "2026-11-16"), "from 14:00");
+  assert.equal(offText(span, "kim", "2026-11-17"), "all day");
+  assert.equal(offText(span, "kim", "2026-11-18"), "until 10:00");
+  assert.equal(offText(A({ fromTime: "10:00", toTime: "13:00" }), "kim", "2026-11-16"), "10:00–13:00");
+  assert.equal(offText([], "kim", "2026-11-16"), "");
+  assert.deepEqual(partTimes({ from: 780, until: 1440 }, shiftById(rules, "late")), { from: "13:00", until: null });
+  assert.deepEqual(partTimes({ from: 0, until: 720 }, shiftById(rules, "early1")), { from: null, until: "12:00" });
+  assert.equal(fitsWhole({ from: 600, until: 1440 }, shiftById(rules, "late")), true);
+  assert.equal(fitsWhole({ from: 780, until: 1440 }, shiftById(rules, "late")), false);
+});
+
+t("someone who finishes early (off from 12) takes an early shift until 12, and the rest of the shift is noted for the team; nothing else is lost", () => {
+  const week = generateWeek({ rules, mondayIso: FIRST, absences: kimOff({ from: "2026-11-16", to: "2026-11-16", fromTime: "12:00" }) });
+  const [key, place] = kimOn(week, "mon");
+  assert.ok(["early1", "early2"].includes(key), `Kim on ${key}`);
+  assert.equal(place.until, "12:00");
+  assert.equal(place.from, undefined);
+  assert.equal(place.source, "part");
+  assert.ok(week.issues.some((i) => /Kim is on Early [12] until 12:00 only, so the rest of the shift is for the team to absorb/.test(i.text)));
+  assert.equal(week.issues.filter((i) => i.severity === "gap").length, 0);
+  assert.deepEqual(week.days.mon.unfilled.filter((k) => !k.startsWith("desk2")), [], "every other shift is still filled");
+  assert.ok(kimOn(week, "tue"), "back as normal on Tuesday");
+});
+
+t("someone who starts late (back at 1pm) takes a late shift from 1pm, noted as the first part being for the team", () => {
+  const week = generateWeek({ rules, mondayIso: FIRST, absences: kimOff({ from: "2026-11-17", to: "2026-11-17", toTime: "13:00" }) });
+  const [key, place] = kimOn(week, "tue");
+  assert.equal(place.from, "13:00");
+  assert.equal(place.until, undefined);
+  assert.ok(["late", "mid", "admin1"].includes(key), `Kim on ${key}`);
+  assert.ok(week.issues.some((i) => /Kim is on .* from 13:00 only, so the first part of the shift is for the team to absorb/.test(i.text)));
+  assert.equal(week.issues.filter((i) => i.severity === "gap").length, 0);
+});
+
+t("someone off from 5pm still does a whole shift that ends by then; a part day that leaves a whole shift is not a part shift", () => {
+  const week = generateWeek({ rules, mondayIso: FIRST, absences: kimOff({ from: "2026-11-18", to: "2026-11-18", fromTime: "17:00" }) });
+  const [key, place] = kimOn(week, "wed");
+  assert.ok(["early1", "early2", "tyelan", "admin3"].includes(key), `Kim on ${key}: a shift that is over by 5`);
+  assert.equal(place.from, undefined);
+  assert.equal(place.until, undefined);
+  const back = generateWeek({ rules, mondayIso: FIRST, absences: kimOff({ from: "2026-11-16", to: "2026-11-18", fromTime: "14:00", toTime: "10:00" }) });
+  assert.equal(kimOn(back, "tue"), undefined, "the middle day is all day off");
+  assert.ok(kimOn(back, "mon")[1].until, "Monday: until 2pm");
+  const wed = kimOn(back, "wed");
+  assert.ok(wed, "Wednesday: back at 10");
+  assert.equal(wed[1].from, undefined, "Wednesday: back at 10 fits a whole Late, so it is a whole shift");
+  assert.equal(back.issues.filter((i) => i.severity === "gap").length, 0);
+});
+
+t("someone in for too little of the day to take a shift is told so, not quietly dropped", () => {
+  const week = generateWeek({ rules, mondayIso: FIRST, absences: kimOff({ from: "2026-11-16", to: "2026-11-16", fromTime: "08:30" }) });
+  assert.equal(kimOn(week, "mon"), undefined);
+  assert.ok(week.issues.some((i) => /Kim is in for too little of the day to take a shift/.test(i.text)));
+  assert.equal(week.issues.filter((i) => /Kim has no shift/.test(i.text)).length, 0, "and it is not reported twice");
+});
+
+t("part days: people with a usual shift keep it for the time they are in (Dave finishing early is on the desk until then)", () => {
+  const week = generateWeek({ rules, mondayIso: FIRST, absences: [{ uid: "dave", from: "2026-11-19", to: "2026-11-19", fromTime: "15:00", reason: "leave" }] });
+  assert.equal(week.days.thu.slots.desk.uid, "dave");
+  assert.equal(week.days.thu.slots.desk.until, "15:00");
+  assert.ok(week.issues.some((i) => /Dave is on Desk\/phones until 15:00 only/.test(i.text)));
+});
+
+t("a week is checked against part days: a whole shift for someone in for part of the day is a problem, a shift with the right times is not", () => {
+  const week = weeks[0];
+  const [curKey, cur] = Object.entries(week.days.mon.slots).find(([, x]) => ["emily", "kim", "lewis", "libby", "lucy"].includes(x.uid));
+  const who = cur.uid;
+  const off = [{ uid: who, from: "2026-11-16", to: "2026-11-16", fromTime: "12:00" }];
+  const bad = checkWeek(rules, week, off);
+  assert.ok(bad.some((i) => i.severity === "gap" && /but is off for part of it \(in 00:00 to 12:00 only\)/.test(i.text)));
+  assert.ok(bad.some((i) => /but is off/.test(i.text)), "the page's 'rebuild affected weeks' notice picks this up");
+  const fixed = setPlace(setPlace(week, rules, "mon", curKey, ""), rules, "mon", "early1", who, { until: "12:00" });
+  const clean = checkWeek(rules, fixed, off).filter((i) => i.severity === "gap" && new RegExp(rules.people.find((p) => p.uid === who).name).test(i.text));
+  assert.deepEqual(clean, [], "on an early until 12 they are fine");
+  const placed = setPlace(week, rules, "mon", "late", "kim", { from: "13:00", until: "16:00" });
+  assert.deepEqual([placed.days.mon.slots.late.from, placed.days.mon.slots.late.until], ["13:00", "16:00"]);
+  assert.equal(setPlace(week, rules, "mon", "late", "kim", "12:00").days.mon.slots.late.until, "12:00", "the old way of passing an until still works");
+  assert.equal(placeText({ name: "Kim", from: "13:00" }), "Kim (from 13)");
+  assert.equal(placeText({ name: "Kim", from: "13:00", until: "16:00" }), "Kim (from 13 till 16)");
+  assert.equal(placeText({ name: "Kim", until: "12:00" }), "Kim (till 12)");
+});
+
+t("time off is entered and shown with times: the form, the saved fields and the rota's Off row", () => {
+  const panel = readFileSync(new URL("../src/components/rota/RotaAbsencesPanel.jsx", import.meta.url), "utf8");
+  assert.match(panel, /Off from/);
+  assert.match(panel, /Back at/);
+  assert.match(panel, /fromTime, toTime, reason/);
+  const service = readFileSync(new URL("../src/modules/rota/rotaService.js", import.meta.url), "utf8");
+  assert.match(service, /\.\.\.\(fromTime \? \{ fromTime \} : \{\}\), \.\.\.\(toTime \? \{ toTime \} : \{\}\)/);
+  assert.match(service, /The time they are back must be after the time they go/);
+  const weekPanel = readFileSync(new URL("../src/components/rota/RotaWeekPanel.jsx", import.meta.url), "utf8");
+  assert.match(weekPanel, /offText\(absences, p\.uid, iso\)/);
+  assert.match(weekPanel, /availabilityOn\(absences, uid/);
 });
 
 console.log(`\n${n} passed`);

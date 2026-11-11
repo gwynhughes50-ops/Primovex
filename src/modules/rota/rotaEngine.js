@@ -9,7 +9,7 @@
 //        - not the same shift two days running, and not an early the morning after a late.
 //   4. If an essential shift is still empty, someone with a usual shift who can cover it steps in, and the shift they leave is shown as empty.
 //   5. Anything still empty is reported. An essential shift that can't be covered is a gap; a non-essential one that is dropped is a note. Nothing is left empty quietly.
-import { DAYS, DAY_LABELS, absentOn, addDays, ruleShiftsOf, shiftById, toMinutes, weekDates } from "./rotaModel.js";
+import { DAYS, DAY_LABELS, MIN_PART_MINUTES, addDays, availabilityOn, fitsWhole, overlapMinutes, partTimes, ruleShiftsOf, shiftById, toMinutes, weekDates } from "./rotaModel.js";
 
 const BIG = 1e9;
 const ESSENTIAL_EMPTY = 100000; // leaving an essential shift empty is always worse than anything else
@@ -64,10 +64,10 @@ const bump = (counts, uid, group) => { counts[uid] = counts[uid] || {}; counts[u
 const totalOf = (counts, uid) => Object.values(counts[uid] || {}).reduce((a, b) => a + b, 0);
 
 // Can this person do this shift (for the whole of it, or until `until`) on this day?
-export function canDo(person, shift, day, { until = null } = {}) {
+export function canDo(person, shift, day, { until = null, from = null } = {}) {
   if ((person.cannotDo || []).includes(shift.id)) return false;
-  const start = toMinutes(shift.start);
-  const end = toMinutes(until || shift.end);
+  const start = from ? Math.max(toMinutes(shift.start), toMinutes(from)) : toMinutes(shift.start);
+  const end = until ? Math.min(toMinutes(shift.end), toMinutes(until)) : toMinutes(shift.end);
   const earliest = person.earliest?.[day];
   const latest = person.latest?.[day];
   if (earliest && start < toMinutes(earliest)) return false;
@@ -109,13 +109,30 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
     }
     const assigned = {}; // slotKey -> { uid, until, source }
     const used = new Set();
-    const present = people.filter((p) => (p.days || []).includes(day) && !absentOn(absences, p.uid, iso));
+    // who is in today, and for how much of the day (someone off for part of it is still in, for the rest)
+    const availOf = {};
+    const present = people.filter((p) => {
+      if (!(p.days || []).includes(day)) return false;
+      const a = availabilityOn(absences, p.uid, iso);
+      if (!a) return false;
+      availOf[p.uid] = a;
+      return true;
+    });
     const presentUids = new Set(present.map((p) => p.uid));
     const firstFree = (shiftId) => slots.find((s) => s.shift.id === shiftId && !assigned[s.key]);
-    const put = (slot, uid, source, until = null) => {
-      assigned[slot.key] = { uid, name: byUid[uid]?.name || "", source, ...(until ? { until } : {}) };
+    const put = (slot, uid, source, { from = null, until = null } = {}) => {
+      assigned[slot.key] = { uid, name: byUid[uid]?.name || "", source, ...(from ? { from } : {}), ...(until ? { until } : {}) };
       used.add(uid);
       bump(weekCounts, uid, slot.shift.group);
+    };
+    const earlierOf = (a, b) => (a && b ? (toMinutes(a) <= toMinutes(b) ? a : b) : a || b || null);
+    const partNote = (name, shift, from, until) => issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${name} is on ${shift.label} ${from ? `from ${from}` : ""}${from && until ? " " : ""}${until ? `until ${until}` : ""} only, so ${from && until ? "the rest" : from ? "the first part" : "the rest"} of the shift is for the team to absorb.` });
+    // place someone on a slot, with the times they are in for (their time off, and a rule's "until") and a note when it is only part of the shift
+    const putPart = (slot, p, source, ruleUntil = null) => {
+      const t = partTimes(availOf[p.uid], slot.shift);
+      const until = earlierOf(t.until, ruleUntil && toMinutes(ruleUntil) < toMinutes(slot.shift.end) ? ruleUntil : null);
+      put(slot, p.uid, source, { from: t.from, until });
+      if (t.from || until) partNote(p.name, slot.shift, t.from, until);
     };
 
     // 1. places fixed by hand
@@ -126,7 +143,8 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
         issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${byUid[uid]?.name || "someone"} was placed on ${slot.shift.label} by hand but is not available that day, so the place was cleared.` });
         continue;
       }
-      put(slot, uid, "locked");
+      const t = partTimes(availOf[uid], slot.shift);
+      put(slot, uid, "locked", t);
     }
 
     // 2. day rules, fixed, usual and "only" people
@@ -138,14 +156,35 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
         // one shift, or any shift of a kind (Early 1 or Early 2): a part shift goes on the later row, so the first row stays whole for someone working all day
         const free = slots.filter((s) => ruleShifts.some((x) => x.id === s.shift.id) && !assigned[s.key]);
         const slot = dr.until ? free[free.length - 1] : free[0];
-        if (slot) { put(slot, p.uid, "rule", dr.until || null); if (dr.until && toMinutes(dr.until) < toMinutes(slot.shift.end)) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${p.name} is on ${slot.shift.label} until ${dr.until} only, so the rest of the shift is for the team to absorb.` }); continue; }
+        if (slot) { putPart(slot, p, "rule", dr.until || null); continue; }
       }
       if (p.mode === "fixed" || p.mode === "usual") {
         const slot = firstFree(p.shift);
-        if (slot) put(slot, p.uid, "usual");
+        if (slot) putPart(slot, p, "usual");
       } else if (p.mode === "only") {
-        for (const id of p.onlyShifts || []) { const slot = firstFree(id); if (slot) { put(slot, p.uid, "usual"); break; } }
+        for (const id of p.onlyShifts || []) { const slot = firstFree(id); if (slot) { putPart(slot, p, "usual"); break; } }
       }
+    }
+
+    const tooLittle = new Set();
+    // 2b. someone in for only part of the day, with no whole shift that fits: they take the shift they overlap most (an essential one first), for the part they are in; the rest is for the team to absorb
+    for (const p of [...present].sort((x, y) => String(x.uid).localeCompare(String(y.uid)))) {
+      const a = availOf[p.uid];
+      if (used.has(p.uid) || (p.mode || "pool") !== "pool" || (a.from === 0 && a.until === 1440)) continue;
+      const open = slots.filter((s) => !assigned[s.key] && !reserved.has(s.shift.id));
+      if (open.some((s) => fitsWhole(a, s.shift) && canDo(p, s.shift, day))) continue;
+      let best = null;
+      for (const s of open) {
+        const ov = overlapMinutes(a, s.shift);
+        if (ov < MIN_PART_MINUTES) continue;
+        const limit = p.maxPerWeek?.[s.shift.group];
+        if (limit != null && (weekCounts[p.uid]?.[s.shift.group] || 0) >= Number(limit)) continue;
+        if (!canDo(p, s.shift, day, partTimes(a, s.shift))) continue;
+        const score = ov + (s.shift.essential ? 30 : 0);
+        if (!best || score > best.score) best = { slot: s, score };
+      }
+      if (best) putPart(best.slot, p, "part");
+      else { tooLittle.add(p.uid); issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${p.name} is in for too little of the day to take a shift.` }); }
     }
 
     // 3. everyone else rotates through the shifts nobody owns
@@ -160,7 +199,7 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
           if (r < rows && c < cols) {
             const slot = rotating[r], person = pool[c], group = slot.shift.group;
             const limit = person.maxPerWeek?.[group];
-            if (!canDo(person, slot.shift, day) || (limit != null && (weekCounts[person.uid]?.[group] || 0) >= Number(limit))) { cost[r][c] = BIG; continue; }
+            if (!fitsWhole(availOf[person.uid], slot.shift) || !canDo(person, slot.shift, day) || (limit != null && (weekCounts[person.uid]?.[group] || 0) >= Number(limit))) { cost[r][c] = BIG; continue; }
             const total = totalOf(counts, person.uid) + totalOf(weekCounts, person.uid);
             const share = ((counts[person.uid]?.[group] || 0) + (weekCounts[person.uid]?.[group] || 0)) / (total + 1);
             let v = Math.round(FAIR_WEIGHT * share);
@@ -195,7 +234,7 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
     // 4. cover for an essential shift that is still empty
     for (const slot of slots) {
       if (assigned[slot.key] || !slot.shift.essential) continue;
-      const coverers = present.filter((p) => p.mode === "usual" && (p.coverShifts || []).includes(slot.shift.id) && canDo(p, slot.shift, day) && !(p.maxPerWeek?.[slot.shift.group] != null && (weekCounts[p.uid]?.[slot.shift.group] || 0) >= Number(p.maxPerWeek[slot.shift.group])));
+      const coverers = present.filter((p) => p.mode === "usual" && (p.coverShifts || []).includes(slot.shift.id) && fitsWhole(availOf[p.uid], slot.shift) && canDo(p, slot.shift, day) && !(p.maxPerWeek?.[slot.shift.group] != null && (weekCounts[p.uid]?.[slot.shift.group] || 0) >= Number(p.maxPerWeek[slot.shift.group])));
       const free = coverers.find((p) => !used.has(p.uid));
       const stepIn = free || coverers[0];
       if (!stepIn) continue;
@@ -223,7 +262,7 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
         issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${slot.shift.label} is not staffed (${why}).` });
       }
     }
-    const benched = present.filter((p) => !used.has(p.uid) && (p.mode || "pool") === "pool").map((p) => p.uid);
+    const benched = present.filter((p) => !used.has(p.uid) && !tooLittle.has(p.uid) && (p.mode || "pool") === "pool").map((p) => p.uid);
     for (const uid of benched) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${byUid[uid].name} has no shift (more people than shifts).` });
 
     out[day] = { iso, slots: assigned, unfilled };

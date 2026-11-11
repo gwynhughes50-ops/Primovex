@@ -10,7 +10,7 @@ const colName = (i) => { let n = i + 1, s = ""; while (n > 0) { const r = (n - 1
 const shortDate = (iso) => dateOf(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
 // "Karen L (till 12)" for a place that stops early, otherwise just the name
-export const placeText = (a) => (a ? `${a.name || ""}${a.until ? ` (till ${timeLabel(a.until)})` : ""}` : "");
+export const placeText = (a) => (a ? `${a.name || ""}${a.from || a.until ? ` (${[a.from ? `from ${timeLabel(a.from)}` : "", a.until ? `till ${timeLabel(a.until)}` : ""].filter(Boolean).join(" ")})` : ""}` : "");
 
 // The counter columns: one per group of shifts, in the order the rota lists them, and a total.
 export function counterColumns(rules) {

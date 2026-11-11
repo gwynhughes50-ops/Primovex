@@ -1,5 +1,5 @@
 // Helpers around weeks that have been built and saved: what history to build from, which places were fixed by hand, and a check of a week after someone has changed it.
-import { DAYS, DAY_LABELS, absentOn, addDays, shiftById, toMinutes, weekDates } from "./rotaModel.js";
+import { DAYS, DAY_LABELS, addDays, availabilityOn, hhmm, shiftById, toMinutes, weekDates } from "./rotaModel.js";
 import { canDo, historyAfter, shiftIdOfKey, slotKeyOf } from "./rotaEngine.js";
 
 const HISTORY_WEEKS = 12; // how far back fairness looks
@@ -49,12 +49,13 @@ export function withNames(week, rules) {
 }
 
 // Set one place by hand. uid "" clears it. Returns the week with the change and `edited` marked.
-export function setPlace(week, rules, day, slotKey, uid, until = null) {
+export function setPlace(week, rules, day, slotKey, uid, times = null) {
+  const t = typeof times === "string" ? { until: times } : (times || {});
   const names = Object.fromEntries((rules.people || []).map((p) => [p.uid, p.name]));
   const days = JSON.parse(JSON.stringify(week.days || {}));
   const d = days[day] = days[day] || { iso: weekDates(week.mondayIso).find((x) => x.day === day).iso, slots: {}, unfilled: [] };
   d.slots = d.slots || {};
-  if (uid) d.slots[slotKey] = { uid, name: names[uid] || "", source: "locked", ...(until ? { until } : {}) };
+  if (uid) d.slots[slotKey] = { uid, name: names[uid] || "", source: "locked", ...(t.from ? { from: t.from } : {}), ...(t.until ? { until: t.until } : {}) };
   else delete d.slots[slotKey];
   const all = slotsOfDay(rules, day).map((s) => s.key);
   d.unfilled = all.filter((k) => !d.slots[k]);
@@ -86,10 +87,14 @@ export function checkWeek(rules, week, absences = []) {
       weekCount[a.uid] = weekCount[a.uid] || {};
       weekCount[a.uid][shift.group] = (weekCount[a.uid][shift.group] || 0) + 1;
       if (!p) { issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${who} is on ${shift.label} but is no longer on the rota.` }); continue; }
-      if (absentOn(absences, a.uid, iso)) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${who} is on ${shift.label} but is off.` });
+      const avail = availabilityOn(absences, a.uid, iso);
+      const placeStart = Math.max(toMinutes(shift.start), a.from ? toMinutes(a.from) : 0);
+      const placeEnd = Math.min(toMinutes(shift.end), a.until ? toMinutes(a.until) : 1440);
+      if (!avail) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${who} is on ${shift.label} but is off.` });
+      else if (placeStart < avail.from || placeEnd > avail.until) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${who} is on ${shift.label} but is off for part of it (in ${hhmm(avail.from)} to ${hhmm(avail.until)} only).` });
       else if (!(p.days || []).includes(day)) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${who} is on ${shift.label} but does not work on a ${DAY_LABELS[day]}.` });
-      else if (!canDo(p, shift, day, { until: a.until || null })) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${who} cannot do ${shift.label} (their hours or their rules).` });
-      if (a.until && toMinutes(a.until) < toMinutes(shift.end)) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${who} is on ${shift.label} until ${a.until} only, so the rest of the shift is for the team to absorb.` });
+      else if (!canDo(p, shift, day, { until: a.until || null, from: a.from || null })) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${who} cannot do ${shift.label} (their hours or their rules).` });
+      if (a.from || (a.until && toMinutes(a.until) < toMinutes(shift.end))) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${who} is on ${shift.label} ${a.from ? `from ${a.from}` : ""}${a.from && a.until ? " " : ""}${a.until ? `until ${a.until}` : ""} only, so ${a.from && a.until ? "the rest" : a.from ? "the first part" : "the rest"} of the shift is for the team to absorb.` });
       const limit = p.maxPerWeek?.[shift.group];
       if (limit != null && weekCount[a.uid][shift.group] > Number(limit)) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${who} has more than ${limit} ${shift.group} shift${Number(limit) === 1 ? "" : "s"} this week.` });
       if (rules.settings?.avoidLateThenEarly !== false && prev[a.uid] === "late" && shift.group === "early") issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${who} has an early after a late.` });

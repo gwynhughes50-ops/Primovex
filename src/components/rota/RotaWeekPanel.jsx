@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Printer, Pin } from "lucide-react";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
-import { DAYS, DAY_LABELS, absentOn, addDays, dateOf, ruleCoversShift, timeLabel, weekDates, weekLabel } from "@/modules/rota/rotaModel";
+import { DAYS, DAY_LABELS, addDays, availabilityOn, dateOf, offText, partTimes, ruleCoversShift, timeLabel, weekDates, weekLabel } from "@/modules/rota/rotaModel";
 import { generateWeek, weekCounters } from "@/modules/rota/rotaEngine";
 import { checkWeek, historyBefore, lockedOf, setPlace, slotsOfDay, withNames } from "@/modules/rota/rotaWeek";
 import { buildRotaHtml, buildRotaXlsx, counterColumns, runningCounters } from "@/modules/rota/rotaExport";
@@ -67,7 +67,12 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
     const base = week || { mondayIso: monday, days: {}, edited: {} };
     const slot = rows.find((r) => r.key === key);
     const rule = people.find((p) => p.uid === uid)?.dayRules?.[day];
-    const next = setPlace(base, rules, day, key, uid, rule && ruleCoversShift(rule.shift, slot?.shift) ? rule.until || null : null);
+    // the times they are in for: their rule's "until", and any time off that day
+    const avail = uid ? availabilityOn(absences, uid, weekDates(monday).find((d) => d.day === day).iso) : null;
+    const t = avail && slot ? partTimes(avail, slot.shift) : { from: null, until: null };
+    const ruleUntil = rule && ruleCoversShift(rule.shift, slot?.shift) ? rule.until || null : null;
+    const until = ruleUntil && (!t.until || ruleUntil < t.until) ? ruleUntil : t.until;
+    const next = setPlace(base, rules, day, key, uid, { from: t.from, until });
     try { await saveWeek(next, actor, { edited: next.edited }); } catch (e) { setError(e?.message || "That change could not be saved."); }
   }
 
@@ -128,10 +133,10 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
                       {canManage ? (
                         <select value={place?.uid || ""} onChange={(e) => change(day, slot.key, e.target.value)} className={FIELD} aria-label={`${slot.shift.label} on ${DAY_LABELS[day]}`}>
                           <option value="">{slot.shift.essential ? "— nobody —" : "— not staffed —"}</option>
-                          {options.map((p) => <option key={p.uid} value={p.uid}>{p.name}{absentOn(absences, p.uid, iso) ? " (off)" : ""}</option>)}
+                          {options.map((p) => <option key={p.uid} value={p.uid}>{p.name}{offText(absences, p.uid, iso) ? ` (off ${offText(absences, p.uid, iso)})` : ""}</option>)}
                         </select>
                       ) : <span>{place ? place.name || person?.name : "—"}</span>}
-                      <span className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--medtrak-muted)]">{place?.until ? `until ${timeLabel(place.until)}` : ""}{week?.edited?.[`${day}|${slot.key}`] && <><Pin className="h-3 w-3" aria-hidden="true" /> fixed by hand</>}</span>
+                      <span className="mt-0.5 flex items-center gap-1 text-[11px] text-[var(--medtrak-muted)]">{[place?.from ? `from ${timeLabel(place.from)}` : "", place?.until ? `until ${timeLabel(place.until)}` : ""].filter(Boolean).join(" ")}{week?.edited?.[`${day}|${slot.key}`] && <><Pin className="h-3 w-3" aria-hidden="true" /> fixed by hand</>}</span>
                     </td>
                   );
                 })}
@@ -139,7 +144,7 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
             ))}
             <tr className="align-top">
               <th className="p-2 text-xs font-semibold">Off</th>
-              {dates.map(({ day, iso }) => <td key={day} className="p-2 text-xs text-[var(--medtrak-muted)]">{people.filter((p) => absentOn(absences, p.uid, iso)).map((p) => p.name).join(", ") || ""}</td>)}
+              {dates.map(({ day, iso }) => <td key={day} className="p-2 text-xs text-[var(--medtrak-muted)]">{people.filter((p) => offText(absences, p.uid, iso)).map((p) => `${p.name} (${offText(absences, p.uid, iso)})`).join(", ") || ""}</td>)}
             </tr>
           </tbody>
         </table>

@@ -57,14 +57,18 @@ export function subscribeAbsences(onData, onError) {
   return onSnapshot(query(collection(db, ABSENCES)), (snap) => onData(snap.docs.map(rowOf).sort((x, y) => String(x.from).localeCompare(String(y.from)))), onError);
 }
 
-// An absence is a person (picked from the list), the first and last day off, and "leave" or "other". Nothing typed.
-export async function addAbsence({ uid, name, from, to, reason }, actor) {
+// An absence is a person (picked from the list), the first and last day off with an optional time on each ("from 14:00" on the first day, "until 10:00" on the last: a half day, finishing early,
+// starting late), and "leave", "toil" or "other". Nothing typed. No first time means from the start of the day, no last time means to the end of it.
+const TIME = /^\d{2}:\d{2}$/;
+export async function addAbsence({ uid, name, from, to, fromTime = "", toTime = "", reason }, actor) {
   if (!uid || !from) throw new Error("Choose who is off and the first day.");
   if (to && to < from) throw new Error("The last day cannot be before the first day.");
+  if ((fromTime && !TIME.test(fromTime)) || (toTime && !TIME.test(toTime))) throw new Error("Choose the times from the list.");
+  if ((to || from) === from && fromTime && toTime && toTime <= fromTime) throw new Error("The time they are back must be after the time they go.");
   if (!["leave", "toil", "other"].includes(reason)) throw new Error("Choose a reason.");
   if (isSafeSyntheticMode()) return;
   const a = who(actor);
-  await addDoc(collection(db, ABSENCES), { uid, name, from, to: to || from, reason, createdAt: serverTimestamp(), createdByUid: a.uid, createdByName: a.name });
+  await addDoc(collection(db, ABSENCES), { uid, name, from, to: to || from, ...(fromTime ? { fromTime } : {}), ...(toTime ? { toTime } : {}), reason, createdAt: serverTimestamp(), createdByUid: a.uid, createdByName: a.name });
   recordAudit(rotaEvent("absence_added"));
 }
 

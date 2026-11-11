@@ -2252,10 +2252,14 @@ async function main() {
       await assertFails(addDoc(collection(who, RA), absenceDoc({ createdByUid: "x" })));
     }
   });
-  await check("An absence holds 'leave', 'toil' or 'other' only: sickness (health data) is refused as a reason, and it can only be recorded as yourself", async () => {
+  await check("An absence holds dates, optional times and 'leave', 'toil' or 'other' only: sickness (health data) is refused as a reason, no extra field (a note, a diagnosis) is accepted, and it can only be recorded as yourself", async () => {
     await assertSucceeds(addDoc(collection(rotaLead, RA), absenceDoc()));
     await assertSucceeds(addDoc(collection(rotaLead, RA), absenceDoc({ reason: "other" })));
     await assertSucceeds(addDoc(collection(rotaLead, RA), absenceDoc({ reason: "toil" })));
+    await assertSucceeds(addDoc(collection(rotaLead, RA), absenceDoc({ fromTime: "14:00" })));
+    await assertSucceeds(addDoc(collection(rotaLead, RA), absenceDoc({ from: "2026-12-07", to: "2026-12-07", fromTime: "10:00", toTime: "13:00" })));
+    await assertFails(addDoc(collection(rotaLead, RA), absenceDoc({ notes: "off with a bad back" })));
+    await assertFails(addDoc(collection(rotaLead, RA), absenceDoc({ diagnosis: "x" })));
     await assertFails(addDoc(collection(rotaLead, RA), absenceDoc({ reason: "sickness" })));
     await assertFails(addDoc(collection(rotaLead, RA), absenceDoc({ reason: "Cancer treatment" })));
     await assertFails(addDoc(collection(rotaLead, RA), absenceDoc({ createdByUid: "someone-else" })));
