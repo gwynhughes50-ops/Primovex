@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Download, Printer, Pin } from "lucide-react";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
-import { DAYS, DAY_LABELS, absentOn, addDays, dateOf, timeLabel, weekDates, weekLabel } from "@/modules/rota/rotaModel";
+import { DAYS, DAY_LABELS, absentOn, addDays, dateOf, ruleCoversShift, timeLabel, weekDates, weekLabel } from "@/modules/rota/rotaModel";
 import { generateWeek, weekCounters } from "@/modules/rota/rotaEngine";
 import { checkWeek, historyBefore, lockedOf, setPlace, slotsOfDay, withNames } from "@/modules/rota/rotaWeek";
-import { buildRotaHtml, buildRotaXlsx, counterColumns } from "@/modules/rota/rotaExport";
+import { buildRotaHtml, buildRotaXlsx, counterColumns, runningCounters } from "@/modules/rota/rotaExport";
 import { saveWeek } from "@/modules/rota/rotaService";
 
 // The rota for a week: a grid of shifts by day. Primovex builds it from the rules and who is off; every place can be changed by hand, the change is checked straight away (double bookings, someone who
@@ -27,6 +27,7 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirmBuild, setConfirmBuild] = useState(false);
+  const [counterView, setCounterView] = useState("week"); // week | total
   const week = weeks[monday] || null;
   const named = useMemo(() => (week ? withNames(week, rules) : null), [week, rules]);
   const issues = useMemo(() => (week ? checkWeek(rules, week, absences) : []), [week, rules, absences]);
@@ -66,11 +67,14 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
     const base = week || { mondayIso: monday, days: {}, edited: {} };
     const slot = rows.find((r) => r.key === key);
     const rule = people.find((p) => p.uid === uid)?.dayRules?.[day];
-    const next = setPlace(base, rules, day, key, uid, rule && rule.shift === slot?.shift.id ? rule.until || null : null);
+    const next = setPlace(base, rules, day, key, uid, rule && ruleCoversShift(rule.shift, slot?.shift) ? rule.until || null : null);
     try { await saveWeek(next, actor, { edited: next.edited }); } catch (e) { setError(e?.message || "That change could not be saved."); }
   }
 
-  const counters = named ? weekCounters(named, rules) : {};
+  // the running total: every built week up to and including this one
+  const throughThis = useMemo(() => Object.values(weeks).filter((w) => w.mondayIso <= monday && w.days).sort((a, b) => a.mondayIso.localeCompare(b.mondayIso)), [weeks, monday]);
+  const weekOnly = named ? weekCounters(named, rules) : {};
+  const counters = counterView === "total" ? runningCounters(throughThis, rules) : weekOnly;
   const cols = counterColumns(rules);
   const builtFromNow = Object.values(weeks).filter((w) => w.mondayIso >= startMonday).sort((a, b) => a.mondayIso.localeCompare(b.mondayIso)).map((w) => withNames(w, rules));
   const doPrint = (list) => printHtmlDocument(buildRotaHtml(list, rules, { printedBy: actor.displayName }));
@@ -154,7 +158,11 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
 
       {week && (
         <section>
-          <h3 className="text-sm font-bold text-slate-50">Shift counter</h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="text-sm font-bold text-slate-50">Shift counter</h3>
+            <button type="button" className={`rounded-full px-3 py-1 text-xs font-semibold ${counterView === "week" ? "bg-[var(--medtrak-accent)] text-slate-950" : "border border-[var(--medtrak-border)] text-[var(--medtrak-text)]"}`} onClick={() => setCounterView("week")}>This week</button>
+            <button type="button" className={`rounded-full px-3 py-1 text-xs font-semibold ${counterView === "total" ? "bg-[var(--medtrak-accent)] text-slate-950" : "border border-[var(--medtrak-border)] text-[var(--medtrak-text)]"}`} onClick={() => setCounterView("total")}>Running total ({throughThis.length} week{throughThis.length === 1 ? "" : "s"})</button>
+          </div>
           <div className="mt-1 overflow-x-auto">
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead className="text-xs text-[var(--medtrak-muted)]"><tr><th className="p-1">Name</th>{cols.map((c) => <th key={c.group} className="p-1">{c.label}</th>)}<th className="p-1">Total</th></tr></thead>
@@ -163,7 +171,7 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
               </tbody>
             </table>
           </div>
-          <p className="mt-1 text-xs text-[var(--medtrak-muted)]">Counts every place a name appears in; a part shift (for example until 12) counts as one.</p>
+          <p className="mt-1 text-xs text-[var(--medtrak-muted)]">{counterView === "total" ? `Added up over every built week up to and including this one (from week commencing ${throughThis.length ? weekLabel(throughThis[0].mondayIso) : ""}). ` : ""}Counts every place a name appears in; a part shift (for example until 12) counts as one.</p>
         </section>
       )}
     </div>

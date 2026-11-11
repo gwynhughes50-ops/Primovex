@@ -84,7 +84,7 @@ function PersonCard({ person, rules, onChange, onRemove, canManage }) {
                 <div key={d} className="rounded-lg border border-[var(--medtrak-border)] p-2 text-xs">
                   <p className="font-bold">{DAY_LABELS[d]}</p>
                   <select value={rule?.shift || ""} disabled={!canManage} onChange={(e) => { const next = { ...(person.dayRules || {}) }; if (!e.target.value) delete next[d]; else next[d] = { shift: e.target.value, until: rule?.until || "" }; set({ dayRules: next }); }} className={`${FIELD} mt-1 w-full`}>
-                    <option value="">Normal rules</option>{shifts.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                    <option value="">Normal rules</option>{groupsOf(rules).filter((g) => shifts.filter((s) => s.group === g).length > 1).map((g) => <option key={`g-${g}`} value={`group:${g}`}>Any {groupLabel(rules, g)} ({shifts.filter((s) => s.group === g).map((s) => s.label).join(" or ")})</option>)}{shifts.map((s) => <option key={s.id} value={s.id}>{s.label} only</option>)}
                   </select>
                   {rule?.shift && <label className="mt-1 block">Until<TimeSelect value={rule.until} blank="End of shift" disabled={!canManage} onChange={(v) => set({ dayRules: { ...person.dayRules, [d]: { ...rule, until: v } } })} /></label>}
                 </div>
@@ -106,9 +106,11 @@ function ShiftsEditor({ rules, onChange, canManage }) {
   const used = (id) => rules.people.some((p) => p.shift === id || (p.onlyShifts || []).includes(id) || (p.coverShifts || []).includes(id) || (p.cannotDo || []).includes(id) || Object.values(p.dayRules || {}).some((r) => r.shift === id));
   const setShift = (i, patch) => onChange({ ...rules, shifts: rules.shifts.map((s, k) => (k === i ? { ...s, ...patch } : s)) });
   const [problem, setProblem] = useState("");
+  const move = (i, by) => { const next = [...rules.shifts]; const j = i + by; if (j < 0 || j >= next.length) return; [next[i], next[j]] = [next[j], next[i]]; onChange({ ...rules, shifts: next }); };
   return (
     <section className="rounded-2xl border border-[var(--medtrak-border)] p-4">
       <h2 className="text-lg font-bold text-slate-50">The shifts</h2>
+      <p className="text-xs text-[var(--medtrak-muted)]">The order here is the order down the rota, in print and in Excel. Use the arrows to move a shift.</p>
       <p className="text-xs text-[var(--medtrak-muted)]">An essential shift must be covered every day: if it can't be, the rota says so. A shift that is not essential is given up when there are too few people, the lowest "given up" number first.</p>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[820px] text-left text-sm">
@@ -124,7 +126,7 @@ function ShiftsEditor({ rules, onChange, canManage }) {
                 <td className="p-1"><input type="checkbox" checked={Boolean(s.essential)} disabled={!canManage} onChange={(e) => setShift(i, { essential: e.target.checked })} aria-label={`${s.label} is essential`} /></td>
                 <td className="p-1">{s.essential ? "—" : <select value={s.dropOrder || 5} disabled={!canManage} onChange={(e) => setShift(i, { dropOrder: Number(e.target.value) })} className={FIELD}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}{n === 1 ? " (first)" : ""}</option>)}</select>}</td>
                 <td className="p-1"><div className="flex gap-1.5">{DAYS.map((d) => <label key={d} className="text-xs"><input type="checkbox" checked={(s.days || []).includes(d)} disabled={!canManage} onChange={(e) => setShift(i, { days: DAYS.filter((x) => (x === d ? e.target.checked : (s.days || []).includes(x))) })} /> {DAY_SHORT[d]}</label>)}</div></td>
-                <td className="p-1">{canManage && <button type="button" className={BTN} aria-label={`Remove ${s.label}`} onClick={() => { if (used(s.id)) { setProblem(`${s.label} is used in someone's rules. Change their rules first.`); return; } setProblem(""); onChange({ ...rules, shifts: rules.shifts.filter((_, k) => k !== i) }); }}><Trash2 className="h-4 w-4" /></button>}</td>
+                <td className="p-1 whitespace-nowrap">{canManage && <><button type="button" className={BTN} disabled={i === 0} aria-label={`Move ${s.label} up`} onClick={() => move(i, -1)}>↑</button> <button type="button" className={BTN} disabled={i === rules.shifts.length - 1} aria-label={`Move ${s.label} down`} onClick={() => move(i, 1)}>↓</button> </>}{canManage && <button type="button" className={BTN} aria-label={`Remove ${s.label}`} onClick={() => { if (used(s.id)) { setProblem(`${s.label} is used in someone's rules. Change their rules first.`); return; } setProblem(""); onChange({ ...rules, shifts: rules.shifts.filter((_, k) => k !== i) }); }}><Trash2 className="h-4 w-4" /></button>}</td>
               </tr>
             ))}
           </tbody>

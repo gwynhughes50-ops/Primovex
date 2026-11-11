@@ -1,10 +1,10 @@
 // Covers the reception rota engine (src/modules/rota): the rules from the current rota are entered as rules, and the weeks it builds are checked against them.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { DAYS, DEFAULT_SHIFTS, DEFAULT_SETTINGS, checkRules, mondayOf, addDays, newPerson, shiftById, toMinutes } from "../src/modules/rota/rotaModel.js";
+import { ABSENCE_REASONS, DAYS, DEFAULT_SHIFTS, ruleCoversShift, DEFAULT_SETTINGS, checkRules, mondayOf, addDays, newPerson, shiftById, toMinutes } from "../src/modules/rota/rotaModel.js";
 import { assignMin, canDo, generateWeek, generateWeeks, historyAfter, shiftIdOfKey, weekCounters } from "../src/modules/rota/rotaEngine.js";
 import { checkWeek, historyBefore, lockedOf, setPlace, withNames } from "../src/modules/rota/rotaWeek.js";
-import { buildRotaHtml, buildRotaXlsx, placeText, weekSheet } from "../src/modules/rota/rotaExport.js";
+import { buildRotaHtml, buildRotaXlsx, placeText, runningCounters, totalRows, weekSheet } from "../src/modules/rota/rotaExport.js";
 import { unzipSync, strFromU8 } from "fflate";
 
 let n = 0;
@@ -308,6 +308,59 @@ t("the person who builds the rota can load the staff list to pick the team from 
   const panel = readFileSync(new URL("../src/components/rota/RotaRulesPanel.jsx", import.meta.url), "utf8");
   assert.match(panel, /The staff list could not be loaded/);
   assert.match(panel, /The staff list is empty/);
+});
+
+t("the rota runs down in the order Sarah asked for, TOIL is an absence reason, and the shifts can be moved", () => {
+  assert.deepEqual(DEFAULT_SHIFTS.map((x) => x.label), ["Early 1", "Early 2", "Mid", "Late", "Admin 1", "Admin 2", "Admin 3", "Desk/phones", "Desk/phones (morning)", "Ty Elan"]);
+  const sheet = weekSheet(withNames(weeks[0], rules), rules);
+  assert.deepEqual(sheet.rows.slice(1).map((r) => r[0].replace(/ [\d.]+-[\d.]+$/, "")), ["Early 1", "Early 2", "Mid", "Late", "Admin 1", "Admin 2", "Admin 3", "Desk/phones", "Desk/phones (morning)", "Desk/phones (morning)", "Ty Elan"]);
+  assert.equal(ABSENCE_REASONS.toil, "Time off in lieu (TOIL)");
+  assert.ok(!("sickness" in ABSENCE_REASONS));
+  const panel = readFileSync(new URL("../src/components/rota/RotaRulesPanel.jsx", import.meta.url), "utf8");
+  assert.match(panel, /Move \$\{s\.label\} up/);
+  assert.match(panel, /Move \$\{s\.label\} down/);
+});
+
+t("Karen L is on Early 1 or Early 2 every Wednesday, whichever is free, until 12, when her rule says any early", () => {
+  const anyEarly = { ...rules, people: rules.people.map((p) => (p.uid === "karenl" ? { ...p, dayRules: { wed: { shift: "group:early", until: "12:00" } } } : p)) };
+  assert.deepEqual(checkRules(anyEarly), []);
+  const built = generateWeeks({ rules: anyEarly, firstMonday: FIRST, weeks: 7 });
+  for (const week of built) {
+    const wed = Object.entries(week.days.wed.slots).find(([, a]) => a.uid === "karenl");
+    assert.ok(["early1", "early2"].includes(wed[0]), `Karen L on ${wed[0]}`);
+    assert.equal(wed[1].until, "12:00");
+    assert.equal(week.issues.filter((i) => i.severity === "gap").length, 0);
+    const other = ["early1", "early2"].find((k) => k !== wed[0]);
+    assert.ok(week.days.wed.slots[other] && week.days.wed.slots[other].uid !== "karenl", "the other early is a full day for someone else");
+    const tue = Object.entries(week.days.tue.slots).find(([, a]) => a.uid === "karenl")[0];
+    assert.notEqual(tue, "late", "no late the day before an early");
+  }
+  assert.match(checkRules({ ...rules, people: rules.people.map((p) => (p.uid === "karenl" ? { ...p, dayRules: { wed: { shift: "group:nothing" } } } : p)) }).join(" "), /choose the shift/);
+  assert.equal(ruleCoversShift("group:early", shiftById(rules, "early2")), true);
+  assert.equal(ruleCoversShift("group:early", shiftById(rules, "mid")), false);
+  assert.equal(ruleCoversShift("early2", shiftById(rules, "early2")), true);
+  const panel = readFileSync(new URL("../src/components/rota/RotaRulesPanel.jsx", import.meta.url), "utf8");
+  assert.match(panel, /value=\{`group:\$\{g\}`\}/, "the page offers 'any early'");
+});
+
+t("the running total adds every week up, in the Excel file and on the printout, and the page can show it", () => {
+  const named = weeks.map((w) => withNames(w, rules));
+  const total = runningCounters(named, rules);
+  const everyone = Object.values(total).reduce((sum, r) => sum + r.total, 0);
+  assert.equal(everyone, 7 * (9 * 5 + 6), "seven weeks of person-days");
+  assert.equal(total.dave.desk, 35);
+  assert.equal(total.jack.admin2, 35);
+  const rows = totalRows(named, rules);
+  assert.match(rows[0][0], /Running total, 7 weeks \(w\.c\. 16 Nov to w\.c\. 28 Dec\)/);
+  assert.equal(rows[0][rows[0].length - 1], "Total");
+  const files = unzipSync(buildRotaXlsx(named, rules));
+  assert.match(strFromU8(files["xl/workbook.xml"]), /name="Running total"/);
+  assert.ok(files["xl/worksheets/sheet8.xml"], "seven weeks and the total");
+  assert.equal(Object.keys(unzipSync(buildRotaXlsx(named.slice(0, 1), rules))).filter((k) => k.startsWith("xl/worksheets/")).length, 1, "one week: no total sheet");
+  assert.match(buildRotaHtml(named, rules), /Running total, 7 weeks/);
+  assert.doesNotMatch(buildRotaHtml(named.slice(0, 1), rules), /Running total/);
+  const panel = readFileSync(new URL("../src/components/rota/RotaWeekPanel.jsx", import.meta.url), "utf8");
+  assert.match(panel, /Running total \(/);
 });
 
 console.log(`\n${n} passed`);

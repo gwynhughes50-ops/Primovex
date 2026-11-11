@@ -19,6 +19,23 @@ export function counterColumns(rules) {
   return order.map((g) => ({ group: g, label: groupLabel(rules, g) }));
 }
 
+// Every person's shifts added up over several weeks (the running total): { uid: { group: n, total } }.
+export function runningCounters(weeks, rules) {
+  const total = {};
+  for (const week of weeks) for (const [uid, row] of Object.entries(weekCounters(week, rules))) { total[uid] = total[uid] || { total: 0 }; for (const [k, v] of Object.entries(row)) total[uid][k] = (total[uid][k] || 0) + v; }
+  return total;
+}
+
+// The running total as rows of text, for the Excel sheet and the printout.
+export function totalRows(weeks, rules) {
+  const counters = runningCounters(weeks, rules);
+  const cols = counterColumns(rules);
+  const title = `Running total, ${weeks.length} week${weeks.length === 1 ? "" : "s"} (w.c. ${shortDate(weeks[0].mondayIso)} to w.c. ${shortDate(weeks[weeks.length - 1].mondayIso)})`;
+  const rows = [[title, ...cols.map((c) => c.label), "Total"]];
+  for (const p of rules.people || []) { const r = counters[p.uid]; if (r?.total) rows.push([p.name, ...cols.map((c) => r[c.group] || 0), r.total]); }
+  return rows;
+}
+
 // The cells of one week as rows of text: [[header...], [shift label, mon..fri], ...] and the counter table.
 export function weekSheet(week, rules) {
   const header = [`w.c. ${shortDate(week.mondayIso)}`, ...DAYS.map((d) => `${DAY_SHORT[d]} ${shortDate(addDays(week.mondayIso, DAYS.indexOf(d)))}`)];
@@ -72,6 +89,7 @@ function sheetXml(rows, counterRows, issues) {
 // weeks: saved weeks (with names on the places), oldest first
 export function buildRotaXlsx(weeks, rules) {
   const sheets = weeks.map((w) => ({ name: `w.c. ${shortDate(w.mondayIso)}`.slice(0, 31), ...weekSheet(w, rules) }));
+  if (weeks.length > 1) sheets.push({ name: "Running total", rows: totalRows(weeks, rules), counterRows: [], issues: [] });
   const files = {
     "[Content_Types].xml": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}</Types>`),
     "_rels/.rels": strToU8(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`),
@@ -90,5 +108,9 @@ export function buildRotaHtml(weeks, rules, { printedBy = "", printedAt = new Da
     const table = (data, head = true) => `<table>${data.map((r, i) => `<tr>${r.map((c, j) => (head && i === 0) || j === 0 ? `<th>${esc(c)}</th>` : `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</table>`;
     return `<section><h2>Reception rota: week commencing ${esc(dateOf(w.mondayIso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }))}</h2>${table(rows)}<h3>Shift counter</h3>${table(counterRows)}${issues.length ? `<ul class="issues">${issues.map((x) => `<li>${esc(x.text)}</li>`).join("")}</ul>` : ""}</section>`;
   });
+  if (weeks.length > 1) {
+    const rows = totalRows(weeks, rules);
+    blocks.push(`<section><h2>${esc(rows[0][0])}</h2><table>${rows.map((r, i) => `<tr>${r.map((c, j) => (i === 0 || j === 0 ? `<th>${esc(c)}</th>` : `<td>${esc(c)}</td>`)).join("")}</tr>`).join("")}</table></section>`);
+  }
   return `<!doctype html><html><head><meta charset="utf-8"><title>Reception rota</title><style>@page{size:A4 landscape;margin:12mm}body{font-family:Arial,sans-serif;font-size:10pt;color:#111}h2{font-size:13pt;margin:0 0 6px}h3{font-size:10pt;margin:10px 0 4px}table{border-collapse:collapse;width:100%;margin-bottom:6px}th,td{border:1px solid #888;padding:3px 5px;text-align:left;vertical-align:top}th{background:#eee}section{page-break-after:always}section:last-child{page-break-after:auto}.issues{font-size:9pt;color:#555}.foot{font-size:8pt;color:#555;margin-top:6px}</style></head><body>${blocks.join("")}<p class="foot">Printed ${esc(printedAt.toLocaleString("en-GB"))}${printedBy ? ` by ${esc(printedBy)}` : ""}. Names only: no leave reasons.</p></body></html>`;
 }

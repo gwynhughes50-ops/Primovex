@@ -755,8 +755,8 @@ match /subject_access_requests/{requestId} {
 
     match /reception_rota_absences/{absenceId} {
       allow get, list: if signedIn() && rotaReader();
-      allow create: if signedIn() && rotaManager() && request.resource.data.reason in ["leave", "other"] && request.resource.data.createdByUid == request.auth.uid;
-      allow update: if signedIn() && rotaManager() && request.resource.data.reason in ["leave", "other"];
+      allow create: if signedIn() && rotaManager() && request.resource.data.reason in ["leave", "toil", "other"] && request.resource.data.createdByUid == request.auth.uid;
+      allow update: if signedIn() && rotaManager() && request.resource.data.reason in ["leave", "toil", "other"];
       allow delete: if signedIn() && rotaManager();
     }
 

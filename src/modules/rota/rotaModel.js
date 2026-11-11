@@ -14,7 +14,7 @@ export const MODES = {
 };
 
 // Only "leave" or "off" is kept. Why someone is off sick is health information and the rota does not need it, so there is no "sickness" choice: sickness is entered as "Off (any other reason)".
-export const ABSENCE_REASONS = { leave: "Annual leave", other: "Off (sickness or any other reason)" };
+export const ABSENCE_REASONS = { leave: "Annual leave", toil: "Time off in lieu (TOIL)", other: "Off (sickness or any other reason)" };
 
 // "08:30" to minutes, so times can be compared.
 export const toMinutes = (hhmm) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || "")); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
@@ -29,11 +29,11 @@ export const DEFAULT_SHIFTS = [
   { id: "mid", label: "Mid", group: "mid", start: "09:30", end: "18:00", essential: true, count: 1, days: DAYS },
   { id: "late", label: "Late", group: "late", start: "10:00", end: "18:30", essential: true, count: 1, days: DAYS },
   { id: "admin1", label: "Admin 1", group: "admin1", start: "09:00", end: "17:30", essential: true, count: 1, days: DAYS },
-  { id: "tyelan", label: "Ty Elan", group: "tyelan", start: "08:30", end: "17:00", essential: true, count: 1, days: DAYS },
   { id: "admin2", label: "Admin 2", group: "admin2", start: "08:30", end: "17:00", essential: false, count: 1, days: DAYS, dropOrder: 2 },
+  { id: "admin3", label: "Admin 3", group: "admin3", start: "08:30", end: "17:00", essential: false, count: 1, days: DAYS, dropOrder: 1 },
   { id: "desk", label: "Desk/phones", group: "desk", start: "08:30", end: "17:00", essential: false, count: 1, days: DAYS, dropOrder: 3 },
   { id: "desk2", label: "Desk/phones (morning)", group: "desk", start: "08:30", end: "10:00", essential: false, count: 2, days: DAYS, dropOrder: 4 },
-  { id: "admin3", label: "Admin 3", group: "admin3", start: "08:30", end: "17:00", essential: false, count: 1, days: DAYS, dropOrder: 1 },
+  { id: "tyelan", label: "Ty Elan", group: "tyelan", start: "08:30", end: "17:00", essential: true, count: 1, days: DAYS },
 ];
 
 export const DEFAULT_SETTINGS = {
@@ -59,6 +59,10 @@ export const newPerson = (uid, name) => ({
 });
 
 export const shiftById = (rules, id) => (rules?.shifts || []).find((s) => s.id === id) || null;
+// A day rule names one shift ("early2") or any shift of a kind ("group:early", which is Early 1 or Early 2). These give the shifts a rule can mean.
+export const GROUP_PREFIX = "group:";
+export const ruleShiftsOf = (rules, spec) => (String(spec || "").startsWith(GROUP_PREFIX) ? (rules?.shifts || []).filter((s) => s.group === String(spec).slice(GROUP_PREFIX.length)) : [shiftById(rules, spec)].filter(Boolean));
+export const ruleCoversShift = (spec, shift) => Boolean(spec && shift) && (spec === shift.id || spec === `${GROUP_PREFIX}${shift.group}`);
 export const groupsOf = (rules) => [...new Set((rules?.shifts || []).map((s) => s.group))];
 export const groupLabel = (rules, group) => { const first = (rules?.shifts || []).find((s) => s.group === group); return first ? first.label.replace(/ \d$/, "").replace(/ \(.*\)$/, "") : group; };
 
@@ -97,7 +101,7 @@ export function checkRules(rules) {
       const e = p.earliest?.[d]; const l = p.latest?.[d];
       if (e && l && toMinutes(l) <= toMinutes(e)) problems.push(`${p.name} on ${DAY_LABELS[d]}: the latest finish must be after the earliest start.`);
       const dr = p.dayRules?.[d];
-      if (dr && !shiftById(rules, dr.shift)) problems.push(`${p.name} on ${DAY_LABELS[d]}: choose the shift.`);
+      if (dr && !ruleShiftsOf(rules, dr.shift).length) problems.push(`${p.name} on ${DAY_LABELS[d]}: choose the shift.`);
     }
   }
   return problems;

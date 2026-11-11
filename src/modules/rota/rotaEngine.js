@@ -9,7 +9,7 @@
 //        - not the same shift two days running, and not an early the morning after a late.
 //   4. If an essential shift is still empty, someone with a usual shift who can cover it steps in, and the shift they leave is shown as empty.
 //   5. Anything still empty is reported. An essential shift that can't be covered is a gap; a non-essential one that is dropped is a note. Nothing is left empty quietly.
-import { DAYS, DAY_LABELS, absentOn, addDays, shiftById, toMinutes, weekDates } from "./rotaModel.js";
+import { DAYS, DAY_LABELS, absentOn, addDays, ruleShiftsOf, shiftById, toMinutes, weekDates } from "./rotaModel.js";
 
 const BIG = 1e9;
 const ESSENTIAL_EMPTY = 100000; // leaving an essential shift empty is always worse than anything else
@@ -133,8 +133,11 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
     for (const p of present) {
       if (used.has(p.uid)) continue;
       const dr = p.dayRules?.[day];
-      if (dr && shiftById(rules, dr.shift)) {
-        const slot = firstFree(dr.shift);
+      const ruleShifts = dr ? ruleShiftsOf(rules, dr.shift) : [];
+      if (dr && ruleShifts.length) {
+        // one shift, or any shift of a kind (Early 1 or Early 2): a part shift goes on the later row, so the first row stays whole for someone working all day
+        const free = slots.filter((s) => ruleShifts.some((x) => x.id === s.shift.id) && !assigned[s.key]);
+        const slot = dr.until ? free[free.length - 1] : free[0];
         if (slot) { put(slot, p.uid, "rule", dr.until || null); if (dr.until && toMinutes(dr.until) < toMinutes(slot.shift.end)) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${p.name} is on ${slot.shift.label} until ${dr.until} only, so the rest of the shift is for the team to absorb.` }); continue; }
       }
       if (p.mode === "fixed" || p.mode === "usual") {
@@ -168,7 +171,7 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
             if (settings.avoidLateThenEarly !== false && group === "late") {
               const tomorrow = DAYS[DAYS.indexOf(day) + 1];
               const rule = tomorrow ? person.dayRules?.[tomorrow] : null;
-              if (rule && shiftById(rules, rule.shift)?.group === "early" && (person.days || []).includes(tomorrow)) v += 200;
+              if (rule && ruleShiftsOf(rules, rule.shift).some((x) => x.group === "early") && (person.days || []).includes(tomorrow)) v += 200;
             }
             if (settings.rollFridayLate !== false && day === "fri" && group === "late") v += FRIDAY_LATE_WEIGHT * (friLate[person.uid] || 0);
             v += jitter(`${person.uid}|${slot.key}|${iso}`);

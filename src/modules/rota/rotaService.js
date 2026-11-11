@@ -61,7 +61,7 @@ export function subscribeAbsences(onData, onError) {
 export async function addAbsence({ uid, name, from, to, reason }, actor) {
   if (!uid || !from) throw new Error("Choose who is off and the first day.");
   if (to && to < from) throw new Error("The last day cannot be before the first day.");
-  if (!["leave", "other"].includes(reason)) throw new Error("Choose a reason.");
+  if (!["leave", "toil", "other"].includes(reason)) throw new Error("Choose a reason.");
   if (isSafeSyntheticMode()) return;
   const a = who(actor);
   await addDoc(collection(db, ABSENCES), { uid, name, from, to: to || from, reason, createdAt: serverTimestamp(), createdByUid: a.uid, createdByName: a.name });
