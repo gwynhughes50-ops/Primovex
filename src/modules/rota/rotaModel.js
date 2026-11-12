@@ -64,13 +64,23 @@ export const newPerson = (uid, name) => ({
   dayRules: {}, // per day: { shift: "early2", until: "12:00" } means that day they do that shift, until that time
 });
 
+// The people whose rules put them on this shift (fixed, usual, or "only these shifts") and who work on this day. An empty place on a shift like that is only worth a note when someone who
+// should have been on it is not: the morning desk, for instance, is not "not staffed" on a day neither part-timer is due in.
+export const ownersOnDay = (rules, shift, day) => (rules?.people || []).filter((p) => (p.days || []).includes(day) && (((p.mode === "fixed" || p.mode === "usual") && p.shift === shift.id) || (p.mode === "only" && (p.onlyShifts || []).includes(shift.id))));
+export const isOwned = (rules, shift) => (rules?.people || []).some((p) => ((p.mode === "fixed" || p.mode === "usual") && p.shift === shift.id) || (p.mode === "only" && (p.onlyShifts || []).includes(shift.id)));
 export const shiftById = (rules, id) => (rules?.shifts || []).find((s) => s.id === id) || null;
 // A day rule names one shift ("early2") or any shift of a kind ("group:early", which is Early 1 or Early 2). These give the shifts a rule can mean.
 export const GROUP_PREFIX = "group:";
 export const ruleShiftsOf = (rules, spec) => (String(spec || "").startsWith(GROUP_PREFIX) ? (rules?.shifts || []).filter((s) => s.group === String(spec).slice(GROUP_PREFIX.length)) : [shiftById(rules, spec)].filter(Boolean));
 export const ruleCoversShift = (spec, shift) => Boolean(spec && shift) && (spec === shift.id || spec === `${GROUP_PREFIX}${shift.group}`);
 export const groupsOf = (rules) => [...new Set((rules?.shifts || []).map((s) => s.group))];
-export const groupLabel = (rules, group) => { const first = (rules?.shifts || []).find((s) => s.group === group); return first ? first.label.replace(/ \d$/, "").replace(/ \(.*\)$/, "") : group; };
+// The name of a group of shifts, for the counters. Early 1 and Early 2 are one group, "Early"; Admin 1, Admin 2 and Admin 3 are each their own, so keep their numbers.
+export const groupLabel = (rules, group) => {
+  const inGroup = (rules?.shifts || []).filter((s) => s.group === group);
+  if (!inGroup.length) return group;
+  const label = inGroup[0].label.replace(/ \(.*\)$/, "");
+  return inGroup.length > 1 ? label.replace(/ \d$/, "") : label;
+};
 
 // ---- dates (Monday-based weeks, in the practice's own calendar days) ----
 const pad = (n) => String(n).padStart(2, "0");

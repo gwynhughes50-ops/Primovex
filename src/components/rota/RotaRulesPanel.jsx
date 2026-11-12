@@ -3,6 +3,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { listStaffDirectory } from "@/services/staffDirectoryService";
 import { DAYS, DAY_LABELS, DAY_SHORT, MODES, TIME_CHOICES, checkRules, groupLabel, groupsOf, inStandardOrder, newPerson, timeLabel } from "@/modules/rota/rotaModel";
 import { saveRules } from "@/modules/rota/rotaService";
+import { groupColour, initials, personColour, tint } from "./rotaStyle";
 
 // The rules, entered once. Each person: the days they work, how they take part (rotate / always one shift / a usual shift and cover / only certain shifts), shifts they never do, earliest start and
 // latest finish for each day, a weekly limit on a kind of shift, and a day when they always do one shift until a set time (Karen L on a Wednesday). Everything is picked from a list.
@@ -29,8 +30,14 @@ function PersonCard({ person, rules, onChange, onRemove, canManage }) {
   const [sure, setSure] = useState(false);
   const groups = groupsOf(rules);
   return (
-    <details className="rounded-2xl border border-[var(--medtrak-border)] p-3">
-      <summary className="cursor-pointer text-sm"><strong>{person.name}</strong> <span className="text-[var(--medtrak-muted)]">· {MODES[person.mode]}{person.shift && (person.mode === "fixed" || person.mode === "usual") ? `: ${rules.shifts.find((s) => s.id === person.shift)?.label || ""}` : ""} · {person.days.map((d) => DAY_SHORT[d]).join(" ")}</span></summary>
+    <details className="rounded-2xl border border-[var(--medtrak-border)] bg-[color:color-mix(in_srgb,var(--medtrak-panel,#0f172a)_60%,transparent)] p-3">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-3 text-sm">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-bold text-white" style={{ background: personColour(person.uid) }} aria-hidden="true">{initials(person.name)}</span>
+        <span className="min-w-[90px] font-bold text-[var(--medtrak-text)]">{person.name}</span>
+        <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold" style={{ background: tint("#3b82f6", 14), color: "#3b82f6" }}>{MODES[person.mode]}{person.shift && (person.mode === "fixed" || person.mode === "usual") ? `: ${rules.shifts.find((s) => s.id === person.shift)?.label || ""}` : ""}</span>
+        <span className="flex gap-1">{DAYS.map((d) => <span key={d} className={`grid h-6 w-9 place-items-center rounded-md text-[10px] font-bold ${person.days.includes(d) ? "bg-[var(--medtrak-accent)] text-slate-950" : "bg-[color:color-mix(in_srgb,var(--medtrak-text)_8%,transparent)] text-[var(--medtrak-muted)]"}`}>{DAY_SHORT[d]}</span>)}</span>
+        <span className="ml-auto text-xs text-[var(--medtrak-muted)]">Open to change</span>
+      </summary>
       <div className="mt-3 space-y-4">
         <div>
           <p className="text-xs font-bold">Works on</p>
@@ -108,8 +115,8 @@ function ShiftsEditor({ rules, onChange, canManage }) {
   const [problem, setProblem] = useState("");
   const move = (i, by) => { const next = [...rules.shifts]; const j = i + by; if (j < 0 || j >= next.length) return; [next[i], next[j]] = [next[j], next[i]]; onChange({ ...rules, shifts: next }); };
   return (
-    <section className="rounded-2xl border border-[var(--medtrak-border)] p-4">
-      <h2 className="text-lg font-bold text-slate-50">The shifts</h2>
+    <section className="rounded-2xl border border-[var(--medtrak-border)] bg-[color:color-mix(in_srgb,var(--medtrak-panel,#0f172a)_60%,transparent)] p-5">
+      <h2 className="text-lg font-black text-slate-50">The shifts</h2>
       <p className="text-xs text-[var(--medtrak-muted)]">The order here is the order down the rota, in print and in Excel. Use the arrows to move a shift, or put them all in the usual order in one go. Press "Save the rules" afterwards.</p>
       {canManage && <button type="button" className={`${BTN} mt-2`} onClick={() => onChange({ ...rules, shifts: inStandardOrder(rules.shifts) })}>Put the shifts in the usual order (Early 1, Early 2, Mid, Late, Admin 1, 2, 3, Desk/phones, Desk/phones mornings, Ty Elan)</button>}
       <p className="text-xs text-[var(--medtrak-muted)]">An essential shift must be covered every day: if it can't be, the rota says so. A shift that is not essential is given up when there are too few people, the lowest "given up" number first.</p>
@@ -119,7 +126,7 @@ function ShiftsEditor({ rules, onChange, canManage }) {
           <tbody>
             {rules.shifts.map((s, i) => (
               <tr key={s.id} className="align-top">
-                <td className="p-1"><input value={s.label} disabled={!canManage} onChange={(e) => setShift(i, { label: e.target.value })} className={`${FIELD} w-40`} /></td>
+                <td className="p-1"><span className="flex items-center gap-2"><span className="h-6 w-1.5 shrink-0 rounded-full" style={{ background: groupColour(s.group, groupsOf(rules).indexOf(s.group)) }} aria-hidden="true" /><input value={s.label} disabled={!canManage} onChange={(e) => setShift(i, { label: e.target.value })} className={`${FIELD} w-40`} /></span></td>
                 <td className="p-1"><select value={s.group} disabled={!canManage} onChange={(e) => setShift(i, { group: e.target.value })} className={FIELD}>{[...new Set([...groupsOf(rules), s.group])].map((g) => <option key={g} value={g}>{groupLabel(rules, g)}</option>)}</select></td>
                 <td className="p-1"><TimeSelect value={s.start} blank="" disabled={!canManage} onChange={(v) => v && setShift(i, { start: v })} /></td>
                 <td className="p-1"><TimeSelect value={s.end} blank="" disabled={!canManage} onChange={(v) => v && setShift(i, { end: v })} /></td>
@@ -164,8 +171,8 @@ export default function RotaRulesPanel({ rules, actor, canManage }) {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-2xl border border-[var(--medtrak-border)] p-4">
-        <h2 className="text-lg font-bold text-slate-50">The reception team</h2>
+      <section className="rounded-2xl border border-[var(--medtrak-border)] bg-[color:color-mix(in_srgb,var(--medtrak-panel,#0f172a)_60%,transparent)] p-5">
+        <h2 className="text-lg font-black text-slate-50">The reception team</h2>
         <p className="text-xs text-[var(--medtrak-muted)]">People are chosen from the practice's staff list. Open a person to see and change their rules.</p>
         {canManage && (
           <div className="mt-3 flex flex-wrap items-end gap-2">
@@ -180,8 +187,8 @@ export default function RotaRulesPanel({ rules, actor, canManage }) {
         </div>
       </section>
       <ShiftsEditor rules={draft} onChange={change} canManage={canManage} />
-      <section className="rounded-2xl border border-[var(--medtrak-border)] p-4">
-        <h2 className="text-lg font-bold text-slate-50">Settings</h2>
+      <section className="rounded-2xl border border-[var(--medtrak-border)] bg-[color:color-mix(in_srgb,var(--medtrak-panel,#0f172a)_60%,transparent)] p-5">
+        <h2 className="text-lg font-black text-slate-50">Settings</h2>
         <div className="mt-2 space-y-1">
           <Check checked={draft.settings?.avoidLateThenEarly !== false} disabled={!canManage} onChange={(on) => change({ ...draft, settings: { ...draft.settings, avoidLateThenEarly: on } })}>Avoid an early shift the morning after a late</Check>
           <Check checked={draft.settings?.rollFridayLate !== false} disabled={!canManage} onChange={(on) => change({ ...draft, settings: { ...draft.settings, rollFridayLate: on } })}>Share the Friday late round the team in turn</Check>

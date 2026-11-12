@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { ABSENCE_REASONS, DAYS, DEFAULT_SHIFTS, availabilityOn, fitsWhole, inStandardOrder, offText, partTimes, ruleCoversShift, DEFAULT_SETTINGS, checkRules, mondayOf, addDays, newPerson, shiftById, toMinutes } from "../src/modules/rota/rotaModel.js";
 import { assignMin, canDo, generateWeek, generateWeeks, historyAfter, shiftIdOfKey, weekCounters } from "../src/modules/rota/rotaEngine.js";
 import { checkWeek, historyBefore, lockedOf, setPlace, withNames } from "../src/modules/rota/rotaWeek.js";
-import { buildRotaHtml, buildRotaXlsx, placeText, runningCounters, totalRows, weekSheet } from "../src/modules/rota/rotaExport.js";
+import { buildRotaHtml, buildRotaXlsx, counterColumns, placeText, runningCounters, totalRows, weekSheet } from "../src/modules/rota/rotaExport.js";
 import { unzipSync, strFromU8 } from "fflate";
 
 let n = 0;
@@ -485,6 +485,22 @@ t("time off is entered and shown with times: the form, the saved fields and the 
   const weekPanel = readFileSync(new URL("../src/components/rota/RotaWeekPanel.jsx", import.meta.url), "utf8");
   assert.match(weekPanel, /offText\(absences, p\.uid, iso\)/);
   assert.match(weekPanel, /availabilityOn\(absences, uid/);
+});
+
+t("notes are only for what matters: the morning desk is not 'not staffed' on a day neither part-timer is due in, but is when one who should be in is off", () => {
+  for (const week of weeks) {
+    assert.equal(week.issues.filter((x) => /Desk\/phones \(morning\) is not staffed/.test(x.text)).length, 0, "a normal week has no such notes");
+    assert.equal(checkWeek(rules, week, []).filter((x) => /Desk\/phones \(morning\) is not staffed/.test(x.text)).length, 0, "and the checker agrees");
+  }
+  const absences = [{ uid: "debbie", from: "2026-11-17", to: "2026-11-17", reason: "other" }];
+  const week = generateWeek({ rules, mondayIso: FIRST, absences });
+  assert.ok(week.issues.some((x) => x.day === "tue" && /Desk\/phones \(morning\) is not staffed \(Debbie is not in\)/.test(x.text)));
+  assert.equal(week.issues.filter((x) => /Desk\/phones \(morning\) is not staffed/.test(x.text)).length, 1, "only Tuesday");
+  assert.ok(checkWeek(rules, week, absences).some((x) => x.day === "tue" && /Desk\/phones \(morning\) is not staffed/.test(x.text)));
+});
+
+t("the counter columns read as on the current rota: Early (Early 1 and 2 together), Mid, Late, Admin 1, Admin 2, Admin 3, Desk/phones, Ty Elan", () => {
+  assert.deepEqual(counterColumns(rules).map((c) => c.label), ["Early", "Mid", "Late", "Admin 1", "Admin 2", "Admin 3", "Desk/phones", "Ty Elan"]);
 });
 
 console.log(`\n${n} passed`);

@@ -1,5 +1,5 @@
 // Helpers around weeks that have been built and saved: what history to build from, which places were fixed by hand, and a check of a week after someone has changed it.
-import { DAYS, DAY_LABELS, addDays, availabilityOn, hhmm, shiftById, toMinutes, weekDates } from "./rotaModel.js";
+import { DAYS, DAY_LABELS, addDays, availabilityOn, hhmm, isOwned, ownersOnDay, shiftById, toMinutes, weekDates } from "./rotaModel.js";
 import { canDo, historyAfter, shiftIdOfKey, slotKeyOf } from "./rotaEngine.js";
 
 const HISTORY_WEEKS = 12; // how far back fairness looks
@@ -77,7 +77,7 @@ export function checkWeek(rules, week, absences = []) {
       const shift = shiftById(rules, shiftIdOfKey(key));
       if (!a) {
         if (shift.essential) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: nobody is on ${shift.label} (${shift.start}–${shift.end}).` });
-        else issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${shift.label} is not staffed.` });
+        else if (!(isOwned(rules, shift) && slotsOfDay(rules, day).filter((s) => s.shift.id === shift.id).findIndex((s) => s.key === key) >= ownersOnDay(rules, shift, day).length)) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${shift.label} is not staffed.` });
         continue;
       }
       const p = people[a.uid];

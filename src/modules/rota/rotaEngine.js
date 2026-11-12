@@ -9,7 +9,7 @@
 //        - not the same shift two days running, and not an early the morning after a late.
 //   4. If an essential shift is still empty, someone with a usual shift who can cover it steps in, and the shift they leave is shown as empty.
 //   5. Anything still empty is reported. An essential shift that can't be covered is a gap; a non-essential one that is dropped is a note. Nothing is left empty quietly.
-import { DAYS, DAY_LABELS, MIN_PART_MINUTES, addDays, availabilityOn, fitsWhole, overlapMinutes, partTimes, ruleShiftsOf, shiftById, toMinutes, weekDates } from "./rotaModel.js";
+import { DAYS, DAY_LABELS, MIN_PART_MINUTES, addDays, availabilityOn, fitsWhole, isOwned, overlapMinutes, ownersOnDay, partTimes, ruleShiftsOf, shiftById, toMinutes, weekDates } from "./rotaModel.js";
 
 const BIG = 1e9;
 const ESSENTIAL_EMPTY = 100000; // leaving an essential shift empty is always worse than anything else
@@ -257,8 +257,12 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
       unfilled.push(slot.key);
       if (slot.shift.essential) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: nobody is available for ${slot.shift.label} (${slot.shift.start}–${slot.shift.end}).` });
       else if (!issues.some((i) => i.day === day && i.text.includes(`${slot.shift.label} is left unstaffed`))) {
-        const owner = people.find((p) => (p.mode === "fixed" || p.mode === "usual") && p.shift === slot.shift.id);
-        const why = owner && !presentUids.has(owner.uid) ? `${owner.name} is not in` : reserved.has(slot.shift.id) ? "nobody is on it" : "there are not enough people";
+        const owners = ownersOnDay(rules, slot.shift, day);
+        const place = slots.filter((s) => s.shift.id === slot.shift.id).indexOf(slot);
+        const absentOwner = owners.find((o) => !presentUids.has(o.uid));
+        // a shift that belongs to certain people is only worth a note when one of them who should be in is not (the morning desk on a day neither part-timer is due in is not a gap)
+        if (isOwned(rules, slot.shift) && place >= owners.length) continue;
+        const why = absentOwner ? `${absentOwner.name} is not in` : reserved.has(slot.shift.id) ? "nobody is on it" : "there are not enough people";
         issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${slot.shift.label} is not staffed (${why}).` });
       }
     }
