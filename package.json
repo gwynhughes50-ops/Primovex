@@ -108,6 +108,7 @@
     "test:pin-enter": "node scripts/verify-pin-enter.mjs",
     "test:laptops": "node scripts/verify-laptops.mjs",
     "test:rota": "node scripts/verify-rota.mjs",
+    "test:rota-review": "node scripts/verify-rota-review.mjs",
     "test:concern-meeting-cancel": "node scripts/verify-concern-meeting-cancel.mjs",
     "test:test-documents": "esbuild scripts/verify-test-documents.mjs --bundle --platform=node --format=esm --external:firebase/* --external:pdf-lib --external:fflate --alias:@/lib/firebase=./scripts/stubs/sarStubs.js --alias:@=./src --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=work/verify-test-documents.bundle.mjs && node work/verify-test-documents.bundle.mjs",
     "test:document-formats": "esbuild scripts/verify-document-formats.mjs --bundle --platform=node --format=esm --external:firebase/* --alias:@/lib/firebase=./scripts/stubs/sarStubs.js --alias:@=./src --outfile=work/verify-document-formats.bundle.mjs && node work/verify-document-formats.bundle.mjs",

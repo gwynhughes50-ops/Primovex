@@ -7,6 +7,7 @@ import { checkWeek, historyBefore, lockedOf, setPlace, slotsOfDay, withNames } f
 import { buildRotaHtml, buildRotaXlsx, counterColumns, runningCounters } from "@/modules/rota/rotaExport";
 import { saveWeek } from "@/modules/rota/rotaService";
 import { groupColour, initials, personColour, tint } from "./rotaStyle";
+import RotaReviewPanel from "./RotaReviewPanel";
 
 // The rota for a week: a grid of shifts by day, each kind of shift in its own colour and each person as a coloured chip. Primovex builds it from the rules and who is off; every place can be changed by
 // hand (click the chip), the change is checked straight away (double bookings, someone who is off, hours, weekly limits, an empty essential shift), and a place fixed by hand is kept when the week is
@@ -147,6 +148,8 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
         <Tile icon={gaps.length ? AlertTriangle : CheckCircle2} tone={!week ? "info" : gaps.length ? "bad" : notes.length ? "warn" : "good"} label="Needs attention" value={!week ? "—" : gaps.length ? `${gaps.length} to fix` : "Nothing to fix"} note={week ? `${notes.length} note${notes.length === 1 ? "" : "s"} to know about` : ""} />
         <Tile icon={UserMinus} tone={offPeople.length ? "warn" : "info"} label="Off this week" value={offPeople.length ? `${offPeople.length} ${offPeople.length === 1 ? "person" : "people"}` : "Nobody"} note={offPeople.map((p) => p.name).join(", ")} />
       </div>
+
+      <RotaReviewPanel rules={rules} weeks={weeks} absences={absences} startMonday={startMonday} canManage={canManage} onGoToWeek={setMonday} />
 
       {canManage && (
         <div className={`${CARD} flex flex-wrap items-center gap-3 p-3`}>

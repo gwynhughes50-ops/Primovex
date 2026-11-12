@@ -33,6 +33,7 @@ const { sendKitNotification, replaceKitItemBatch } = require("./services/kitChec
 const { recordUsage } = require("./services/usageService");
 const { routeQuestion, countRequest } = require("./services/orbRouterService");
 const { phraseAnswer } = require("./services/orbPhraseService");
+const { reviewSummary } = require("./services/rotaReviewService");
 const { runRetention } = require("./services/retentionService");
 const { sendTeamMessage, findColleagues } = require("./services/teamMessageService");
 const { replyToMessage } = require("./services/messageReplyService");
@@ -740,6 +741,52 @@ exports.orbPhrase = onCall(
     }
     const { detail, ...decision } = result;
     if (detail) console.warn("Orb language assistant wording unavailable", { detail });
+    return decision;
+  }
+);
+
+// The reception rota check's written summary. Separate switch (settings/orb.aiRotaReview), off unless a System Admin turns it on, and only for the person who builds the rota or an administrator. The app
+// sends the findings of its own check with every name replaced by "Person A", "Person B" ...; this refuses to call the model if a real staff name is still in them, and throws away a reply that is not
+// faithful to the findings. Audited by counts only (never the findings or the summary).
+exports.rotaReviewSummary = onCall(
+  {
+    region: "europe-west2",
+    timeoutSeconds: 30,
+    memory: "256MiB",
+    secrets: [AZURE_OPENAI_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT],
+  },
+  async (request) => {
+    assertSignedIn(request);
+    const snapshot = await db.collection("users").doc(request.auth.uid).get();
+    if (!snapshot.exists) throw new HttpsError("failed-precondition", "A Primovex user profile is required.");
+    const profile = snapshot.data() || {};
+    const capabilities = await getEffectiveCapabilities(db, profile.role, profile);
+    const startedAt = Date.now();
+    const result = await reviewSummary({
+      db,
+      uid: request.auth.uid,
+      isAdmin: profile.role === "System Admin",
+      capabilities,
+      payload: request.data,
+      azure: { endpoint: AZURE_OPENAI_ENDPOINT.value(), key: AZURE_OPENAI_KEY.value(), deployment: AZURE_OPENAI_DEPLOYMENT.value() },
+    });
+    if (result.enabled && result.reason !== "not-allowed") {
+      appendGovernedAuditEvent({
+        db,
+        auth: request.auth,
+        profile,
+        data: {
+          action: "rota.ai.review",
+          module: "rota",
+          targetType: "reception_rota",
+          summary: result.ok ? "The reception rota check was summarised by the AI" : "The AI summary of the reception rota check was not used",
+          classification: "operational",
+          metadata: { findings: result.count || 0, reason: result.ok ? "summarised" : result.reason || "unknown", ms: Date.now() - startedAt },
+        },
+      }).catch((error) => console.error("Rota AI review audit failed", { message: error?.message }));
+    }
+    const { detail, ...decision } = result;
+    if (detail) console.warn("Rota AI review unavailable", { detail });
     return decision;
   }
 );

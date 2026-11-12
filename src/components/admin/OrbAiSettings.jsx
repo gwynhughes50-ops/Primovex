@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { doc, onSnapshot, serverTimestamp, setDoc } from "firebase/firestore";
-import { Bot, MessageSquareText, ShieldCheck } from "lucide-react";
+import { Bot, CalendarDays, MessageSquareText, ShieldCheck } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { db } from "@/lib/firebase";
@@ -54,12 +54,12 @@ function Switch({ title, icon: Icon, intro, sees, safeguards, usage, limit, on, 
   );
 }
 
-// The administrator's switches for the Orb's AI. Two, deliberately separate, because they
-// send different things to the model. Both are off unless turned on here.
+// The administrator's switches for the Orb's AI and the rota's written summary. Three, deliberately separate, because they
+// send different things to the model. All are off unless turned on here.
 export default function OrbAiSettings() {
   const { user } = useAuth();
   const [settings, setSettings] = useState(null);
-  const [usage, setUsage] = useState({ route: null, phrase: null });
+  const [usage, setUsage] = useState({ route: null, phrase: null, rota: null });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -68,7 +68,8 @@ export default function OrbAiSettings() {
     const offSettings = onSnapshot(doc(db, "settings", "orb"), (snap) => setSettings(snap.exists() ? snap.data() : {}), () => setSettings({}));
     const offRoute = onSnapshot(doc(db, "orb_ai_usage", `all_${day}`), (snap) => setUsage((u) => ({ ...u, route: snap.exists() ? snap.data().count || 0 : 0 })), () => {});
     const offPhrase = onSnapshot(doc(db, "orb_ai_usage", `p_all_${day}`), (snap) => setUsage((u) => ({ ...u, phrase: snap.exists() ? snap.data().count || 0 : 0 })), () => {});
-    return () => { offSettings(); offRoute(); offPhrase(); };
+    const offRota = onSnapshot(doc(db, "orb_ai_usage", `r_all_${day}`), (snap) => setUsage((u) => ({ ...u, rota: snap.exists() ? snap.data().count || 0 : 0 })), () => {});
+    return () => { offSettings(); offRoute(); offPhrase(); offRota(); };
   }, []);
 
   async function change(field, label, next) {
@@ -145,6 +146,30 @@ export default function OrbAiSettings() {
         confirmText="I understand this sends the Orb's answers (item, room and fridge names, counts, dates) to Azure OpenAI, I've checked the region, and this use is covered by the practice's DPIA."
         busy={busy}
         onChange={(next) => change("aiPhrasing", "Orb language assistant (wording the answers)", next)}
+      />
+
+      <Switch
+        title="Reception rota: a written summary of the rota check"
+        icon={CalendarDays}
+        intro="Lets the AI write a short summary of the rota check for the person who builds the reception rota. The check itself always works without it."
+        sees={[
+          "It sees the findings of the check (what needs fixing, what to watch, what is worth knowing), with every person's name replaced by Person A, Person B and so on.",
+          "It never sees names, why anyone is off, or anything about a patient. Primovex refuses to send the findings at all if a real staff name is still in them.",
+          "Only the person who builds the rota, or an administrator, can ask for it.",
+        ]}
+        safeguards={[
+          "A summary is thrown away, and none shown, if it contains a number, a person or a name that was not in the findings, or a link.",
+          "Limits: 10 per person per hour, 100 for the practice per day.",
+          "If the AI is off, slow or rejected, the findings are shown without a summary.",
+          "Each use is audited (how many findings, never what they say).",
+        ]}
+        usage={usage.rota}
+        limit="100"
+        on={settings?.aiRotaReview === true}
+        loaded={loaded}
+        confirmText="I understand this sends the rota check's findings, with names replaced by letters, to Azure OpenAI, I've checked the region, and this use is covered by the practice's DPIA."
+        busy={busy}
+        onChange={(next) => change("aiRotaReview", "Reception rota summary", next)}
       />
     </div>
   );
