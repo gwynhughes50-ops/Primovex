@@ -36,5 +36,10 @@ export const useCertificates = () => ({ list: stub.certificates || null, error: 
 import { buildAttention } from "../../src/mobile/homeAttention.js";
 export const useOrbStatus = () => ({ chips: buildAttention({ ...(stub.attention || {}), now: new Date() }), level: "green", signals: [] });
 
+// the phone home asks whether this person is on the reception rota (the team's access is on, and weeks are published to them)
+export const subscribeTeamAccess = (onData) => { onData?.(stub.rotaAccess === true); return () => {}; };
+export const subscribeMyPublished = (uid, onData) => { onData?.(stub.rotaWeeks || {}); return () => {}; };
+export const teamUid = (uid) => uid;
+
 // the phone home asks whether this person has a laptop
 export const subscribeMyLaptops = (uid, onData) => { onData?.(stub.laptops || []); return () => {}; };

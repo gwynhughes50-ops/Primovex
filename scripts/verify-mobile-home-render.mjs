@@ -72,4 +72,9 @@ t("every kind of home has the Scan anything button, and the IT tile only for the
   assert.ok(!home("Nurse", ["inventory.write"]).includes("My laptop"), "no laptop, no My laptop tile");
 });
 
+t("there is no My rota tile on the phone home until it is known that the person is on the rota (the tile itself is covered by the role-homes test)", () => {
+  assert.ok(!home("Reception", ["dashboard.read"]).includes("My rota"));
+  assert.ok(!home("Practice Manager", ["*"]).includes("My rota"), "the Practice Manager sees the coordinator's page, not My rota");
+});
+
 console.log(`\n${n} passed`);
