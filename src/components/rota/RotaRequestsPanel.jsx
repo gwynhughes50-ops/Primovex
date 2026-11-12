@@ -68,7 +68,7 @@ function RequestCard({ r, onAnswer, busy }) {
   );
 }
 
-export default function RotaRequestsPanel({ requests, teamAccess, canSwitch, actor }) {
+export default function RotaRequestsPanel({ requests, teamAccess, canSwitch, actor, showAccess = true }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -95,7 +95,7 @@ export default function RotaRequestsPanel({ requests, teamAccess, canSwitch, act
 
   return (
     <div className="space-y-5">
-      <section className={`${CARD} p-5`}>
+      {showAccess && <section className={`${CARD} p-5`}>
         <div className="flex flex-wrap items-start gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-xl" style={{ background: tint("#8b5cf6", 16), color: "#8b5cf6" }}><Smartphone className="h-5 w-5" aria-hidden="true" /></span>
           <div className="min-w-0 flex-1">
@@ -114,7 +114,7 @@ export default function RotaRequestsPanel({ requests, teamAccess, canSwitch, act
             )}
           </div>
         ) : <p className="mt-2 text-xs text-[var(--medtrak-muted)]">Only the Practice Manager and administrators can switch this on or off.</p>}
-      </section>
+      </section>}
 
       {error && <p className="rounded-xl border border-rose-400/20 bg-rose-500/10 p-3 text-sm text-rose-100">{error}</p>}
       {notice && <p className="rounded-xl border border-emerald-400/20 bg-emerald-500/10 p-3 text-sm text-emerald-100">{notice}</p>}

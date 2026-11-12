@@ -233,4 +233,10 @@ t("a My rota tile appears only for someone on the reception rota, once weeks hav
   assert.ok(!mine.some((a) => a.key === "it-equipment" || a.key === "my-laptop"), "it does not open anything else");
 });
 
+t("a Reception rota tile appears on the phone for the Practice Manager and anyone with the rota permission, and not for anyone else", () => {
+  const home = getRoleHome("Nurse", ["inventory.read"]);
+  assert.ok(!visibleActions(home, ["inventory.read"]).some((a) => a.key === "reception-rota"));
+  for (const caps of [["rota.manage"], ["rota.read"], ["*"]]) assert.ok(visibleActions(getRoleHome("Practice Manager", caps), caps).some((a) => a.key === "reception-rota" && a.label === "Reception rota"), caps.join());
+});
+
 console.log(`\n${n} passed`);

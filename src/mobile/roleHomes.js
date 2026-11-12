@@ -172,6 +172,8 @@ export function visibleActions(home, capabilities = [], { hasLaptop = false, has
   // anyone allowed to add documents (and for whom the practice has switched Document reading on, which removes the permission otherwise) gets the Add a document tile
   if (has(capabilities, "documents.intake")) laptopTiles.push({ key: "add-document", label: "Add a document", helper: "Photo of a certificate or data sheet", Icon: FilePlus2 });
   if (hasLaptop) laptopTiles.push({ key: "my-laptop", label: "My laptop", helper: "When it is due an update or back", Icon: Laptop });
+  // the Practice Manager and whoever builds the reception rota: see the rota as built and answer the requests that are waiting
+  if (has(capabilities, "rota.read") || has(capabilities, "rota.manage")) laptopTiles.push({ key: "reception-rota", label: "Reception rota", helper: "See the rota, answer requests", Icon: CalendarDays });
   // a member of the reception team, once the practice has switched the team's rota on and weeks have been published to them: their shifts, who is on, swaps and requests
   if (hasRota) laptopTiles.push({ key: "my-rota", label: "My rota", helper: "Your shifts, swaps and requests", Icon: CalendarDays });
   return [...shown, ...laptopTiles];

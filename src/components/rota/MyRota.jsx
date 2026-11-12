@@ -159,7 +159,7 @@ function MyShifts({ shifts, today, onSwap, onAdjust }) {
   );
 }
 
-function TeamDay({ published, uid, today }) {
+export function TeamDay({ published, uid, today }) {
   const weeks = useMemo(() => Object.keys(published).sort(), [published]);
   const [monday, setMonday] = useState("");
   const [day, setDay] = useState("");

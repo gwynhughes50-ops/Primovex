@@ -106,14 +106,15 @@ function MobileLaptopRoute({ mine = false }) {
   return <MobileSessionShell>{mine ? <MobileMyLaptop /> : <MobileLaptops />}</MobileSessionShell>;
 }
 
-function MobileRotaRoute() {
+function MobileRotaRoute({ coordinator = false }) {
   const { user, loading, can, profile } = useAuth();
   if (loading) return <MobileBootSplash message="Opening My rota" />;
   if (!user) return <MobileAccountLogin />;
   if (profile?.mustChangePassword === true) return <MustChangePassword />;
   if (!can("mobile.access")) return <MobileAccessDenied />;
+  if (coordinator && !can("rota.read") && !can("rota.manage")) return <MobileAccessDenied />;
   // Behind the session lock, like the other pages that show colleagues' details. Who is on the rota and whether the team's access is on is checked by the database.
-  return <MobileSessionShell><MobileRota /></MobileSessionShell>;
+  return <MobileSessionShell><MobileRota coordinator={coordinator} /></MobileSessionShell>;
 }
 
 function MobileAddDocumentRoute() {
@@ -146,6 +147,7 @@ export default function MobileApp() {
       <Route path="/it-equipment" element={<MobileLaptopRoute />} />
       <Route path="/my-laptop" element={<MobileLaptopRoute mine />} />
       <Route path="/my-rota" element={<MobileRotaRoute />} />
+      <Route path="/reception-rota" element={<MobileRotaRoute coordinator />} />
       <Route path="/add-document" element={<MobileAddDocumentRoute />} />
       <Route path="/governance/significant-events" element={<MobileSignificantEventsRoute />} />
       <Route path="/spaces" element={<MobileBootController initialTab="sense" />} />

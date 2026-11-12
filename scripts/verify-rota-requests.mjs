@@ -217,7 +217,7 @@ t("the team's screens never read the rules, the time off or the weeks as built: 
 
 t("it is wired in: a My rota tile and page on the phone (behind the session lock), the same page in the desktop app, the notification label, and the coordinator's publish, requests and team switch", () => {
   assert.match(read("src/apps/MobileApp.jsx"), /<Route path="\/my-rota" element=\{<MobileRotaRoute \/>\} \/>/);
-  assert.match(read("src/apps/MobileApp.jsx"), /<MobileSessionShell><MobileRota \/><\/MobileSessionShell>/);
+  assert.match(read("src/apps/MobileApp.jsx"), /<MobileSessionShell><MobileRota coordinator=\{coordinator\} \/><\/MobileSessionShell>/);
   assert.match(read("src/apps/DesktopApp.jsx"), /<Route path="my-rota"/);
   assert.match(read("src/mobile/MobileLayout.jsx"), /case "my-rota":\s*navigate\("\/my-rota"\)/);
   assert.match(read("src/mobile/RoleAdaptiveMobileHome.jsx"), /visibleActions\(home, capabilities, \{ hasLaptop, hasRota \}\)/);
@@ -233,6 +233,18 @@ t("it is wired in: a My rota tile and page on the phone (behind the session lock
   assert.match(panel, /Only the Practice Manager and administrators can switch this on or off/);
   const fn = read("functions/index.js");
   assert.match(fn.slice(fn.indexOf("exports.rotaRequest")), /rotaRequest\(\{ db, uid: request\.auth\.uid/);
+});
+
+t("the Practice Manager and the coordinator can see the rota and answer requests on the phone: the tile, the page behind the permission, and the screen reads the built weeks (which they may read) and shows them as the team see them", () => {
+  assert.match(read("src/apps/MobileApp.jsx"), /<Route path="\/reception-rota" element=\{<MobileRotaRoute coordinator \/>\} \/>/);
+  assert.match(read("src/apps/MobileApp.jsx"), /coordinator && !can\("rota\.read"\) && !can\("rota\.manage"\)\) return <MobileAccessDenied/);
+  assert.match(read("src/mobile/MobileLayout.jsx"), /case "reception-rota":\s*navigate\("\/reception-rota"\)/);
+  const screen = read("src/components/rota/CoordinatorRota.jsx");
+  assert.match(screen, /subscribeWeeks/);
+  assert.match(screen, /projectPublished\(w, rules\)/);
+  assert.match(screen, /showAccess=\{false\}/, "the team access switch stays on the desktop");
+  assert.match(screen, /canSwitch=\{false\}/);
+  assert.match(read("src/components/rota/RotaRequestsPanel.jsx"), /\{showAccess && <section/);
 });
 
 console.log(`\n${n} passed`);
