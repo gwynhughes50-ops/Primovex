@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { runRetention, deleteOlderThan, removeStoredTime, USAGE_SESSION_DAYS, ORB_USAGE_DAYS } = require("../services/retentionService");
+const { runRetention, deleteOlderThan, removeRotaRecords, removeStoredTime, USAGE_SESSION_DAYS, ORB_USAGE_DAYS, ROTA_MONTHS } = require("../services/retentionService");
 
 const NOW = new Date(Date.UTC(2026, 9, 7, 3, 30, 0));
 const DAY = 86400000;
@@ -127,4 +127,51 @@ test("a large backlog is cleared in batches, and an empty collection is fine", a
   const n = await deleteOlderThan({ db, collection: "usage_sessions", field: "startedAt", cutoff: ts(1), batchSize: 400, maxBatches: 10 });
   assert.equal(n, 1000);
   assert.equal((await runRetention({ db: fakeDb({}), now: NOW })).usageSessionsDeleted, 0);
+});
+
+// ---- the reception rota ----
+const rotaData = () => ({
+  reception_rota_weeks: { old: { mondayIso: "2025-10-06" }, edge: { mondayIso: "2025-10-13" }, recent: { mondayIso: "2026-10-05" }, future: { mondayIso: "2026-11-16" } },
+  reception_rota_published: { old: { mondayIso: "2025-09-29" }, recent: { mondayIso: "2026-10-05" } },
+  reception_rota_absences: { old: { to: "2025-10-06" }, ongoing: { to: "2025-10-20" }, recent: { to: "2026-10-01" } },
+  reception_rota_requests: { old: { createdAt: ts(NOW.getTime() - 400 * DAY) }, recent: { createdAt: ts(NOW.getTime() - 20 * DAY) } },
+});
+
+test("the reception rota's records older than twelve months are deleted: weeks and published copies by their Monday, time off by its last day, requests by when they were made; nothing newer or to come", async () => {
+  assert.equal(ROTA_MONTHS, 12);
+  const db = fakeDb(rotaData());
+  const result = await removeRotaRecords({ db, now: NOW });
+  assert.deepEqual(result, { rotaWeeksDeleted: 1, rotaPublishedDeleted: 1, rotaAbsencesDeleted: 1, rotaRequestsDeleted: 1 });
+  assert.deepEqual(db.deleted.sort(), ["reception_rota_absences/old", "reception_rota_published/old", "reception_rota_requests/old", "reception_rota_weeks/old"]);
+});
+
+test("the weekly clean-up includes the rota, and the administrator's 'Clean up now' on the activity report does not touch it", async () => {
+  const weekly = fakeDb(rotaData());
+  const r = await runRetention({ db: weekly, now: NOW });
+  assert.equal(r.rotaWeeksDeleted, 1);
+  assert.equal(r.rotaRequestsDeleted, 1);
+  const activityOnly = fakeDb(rotaData());
+  const r2 = await runRetention({ db: activityOnly, now: NOW, rota: false });
+  assert.equal("rotaWeeksDeleted" in r2, false);
+  assert.deepEqual(activityOnly.deleted, [], "nothing from the rota");
+  const fs = require("node:fs");
+  const server = fs.readFileSync(require("node:path").join(__dirname, "..", "index.js"), "utf8");
+  assert.match(server.slice(server.indexOf("exports.runRetentionNow")), /runRetention\(\{ db, rota: false \}\)/);
+});
+
+test("running the rota clean-up again finds nothing more, and an empty rota is fine", async () => {
+  const db = fakeDb(rotaData());
+  await removeRotaRecords({ db, now: NOW });
+  const again = await removeRotaRecords({ db, now: NOW });
+  assert.deepEqual(again, { rotaWeeksDeleted: 0, rotaPublishedDeleted: 0, rotaAbsencesDeleted: 0, rotaRequestsDeleted: 0 });
+  assert.deepEqual(await removeRotaRecords({ db: fakeDb({}), now: NOW }), { rotaWeeksDeleted: 0, rotaPublishedDeleted: 0, rotaAbsencesDeleted: 0, rotaRequestsDeleted: 0 });
+});
+
+test("a large backlog of old rota records is cleaned in batches, and a different period can be given", async () => {
+  const many = {};
+  for (let i = 0; i < 900; i += 1) many[`r${i}`] = { createdAt: ts(NOW.getTime() - 500 * DAY) };
+  const db = fakeDb({ reception_rota_requests: many });
+  assert.equal((await removeRotaRecords({ db, now: NOW })).rotaRequestsDeleted, 900);
+  const short = fakeDb({ reception_rota_weeks: { a: { mondayIso: "2026-06-01" }, b: { mondayIso: "2026-09-28" } } });
+  assert.equal((await removeRotaRecords({ db: short, now: NOW, months: 3 })).rotaWeeksDeleted, 1, "three months back is 7 July: June goes, September stays");
 });

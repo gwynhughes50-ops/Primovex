@@ -12,6 +12,7 @@ Retention must be assigned by the controller and Records Manager according to th
 | Security and access audit | No/To determine | Event date | To determine from security/legal need | Secure deletion | Pending |
 | Synthetic demonstration data | No | Creation date | Short test period to approve | Automated deletion | Pending |
 | Backups | Mirrors source | Backup date | Defined rolling period | Cryptographic/verified deletion | Pending |
+| Reception rota: the weeks built, the copies published to the team, time off, and the team's swap and adjustment requests | Yes (the rota itself) | The week, the last day off, the date a request was made | 12 months proposed (built, in `functions/services/retentionService.js`) | Automated deletion by the weekly clean-up | Pending (Dr Lane and the DPO) |
 
 ## Engineering requirements before live use
 

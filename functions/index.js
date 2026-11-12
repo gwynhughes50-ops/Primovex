@@ -928,7 +928,7 @@ exports.scheduledRetention = onSchedule(
 // The same clean-up, run on demand by an administrator (for example straight after the activity tracking stopped recording time, to remove the time already stored without waiting for Sunday).
 exports.runRetentionNow = onCall({ region: "europe-west2", timeoutSeconds: 120 }, async (request) => {
   await assertAdmin(request);
-  return runRetention({ db });
+  return runRetention({ db, rota: false }); // activity records only: the rota's records are cleaned up by the weekly job
 });
 
 // Sign-in and activity reporting: the app tells us which area of it a person is in
