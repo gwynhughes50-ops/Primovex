@@ -34,6 +34,7 @@ const { recordUsage } = require("./services/usageService");
 const { routeQuestion, countRequest } = require("./services/orbRouterService");
 const { phraseAnswer } = require("./services/orbPhraseService");
 const { reviewSummary } = require("./services/rotaReviewService");
+const { rotaRequest } = require("./services/rotaRequestService");
 const { runRetention } = require("./services/retentionService");
 const { sendTeamMessage, findColleagues } = require("./services/teamMessageService");
 const { replyToMessage } = require("./services/messageReplyService");
@@ -787,6 +788,30 @@ exports.rotaReviewSummary = onCall(
     }
     const { detail, ...decision } = result;
     if (detail) console.warn("Rota AI review unavailable", { detail });
+    return decision;
+  }
+);
+
+// The reception team's requests (swap a shift with a colleague, ask for an adjustment) and the coordinator's answers. Every step is made here because only the server can see everyone's rules and
+// time off, check a swap against them and change the rota. Switched on by the Practice Manager (settings/rota.teamAccess). Audited by kind and count, never the details.
+exports.rotaRequest = onCall(
+  { region: "europe-west2", timeoutSeconds: 60, memory: "256MiB" },
+  async (request) => {
+    assertSignedIn(request);
+    const snapshot = await db.collection("users").doc(request.auth.uid).get();
+    if (!snapshot.exists) throw new HttpsError("failed-precondition", "A Primovex user profile is required.");
+    const profile = snapshot.data() || {};
+    const capabilities = await getEffectiveCapabilities(db, profile.role, profile);
+    const result = await rotaRequest({ db, uid: request.auth.uid, profile, capabilities, isAdmin: profile.role === "System Admin", data: request.data || {} });
+    if (result.audit) {
+      appendGovernedAuditEvent({
+        db,
+        auth: request.auth,
+        profile,
+        data: { action: result.audit.action, module: "rota", targetType: "reception_rota_request", summary: result.audit.summary, classification: "operational", metadata: result.audit.metadata },
+      }).catch((error) => console.error("Rota request audit failed", { message: error?.message }));
+    }
+    const { audit, ...decision } = result;
     return decision;
   }
 );

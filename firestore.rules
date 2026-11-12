@@ -161,6 +161,11 @@ service cloud.firestore {
       allow create, update: if hasPermission("inventory", "verify") || isAdmin();
     }
 
+    // Whether the reception team can use the rota on their phones (teamAccess): switched on by the Practice Manager once it has been agreed. Read by everyone who is signed in.
+    match /settings/rota {
+      allow create, update: if hasPermission("practiceAdmin", "write") || isAdmin();
+    }
+
     // Which roles are told when a fridge reading is out of range (read by everyone; set by the Practice Manager
     // and admins). The Practice Manager default is applied in the app when this has not been set.
     match /settings/fridgeAlerts {
@@ -751,6 +756,22 @@ match /subject_access_requests/{requestId} {
       allow create, update: if signedIn() && rotaManager() && weekId.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
         && request.resource.data.keys().hasOnly(["mondayIso", "days", "issues", "generatedAt", "generatedByUid", "generatedByName", "updatedAt", "updatedByUid", "updatedByName", "edited"]);
       allow delete: if rotaManager();
+    }
+
+    // What the reception team see on their phones. The coordinator publishes a week; this copy holds only who is on which shift and the times (no check notes, no rules, no time off), so a member of the
+    // team can see who is on a shift (they need to, to swap) and never who is off or why. A member of the team reads it by asking for the weeks that list them (teamUids). Only the coordinator writes it.
+    match /reception_rota_published/{weekId} {
+      allow get, list: if signedIn() && (rotaReader() || request.auth.uid in resource.data.teamUids);
+      allow create, update: if signedIn() && rotaManager() && weekId.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+        && request.resource.data.keys().hasOnly(["mondayIso", "teamUids", "slots", "days", "publishedAt", "publishedByUid", "publishedByName"]);
+      allow delete: if signedIn() && rotaManager();
+    }
+
+    // Swap and adjustment requests. Made and answered only by the server (the rotaRequest function), which checks them against everyone's rules and time off. A person reads only the requests they made
+    // or that are for them; the coordinator reads all of them. Nobody can write one from the app.
+    match /reception_rota_requests/{requestId} {
+      allow get, list: if signedIn() && (rotaReader() || resource.data.requesterUid == request.auth.uid || resource.data.targetUid == request.auth.uid);
+      allow create, update, delete: if false;
     }
 
     match /reception_rota_absences/{absenceId} {

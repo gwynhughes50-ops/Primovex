@@ -2276,6 +2276,76 @@ async function main() {
     await assertSucceeds(deleteDoc(doc(admin, RR, "main")));
   });
 
+  console.log("\n=== 34. Reception rota on the team's phones: published weeks, requests and the team switch ===");
+  const teamKim = testEnv.authenticatedContext("teamkim-uid").firestore(); // on the reception team
+  const teamLibby = testEnv.authenticatedContext("teamlibby-uid").firestore(); // on the reception team
+  const outsider = testEnv.authenticatedContext("outsider-uid").firestore(); // signed in, not on the team
+  const RP = "reception_rota_published", RQ = "reception_rota_requests";
+  const pubDoc = (extra = {}) => ({ mondayIso: "2026-11-16", teamUids: ["teamkim-uid", "teamlibby-uid"], slots: [{ key: "early1", label: "Early 1", start: "08:00", end: "16:30", days: ["mon"] }], days: { mon: { iso: "2026-11-16", slots: { early1: { uid: "teamkim-uid", name: "Kim" } } } }, publishedAt: new Date(), publishedByUid: "rotalead-uid", publishedByName: "Lead", ...extra });
+  const reqDoc = (extra = {}) => ({ type: "swap", status: "awaiting_colleague", requesterUid: "teamkim-uid", requesterName: "Kim", targetUid: "teamlibby-uid", targetName: "Libby", a: {}, b: {}, changesHours: false, history: [], ...extra });
+  await seed(async (db) => {
+    await setDoc(doc(db, "users", "teamkim-uid"), { role: "User", displayName: "Kim" });
+    await setDoc(doc(db, "users", "teamlibby-uid"), { role: "User", displayName: "Libby" });
+    await setDoc(doc(db, "users", "outsider-uid"), { role: "User", displayName: "Outsider" });
+    await setDoc(doc(db, RP, "2026-11-16"), pubDoc());
+    await setDoc(doc(db, RQ, "swap-1"), reqDoc());
+    await setDoc(doc(db, RQ, "swap-2"), reqDoc({ requesterUid: "teamlibby-uid", targetUid: "teamkim-uid" }));
+    await setDoc(doc(db, RQ, "swap-3"), reqDoc({ requesterUid: "someone-else", targetUid: "another" }));
+  });
+  await check("A member of the reception team CAN read the published weeks that list them (asking for those), and see who is on a shift", async () => {
+    for (const who of [teamKim, teamLibby]) {
+      const own = await assertSucceeds(getDocs(query(collection(who, RP), where("teamUids", "array-contains", who === teamKim ? "teamkim-uid" : "teamlibby-uid"))));
+      assert.equal(own.docs.length, 1);
+      await assertSucceeds(getDoc(doc(who, RP, "2026-11-16")));
+    }
+  });
+  await check("Someone signed in who is NOT on the team, a read-only user and an anonymous visitor CANNOT read a published week, and the team CANNOT list every week without saying who they are", async () => {
+    for (const who of [outsider, readonly, nurse, anon]) {
+      await assertFails(getDoc(doc(who, RP, "2026-11-16")));
+      await assertFails(getDocs(collection(who, RP)));
+    }
+    await assertFails(getDocs(collection(teamKim, RP)));
+    await assertFails(getDocs(query(collection(outsider, RP), where("teamUids", "array-contains", "teamkim-uid"))));
+  });
+  await check("The team CANNOT write a published week; the coordinator CAN, with the fixed fields only, and the published copy has no room for check notes, hand-changed marks or time off", async () => {
+    await assertFails(setDoc(doc(teamKim, RP, "2026-11-23"), pubDoc({ mondayIso: "2026-11-23" })));
+    await assertFails(updateDoc(doc(teamKim, RP, "2026-11-16"), { days: {} }));
+    await assertSucceeds(setDoc(doc(rotaLead, RP, "2026-11-23"), pubDoc({ mondayIso: "2026-11-23" })));
+    await assertFails(setDoc(doc(rotaLead, RP, "2026-11-30"), pubDoc({ mondayIso: "2026-11-30", issues: [{ text: "Kim is off" }] })));
+    await assertFails(setDoc(doc(rotaLead, RP, "2026-11-30"), pubDoc({ mondayIso: "2026-11-30", edited: { "mon|late": true } })));
+    await assertFails(setDoc(doc(rotaLead, RP, "next-week"), pubDoc()));
+    await assertSucceeds(deleteDoc(doc(rotaLead, RP, "2026-11-23")));
+    await assertFails(deleteDoc(doc(teamKim, RP, "2026-11-16")));
+  });
+  await check("A person CAN read the requests they made or that are for them (asking for their own), but NOT anyone else's; the coordinator CAN read them all", async () => {
+    const mine = await assertSucceeds(getDocs(query(collection(teamKim, RQ), where("requesterUid", "==", "teamkim-uid"))));
+    assert.equal(mine.docs.length, 1);
+    const forMe = await assertSucceeds(getDocs(query(collection(teamKim, RQ), where("targetUid", "==", "teamkim-uid"))));
+    assert.equal(forMe.docs.length, 1);
+    await assertSucceeds(getDoc(doc(teamKim, RQ, "swap-1")));
+    await assertSucceeds(getDoc(doc(teamLibby, RQ, "swap-1")));
+    await assertFails(getDoc(doc(teamKim, RQ, "swap-3")));
+    await assertFails(getDocs(collection(teamKim, RQ)));
+    await assertFails(getDoc(doc(outsider, RQ, "swap-1")));
+    await assertFails(getDoc(doc(anon, RQ, "swap-1")));
+    for (const who of [rotaLead, rotaView, pm, admin]) assert.equal((await assertSucceeds(getDocs(collection(who, RQ)))).docs.length, 3);
+  });
+  await check("Nobody CAN make, change or remove a request from the app: not the requester, not the colleague, not even the coordinator or an administrator (the server does it)", async () => {
+    for (const who of [teamKim, teamLibby, rotaLead, pm, admin]) {
+      await assertFails(setDoc(doc(who, RQ, "new-one"), reqDoc()));
+      await assertFails(addDoc(collection(who, RQ), reqDoc()));
+      await assertFails(updateDoc(doc(who, RQ, "swap-1"), { status: "approved" }));
+      await assertFails(deleteDoc(doc(who, RQ, "swap-1")));
+    }
+  });
+  await check("Only the Practice Manager and administrators CAN switch the team's access on; the coordinator, the team and others CANNOT; everyone signed in can read the switch", async () => {
+    await assertSucceeds(setDoc(doc(pm, "settings", "rota"), { teamAccess: true }));
+    await assertSucceeds(setDoc(doc(admin, "settings", "rota"), { teamAccess: false }));
+    for (const who of [teamKim, outsider, nurse, readonly, anon]) await assertFails(setDoc(doc(who, "settings", "rota"), { teamAccess: true }));
+    await assertSucceeds(getDoc(doc(teamKim, "settings", "rota")));
+    await assertFails(getDoc(doc(anon, "settings", "rota")));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);
