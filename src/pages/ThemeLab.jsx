@@ -1,3 +1,4 @@
+import { ReadingControls } from "@/components/theme/ReadingPreferences";
 import { useMemo } from "react";
 import { ThemePickerButton, useMedTrakTheme } from "@/components/theme/MedTrakThemeProvider";
 import { Button } from "@/components/ui/button";
@@ -117,17 +118,18 @@ export default function ThemeLab() {
       <header className="mt-card rounded-3xl border p-6 shadow-2xl shadow-black/10">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <p className="mt-accent text-xs font-semibold uppercase tracking-[0.3em]">Sprint 21A</p>
-            <h1 className="mt-text-primary mt-2 text-3xl font-bold tracking-tight">Theme Lab</h1>
+            <p className="mt-accent text-xs font-semibold uppercase tracking-[0.3em]">Personal preferences</p>
+            <h1 className="mt-text-primary mt-2 text-3xl font-bold tracking-tight">Appearance &amp; Reading</h1>
             <p className="mt-text-secondary mt-2 max-w-3xl text-sm leading-6">
-              A quality-control page for checking every Primovex theme across desktop, tablet and mobile components.
-              Use this before each release to catch hidden text, weak contrast and awkward component states.
+              Choose your colours and reading preferences, with a live preview.
+              Reading settings are personal to this device; your colour theme follows your existing profile preference.
             </p>
           </div>
           <ThemePickerButton />
         </div>
       </header>
 
+      <ReadingControls />
       <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
         <LabCard title="Theme selector and contrast checks">
           <div className="grid gap-3 md:grid-cols-2">

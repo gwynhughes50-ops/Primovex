@@ -111,6 +111,7 @@
     "test:rota-review": "node scripts/verify-rota-review.mjs",
     "test:rota-requests": "node scripts/verify-rota-requests.mjs",
     "test:android-portrait": "node scripts/verify-android-portrait.mjs",
+    "test:reading-preferences": "node scripts/verify-reading-preferences.mjs",
     "build:rota-core": "node scripts/build-rota-core.mjs",
     "test:rota-core": "node scripts/build-rota-core.mjs --check",
     "test:concern-meeting-cancel": "node scripts/verify-concern-meeting-cancel.mjs",

@@ -1,3 +1,4 @@
+import { ReadingPreferencesProvider } from "./ReadingPreferences";
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -8,6 +9,9 @@ const LEGACY_STORAGE_KEY = "medtrak-theme";
 const DEFAULT_THEME_ID = "nhs-blue";
 
 export const MEDTRAK_THEMES = [
+  { id: "primovex-modern", name: "Primovex Modern", description: "Bright surfaces with Primovex blue and violet.", light: true, bg: "#f5f7fc", panel: "#ffffff", panelSoft: "#eef2fa", border: "#c7d0e0", text: "#172033", muted: "#4c5870", accent: "#3154b8", accent2: "#7040b5" },
+  { id: "contemporary", name: "Contemporary", description: "Quiet neutral surfaces and a restrained teal accent.", light: true, bg: "#f4f6f6", panel: "#ffffff", panelSoft: "#eaf0ef", border: "#bccdca", text: "#182c2b", muted: "#485f5d", accent: "#14645e", accent2: "#356e83" },
+  { id: "soft-paper", name: "Soft Paper", description: "Warm off-white surfaces with dark readable text.", light: true, bg: "#f5f0e7", panel: "#fffbf3", panelSoft: "#eee7da", border: "#c8bcaa", text: "#302b25", muted: "#625749", accent: "#365997", accent2: "#755383" },
   {
     id: "aurora",
     name: "Primovex Midnight",
@@ -83,7 +87,7 @@ export const MEDTRAK_THEMES = [
 const ThemeContext = createContext(null);
 
 function getTheme(themeId) {
-  return MEDTRAK_THEMES.find((theme) => theme.id === themeId) || MEDTRAK_THEMES[0];
+  return MEDTRAK_THEMES.find((theme) => theme.id === themeId) || MEDTRAK_THEMES.find((theme) => theme.id === DEFAULT_THEME_ID);
 }
 
 function injectThemeStyles() {
@@ -1245,7 +1249,7 @@ export function MedTrakThemeProvider({ children }) {
     };
   }, [themeId]);
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={value}><ReadingPreferencesProvider>{children}</ReadingPreferencesProvider></ThemeContext.Provider>;
 }
 
 export function useMedTrakTheme() {

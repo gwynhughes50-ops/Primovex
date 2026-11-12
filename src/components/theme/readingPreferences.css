@@ -1,0 +1,28 @@
+html[data-reading-size="large"] { font-size: 112.5%; }
+html[data-reading-size="extra-large"] { font-size: 125%; }
+/* "system" (shown as Primovex default) leaves the app's own font alone. Arial and Verdana replace it everywhere. The theme sets its own font with !important on the page, buttons, inputs and so on, so
+   these rules name the theme attribute as well (a higher specificity) or they would only reach some of the text. Code is left as it is. */
+html[data-reading-font="arial"][data-medtrak-theme],
+html[data-reading-font="arial"][data-medtrak-theme] :is(body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, label, span, a, li, td, th, summary, legend) { font-family: Arial, Helvetica, sans-serif !important; }
+html[data-reading-font="verdana"][data-medtrak-theme],
+html[data-reading-font="verdana"][data-medtrak-theme] :is(body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, label, span, a, li, td, th, summary, legend) { font-family: Verdana, Geneva, sans-serif !important; }
+html[data-reading-spacing="comfortable"] :is(p,li,label,input,textarea) { line-height: 1.65 !important; letter-spacing: .025em; word-spacing: .06em; }
+html[data-reading-spacing="comfortable"] p + p { margin-top: 1em; }
+html[data-reading-spacing="comfortable"] :is(h1,h2,h3,h4) { line-height: 1.35 !important; }
+html[data-reading-spacing="comfortable"] :is(button,input,select) { min-height: 2.75rem; }
+html[data-reading-motion="reduced"] *, html[data-reading-motion="reduced"] *::before, html[data-reading-motion="reduced"] *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+@media (prefers-reduced-motion: reduce) {
+ html[data-reading-motion="system"] *, html[data-reading-motion="system"] *::before, html[data-reading-motion="system"] *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+.reading-panel { padding: 1.5rem; border: 1px solid var(--medtrak-border); border-radius: 1.25rem; background: var(--medtrak-panel); color: var(--medtrak-text); }
+.reading-panel h2 { font-size: 1.4rem; font-weight: 700; }
+.reading-panel p { margin-top: .75rem; max-width: 65ch; color: var(--medtrak-muted); }
+.reading-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1rem; }
+.reading-actions button { border: 1px solid var(--medtrak-border); border-radius: .65rem; padding: .75rem 1rem; background: var(--medtrak-panel); color: var(--medtrak-text); font-weight: 600; }
+.reading-controls { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,14rem),1fr)); gap: 1rem; margin-block: 1.5rem; }
+.reading-panel label { display: grid; gap: .5rem; font-weight: 600; }
+.reading-panel :is(select,input) { width: 100%; min-width: 0; padding: .75rem; border: 1px solid var(--medtrak-border); border-radius: .6rem; background: var(--medtrak-bg); color: var(--medtrak-text); font-size: 1rem; }
+.reading-panel :is(button,select,input):focus-visible { outline: 3px solid var(--medtrak-accent); outline-offset: 3px; }
+.reading-preview { margin-top: 1.5rem; padding: 1.25rem; border: 1px solid var(--medtrak-border); border-radius: .75rem; background: var(--medtrak-bg); max-width: 65ch; }
+.reading-preview h3 { font-size: 1.25rem; font-weight: 700; margin-block: .5rem; }
+.reading-preview label { margin-top: 1rem; }
