@@ -1,5 +1,6 @@
 // Covers swapping shifts, asking for adjustments and what the team see (src/modules/rota/rotaSwap.js and rotaPublish.js).
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { DAYS, DEFAULT_SETTINGS, DEFAULT_SHIFTS, newPerson } from "../src/modules/rota/rotaModel.js";
 import { generateWeeks } from "../src/modules/rota/rotaEngine.js";
 import { withNames } from "../src/modules/rota/rotaWeek.js";
@@ -194,6 +195,44 @@ t("what a person sees: their own shifts from today on, in order, with part shift
   assert.deepEqual(roster.slice(0, 2).map((r) => r.label), ["Early 1", "Early 2"]);
   assert.equal(roster.find((r) => r.uid === "karenl").end, "12:00");
   assert.deepEqual(dayRoster(null, "mon"), []);
+});
+
+const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+
+t("the team's screens never read the rules, the time off or the weeks as built: only the published weeks and their own requests, and every request goes through the server", () => {
+  const screen = read("src/components/rota/MyRota.jsx");
+  assert.doesNotMatch(screen, /subscribeRules|subscribeAbsences|subscribeWeeks|rotaService|reception_rota_(rules|weeks|absences)|checkWeek|availabilityOn/, "nothing about anyone's rules or time off");
+  assert.match(screen, /subscribeMyPublished\(uid/);
+  assert.match(screen, /subscribeMyRequests\(uid/);
+  assert.match(screen, /askRota\(\{ action: "options"/);
+  assert.match(screen, /askRota\(\{ action: "create_swap"/);
+  assert.match(screen, /askRota\(\{ action: "create_adjust"/);
+  const service = read("src/modules/rota/rotaTeamService.js");
+  assert.match(service, /where\("teamUids", "array-contains", uid\)/, "the published weeks that list the person");
+  assert.match(service, /where\("requesterUid", "==", uid\)/);
+  assert.match(service, /where\("targetUid", "==", uid\)/);
+  assert.doesNotMatch(service.slice(service.indexOf("// ---- a member of the team ----")), /setDoc|addDoc|updateDoc|deleteDoc/, "the team's side never writes");
+  assert.match(service, /httpsCallable\(functions, "rotaRequest"/);
+});
+
+t("it is wired in: a My rota tile and page on the phone (behind the session lock), the same page in the desktop app, the notification label, and the coordinator's publish, requests and team switch", () => {
+  assert.match(read("src/apps/MobileApp.jsx"), /<Route path="\/my-rota" element=\{<MobileRotaRoute \/>\} \/>/);
+  assert.match(read("src/apps/MobileApp.jsx"), /<MobileSessionShell><MobileRota \/><\/MobileSessionShell>/);
+  assert.match(read("src/apps/DesktopApp.jsx"), /<Route path="my-rota"/);
+  assert.match(read("src/mobile/MobileLayout.jsx"), /case "my-rota":\s*navigate\("\/my-rota"\)/);
+  assert.match(read("src/mobile/RoleAdaptiveMobileHome.jsx"), /visibleActions\(home, capabilities, \{ hasLaptop, hasRota \}\)/);
+  assert.match(read("src/services/notificationCentreService.js"), /rota: "Reception rota"/);
+  const week = read("src/components/rota/RotaWeekPanel.jsx");
+  assert.match(week, /publishWeeks\(list, rules, actor\)/);
+  assert.match(week, /Publish to the team/);
+  const page = read("src/pages/ReceptionRota.jsx");
+  assert.match(page, /<RotaRequestsPanel requests=\{requests\} teamAccess=\{teamAccess\} canSwitch=\{canSwitch\}/);
+  const panel = read("src/components/rota/RotaRequestsPanel.jsx");
+  assert.match(panel, /I have checked that the DPIA addition/, "turning the team's access on asks for a tick");
+  assert.match(panel, /disabled=\{busy \|\| !confirmed\}/);
+  assert.match(panel, /Only the Practice Manager and administrators can switch this on or off/);
+  const fn = read("functions/index.js");
+  assert.match(fn.slice(fn.indexOf("exports.rotaRequest")), /rotaRequest\(\{ db, uid: request\.auth\.uid/);
 });
 
 console.log(`\n${n} passed`);

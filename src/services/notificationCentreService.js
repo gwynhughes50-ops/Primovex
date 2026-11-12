@@ -89,6 +89,7 @@ export function getModuleLabel(module) {
     quality: "Quality",
     clinflow: "ClinFlow",
     laptop: "IT equipment",
+    rota: "Reception rota",
     general: "General",
   };
   return labels[key] || key.charAt(0).toUpperCase() + key.slice(1);

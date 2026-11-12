@@ -2287,6 +2287,7 @@ async function main() {
     await setDoc(doc(db, "users", "teamkim-uid"), { role: "User", displayName: "Kim" });
     await setDoc(doc(db, "users", "teamlibby-uid"), { role: "User", displayName: "Libby" });
     await setDoc(doc(db, "users", "outsider-uid"), { role: "User", displayName: "Outsider" });
+    await setDoc(doc(db, "settings", "rota"), { teamAccess: true });
     await setDoc(doc(db, RP, "2026-11-16"), pubDoc());
     await setDoc(doc(db, RQ, "swap-1"), reqDoc());
     await setDoc(doc(db, RQ, "swap-2"), reqDoc({ requesterUid: "teamlibby-uid", targetUid: "teamkim-uid" }));
@@ -2298,6 +2299,14 @@ async function main() {
       assert.equal(own.docs.length, 1);
       await assertSucceeds(getDoc(doc(who, RP, "2026-11-16")));
     }
+  });
+  await check("While the Practice Manager has the team's access switched off, the team CANNOT read a published week (and can again when it is on)", async () => {
+    await assertSucceeds(setDoc(doc(admin, "settings", "rota"), { teamAccess: false }));
+    await assertFails(getDoc(doc(teamKim, RP, "2026-11-16")));
+    await assertFails(getDocs(query(collection(teamKim, RP), where("teamUids", "array-contains", "teamkim-uid"))));
+    await assertSucceeds(getDoc(doc(rotaLead, RP, "2026-11-16")));
+    await assertSucceeds(setDoc(doc(pm, "settings", "rota"), { teamAccess: true }));
+    await assertSucceeds(getDoc(doc(teamKim, RP, "2026-11-16")));
   });
   await check("Someone signed in who is NOT on the team, a read-only user and an anonymous visitor CANNOT read a published week, and the team CANNOT list every week without saying who they are", async () => {
     for (const who of [outsider, readonly, nurse, anon]) {

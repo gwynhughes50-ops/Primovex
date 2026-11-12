@@ -6,6 +6,7 @@ import { getRoleHome, visibleActions } from "./roleHomes";
 import MobileAttentionStrip from "./MobileAttentionStrip";
 import MobileStockTakeBanner from "./MobileStockTakeBanner";
 import { subscribeMyLaptops } from "@/modules/laptops/laptopService";
+import { subscribeMyPublished, subscribeTeamAccess, teamUid } from "@/modules/rota/rotaTeamService";
 
 // The phone home for everyone except the Cleaner (who has MobileCleanerHome): its tiles come from the role
 // (see roleHomes.js). Managers and partners also see what needs attention at the top.
@@ -16,6 +17,16 @@ export default function RoleAdaptiveMobileHome({ onAction }) {
   useEffect(() => {
     if (!user?.uid) return undefined;
     return subscribeMyLaptops(user.uid, (rows) => setHasLaptop((rows || []).length > 0), () => setHasLaptop(false));
+  }, [user?.uid]);
+  // whether this person is on the reception rota and weeks have been published to them (and the practice has switched the team's access on): only then is there a My rota tile
+  const [hasRota, setHasRota] = useState(false);
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    let access = false; let weeks = 0;
+    const update = () => setHasRota(access && weeks > 0);
+    const stopAccess = subscribeTeamAccess((on) => { access = on; update(); }, () => { access = false; update(); });
+    const stopWeeks = subscribeMyPublished(teamUid(user.uid), (map) => { weeks = Object.keys(map || {}).length; update(); }, () => { weeks = 0; update(); });
+    return () => { stopAccess(); stopWeeks(); };
   }, [user?.uid]);
   const { activeSenseSession } = useSenseSession();
   const home = getRoleHome(role, capabilities, roleHomeType);
@@ -64,7 +75,7 @@ export default function RoleAdaptiveMobileHome({ onAction }) {
       </button>
 
       <div className="pvx-role-actions">
-        {visibleActions(home, capabilities, { hasLaptop }).map(({ key, label, helper, Icon }) => (
+        {visibleActions(home, capabilities, { hasLaptop, hasRota }).map(({ key, label, helper, Icon }) => (
           <button key={key} type="button" onClick={() => onAction?.(key)}>
             <Icon className="h-5 w-5" />
             <b>{label}</b>

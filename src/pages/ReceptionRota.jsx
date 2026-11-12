@@ -1,24 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
-import { CalendarDays, SlidersHorizontal, UserMinus } from "lucide-react";
+import { ArrowLeftRight, CalendarDays, SlidersHorizontal, UserMinus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { emptyRules, mondayOf } from "@/modules/rota/rotaModel";
 import { subscribeAbsences, subscribeRules, subscribeWeeks } from "@/modules/rota/rotaService";
+import { subscribePublished, subscribeRequests, subscribeTeamAccess } from "@/modules/rota/rotaTeamService";
 import RotaWeekPanel from "@/components/rota/RotaWeekPanel";
 import RotaRulesPanel from "@/components/rota/RotaRulesPanel";
 import RotaAbsencesPanel from "@/components/rota/RotaAbsencesPanel";
+import RotaRequestsPanel from "@/components/rota/RotaRequestsPanel";
 
 // Reception rota (Operations > Reception rota). One person (given the permission) enters the rules for each member of the reception team and who is off, and Primovex builds the rota in the background.
 // She can change any place by hand: Primovex checks it and keeps it when the week is built again. The Practice Manager can see all of it.
-const TABS = [["rota", "Rota", CalendarDays], ["off", "Who is off", UserMinus], ["rules", "People and rules", SlidersHorizontal]];
+const TABS = [["rota", "Rota", CalendarDays], ["requests", "Requests", ArrowLeftRight], ["off", "Who is off", UserMinus], ["rules", "People and rules", SlidersHorizontal]];
 
 export default function ReceptionRota() {
-  const { can, user, displayName } = useAuth();
+  const { can, user, displayName, isAdmin } = useAuth();
   const canManage = can("rota.manage");
+  const canSwitch = Boolean(isAdmin || can("practiceAdmin.write"));
   const actor = useMemo(() => ({ uid: user?.uid || "", displayName: displayName || user?.email || "" }), [user, displayName]);
   const [tab, setTab] = useState("rota");
   const [rules, setRules] = useState(null); // null while loading
   const [weeks, setWeeks] = useState({});
   const [absences, setAbsences] = useState([]);
+  const [published, setPublished] = useState({});
+  const [requests, setRequests] = useState([]);
+  const [teamAccess, setTeamAccess] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -27,6 +33,9 @@ export default function ReceptionRota() {
       subscribeRules((r) => setRules(r || emptyRules()), onError),
       subscribeWeeks(setWeeks, onError),
       subscribeAbsences(setAbsences, onError),
+      subscribePublished(setPublished, onError),
+      subscribeRequests(setRequests, onError),
+      subscribeTeamAccess(setTeamAccess, () => {}),
     ];
     return () => stops.forEach((stop) => stop());
   }, []);
@@ -34,6 +43,7 @@ export default function ReceptionRota() {
   const startMonday = useMemo(() => mondayOf(new Date()), []);
   const ready = rules !== null;
   const noTeam = ready && !(rules.people || []).length;
+  const waitingForYou = requests.filter((r) => r.status === "awaiting_coordinator").length;
 
   return (
     <div className="space-y-5">
@@ -48,7 +58,7 @@ export default function ReceptionRota() {
         <div className="inline-flex rounded-2xl border border-[var(--medtrak-border)] p-1" role="tablist">
           {TABS.map(([id, label, Icon]) => (
             <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${tab === id ? "bg-[var(--medtrak-accent)] text-slate-950 shadow-sm" : "text-[var(--medtrak-text)] hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_10%,transparent)]"}`}>
-              <Icon className="h-4 w-4" aria-hidden="true" />{label}
+              <Icon className="h-4 w-4" aria-hidden="true" />{label}{id === "requests" && waitingForYou > 0 && <span className="rounded-full bg-amber-400 px-1.5 text-[11px] font-black text-slate-950">{waitingForYou}</span>}
             </button>
           ))}
         </div>
@@ -59,7 +69,8 @@ export default function ReceptionRota() {
           {noTeam && tab !== "rules" && (
             <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-sm text-amber-100">No one is on the rota yet. {canManage ? <>Add the reception team under <button type="button" className="underline" onClick={() => setTab("rules")}>People and rules</button>.</> : "Ask whoever builds the rota to add the team."}</p>
           )}
-          {tab === "rota" && <RotaWeekPanel rules={rules} weeks={weeks} absences={absences} actor={actor} canManage={canManage} startMonday={startMonday} />}
+          {tab === "rota" && <RotaWeekPanel rules={rules} weeks={weeks} absences={absences} actor={actor} canManage={canManage} startMonday={startMonday} published={published} teamAccess={teamAccess} />}
+          {tab === "requests" && <RotaRequestsPanel requests={requests} teamAccess={teamAccess} canSwitch={canSwitch} actor={actor} />}
           {tab === "off" && <RotaAbsencesPanel rules={rules} absences={absences} actor={actor} canManage={canManage} />}
           {tab === "rules" && <RotaRulesPanel rules={rules} actor={actor} canManage={canManage} />}
         </>

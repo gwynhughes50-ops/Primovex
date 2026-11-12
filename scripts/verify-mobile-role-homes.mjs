@@ -224,4 +224,13 @@ t("a My laptop tile appears only for someone who has a laptop", () => {
   assert.ok(!mine.some((a) => a.key === "it-equipment"), "having a laptop does not open the register");
 });
 
+t("a My rota tile appears only for someone on the reception rota, once weeks have been published to them and the team's access is on", () => {
+  const home = getRoleHome("Receptionist", ["inventory.read"]);
+  assert.ok(!visibleActions(home, ["inventory.read"]).some((a) => a.key === "my-rota"));
+  assert.ok(!visibleActions(home, ["inventory.read"], { hasRota: false }).some((a) => a.key === "my-rota"));
+  const mine = visibleActions(home, ["inventory.read"], { hasRota: true });
+  assert.ok(mine.some((a) => a.key === "my-rota" && a.label === "My rota"));
+  assert.ok(!mine.some((a) => a.key === "it-equipment" || a.key === "my-laptop"), "it does not open anything else");
+});
+
 console.log(`\n${n} passed`);

@@ -11,6 +11,7 @@ import FridgeCheckLanding from "@/mobile/FridgeCheckLanding";
 import CoshhLanding from "@/mobile/CoshhLanding";
 import ComplianceLanding from "@/mobile/ComplianceLanding";
 import { MobileLaptops, LaptopLanding, MobileMyLaptop } from "@/mobile/MobileLaptops";
+import MobileRota from "@/mobile/MobileRota";
 import MobileAddDocument from "@/mobile/MobileAddDocument";
 import MobileBootSplash from "@/mobile/auth/MobileBootSplash";
 import MobileAccountLogin from "@/mobile/auth/MobileAccountLogin";
@@ -105,6 +106,16 @@ function MobileLaptopRoute({ mine = false }) {
   return <MobileSessionShell>{mine ? <MobileMyLaptop /> : <MobileLaptops />}</MobileSessionShell>;
 }
 
+function MobileRotaRoute() {
+  const { user, loading, can, profile } = useAuth();
+  if (loading) return <MobileBootSplash message="Opening My rota" />;
+  if (!user) return <MobileAccountLogin />;
+  if (profile?.mustChangePassword === true) return <MustChangePassword />;
+  if (!can("mobile.access")) return <MobileAccessDenied />;
+  // Behind the session lock, like the other pages that show colleagues' details. Who is on the rota and whether the team's access is on is checked by the database.
+  return <MobileSessionShell><MobileRota /></MobileSessionShell>;
+}
+
 function MobileAddDocumentRoute() {
   const { user, loading, can, profile } = useAuth();
   if (loading) return <MobileBootSplash message="Opening Add a document" />;
@@ -134,6 +145,7 @@ export default function MobileApp() {
       <Route path="/governance/sars" element={<MobileGovernanceSARsRoute />} />
       <Route path="/it-equipment" element={<MobileLaptopRoute />} />
       <Route path="/my-laptop" element={<MobileLaptopRoute mine />} />
+      <Route path="/my-rota" element={<MobileRotaRoute />} />
       <Route path="/add-document" element={<MobileAddDocumentRoute />} />
       <Route path="/governance/significant-events" element={<MobileSignificantEventsRoute />} />
       <Route path="/spaces" element={<MobileBootController initialTab="sense" />} />

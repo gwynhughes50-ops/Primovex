@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, CalendarRange, CheckCircle2, ChevronLeft, ChevronRight, Download, Info, Pin, Printer, ShieldCheck, UserMinus } from "lucide-react";
+import { AlertTriangle, CalendarRange, CheckCircle2, ChevronLeft, ChevronRight, Download, Info, Pin, Printer, ShieldCheck, Smartphone, UserMinus } from "lucide-react";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
 import { DAYS, DAY_LABELS, addDays, availabilityOn, dateOf, isoOf, offText, partTimes, ruleCoversShift, timeLabel, weekDates, weekLabel } from "@/modules/rota/rotaModel";
 import { generateWeek, weekCounters } from "@/modules/rota/rotaEngine";
 import { checkWeek, historyBefore, lockedOf, setPlace, slotsOfDay, withNames } from "@/modules/rota/rotaWeek";
 import { buildRotaHtml, buildRotaXlsx, counterColumns, runningCounters } from "@/modules/rota/rotaExport";
 import { saveWeek } from "@/modules/rota/rotaService";
+import { publishWeeks } from "@/modules/rota/rotaTeamService";
+import { isPublishedCurrent } from "@/modules/rota/rotaPublish";
 import { groupColour, initials, personColour, tint } from "./rotaStyle";
 import RotaReviewPanel from "./RotaReviewPanel";
 
@@ -43,7 +45,7 @@ function Avatar({ uid, name, size = "h-6 w-6 text-[10px]" }) {
   return <span className={`grid shrink-0 place-items-center rounded-full font-bold text-white ${size}`} style={{ background: personColour(uid) }} aria-hidden="true">{initials(name)}</span>;
 }
 
-export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage, startMonday }) {
+export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage, startMonday, published = {}, teamAccess = false }) {
   const [monday, setMonday] = useState(startMonday);
   const [span, setSpan] = useState(4);
   const [busy, setBusy] = useState(false);
@@ -84,6 +86,15 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
     setBusy(false);
   }
 
+  // what the team can see of this week: nothing until the coordinator publishes it, and a note when the rota has changed since
+  const pubDoc = published[monday];
+  const pubState = !week ? "none" : !pubDoc ? "not" : isPublishedCurrent(week, pubDoc, rules) ? "current" : "changed";
+  const unpublished = Object.values(weeks).filter((w) => w.mondayIso >= startMonday && w.days && !(published[w.mondayIso] && isPublishedCurrent(w, published[w.mondayIso], rules)));
+  async function publish(list) {
+    setBusy(true); setError("");
+    try { await publishWeeks(list, rules, actor); } catch (e) { setError(e?.message || "That could not be published."); }
+    setBusy(false);
+  }
   const targets = Array.from({ length: span }, (_, i) => addDays(monday, 7 * i));
   const alreadyBuilt = targets.some((m) => weeks[m]);
 
@@ -136,6 +147,9 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
         {monday !== startMonday && <button type="button" className={BTN} onClick={() => setMonday(startMonday)}><CalendarRange className="h-4 w-4" aria-hidden="true" />This week</button>}
         {week && <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: tint("#10b981", 16), color: "#10b981" }}>Built</span>}
         {!week && <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: tint("#f59e0b", 16), color: "#f59e0b" }}>Not built yet</span>}
+        {week && <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: tint(pubState === "current" ? "#8b5cf6" : "#64748b", 16), color: pubState === "current" ? "#8b5cf6" : "#94a3b8" }} title={teamAccess ? "" : "The team's access is off, so they cannot see published weeks yet"}>{pubState === "current" ? "Published to the team" : pubState === "changed" ? "Changed since published" : "Not published"}</span>}
+        {canManage && week && pubState !== "current" && <button type="button" className={BTN} disabled={busy} onClick={() => publish([week])}><Smartphone className="h-4 w-4" aria-hidden="true" />{pubState === "changed" ? "Publish the changes" : "Publish to the team"}</button>}
+        {canManage && unpublished.length > 1 && <button type="button" className={BTN} disabled={busy} onClick={() => publish(unpublished)}>Publish all {unpublished.length} built weeks</button>}
         <span className="ml-auto flex flex-wrap gap-2">
           <button type="button" className={BTN} disabled={!named} onClick={() => doPrint([named])}><Printer className="h-4 w-4" aria-hidden="true" />Print this week</button>
           <button type="button" className={BTN} disabled={!named} onClick={() => download(buildRotaXlsx([named], rules), `reception-rota-${monday}.xlsx`)}><Download className="h-4 w-4" aria-hidden="true" />Excel, this week</button>

@@ -383,6 +383,9 @@ export default function MobileLayout({ initialTab = "home" }) {
       case "my-laptop":
         navigate("/my-laptop");
         break;
+      case "my-rota":
+        navigate("/my-rota");
+        break;
       case "add-document":
         navigate("/add-document");
         break;

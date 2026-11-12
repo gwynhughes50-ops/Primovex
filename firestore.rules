@@ -759,9 +759,10 @@ match /subject_access_requests/{requestId} {
     }
 
     // What the reception team see on their phones. The coordinator publishes a week; this copy holds only who is on which shift and the times (no check notes, no rules, no time off), so a member of the
-    // team can see who is on a shift (they need to, to swap) and never who is off or why. A member of the team reads it by asking for the weeks that list them (teamUids). Only the coordinator writes it.
+    // team can see who is on a shift (they need to, to swap) and never who is off or why. A member of the team reads it by asking for the weeks that list them (teamUids), and only while the Practice Manager has switched the team's access on (settings/rota). Only the coordinator writes it.
     match /reception_rota_published/{weekId} {
-      allow get, list: if signedIn() && (rotaReader() || request.auth.uid in resource.data.teamUids);
+      allow get, list: if signedIn() && (rotaReader()
+        || (request.auth.uid in resource.data.teamUids && get(/databases/$(database)/documents/settings/rota).data.teamAccess == true));
       allow create, update: if signedIn() && rotaManager() && weekId.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
         && request.resource.data.keys().hasOnly(["mondayIso", "teamUids", "slots", "days", "publishedAt", "publishedByUid", "publishedByName"]);
       allow delete: if signedIn() && rotaManager();

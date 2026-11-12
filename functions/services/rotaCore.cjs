@@ -333,7 +333,7 @@ function swapOptions({ rules, weeks, absences = [], uid, from, todayIso, weeksAh
         if (monday === from.monday && day === from.day && key === from.key) continue;
         const result = swapPlaces({ rules, weeks, absences, a: from, b: { monday, day, key } });
         if (!result.ok) continue;
-        out.push({ withUid: place.uid, name: people[place.uid].name, monday, day, key, label: placeLabel(rules, monday, day, key, place), changesHours: result.changesHours });
+        out.push({ withUid: place.uid, name: people[place.uid].name, monday, day, key, label: placeLabel(rules, monday, day, key, result.weeks[monday].days[day].slots[key]), changesHours: result.changesHours });
       }
     }
   }

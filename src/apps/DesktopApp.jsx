@@ -18,6 +18,7 @@ import QualityOpportunities from "@/pages/QualityOpportunities";
 import MyTimesheet from "@/pages/MyTimesheet";
 import ITEquipment from "@/pages/ITEquipment";
 import ReceptionRota from "@/pages/ReceptionRota";
+import MyRota from "@/components/rota/MyRota";
 import AddDocument from "@/pages/AddDocument";
 import MyLaptop from "@/pages/MyLaptop";
 import AnnualLeave from "@/pages/AnnualLeave";
@@ -102,6 +103,7 @@ export default function DesktopApp() {
         <Route path="inventory" element={<PermissionGate capability="inventory.read"><Inventory /></PermissionGate>} />
         <Route path="stocktake" element={<PermissionGate capability="stocktake.manage"><StockTake /></PermissionGate>} />
         <Route path="my-timesheet" element={<MyTimesheet />} />
+        <Route path="my-rota" element={<div className="mx-auto max-w-xl space-y-4"><h1 className="text-2xl font-black text-slate-50">My rota</h1><MyRota /></div>} />
         <Route path="reception-rota" element={<PermissionGate anyOf={["rota.read", "rota.manage"]}><ReceptionRota /></PermissionGate>} />
         <Route path="it-equipment" element={<PermissionGate anyOf={["itAssets.read", "itAssets.manage"]}><ITEquipment /></PermissionGate>} />
         <Route path="my-laptop" element={<MyLaptop />} />

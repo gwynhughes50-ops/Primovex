@@ -1339,4 +1339,22 @@ export const HELP_ARTICLES = [
     tip: "Only the person who builds the rota and the Practice Manager can see it. It holds who is on which shift and who is off, never why.",
     open: { label: "Open the reception rota", route: "/reception-rota" },
   },
+  {
+    id: "my-rota",
+    title: "See my shifts and swap with a colleague",
+    topic: "Timesheets",
+    asks: ["how do i swap a shift with a colleague", "how do i see my shifts on the rota", "ask to change my shift", "ask to finish early", "who is on the desk today", "see my rota on my phone", "swap a shift"],
+    keywords: ["swap", "shifts", "colleague", "finish", "start", "rota", "my"],
+    where: "both",
+    steps: [
+      "Open \"My rota\" on the phone's home screen. It only appears once your coordinator has switched it on and published a week that includes you.",
+      "\"My shifts\" lists your shifts from today. \"Team\" shows who is on each shift each day, so you can see who to swap with.",
+      "To swap, press \"Swap\" on a shift. Primovex shows only the swaps that keep everyone's hours and rules. Choose one and press \"Ask\". Your colleague gets a message and says yes or no.",
+      "If nobody's hours change, the swap is made as soon as they say yes, and the coordinator is told. If someone's hours change, the coordinator also has to agree it.",
+      "To finish early, start late, be off for part of a day or the whole day, or ask for a different shift, press \"Ask for a change\", choose what you want and how it should be counted, and send it to the coordinator.",
+      "Under \"Requests\" you can see how each one is getting on, answer a colleague who has asked you to swap, or cancel one you made.",
+    ],
+    tip: "A swap is always your choice: you can say no to a colleague without giving a reason. You never see who is off, only who is on.",
+    open: { label: "Open My rota", route: "/my-rota" },
+  },
 ];

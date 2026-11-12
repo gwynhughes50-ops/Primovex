@@ -106,6 +106,9 @@ export function rotaEvent(type, { mondayIso = "" } = {}) {
     week_built: `Reception rota built for the week of ${week}`,
     week_changed: `Reception rota changed by hand for the week of ${week}`,
     week_removed: `Reception rota removed for the week of ${week}`,
+    week_published: `Reception rota published to the team for the week of ${week}`,
+    team_access_on: "Reception rota: the team's access on their phones was switched on",
+    team_access_off: "Reception rota: the team's access on their phones was switched off",
     absence_added: "Reception rota: an absence was entered",
     absence_removed: "Reception rota: an absence was removed",
   };

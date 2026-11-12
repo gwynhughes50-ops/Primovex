@@ -138,7 +138,8 @@ export function swapOptions({ rules, weeks, absences = [], uid, from, todayIso, 
         if (monday === from.monday && day === from.day && key === from.key) continue;
         const result = swapPlaces({ rules, weeks, absences, a: from, b: { monday, day, key } });
         if (!result.ok) continue;
-        out.push({ withUid: place.uid, name: people[place.uid].name, monday, day, key, label: placeLabel(rules, monday, day, key, place), changesHours: result.changesHours });
+        // the label shows the shift as the person asking would work it (their own time off applies, not the other person's)
+        out.push({ withUid: place.uid, name: people[place.uid].name, monday, day, key, label: placeLabel(rules, monday, day, key, result.weeks[monday].days[day].slots[key]), changesHours: result.changesHours });
       }
     }
   }

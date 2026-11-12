@@ -1,4 +1,4 @@
-import { ClipboardCheck, ClipboardList, FilePlus2, FileText, Laptop, FlaskConical, ListChecks, MessageSquare, Mic, NotebookPen, Package, ScanLine, ShieldAlert, GraduationCap, Sparkles, SprayCan, Stethoscope, Thermometer, TriangleAlert, Wrench } from "lucide-react";
+import { CalendarDays, ClipboardCheck, ClipboardList, FilePlus2, FileText, Laptop, FlaskConical, ListChecks, MessageSquare, Mic, NotebookPen, Package, ScanLine, ShieldAlert, GraduationCap, Sparkles, SprayCan, Stethoscope, Thermometer, TriangleAlert, Wrench } from "lucide-react";
 
 // What each kind of person sees on the phone: the home screen's tiles and the bottom bar. Pure data, so
 // it can be tested. A tile marked with a capability is only shown to people who hold it, and a bottom-bar
@@ -165,13 +165,15 @@ export function getRoleHome(role, capabilities = [], homeType = "") {
 
 // The tiles this person may see. Two laptop tiles are added for anyone, whatever their home: the IT team (who may read or manage the laptop register) get the register, to loan out, take
 // back and record updates; and anyone who has a laptop assigned or lent to them (hasLaptop) gets a tile for it, which is where its update and return dates are.
-export function visibleActions(home, capabilities = [], { hasLaptop = false } = {}) {
+export function visibleActions(home, capabilities = [], { hasLaptop = false, hasRota = false } = {}) {
   const shown = home.actions.filter((action) => !action.capability || has(capabilities, action.capability));
   const laptopTiles = [];
   if (has(capabilities, "itAssets.read") || has(capabilities, "itAssets.manage")) laptopTiles.push({ key: "it-equipment", label: "IT equipment", helper: "Loan out, take back, update", Icon: Laptop });
   // anyone allowed to add documents (and for whom the practice has switched Document reading on, which removes the permission otherwise) gets the Add a document tile
   if (has(capabilities, "documents.intake")) laptopTiles.push({ key: "add-document", label: "Add a document", helper: "Photo of a certificate or data sheet", Icon: FilePlus2 });
   if (hasLaptop) laptopTiles.push({ key: "my-laptop", label: "My laptop", helper: "When it is due an update or back", Icon: Laptop });
+  // a member of the reception team, once the practice has switched the team's rota on and weeks have been published to them: their shifts, who is on, swaps and requests
+  if (hasRota) laptopTiles.push({ key: "my-rota", label: "My rota", helper: "Your shifts, swaps and requests", Icon: CalendarDays });
   return [...shown, ...laptopTiles];
 }
 
