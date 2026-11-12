@@ -1188,13 +1188,34 @@ function applyTheme(themeId) {
 
 export function MedTrakThemeProvider({ children }) {
   const { user, profile, isSyntheticMode } = useAuth();
-  const applyingCloudRef = useRef(false);
   const pendingLocalThemeRef = useRef(null);
+  const writeInFlightRef = useRef(null);
   const hydratedUserRef = useRef(null);
+  const migratedUserRef = useRef(null);
+  const latestRef = useRef({});
+  latestRef.current = { uid: user?.uid || "", synthetic: !!isSyntheticMode, cloudTheme: profile?.themePreference || "" };
   const [themeId, setThemeIdState] = useState(() => {
     if (typeof localStorage === "undefined") return DEFAULT_THEME_ID;
     return localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY) || DEFAULT_THEME_ID;
   });
+
+  // Saving is done once, when the person picks a theme, and not from an effect. An effect that saved "whenever the profile differs from the
+  // screen" turned a refused save into a retry loop that, in turn, let the old saved value put the person's choice back.
+  const saveTheme = (id) => {
+    const { uid, synthetic } = latestRef.current;
+    if (!uid || synthetic) return;
+    writeInFlightRef.current = id;
+    updateDoc(doc(db, "users", uid), { themePreference: id, themeUpdatedAt: new Date().toISOString() })
+      .then(() => {
+        if (writeInFlightRef.current === id) writeInFlightRef.current = null;
+        if (pendingLocalThemeRef.current === id) pendingLocalThemeRef.current = null;
+      })
+      .catch((error) => {
+        // The save was refused: keep the person's choice on this device rather than letting the old saved value put it back.
+        if (writeInFlightRef.current === id) writeInFlightRef.current = null;
+        console.warn("Theme preference could not be synced to the user profile.", error);
+      });
+  };
 
   useEffect(() => {
     const userId = user?.uid || "anonymous";
@@ -1206,14 +1227,15 @@ export function MedTrakThemeProvider({ children }) {
     const cloudTheme = profile?.themePreference;
     if (!cloudTheme || !MEDTRAK_THEMES.some((item) => item.id === cloudTheme)) return;
 
+    // A choice made on this device stands until the profile has confirmed it. The profile reports the new value straight away (before the
+    // server has accepted it) and puts the old one back if the save is refused, so "the profile now matches" is not proof the save worked.
     const pendingTheme = pendingLocalThemeRef.current;
     if (pendingTheme) {
-      if (cloudTheme === pendingTheme) pendingLocalThemeRef.current = null;
+      if (cloudTheme === pendingTheme && writeInFlightRef.current !== pendingTheme) pendingLocalThemeRef.current = null;
       return;
     }
 
     if (cloudTheme === themeId) return;
-    applyingCloudRef.current = true;
     setThemeIdState(cloudTheme);
   }, [profile?.themePreference, themeId, user?.uid]);
 
@@ -1222,21 +1244,21 @@ export function MedTrakThemeProvider({ children }) {
     localStorage.setItem(STORAGE_KEY, themeId);
     localStorage.removeItem(LEGACY_STORAGE_KEY);
     window.dispatchEvent(new CustomEvent("primovex:theme-changed", { detail: { themeId } }));
+  }, [themeId]);
 
-    if (applyingCloudRef.current) {
-      applyingCloudRef.current = false;
-      return;
-    }
-    if (!user?.uid || isSyntheticMode || profile?.themePreference === themeId) return;
-    updateDoc(doc(db, "users", user.uid), { themePreference: themeId, themeUpdatedAt: new Date().toISOString() }).catch((error) => {
-      console.warn("Theme preference could not be synced to the user profile.", error);
-    });
-  }, [themeId, user?.uid, isSyntheticMode, profile?.themePreference]);
+  // A person who chose a theme on this device before their profile held one keeps it: it is saved to the profile once.
+  useEffect(() => {
+    if (!user?.uid || isSyntheticMode || !profile || profile.themePreference) return;
+    if (migratedUserRef.current === user.uid) return;
+    migratedUserRef.current = user.uid;
+    saveTheme(themeId);
+  }, [user?.uid, isSyntheticMode, profile, themeId]);
 
   const setThemeId = (nextThemeId) => {
     const safeThemeId = MEDTRAK_THEMES.some((item) => item.id === nextThemeId) ? nextThemeId : DEFAULT_THEME_ID;
     pendingLocalThemeRef.current = safeThemeId;
     setThemeIdState(safeThemeId);
+    if (latestRef.current.cloudTheme !== safeThemeId) saveTheme(safeThemeId);
   };
 
   const value = useMemo(() => {

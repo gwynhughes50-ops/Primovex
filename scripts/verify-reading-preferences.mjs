@@ -57,6 +57,23 @@ t("adding themes at the top of the list did not change what people get by defaul
   assert.equal(new Set(ids).size, ids.length, "no theme id is used twice");
 });
 
+// ---- saving the choice ----
+t("a theme the person picks stays picked: the save is made once, by the pick, and a refused save or a stale profile cannot put the old theme back", () => {
+  const start = provider.indexOf("export function MedTrakThemeProvider");
+  const body = provider.slice(start, provider.indexOf("export function useMedTrakTheme"));
+  assert.equal((body.match(/updateDoc\(/g) || []).length, 1, "one place saves the theme");
+  const save = body.slice(body.indexOf("const saveTheme"), body.indexOf("useEffect("));
+  assert.match(save, /updateDoc\(/, "the one save is inside saveTheme, not inside an effect");
+  const pick = body.slice(body.indexOf("const setThemeId"), body.indexOf("const value = useMemo"));
+  assert.match(pick, /saveTheme\(safeThemeId\)/, "picking a theme saves it");
+  assert.doesNotMatch(body, /applyingCloudRef/, "no flag that lets an effect save on the person's behalf");
+  assert.match(body, /writeInFlightRef\.current !== pendingTheme/, "the choice is only released once the save has finished");
+  assert.match(save, /\.catch\(/, "a refused save is handled");
+  const effects = body.slice(body.indexOf("useEffect("), body.indexOf("const setThemeId"));
+  const applyEffect = effects.slice(effects.indexOf("applyTheme(themeId)"), effects.indexOf("applyTheme(themeId)") + 400);
+  assert.doesNotMatch(applyEffect.split("}, [themeId])")[0], /updateDoc|saveTheme/, "applying the theme on screen does not save anything");
+});
+
 // ---- the font rules ----
 t("fonts: Primovex default leaves the app's font alone, and Arial and Verdana outrank the theme's own font rule so they reach all the text, not only some", () => {
   const css = read("src/components/theme/readingPreferences.css");
