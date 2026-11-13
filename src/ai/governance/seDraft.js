@@ -146,7 +146,7 @@ const clip = (text, n) => (text.length > n ? `${text.slice(0, n - 1)}…` : text
 
 export function buildSeReportDraft(question, { spaces = [], now = new Date() } = {}) {
   if (containsName(question)) {
-    return { text: "That looks like it has a person's name in it. Please don't say or type names into the Orb. Say it again using roles (the nurse, a receptionist) and leave the patient out: you can add them on the form before you send it.", followUps: [] };
+    return { text: "That looks like it has a person's name in it. Please don't say or type names into Ask Primovex. Say it again using roles (the nurse, a receptionist) and leave the patient out: you can add them on the form before you send it.", followUps: [] };
   }
   const parsed = parseSeReport(question, { spaces, now });
   if (parsed.description.length < 12) {

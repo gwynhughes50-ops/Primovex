@@ -19,9 +19,9 @@ export default function MobileBottomNav({ activeKey = "home", onNavigate, onOpen
     <nav className="fixed inset-x-0 bottom-0 z-[90] min-h-[calc(var(--pvx-mobile-nav-height)+var(--pvx-mobile-safe-bottom))] border-t border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 pb-[var(--pvx-mobile-safe-bottom)] pt-2 shadow-[0_-10px_30px_rgba(15,23,42,.10)]">
       <div className="mx-auto grid h-[var(--pvx-mobile-nav-height)] max-w-lg grid-cols-5 items-end">
         {items.slice(0, 2).map(({ key, label, Icon }) => <NavButton key={key} {...{ keyName: key, label, Icon, activeKey, onNavigate }} />)}
-        <button type="button" onClick={onOpenAI} className="relative mx-auto -mt-9 h-[4.5rem] w-[4.5rem] rounded-full" aria-label={orbStatus.level === "green" ? "Primovex AI actions" : `Primovex AI actions. ${orbStatus.headline}`}>
+        <button type="button" onClick={onOpenAI} className="relative mx-auto -mt-9 h-[4.5rem] w-[4.5rem] rounded-full" aria-label={orbStatus.level === "green" ? "Ask Primovex" : `Ask Primovex. ${orbStatus.headline}`}>
           <PulseOrbFace size={72} active={busy} level={orbStatus.level} />
-          <span className="sr-only">Primovex AI{orbStatus.level === "green" ? "" : `. ${orbStatus.summary}`}</span>
+          <span className="sr-only">Ask Primovex{orbStatus.level === "green" ? "" : `. ${orbStatus.summary}`}</span>
         </button>
         {items.slice(2).map(({ key, label, Icon }) => <NavButton key={key} {...{ keyName: key, label, Icon, activeKey, onNavigate }} />)}
       </div>

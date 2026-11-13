@@ -47,7 +47,7 @@ export default function OrbProductNames() {
         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-2xl border border-sky-400/30 bg-sky-500/10 text-sky-200"><Pill className="h-5 w-5" /></span>
         <div>
           <h2 className="text-lg font-bold">Names for your stock</h2>
-          <p className="text-sm text-slate-400">The Orb already knows medicine names (generic, brand, US spellings, small slips). Teach it what <i>your practice</i> calls things: the words people say, and the product they mean.</p>
+          <p className="text-sm text-slate-400">Ask Primovex already knows medicine names (generic, brand, US spellings, small slips). Teach it what <i>your practice</i> calls things: the words people say, and the product they mean.</p>
         </div>
       </div>
       {canEdit && (

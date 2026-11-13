@@ -43,9 +43,9 @@ export default function RoleAdaptiveMobileHome({ onAction }) {
           <h1>Good {new Date().getHours() < 12 ? "morning" : new Date().getHours() < 18 ? "afternoon" : "evening"}, {firstName}</h1>
           <p>{home.headline}</p>
         </div>
-        <button type="button" className="pvx-orb-command" onClick={() => onAction?.("orb")} aria-label="Ask the Orb">
+        <button type="button" className="pvx-orb-command" onClick={() => onAction?.("orb")} aria-label="Ask Primovex">
           <Sparkles className="h-6 w-6" />
-          <span>Orb</span>
+          <span>Ask</span>
         </button>
       </div>
 

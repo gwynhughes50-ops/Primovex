@@ -7,6 +7,7 @@ import useNotifications from "@/hooks/useNotifications";
 import PulseWidget from "@/components/pulse/PulseWidget";
 import PlatformModeBanner from "@/components/platform/PlatformModeBanner";
 import AskPrimovexPanel from "@/ai/components/AskPrimovexPanel";
+import RouteAskTip from "@/components/ai/RouteAskTip";
 import DesktopSidebar from "@/components/navigation/DesktopSidebar";
 import ViewAsBanner from "@/components/security/ViewAsBanner";
 import PhonePreview from "@/components/security/PhonePreview";
@@ -109,7 +110,7 @@ export default function Layout() {
           ) : (
             <div className="px-4 py-4 sm:px-6 lg:px-8">
               <PlatformModeBanner compact />
-              <main className="mx-auto mt-5 w-full max-w-[1600px]"><Outlet /></main>
+              <main className="mx-auto mt-5 w-full max-w-[1600px]"><RouteAskTip /><Outlet /></main>
             </div>
           )}
         </div>

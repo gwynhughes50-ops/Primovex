@@ -32,7 +32,7 @@ export default function MobileAIActionSheet({ open, onClose, onAsk, onQuickNote,
         <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-[var(--medtrak-border)]" />
         <header className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--medtrak-accent)]">Primovex AI</p>
+            <p className="text-xs font-bold uppercase tracking-[.16em] text-[var(--medtrak-accent)]">Ask Primovex</p>
             <h2 className="mt-1 text-2xl font-bold">What would you like to do?</h2>
             <p className="mt-1 text-sm text-[var(--medtrak-muted)]">Start a task without hunting through menus.</p>
           </div>

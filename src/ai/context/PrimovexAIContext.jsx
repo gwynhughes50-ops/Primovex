@@ -54,7 +54,7 @@ export function PrimovexAIProvider({ children }) {
         context: { capabilities, role, userId: user?.uid || null, profile, forcedIntent: options.forcedIntent || null },
         conversation: messages,
       });
-      const timeout = new Promise((_, reject) => window.setTimeout(() => reject(new Error('Orb request timed out')), 14000));
+      const timeout = new Promise((_, reject) => window.setTimeout(() => reject(new Error('Ask Primovex request timed out')), 14000));
       const raw = await Promise.race([providerRequest, timeout]);
       setStatus(AI_STATES.REASONING);
       await new Promise((resolve) => window.setTimeout(resolve, 220));
@@ -87,7 +87,7 @@ export function PrimovexAIProvider({ children }) {
       console.error('Primovex AI request failed:', error);
       setMessages((current) => [
         ...current,
-        createMessage({ role: 'assistant', content: 'Primovex AI could not complete that request.', error: true }),
+        createMessage({ role: 'assistant', content: 'Ask Primovex could not complete that request. Try again in a moment.', error: true }),
       ]);
       setStatus(AI_STATES.ERROR);
     }

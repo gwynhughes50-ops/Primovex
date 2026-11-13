@@ -275,9 +275,12 @@ export default function PulseWidget({ variant = 'desktop' }) {
     document.body.style.cursor = 'grabbing';
   };
 
-  const finishDrag = () => {
+  const finishDrag = (event) => {
     const current = dragRef.current;
     if (current.timer) clearTimeout(current.timer);
+    // pressed and let go on the ball without moving it: that is a click, and a click opens Ask Primovex
+    const moved = event ? Math.hypot((event.clientX ?? current.startX) - current.startX, (event.clientY ?? current.startY) - current.startY) : 99;
+    const wasClick = Boolean(current.pressed && event?.type === 'pointerup' && moved < 6 && orbRef.current?.contains(event.target));
 
     if (current.dragging && state.snapToEdge && widgetRef.current) {
       const rect = widgetRef.current.getBoundingClientRect();
@@ -290,6 +293,10 @@ export default function PulseWidget({ variant = 'desktop' }) {
     current.pointerId = null;
     setDragging(false);
     document.body.style.cursor = '';
+    if (wasClick) {
+      updateState({ expanded: false, settingsOpen: false, hintDismissed: true });
+      primovexAI.open();
+    }
   };
 
   useEffect(() => {
@@ -308,7 +315,7 @@ export default function PulseWidget({ variant = 'desktop' }) {
       updateState({ x: nextX, y: nextY });
     };
 
-    const onUp = () => finishDrag();
+    const onUp = (event) => finishDrag(event);
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
@@ -336,10 +343,9 @@ export default function PulseWidget({ variant = 'desktop' }) {
     };
   };
 
+  // A single click opens Ask Primovex (see finishDrag). A double click does nothing more; the Pulse details are on a right click.
   const onOrbDoubleClick = (event) => {
     event.preventDefault();
-    if (dragRef.current.dragging) return;
-    updateState({ expanded: !state.expanded, settingsOpen: false, hintDismissed: true });
   };
 
   const onContextMenu = (event) => {
@@ -360,7 +366,7 @@ export default function PulseWidget({ variant = 'desktop' }) {
         ref={orbRef}
         role="button"
         tabIndex={0}
-        aria-label={`Primovex Orb. ${changeNote} Double click to open. Drag to move.`}
+        aria-label={`Ask Primovex. ${changeNote} Click to open. Drag to move. Right click for the Pulse details.`}
         onPointerDown={onOrbPointerDown}
         onDoubleClick={onOrbDoubleClick}
         onContextMenu={onContextMenu}
@@ -369,7 +375,8 @@ export default function PulseWidget({ variant = 'desktop' }) {
         onKeyDown={(event) => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
-            updateState({ expanded: !state.expanded, settingsOpen: false });
+            updateState({ expanded: false, settingsOpen: false });
+            primovexAI.open();
           }
         }}
         className="group relative grid place-items-center rounded-full outline-none"
@@ -383,14 +390,20 @@ export default function PulseWidget({ variant = 'desktop' }) {
         <span className="sr-only" role="status" aria-live="polite">{changeNote}</span>
       </div>
 
+      {variant !== 'mobile' && !state.expanded && !primovexAI.isOpen && !dragging && (
+        <button type="button" onClick={() => primovexAI.open()} className="absolute left-1/2 top-[calc(100%+2px)] z-[41] -translate-x-1/2 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[11px] font-bold shadow-md backdrop-blur mt-pulse-panel mt-pulse-text">
+          Ask Primovex
+        </button>
+      )}
+
       {showHint && (
-        <div className="pointer-events-none absolute left-1/2 top-[calc(100%+10px)] z-[45] w-56 -translate-x-1/2 rounded-2xl border px-3 py-2 text-center text-xs shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
-          Drag anywhere · Double-click to open
+        <div className="pointer-events-none absolute left-1/2 top-[calc(100%+32px)] z-[45] w-56 -translate-x-1/2 rounded-2xl border px-3 py-2 text-center text-xs shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
+          Click to ask Primovex · drag to move
         </div>
       )}
 
       {showPreview && (
-        <div className="pointer-events-none absolute left-1/2 top-[calc(100%+10px)] z-[45] w-56 -translate-x-1/2 rounded-2xl border p-3 shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
+        <div className="pointer-events-none absolute left-1/2 top-[calc(100%+32px)] z-[45] w-56 -translate-x-1/2 rounded-2xl border p-3 shadow-2xl backdrop-blur mt-pulse-panel mt-pulse-text">
           {level !== 'green' && (
             <div className="mb-2 border-b pb-2">
               <div className="flex items-center gap-2 text-xs font-bold"><span className="h-2 w-2 rounded-full" style={{ background: LEVEL_COLOUR[level] }} />{orbStatus.headline}</div>
@@ -405,7 +418,7 @@ export default function PulseWidget({ variant = 'desktop' }) {
             <div className="text-3xl font-black">{score}</div>
             <div className="text-right text-xs mt-pulse-muted">
               <div>{issueCount} Pulse Event{issueCount === 1 ? '' : 's'}</div>
-              <div>Double-click to open</div>
+              <div>Click to ask Primovex</div>
             </div>
           </div>
         </div>
@@ -465,12 +478,12 @@ function PulseDrawer({ side, pulse, score, tone, band, state, updateState, reset
             <Toggle label="Reduced motion" checked={state.reducedMotion} onChange={() => updateState({ reducedMotion: !state.reducedMotion })} />
             {isDesktopShell() && (
               <>
-                <Toggle label="Show the orb on my desktop when Primovex is minimised" checked={state.desktopOrb} onChange={() => updateState({ desktopOrb: !state.desktopOrb })} />
+                <Toggle label="Show the Ask Primovex ball on my desktop when Primovex is minimised" checked={state.desktopOrb} onChange={() => updateState({ desktopOrb: !state.desktopOrb })} />
                 <Toggle label="Closing the window keeps Primovex running in the tray" checked={state.closeToTray} onChange={() => updateState({ closeToTray: !state.closeToTray })} />
               </>
             )}
             <div className="flex items-center justify-between rounded-xl border px-3 py-2 mt-pulse-surface">
-              <span className="mt-pulse-secondary">Orb size</span>
+              <span className="mt-pulse-secondary">Ball size</span>
               <div className="flex gap-1">
                 {['small', 'medium', 'large'].map((size) => (
                   <button key={size} type="button" onClick={() => updateState({ size })} className={`rounded-full px-2 py-1 text-xs ${state.size === size ? 'mt-pulse-accent-fill' : 'mt-pulse-choice'}`}>{size}</button>

@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowRight, Bot, CheckCircle2, ExternalLink, Meh, MessageSquarePlus, Mic, MicOff, RotateCcw, ShieldCheck, TriangleAlert, X, XCircle } from 'lucide-react';
+import { ArrowRight, Bot, CheckCircle2, ExternalLink, HelpCircle, Meh, MessageSquarePlus, Mic, MicOff, RotateCcw, ShieldCheck, TriangleAlert, X, XCircle } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import AssistantWelcome from './AssistantWelcome';
+import { ASSISTANT_NAME, ASSISTANT_TAGLINE } from '../starters';
 import { useNavigate } from 'react-router-dom';
 import usePrimovexAI from '../hooks/usePrimovexAI';
 import PulseOrbFace from '@/components/pulse/PulseOrbFace';
@@ -13,16 +16,6 @@ import OrbStatusPanel from '@/orb/OrbStatusPanel';
 import { AI_STATES } from '../types/responseContract';
 import { interpretSpoken, spokenReply } from '../voice/spokenCommands';
 import { cancelNativeListening, nativeVoiceAvailable, requestNativeMicrophonePermission, startNativeListening, stopNativeListening, subscribeNativeOrbVoice } from '../voice/nativeOrbVoice';
-
-const SUGGESTIONS = [
-  'Are all fridges OK today?',
-  'Tell me about Fridge 2.',
-  'What needs attention today?',
-  'Which stock is low?',
-  'What changed since yesterday?',
-  'How do I add a new product to stock?',
-  'How many significant events are open?',
-];
 
 const STATUS_LABELS = {
   [AI_STATES.IDLE]: 'Ready',
@@ -65,7 +58,7 @@ function MessageFeedback({ message, onRecord }) {
     else onRecord(message.id, outcome);
   };
   return <div className="mt-2 rounded-xl border border-[var(--medtrak-border)] p-2">
-    <p className="primovex-ai-faint mb-2 text-xs font-semibold">Did Orb understand and help?</p>
+    <p className="primovex-ai-faint mb-2 text-xs font-semibold">Did that help?</p>
     <div className="flex flex-wrap gap-1.5">{FEEDBACK_OPTIONS.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => choose(id)} className="inline-flex items-center gap-1 rounded-lg border border-[var(--medtrak-border)] px-2 py-1 text-[11px]"><Icon className="h-3 w-3" />{label}</button>)}</div>
     {pendingOutcome && <div className="mt-2"><p className="primovex-ai-faint mb-1 text-[11px]">What needed changing?</p><div className="flex flex-wrap gap-1">{CORRECTION_REASONS.map((reason) => <button key={reason} type="button" onClick={() => onRecord(message.id, pendingOutcome, reason)} className="rounded-lg bg-[var(--medtrak-accent)]/10 px-2 py-1 text-[11px] text-[var(--medtrak-accent)]">{reason}</button>)}</div></div>}
   </div>;
@@ -98,6 +91,8 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
   const navigate = useNavigate();
   const { isOpen, close, status, messages, ask, addUserMessage, clearConversation, resolveClarification, recordFeedback, confirmProposal, cancelProposal } = usePrimovexAI();
   const orbStatus = useOrbStatus();
+  const { can } = useAuth();
+  const [helpOpen, setHelpOpen] = useState(false); // the "What can I do?" card, shown over the conversation
   const [prompt, setPrompt] = useState('');
   const [report, setReport] = useState(null); // { text } while the "tell the developer" form is open
   const [voiceState, setVoiceState] = useState(VOICE_STATES.SLEEPING);
@@ -170,11 +165,11 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     if (!session.active) return;
     if (FATAL_VOICE_CODES.has(String(code))) {
       setVoiceSupported(false);
-      endSession('Microphone permission was denied. Enable it in Android Settings to use Orb voice.');
+      endSession('Microphone permission was denied. Enable it in Android Settings to use voice.');
       return;
     }
     session.errors += 1;
-    if (session.errors >= 12) { endSession('Voice is not working right now. Tap the Orb to try again.'); return; }
+    if (session.errors >= 12) { endSession('Voice is not working right now. Tap the button to try again.'); return; }
     setVoiceState(VOICE_STATES.FOLLOW_UP);
     afterTurn();
   }, [afterTurn, endSession]);
@@ -295,9 +290,9 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     setDictation('working');
     try {
       const { base64, heard } = recording.stop();
-      if (!heard) { setVoiceError("I didn't hear anything. Tap the Orb and try again."); return; }
+      if (!heard) { setVoiceError("I didn't hear anything. Tap the button and try again."); return; }
       const { text } = await transcribeSpeech(base64);
-      if (!text) { setVoiceError("I couldn't make that out. Tap the Orb and try again, or type below."); return; }
+      if (!text) { setVoiceError("I couldn't make that out. Tap the button and try again, or type below."); return; }
       await processTextRef.current(text);
     } catch (error) {
       setVoiceError(error?.message || 'That did not work. Type your question below.');
@@ -334,7 +329,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     if (type === 'permission') {
       if (value === 'denied') {
         setVoiceSupported(false);
-        endSession('Microphone permission was denied. Enable it in Android Settings to use Orb voice.');
+        endSession('Microphone permission was denied. Enable it in Android Settings to use voice.');
       }
       return;
     }
@@ -438,31 +433,32 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
   return (
     <aside
       className={`${panelClass} primovex-ai-panel flex flex-col overflow-hidden shadow-2xl backdrop-blur-xl ${isMobile ? 'primovex-ai-mobile rounded-t-[2rem]' : 'rounded-3xl'}`}
-      aria-label="Orb"
+      aria-label="Ask Primovex"
     >
       <header className="primovex-ai-divider flex items-center justify-between px-4 py-4">
         <div className="flex items-center gap-3">
           <div className={`relative h-10 w-10 shrink-0 ${busy ? 'primovex-ai-breathe' : ''}`} aria-hidden="true"><PulseOrbFace size={40} active={busy} level={orbStatus.level} /></div>
           <div>
-            <h2 className="font-bold">Orb</h2>
-            <p className="primovex-ai-muted text-xs">{STATUS_LABELS[status]} · Operational intelligence</p>
+            <h2 className="font-bold">{ASSISTANT_NAME}</h2>
+            <p className="primovex-ai-muted text-xs">{STATUS_LABELS[status]} · {ASSISTANT_TAGLINE}</p>
           </div>
         </div>
         <div className="flex gap-1">
+          <button type="button" onClick={() => setHelpOpen((v) => !v)} className="primovex-ai-icon-button rounded-full p-2" title="What can I do?" aria-label="What can I do?" aria-pressed={helpOpen}><HelpCircle className="h-4 w-4" /></button>
           <button type="button" onClick={() => setReport({ text: '' })} className="primovex-ai-icon-button rounded-full p-2" title="Tell the developer a problem or an idea" aria-label="Tell the developer a problem or an idea"><MessageSquarePlus className="h-4 w-4" /></button>
           <button type="button" onClick={clearConversation} className="primovex-ai-icon-button rounded-full p-2" title="Clear conversation"><RotateCcw className="h-4 w-4" /></button>
-          <button type="button" onClick={() => { sleepOrb(); close(); }} className="primovex-ai-icon-button rounded-full p-2" title="Close Orb"><X className="h-5 w-5" /></button>
+          <button type="button" onClick={() => { sleepOrb(); close(); }} className="primovex-ai-icon-button rounded-full p-2" title="Close Ask Primovex"><X className="h-5 w-5" /></button>
         </div>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         {isMobile && (
           <section className={`primovex-voice-stage ${orbAwake ? 'is-awake' : 'is-sleeping'}`} aria-live="polite">
-            <button type="button" onClick={dictationMode ? dictate : (orbAwake ? sleepOrb : wakeOrb)} className={`primovex-pulse-voice-orb state-${voiceState}`} aria-label={orbAwake ? 'Put Orb to sleep' : 'Wake Orb'}>
+            <button type="button" onClick={dictationMode ? dictate : (orbAwake ? sleepOrb : wakeOrb)} className={`primovex-pulse-voice-orb state-${voiceState}`} aria-label={orbAwake ? 'Stop listening' : 'Start listening'}>
               <PulseOrbFace level={orbStatus.level} size={150} active={recordingNow || dictation === 'working' || voiceState === VOICE_STATES.LISTENING || voiceState === VOICE_STATES.THINKING || voiceState === VOICE_STATES.WAKING} still={voiceState === VOICE_STATES.SLEEPING && dictation === 'idle'} />
             </button>
             <strong>{orbLabel}</strong>
-            <span>{voiceError || partialTranscript || (dictationMode ? (recordingNow ? 'Say your question. It stops when you stop talking, or tap the Orb.' : dictation === 'working' ? 'One moment…' : 'Tap the Orb, then say your question. It is sent for the Orb to answer.') : voiceSupported ? (orbAwake ? 'Keep talking. Say “that’s all” when you are finished.' : 'Tap the Orb and talk. It keeps listening until you say “that’s all” or go quiet.') : 'Voice recognition is unavailable on this device. You can still type below.')}</span>
+            <span>{voiceError || partialTranscript || (dictationMode ? (recordingNow ? 'Say your question. It stops when you stop talking, or tap the button.' : dictation === 'working' ? 'One moment…' : 'Tap the button, then say your question. It is sent for Ask Primovex to answer.') : voiceSupported ? (orbAwake ? 'Keep talking. Say “that’s all” when you are finished.' : 'Tap the button and talk. It keeps listening until you say “that’s all” or go quiet.') : 'Voice recognition is unavailable on this device. You can still type below.')}</span>
             {voiceSupported && (
               <button type="button" onClick={toggleSpeak} className="primovex-ai-muted mt-2 text-xs underline" aria-pressed={speakAnswers}>
                 {speakAnswers ? 'Spoken answers: on' : 'Spoken answers: off'}
@@ -471,9 +467,15 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
           </section>
         )}
 
-        {messages.length === 0 ? (
+        {messages.length === 0 || helpOpen ? (
           <div>
-            <div className="mb-4">
+            <AssistantWelcome
+              can={can}
+              compact={isMobile}
+              onAsk={(text) => { setHelpOpen(false); ask(text); }}
+              onFill={(text) => { setHelpOpen(false); setPrompt(text); }}
+            />
+            <div className="mt-5">
               <OrbStatusPanel
                 status={orbStatus}
                 quietWhenGreen
@@ -487,19 +489,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
                 }}
               />
             </div>
-            {!isMobile && (
-              <div className="primovex-ai-accent-card rounded-2xl p-4">
-                <div className="primovex-ai-accent-text flex items-center gap-2 font-semibold"><ShieldCheck className="h-4 w-4" /> Evidence-aware answers</div>
-                <p className="primovex-ai-body mt-2 text-sm leading-6">Orb uses permission-checked operational tools and explains what Primovex currently knows.</p>
-              </div>
-            )}
-            <p className="primovex-ai-faint mb-2 mt-5 text-xs font-semibold uppercase tracking-[0.18em]">Try asking</p>
-            <div className="grid gap-2">
-              {SUGGESTIONS.map((suggestion) => (
-                <button key={suggestion} type="button" onClick={() => ask(suggestion)} className="primovex-ai-suggestion flex items-center justify-between rounded-2xl px-4 py-3 text-left text-sm">
-                  {suggestion}<ArrowRight className="h-4 w-4" />
-                </button>
-              ))}
+            <div className="mt-4 grid gap-2">
               <button type="button" onClick={() => setReport({ text: '' })} className="primovex-ai-suggestion flex items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-semibold">
                 Report a problem or share an idea<MessageSquarePlus className="h-4 w-4" />
               </button>
@@ -510,7 +500,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
             {messages.map((message) => (
               <div key={message.id} className={message.role === 'user' ? 'ml-8' : 'mr-4'}>
                 <div className={`rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === 'user' ? 'primovex-ai-user-message' : message.error ? 'primovex-ai-error-message' : 'primovex-ai-assistant-message'}`}>
-                  {message.role === 'assistant' && <div className="primovex-ai-accent-text mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em]"><Bot className="h-4 w-4" /> Orb</div>}
+                  {message.role === 'assistant' && <div className="primovex-ai-accent-text mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em]"><Bot className="h-4 w-4" /> Ask Primovex</div>}
                   <p className="primovex-ai-body" style={{ whiteSpace: 'pre-line' }}>{message.content}</p>
                   {message.intent !== 'general.unmatched' && Number.isFinite(message.confidence) && (
                     <div className="primovex-ai-message-divider primovex-ai-muted mt-3 flex items-center justify-between pt-2 text-xs"><span>Evidence confidence</span><span>{Math.round(message.confidence * 100)}%</span></div>
@@ -565,11 +555,11 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
                 )}
                 {message.clarification?.choices?.length > 0 && !message.clarification.resolvedIntent && (
                   <div className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
-                    <p className="text-xs font-semibold">Choose the safe action you expected. Orb will retry now and submit the phrase for manager review.</p>
+                    <p className="text-xs font-semibold">Choose the safe action you expected. Ask Primovex will retry now and submit the phrase for manager review.</p>
                     <div className="mt-2 grid gap-2">{message.clarification.choices.map((choice) => <button key={choice.id} type="button" onClick={() => resolveClarification(message.id, choice.id)} className="rounded-lg border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2 text-left text-xs"><strong className="block">{choice.label}</strong><span className="primovex-ai-muted">{choice.description}</span></button>)}</div>
                   </div>
                 )}
-                {message.clarification?.resolvedIntent && <p className="mt-2 text-xs text-emerald-500">Learning suggestion recorded for review. Orb retried the original request.</p>}
+                {message.clarification?.resolvedIntent && <p className="mt-2 text-xs text-emerald-500">Learning suggestion recorded for review. Ask Primovex retried the original request.</p>}
                 {message.role === 'assistant' && !message.error && message.intent !== 'general.clarification-required' && <MessageFeedback message={message} onRecord={recordFeedback} />}
               </div>
             ))}
@@ -582,10 +572,10 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
       <form onSubmit={submit} className="primovex-ai-divider primovex-ai-form p-4">
         <div className="primovex-ai-composer flex items-end gap-2 rounded-2xl p-2">
           {isMobile && <button type="button" onClick={dictationMode ? dictate : (orbAwake ? sleepOrb : wakeOrb)} className="primovex-ai-mic grid h-10 w-10 shrink-0 place-items-center rounded-xl" aria-label={orbAwake ? 'Stop listening' : 'Talk to Orb'}>{orbAwake ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>}
-          <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) submit(event); }} rows={1} placeholder="Ask Orb…" className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none" />
+          <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) submit(event); }} rows={1} placeholder="Ask, tell or go…" className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none" />
           <button type="submit" disabled={!prompt.trim() || busy} className="primovex-ai-submit grid h-10 w-10 place-items-center rounded-xl disabled:cursor-not-allowed disabled:opacity-30"><ArrowRight className="h-4 w-4" /></button>
         </div>
-        <p className="primovex-ai-muted mt-2 flex items-start gap-1.5 text-[11px] leading-4"><ShieldCheck className="mt-px h-3.5 w-3.5 shrink-0" /><span><strong>Do not say or type any patient details to the Orb</strong> (names, numbers, dates of birth). Spoken words are turned into text by a speech service outside Primovex before Primovex can check them.</span></p>
+        <p className="primovex-ai-muted mt-2 flex items-start gap-1.5 text-[11px] leading-4"><ShieldCheck className="mt-px h-3.5 w-3.5 shrink-0" /><span><strong>Do not say or type any patient details to Ask Primovex</strong> (names, numbers, dates of birth). Spoken words are turned into text by a speech service outside Primovex before Primovex can check them.</span></p>
       </form>
 
       {report && <ReportIssueDialog initialText={report.text} onClose={() => setReport(null)} />}

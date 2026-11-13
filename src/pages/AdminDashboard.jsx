@@ -150,7 +150,7 @@ function AdminTabs({ showUsers }) {
           { to: "users", label: "Users", icon: <Users className="h-4 w-4" /> },
           { to: "users/add", label: "Add User", icon: <UserPlus className="h-4 w-4" /> },
           { to: "users/import", label: "Import staff", icon: <FileUp className="h-4 w-4" /> },
-          { to: "orb-learning", label: "Orb Learning", icon: <BrainCircuit className="h-4 w-4" /> },
+          { to: "orb-learning", label: "Ask Primovex Learning", icon: <BrainCircuit className="h-4 w-4" /> },
         ]
       : []),
     { to: "activity", label: "Activity Log", icon: <Activity className="h-4 w-4" /> },
@@ -903,10 +903,10 @@ export default function AdminDashboard() {
                                     <Button
                                       variant="outline"
                                       className="rounded-full border-slate-700/70 bg-slate-900/40 text-slate-200 hover:bg-slate-900/60"
-                                      title={`What the Orb and Pulse orb show for them: ${describeOrbScope(u.orbScope)}`}
+                                      title={`What Ask Primovex and the Pulse ball show for them: ${describeOrbScope(u.orbScope)}`}
                                       onClick={() => openOrbScope(u)}
                                     >
-                                      <Sparkles className="h-4 w-4 mr-2" /> Orb{normaliseOrbScope(u.orbScope) ? " (limited)" : ""}
+                                      <Sparkles className="h-4 w-4 mr-2" /> Ask Primovex{normaliseOrbScope(u.orbScope) ? " (limited)" : ""}
                                     </Button>
                                     <Button
                                       variant="outline"
@@ -1493,8 +1493,8 @@ export default function AdminDashboard() {
       {orbScopeTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur p-4" role="dialog" aria-modal="true" aria-label="Orb topics">
           <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col rounded-2xl border border-slate-800/70 bg-slate-900/95 p-5 shadow-2xl text-slate-100">
-            <div className="flex items-center gap-2 text-lg font-semibold text-slate-50"><Sparkles className="h-5 w-5" /> Orb for {orbScopeTarget.displayName || orbScopeTarget.email}</div>
-            <p className="mt-1 text-xs text-slate-400">Choose what the Orb and the Pulse orb will answer and show for this person. This only narrows what their role ({orbScopeTarget.role || "no role"}) already allows; it never gives them more.</p>
+            <div className="flex items-center gap-2 text-lg font-semibold text-slate-50"><Sparkles className="h-5 w-5" /> Ask Primovex for {orbScopeTarget.displayName || orbScopeTarget.email}</div>
+            <p className="mt-1 text-xs text-slate-400">Choose what Ask Primovex and the Pulse ball will answer and show for this person. This only narrows what their role ({orbScopeTarget.role || "no role"}) already allows; it never gives them more.</p>
             <div className="mt-3 min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
               <label className="flex items-start gap-3 rounded-xl border border-slate-800/70 bg-slate-950/40 p-3 text-sm">
                 <input type="radio" name="orb-scope" className="mt-1" checked={orbScopeDraft === null} onChange={() => setOrbScopeDraft(null)} />
@@ -1512,7 +1512,7 @@ export default function AdminDashboard() {
                       </span>
                     ))}
                   </span>
-                  <span className="mt-2 block text-xs text-slate-400">How-to help is always available. With none ticked the Orb only answers "how do I...?" questions.</span>
+                  <span className="mt-2 block text-xs text-slate-400">How-to help is always available. With none ticked Ask Primovex only answers "how do I...?" questions.</span>
                 </span>
               </label>
             </div>

@@ -1170,7 +1170,7 @@ export function registerApprovedReadOnlyTools() {
     async execute(input = {}, context = {}) {
       const scope = normaliseOrbScope(context.profile?.orbScope);
       if (scope && !scope.includes('governance')) {
-        return { domain: 'governance', data: null, summary: 'Significant events are not one of the topics your Orb has been set up for.', confidence: 1, sources: [source('Orb topics', 'Limited by an administrator', 'system')], actions: [] };
+        return { domain: 'governance', data: null, summary: 'Significant events are not one of the topics Ask Primovex has been set up to answer for you.', confidence: 1, sources: [source('Orb topics', 'Limited by an administrator', 'system')], actions: [] };
       }
       const capabilities = context.capabilities || [];
       const seesAll = hasCapability(capabilities, 'governance.seTeam') || hasCapability(capabilities, 'governance.partnerAccess');

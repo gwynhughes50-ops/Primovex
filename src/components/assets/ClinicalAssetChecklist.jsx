@@ -332,7 +332,7 @@ export default function ClinicalAssetChecklist({
     }
     const proposal = orbProposalState.proposal;
     if (!proposal || !entities.some((entity) => entity.id === proposal.entityId)) {
-      setOrbActionMessage('The proposed clinical asset is unavailable. Ask Orb to prepare a new proposal.');
+      setOrbActionMessage('The proposed clinical asset is unavailable. Ask Primovex to prepare a new proposal.');
       return;
     }
     try {
@@ -340,13 +340,13 @@ export default function ClinicalAssetChecklist({
       setActiveOrbAction(confirmed);
       setSelectedId(confirmed.entityId);
       setOrbActionMessage('Proposal confirmed. Complete every checklist item, then save the verification.');
-    } catch (error) { setOrbActionMessage(error?.message || 'Orb proposal could not be confirmed.'); }
+    } catch (error) { setOrbActionMessage(error?.message || 'The proposal could not be confirmed.'); }
   }
 
   function cancelOrbAction() {
     cancelGovernedProposal(orbProposalState.proposal || activeOrbAction, orbActor);
     setActiveOrbAction(null);
-    setOrbActionMessage('Orb reconciliation proposal cancelled.');
+    setOrbActionMessage('Reconciliation proposal cancelled.');
     clearOrbActionParams();
   }
 
@@ -459,7 +459,7 @@ export default function ClinicalAssetChecklist({
           completeGovernedProposal(activeOrbAction.id, checkRef?.id || null, orbActor);
         } catch (auditError) {
           console.error('Orb governed-action audit completion failed after checklist save:', auditError);
-          setOrbActionMessage('The verification was saved, but its Orb audit status needs management review.');
+          setOrbActionMessage('The verification was saved, but its Ask Primovex audit status needs management review.');
         }
         setActiveOrbAction(null);
         clearOrbActionParams();
@@ -708,11 +708,11 @@ export default function ClinicalAssetChecklist({
   return (
     <div className="space-y-5 text-[color:var(--medtrak-text)]">
       {(orbProposalState.proposal || orbProposalState.error || activeOrbAction) && (
-        <section className="rounded-2xl border border-primary/35 bg-primary/10 p-4" aria-label="Orb governed reconciliation">
+        <section className="rounded-2xl border border-primary/35 bg-primary/10 p-4" aria-label="Ask Primovex governed reconciliation">
           <div className="flex items-start gap-3">
             <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
             <div className="min-w-0 flex-1">
-              <h3 className="font-semibold">Orb governed reconciliation</h3>
+              <h3 className="font-semibold">Ask Primovex governed reconciliation</h3>
               {orbProposalState.error ? <p className="mt-1 text-sm text-rose-500">{orbProposalState.error}</p> : <p className="mt-1 text-sm text-[color:var(--medtrak-muted)]">{activeOrbAction ? `Confirmed for ${activeOrbAction.entityName}. No readiness result is written until the completed checklist is saved.` : `Review the proposal for ${orbProposalState.proposal?.entityName}. Confirmation starts the checklist only; it does not mark the asset ready or change stock.`}</p>}
               {orbActionMessage && <p className="mt-2 text-sm font-medium">{orbActionMessage}</p>}
               <div className="mt-3 flex flex-wrap gap-2">

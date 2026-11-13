@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { NEXT_STATUSES, REPORT_STATUS, kindLabel, statusLabel } from "@/modules/feedback/issueReport";
 import { answerIssueReport, useAllReports } from "@/modules/feedback/issueReportService";
 
-// Reports from staff (Developer Centre, System Admin only): problems and ideas sent through the Orb, newest first. Each can be marked
+// Reports from staff (Developer Centre, System Admin only): problems and ideas sent through Ask Primovex, newest first. Each can be marked
 // seen, planned, done (with the version) or not doing, with a short reply the person sees under "My reports".
 
 const TONE = { new: "bg-amber-400/20 text-amber-900", seen: "bg-sky-500/15 text-sky-800", planned: "bg-violet-500/15 text-violet-800", fixed: "bg-emerald-500/15 text-emerald-800", wont: "bg-slate-500/15 text-slate-700" };
@@ -60,7 +60,7 @@ export default function StaffReportsPanel() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-xl font-bold">Reports from staff{unread ? <span className="ml-2 rounded-full bg-amber-400/30 px-2.5 py-0.5 text-sm font-bold text-amber-900">{unread} new</span> : null}</h2>
-          <p className="text-sm text-[var(--medtrak-muted)]">Problems and ideas sent through the Orb, with the page, version and device added. Reply and mark them off: staff see your answer.</p>
+          <p className="text-sm text-[var(--medtrak-muted)]">Problems and ideas sent through Ask Primovex, with the page, version and device added. Reply and mark them off: staff see your answer.</p>
         </div>
         <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} /> Show done and not-doing</label>
       </div>

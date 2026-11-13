@@ -146,14 +146,14 @@ const HELP_ARTICLES = [
     keywords: ["significant", "event", "incident", "near miss", "report", "se", "learning", "harm", "mistake"],
     steps: [
       "Anyone can report one. On a computer: Significant events in the left menu → Report. On the phone: Home → Significant events → Report.",
-      "Or tell the Orb: “Report a significant event: …” and say what happened. It sets the report up and asks how much harm was caused (tap green, yellow, orange or red). Nothing is sent until you press Report event.",
+      "Or tell Ask Primovex: “Report a significant event: …” and say what happened. It sets the report up and asks how much harm was caused (tap green, yellow, orange or red). Nothing is sent until you press Report event.",
       "Give a short title, the date, the room (pick it from the list), the kind of event and how much harm: green = no harm (a near miss), yellow = low, orange = moderate, red = severe.",
       "Say what happened and what was done straight away.",
       "Press Report event. The significant events team is told.",
     ],
     notes: [
       "Never use anyone's name. Use roles (the nurse, a receptionist).",
-      "If a patient was involved, give their EMIS number only (or initials and date of birth if there isn't one). Never a name, and never type a patient's name into the Orb.",
+      "If a patient was involved, give their EMIS number only (or initials and date of birth if there isn't one). Never a name, and never type a patient's name into Ask Primovex.",
       "You can follow the events you reported under “Reported by me” and add notes to them.",
     ],
   },
@@ -225,7 +225,7 @@ const HELP_ARTICLES = [
   },
   {
     id: "se-orb",
-    title: "Significant events: ask the Orb",
+    title: "Significant events: ask Primovex",
     category: "Significant events",
     keywords: ["significant", "event", "orb", "ask", "how many", "reviews", "overdue", "meeting", "status"],
     steps: [
@@ -235,7 +235,7 @@ const HELP_ARTICLES = [
       "“What is the status of SE-2026-…?” gives the stage, who leads it and what is still open.",
       "“Report a significant event: …” helps you report one (see the first guide).",
     ],
-    notes: ["The Orb only tells you about events you are allowed to open, and never sends them to the language assistant."],
+    notes: ["Ask Primovex only tells you about events you are allowed to open, and never sends them to the language assistant."],
   },
 ];
 

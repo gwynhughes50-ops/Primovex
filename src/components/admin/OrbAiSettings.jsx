@@ -101,18 +101,18 @@ export default function OrbAiSettings() {
       {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
 
       <Switch
-        title="Orb language assistant: understanding questions"
+        title="Ask Primovex language assistant: understanding questions"
         icon={Bot}
-        intro="Lets staff ask the Orb in their own words. When the Orb doesn't recognise a question, an AI picks which approved lookup fits."
+        intro="Lets staff ask Ask Primovex in their own words. When Ask Primovex doesn't recognise a question, an AI picks which approved lookup fits."
         sees={[
           "It sees the question, with numbers, dates, emails and phone numbers removed first, and the list of lookups that person is allowed to use.",
           "It never sees stock, temperatures, staff, patient or governance data. The lookup runs in the app with the person's own permissions.",
           "Concern and SAR lookups are never offered to it.",
         ]}
         safeguards={[
-          "The Orb's own rules answer first and cost nothing. Only unrecognised questions go to the AI.",
+          "Ask Primovex's own rules answer first and cost nothing. Only unrecognised questions go to the AI.",
           "Limits: 30 questions per person per hour, 1,500 for the practice per day.",
-          "If the AI is off, slow or unsure, the Orb behaves exactly as before.",
+          "If the AI is off, slow or unsure, Ask Primovex behaves exactly as before.",
           "Each use is audited (which lookup, never the question's words).",
         ]}
         usage={usage.route}
@@ -121,13 +121,13 @@ export default function OrbAiSettings() {
         loaded={loaded}
         confirmText="I've checked that the Azure OpenAI resource is in a UK or EU region and that this use is covered by the practice's data protection assessment (DPIA)."
         busy={busy}
-        onChange={(next) => change("aiRouting", "Orb language assistant (understanding questions)", next)}
+        onChange={(next) => change("aiRouting", "Ask Primovex language assistant (understanding questions)", next)}
       />
 
       <Switch
-        title="Orb language assistant: wording the answers"
+        title="Ask Primovex language assistant: wording the answers"
         icon={MessageSquareText}
-        intro="Lets the AI put the Orb's answers into friendlier, clearer words. The facts always come from the app's own lookup."
+        intro="Lets the AI put Ask Primovex's answers into friendlier, clearer words. The facts always come from the app's own lookup."
         sees={[
           "It sees the question and the answer's facts: item, room, fridge and space names, counts and dates, with numbers like phone numbers and references removed.",
           "Only for stock, expiry, cleaning, fridge, alert, space, compliance and box-readiness answers. Never for tasks, notes, maintenance, the timeline, who cleaned or saw something, the team list, or concerns and SARs.",
@@ -143,9 +143,9 @@ export default function OrbAiSettings() {
         limit="1,000"
         on={settings?.aiPhrasing === true}
         loaded={loaded}
-        confirmText="I understand this sends the Orb's answers (item, room and fridge names, counts, dates) to Azure OpenAI, I've checked the region, and this use is covered by the practice's DPIA."
+        confirmText="I understand this sends Ask Primovex's answers (item, room and fridge names, counts, dates) to Azure OpenAI, I've checked the region, and this use is covered by the practice's DPIA."
         busy={busy}
-        onChange={(next) => change("aiPhrasing", "Orb language assistant (wording the answers)", next)}
+        onChange={(next) => change("aiPhrasing", "Ask Primovex language assistant (wording the answers)", next)}
       />
 
       <Switch
