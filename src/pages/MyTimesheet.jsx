@@ -1,3 +1,4 @@
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useState } from "react";
 import { ClipboardCheck } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,7 +17,7 @@ export default function MyTimesheet() {
   const managed = useSheets(canManage ? "all" : "managed");
   const waiting = (managed.list || []).filter((t) => t.state === STATE.submitted && t.uid !== user?.uid && (t.managerUid === user?.uid || (!t.managerUid && canManage))).length;
   const isManager = canManage || (managed.list || []).length > 0;
-  const [tab, setTab] = useState("mine");
+  const [tab, setTab] = useUrlTab(["mine", "signoff", "payroll", "periods", "people"], "mine");
   const tabs = [["mine", "My timesheet"], ...(isManager ? [["signoff", `To sign off${waiting ? ` (${waiting})` : ""}`]] : []), ...(canPayroll ? [["payroll", "Payroll"]] : []), ...(canManage ? [["periods", "Pay periods"]] : [])];
   return (
     <div className="space-y-4">

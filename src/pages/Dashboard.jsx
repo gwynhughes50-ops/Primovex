@@ -9,6 +9,9 @@ import OperationsBrief from "@/operations/components/OperationsBrief";
 import OperationsTimeline from "@/operations/components/OperationsTimeline";
 import DashboardCustomizer from "@/dashboard/DashboardCustomizer";
 import { normaliseDashboardPreferences, saveDashboardPreferences } from "@/dashboard/dashboardPreferences";
+import NeedsYou from "@/components/dashboard/NeedsYou";
+import HealthStrip from "@/components/dashboard/HealthStrip";
+import { useNeedsYou } from "@/dashboard/useNeedsYou";
 import { useAuth } from "@/contexts/AuthContext";
 import HomeHeader from "@/smart-home/components/HomeHeader";
 import HomeMetricCard from "@/smart-home/components/HomeMetricCard";
@@ -35,6 +38,8 @@ export default function Dashboard() {
 
   useEffect(() => setPreferences(normaliseDashboardPreferences(profile?.dashboardPreferences, role, roleHomeType)), [profile?.dashboardPreferences, role, roleHomeType]);
   const visible = useMemo(() => new Set(preferences.visible), [preferences.visible]);
+  // only reads what is waiting on this person while one of the two widgets that show it is on
+  const needs = useNeedsYou(visible.has("needsYou") || visible.has("healthStrip"));
 
   async function savePreferences() {
     setSaving(true);
@@ -46,6 +51,8 @@ export default function Dashboard() {
   const temperatureContext = { loading: data.loading.tempLoading, hasReading: data.temperature.hasReading, within: data.temperature.within, detail: data.temperature.detail, readingAt: data.temperature.readingAt };
 
   const widgets = {
+    healthStrip: <HealthStrip tiles={needs.tiles} />,
+    needsYou: <NeedsYou rows={needs.rows} ready={needs.ready} onSars={needs.reloadSars} />,
     brief: <OperationsBrief inventory={{ totalItems: data.totalItems, lowStockItems: data.lowStockItems, expiringSoon: data.expiringSoon.length, loading: data.loading.stock || data.loading.itemsLoading }} temperature={temperatureContext} recentMoves={data.recentMoves} rooms={rooms} />,
     timeline: <OperationsTimeline context={{ recentMoves: data.recentMoves, temperature: temperatureContext, rooms }} compact />,
     management: <OperationsCentre />,

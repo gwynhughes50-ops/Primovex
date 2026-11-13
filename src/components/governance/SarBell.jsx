@@ -6,7 +6,7 @@ import { sendSarReminder } from "@/modules/governance/services/sarReminderClient
 // The reminder bell. Only shown to someone the server says may remind about this SAR (the Practice Manager, or the line manager of the
 // person it is assigned to): `row` comes from the server's list, so no row means no bell. Pressing it asks first, then sends a
 // reminder with fixed wording to the person the SAR is assigned to. One reminder a day for each SAR.
-export default function SarBell({ row, onSent, compact = false, align = "right" }) {
+export default function SarBell({ row, onSent, compact = false, align = "right", label = "" }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
@@ -37,9 +37,10 @@ export default function SarBell({ row, onSent, compact = false, align = "right" 
         title={bellLabel(row)}
         aria-label={bellLabel(row)}
         aria-expanded={open}
-        className={`inline-flex items-center justify-center rounded-full border ${compact ? "h-9 w-9" : "p-2"} transition ${BELL_STYLE[tone]}`}
+        className={`inline-flex items-center justify-center gap-1.5 rounded-full border ${label ? "px-3 py-1.5 text-xs font-bold" : compact ? "h-9 w-9" : "p-2"} transition ${BELL_STYLE[tone]}`}
       >
         <Icon className="h-4 w-4" />
+        {label}
       </button>
       {open && (
         <div

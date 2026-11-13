@@ -1,3 +1,4 @@
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeftRight, CalendarDays, SlidersHorizontal, UserMinus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,7 +19,7 @@ export default function ReceptionRota() {
   const canManage = can("rota.manage");
   const canSwitch = Boolean(isAdmin || can("practiceAdmin.write"));
   const actor = useMemo(() => ({ uid: user?.uid || "", displayName: displayName || user?.email || "" }), [user, displayName]);
-  const [tab, setTab] = useState("rota");
+  const [tab, setTab] = useUrlTab(["rota", "requests", "off", "rules"], "rota");
   const [rules, setRules] = useState(null); // null while loading
   const [weeks, setWeeks] = useState({});
   const [absences, setAbsences] = useState([]);

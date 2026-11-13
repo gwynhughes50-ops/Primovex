@@ -110,6 +110,7 @@
     "test:rota": "node scripts/verify-rota.mjs",
     "test:rota-review": "node scripts/verify-rota-review.mjs",
     "test:rota-requests": "node scripts/verify-rota-requests.mjs",
+    "test:dashboard-needs": "esbuild scripts/verify-dashboard-needs.mjs --bundle --platform=node --format=cjs --alias:firebase/firestore=./scripts/stubs/sarReminderStubs.js --alias:@/lib/firebase=./scripts/stubs/sarReminderStubs.js --alias:@=./src --outfile=work/verify-dashboard-needs.bundle.cjs && node work/verify-dashboard-needs.bundle.cjs",
     "test:sar-reminder": "esbuild scripts/verify-sar-reminder.mjs --bundle --platform=node --format=cjs --external:react --external:react-dom --loader:.jsx=jsx --jsx=automatic --alias:@/modules/governance/services/sarReminderClient=./scripts/stubs/sarReminderStubs.js --alias:@=./src --outfile=work/verify-sar-reminder.bundle.cjs && node work/verify-sar-reminder.bundle.cjs",
     "test:android-portrait": "node scripts/verify-android-portrait.mjs",
     "test:reading-preferences": "node scripts/verify-reading-preferences.mjs",

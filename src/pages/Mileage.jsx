@@ -1,3 +1,4 @@
+import { useUrlTab } from "@/lib/useUrlTab";
 import { useMemo, useState } from "react";
 import { Car, Plus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -198,7 +199,7 @@ export default function Mileage() {
   const places = usePlaces(true);
   const approvals = useClaims({ scope: canManage ? "all" : "approve" });
   const pending = (approvals.list || []).filter((c) => c.status === STATUS.submitted && c.uid !== user?.uid).length;
-  const [tab, setTab] = useState("mine");
+  const [tab, setTab] = useUrlTab(["mine", "approve", "everyone", "places"], "mine");
   const showApprove = canManage || (approvals.list || []).length > 0;
   const tabs = [["mine", "My mileage"], ...(showApprove ? [["approve", `To approve${pending ? ` (${pending})` : ""}`]] : []), ...(canManage ? [["everyone", "Totals for payroll"], ["places", "Places and routes"]] : [])];
   return (
