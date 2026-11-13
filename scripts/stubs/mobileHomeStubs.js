@@ -43,3 +43,4 @@ export const teamUid = (uid) => uid;
 
 // the phone home asks whether this person has a laptop
 export const subscribeMyLaptops = (uid, onData) => { onData?.(stub.laptops || []); return () => {}; };
+export const useSarsToChase = () => ({ canChase: !!stub.canChase, rows: [], byId: new Map(), loading: false, error: "", reload: async () => {} });

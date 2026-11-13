@@ -5,6 +5,8 @@ import { ChevronLeft, FileText, Plus, X } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { identityLabel, identityProblems } from '@/modules/governance/patientIdentity';
 import { useAuth } from '@/contexts/AuthContext';
+import SarBell from '@/components/governance/SarBell';
+import { useSarsToChase } from '@/modules/governance/useSarsToChase';
 import { listStaffDirectory } from '@/services/staffDirectoryService';
 import {
   SAR_CHECKLIST,
@@ -190,7 +192,7 @@ function SarFormSheet({ sar, actor, staff, onClose }) {
   );
 }
 
-function SarDetailSheet({ sar, actor, isTeam, onClose, onEdit }) {
+function SarDetailSheet({ sar, actor, isTeam, chase, onChased, onClose, onEdit }) {
   const [activity, setActivity] = useState([]);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -221,7 +223,10 @@ function SarDetailSheet({ sar, actor, isTeam, onClose, onEdit }) {
             <h2 className="mt-1 text-xl font-bold">{sar.reference}</h2>
             <p className="mt-1 text-sm text-[var(--medtrak-muted)]">{identityLabel(sar, { withDob: true })} · {SAR_REQUEST_TYPES.find((t) => t.key === sar.requestType)?.label || sar.requestTypeLabel || 'Request'}</p>
           </div>
-          <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-2xl border border-[var(--medtrak-border)]" aria-label="Close"><X className="h-5 w-5" /></button>
+          <div className="flex items-center gap-2">
+            <SarBell row={chase} onSent={onChased} compact />
+            <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-2xl border border-[var(--medtrak-border)]" aria-label="Close"><X className="h-5 w-5" /></button>
+          </div>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-1.5">
@@ -304,6 +309,7 @@ export default function MobileGovernanceSARs() {
   const { user, displayName, can } = useAuth();
   const actor = useMemo(() => actorFromUser(user, displayName), [user, displayName]);
   const isTeam = can('governance.manageSars');
+  const chase = useSarsToChase();
   const isPartner = !isTeam && can('governance.partnerAccess');
   const seesAll = isTeam || isPartner;
   const [rows, setRows] = useState([]);
@@ -412,7 +418,7 @@ export default function MobileGovernanceSARs() {
         })}
       </div>
 
-      {selected && !editing && <SarDetailSheet sar={selected} actor={actor} isTeam={isTeam} onClose={() => setSelectedId('')} onEdit={setEditing} />}
+      {selected && !editing && <SarDetailSheet sar={selected} actor={actor} isTeam={isTeam} chase={chase.byId.get(selected.id)} onChased={() => chase.reload()} onClose={() => setSelectedId('')} onEdit={setEditing} />}
       {editing && isTeam && <SarFormSheet sar={editing.id ? editing : null} actor={actor} staff={staff} onClose={() => setEditing(null)} />}
     </main>
   );

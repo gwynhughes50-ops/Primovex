@@ -7,6 +7,7 @@ import MobileAttentionStrip from "./MobileAttentionStrip";
 import MobileStockTakeBanner from "./MobileStockTakeBanner";
 import { subscribeMyLaptops } from "@/modules/laptops/laptopService";
 import { subscribeMyPublished, subscribeTeamAccess, teamUid } from "@/modules/rota/rotaTeamService";
+import { useSarsToChase } from "@/modules/governance/useSarsToChase";
 
 // The phone home for everyone except the Cleaner (who has MobileCleanerHome): its tiles come from the role
 // (see roleHomes.js). Managers and partners also see what needs attention at the top.
@@ -28,6 +29,7 @@ export default function RoleAdaptiveMobileHome({ onAction }) {
     const stopWeeks = subscribeMyPublished(teamUid(user.uid), (map) => { weeks = Object.keys(map || {}).length; update(); }, () => { weeks = 0; update(); });
     return () => { stopAccess(); stopWeeks(); };
   }, [user?.uid]);
+  const { canChase: hasChase } = useSarsToChase();
   const { activeSenseSession } = useSenseSession();
   const home = getRoleHome(role, capabilities, roleHomeType);
   const firstName = String(displayName || "").trim().split(" ")[0] || "there";
@@ -75,7 +77,7 @@ export default function RoleAdaptiveMobileHome({ onAction }) {
       </button>
 
       <div className="pvx-role-actions">
-        {visibleActions(home, capabilities, { hasLaptop, hasRota }).map(({ key, label, helper, Icon }) => (
+        {visibleActions(home, capabilities, { hasLaptop, hasRota, hasChase }).map(({ key, label, helper, Icon }) => (
           <button key={key} type="button" onClick={() => onAction?.(key)}>
             <Icon className="h-5 w-5" />
             <b>{label}</b>

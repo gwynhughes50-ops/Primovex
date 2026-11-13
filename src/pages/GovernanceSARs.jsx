@@ -11,6 +11,8 @@ import { identityLabel, identityProblems } from "@/modules/governance/patientIde
 import { db } from "@/lib/firebase";
 import { listStaffDirectory } from "@/services/staffDirectoryService";
 import { useAuth } from "@/contexts/AuthContext";
+import SarBell from "@/components/governance/SarBell";
+import { useSarsToChase } from "@/modules/governance/useSarsToChase";
 import { Icons } from "@/config/medtrakIcons";
 import {
   SAR_CHECKLIST,
@@ -444,7 +446,7 @@ function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, act
   );
 }
 
-function SarDetailPanel({ sar, actor, isTeam, canDelete, onEdit, onDelete, onClose }) {
+function SarDetailPanel({ sar, actor, isTeam, canDelete, chase, onChased, onEdit, onDelete, onClose }) {
   const [activity, setActivity] = useState([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -514,6 +516,7 @@ function SarDetailPanel({ sar, actor, isTeam, canDelete, onEdit, onDelete, onClo
             <p className="mt-1 text-sm text-slate-400">{identityLabel(sar, { withDob: true })} · {sar.requestTypeLabel || getRequestTypeLabel(sar.requestType)}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <SarBell row={chase} onSent={onChased} />
             {isTeam && (
               <button type="button" onClick={() => onEdit?.(sar)} className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">
                 <Pencil className="h-4 w-4" /> Edit
@@ -637,6 +640,8 @@ export default function GovernanceSARs() {
   const [newYear, setNewYear] = useState("");
   const [yearError, setYearError] = useState("");
   const canDelete = isTeam;
+  // the reminder bell: the server says which SARs this person may remind about (the Practice Manager: any; a line manager: their team's)
+  const chase = useSarsToChase();
 
   useEffect(() => {
     if (!user?.uid) return undefined;
@@ -886,6 +891,7 @@ export default function GovernanceSARs() {
                       <td className="py-3 pr-3"><StatusBadge status={getSarStatusBadge(sar.status)}>{getStatusLabel(sar.status)}</StatusBadge></td>
                       <td className="py-3 pr-3">
                         <div className="flex items-center gap-2">
+                          <SarBell row={chase.byId.get(sar.id)} onSent={() => chase.reload()} />
                           <Button type="button" size="sm" variant="outline" onClick={() => setSelectedId(sar.id)} className="rounded-full border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800">Open</Button>
                           {isTeam && (
                             <button type="button" onClick={() => setEditing(sar)} title="Edit SAR" aria-label={`Edit ${sar.reference}`} className="rounded-full border border-slate-700 bg-slate-950 p-2 text-slate-200 hover:bg-slate-800">
@@ -910,7 +916,7 @@ export default function GovernanceSARs() {
 
       <SarFormPanel open={showNew} onClose={() => setShowNew(false)} users={users} usersError={usersError} onRetryUsers={loadStaff} actor={actor} defaultYear={yearFilter === "all" ? null : Number(yearFilter)} onSaved={() => { setFilter("open"); setYearFilter("all"); }} />
       <SarFormPanel open={!!editing} sar={editing} onClose={() => setEditing(null)} users={users} usersError={usersError} onRetryUsers={loadStaff} actor={actor} />
-      <SarDetailPanel sar={selected} actor={actor} isTeam={isTeam} canDelete={canDelete} onEdit={setEditing} onDelete={setDeleteTarget} onClose={() => setSelectedId(null)} />
+      <SarDetailPanel sar={selected} actor={actor} isTeam={isTeam} canDelete={canDelete} chase={chase.byId.get(selected.id)} onChased={() => chase.reload()} onEdit={setEditing} onDelete={setDeleteTarget} onClose={() => setSelectedId(null)} />
 
       {deleteTarget && (
         <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4">

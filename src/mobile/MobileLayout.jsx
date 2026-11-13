@@ -386,6 +386,9 @@ export default function MobileLayout({ initialTab = "home" }) {
       case "my-rota":
         navigate("/my-rota");
         break;
+      case "sars-to-chase":
+        navigate("/sars-to-chase");
+        break;
       case "reception-rota":
         navigate("/reception-rota");
         break;

@@ -22,6 +22,8 @@ export const ROUTE_MANIFEST = [
   { path: "/annual-leave", label: "Annual leave", section: "mywork", iconKey: "annualLeave" },
   { path: "/my-training", label: "My training", section: "mywork", iconKey: "training" },
   { path: "/mileage", label: "Mileage", section: "mywork", iconKey: "mileage" },
+  // Only in the menu of the Practice Manager and of line managers (who have people to chase); the server decides, see useSarsToChase.
+  { path: "/sars-to-chase", label: "SARs to chase", section: "mywork", iconKey: "sar", dynamicKey: "sarsToChase" },
   { path: "/quality-opportunities", label: "From ClinFlow", section: "mywork", iconKey: "governance" },
   { path: "/add-document", label: "Add a document", section: "operations", iconKey: "documents", capability: "documents.intake" },
   { path: "/reception-rota", label: "Reception rota", section: "operations", iconKey: "annualLeave", capability: "rota.read", anyOf: ["rota.read", "rota.manage"] },
@@ -67,9 +69,10 @@ function routeAllowed(route, capabilities) {
   return !route.capability || hasCapability(capabilities, route.capability);
 }
 
-export function getVisibleRouteManifest({ isAdmin = false, capabilities = [], developer = false } = {}) {
+export function getVisibleRouteManifest({ isAdmin = false, capabilities = [], developer = false, dynamic = [] } = {}) {
   return ROUTE_MANIFEST.filter((route) => {
     if (route.alias || route.supportRoute || route.hiddenFromSidebar) return false;
+    if (route.dynamicKey && !dynamic.includes(route.dynamicKey)) return false;
     if (route.feature && !featureOn(route.feature)) return false;
     if (route.adminOnly && !isAdmin) return false;
     if (route.developerOnly && !developer) return false;

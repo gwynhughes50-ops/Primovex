@@ -233,6 +233,13 @@ t("a My rota tile appears only for someone on the reception rota, once weeks hav
   assert.ok(!mine.some((a) => a.key === "it-equipment" || a.key === "my-laptop"), "it does not open anything else");
 });
 
+t("a SARs to chase tile appears only when the server says this person has SARs to chase", () => {
+  const home = getRoleHome("Practice Manager", ["inventory.read"]);
+  assert.ok(!visibleActions(home, ["inventory.read"]).some((a) => a.key === "sars-to-chase"));
+  assert.ok(!visibleActions(home, ["inventory.read"], { hasChase: false }).some((a) => a.key === "sars-to-chase"));
+  assert.ok(visibleActions(home, ["inventory.read"], { hasChase: true }).some((a) => a.key === "sars-to-chase" && a.label === "SARs to chase"));
+});
+
 t("a Reception rota tile appears on the phone for the Practice Manager and anyone with the rota permission, and not for anyone else", () => {
   const home = getRoleHome("Nurse", ["inventory.read"]);
   assert.ok(!visibleActions(home, ["inventory.read"]).some((a) => a.key === "reception-rota"));

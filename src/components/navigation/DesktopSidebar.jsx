@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { getVisibleRouteManifest, SIDEBAR_SECTIONS } from "@/config/routeManifest";
 import { getIcon } from "@/config/medtrakIcons";
 import DesktopUpdateLink from "@/components/navigation/DesktopUpdateLink";
+import { useSarsToChase } from "@/modules/governance/useSarsToChase";
 import { groupOfPath, isOpen, loadStored, opened, saveStored, toggled } from "@/config/sidebarGroups";
 
 function SidebarLink({ item, collapsed }) {
@@ -23,7 +24,8 @@ function SidebarLink({ item, collapsed }) {
 }
 
 export default function DesktopSidebar({ collapsed, onToggle, isAdmin, capabilities, developer, displayName, role, onSignOut }) {
-  const routes = getVisibleRouteManifest({ isAdmin, capabilities, developer });
+  const sarsToChase = useSarsToChase();
+  const routes = getVisibleRouteManifest({ isAdmin, capabilities, developer, dynamic: sarsToChase.canChase ? ["sarsToChase"] : [] });
   const standardSections = SIDEBAR_SECTIONS.map((section) => ({ ...section, items: routes.filter((item) => item.section === section.key) })).filter((section) => section.items.length);
   const developerItems = routes.filter((item) => item.section === "developer");
 

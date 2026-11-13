@@ -220,7 +220,7 @@ t("it is wired in: a My rota tile and page on the phone (behind the session lock
   assert.match(read("src/apps/MobileApp.jsx"), /<MobileSessionShell><MobileRota coordinator=\{coordinator\} \/><\/MobileSessionShell>/);
   assert.match(read("src/apps/DesktopApp.jsx"), /<Route path="my-rota"/);
   assert.match(read("src/mobile/MobileLayout.jsx"), /case "my-rota":\s*navigate\("\/my-rota"\)/);
-  assert.match(read("src/mobile/RoleAdaptiveMobileHome.jsx"), /visibleActions\(home, capabilities, \{ hasLaptop, hasRota \}\)/);
+  assert.match(read("src/mobile/RoleAdaptiveMobileHome.jsx"), /visibleActions\(home, capabilities, \{ hasLaptop, hasRota, hasChase \}\)/);
   assert.match(read("src/services/notificationCentreService.js"), /rota: "Reception rota"/);
   const week = read("src/components/rota/RotaWeekPanel.jsx");
   assert.match(week, /publishWeeks\(list, rules, actor\)/);

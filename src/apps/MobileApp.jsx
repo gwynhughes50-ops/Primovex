@@ -12,6 +12,7 @@ import CoshhLanding from "@/mobile/CoshhLanding";
 import ComplianceLanding from "@/mobile/ComplianceLanding";
 import { MobileLaptops, LaptopLanding, MobileMyLaptop } from "@/mobile/MobileLaptops";
 import MobileRota from "@/mobile/MobileRota";
+import MobileSarsToChase from "@/mobile/MobileSarsToChase";
 import MobileAddDocument from "@/mobile/MobileAddDocument";
 import MobileBootSplash from "@/mobile/auth/MobileBootSplash";
 import MobileAccountLogin from "@/mobile/auth/MobileAccountLogin";
@@ -96,6 +97,16 @@ function MobileGovernanceSARsRoute() {
   return <MobileSessionShell><MobileGovernanceSARs /></MobileSessionShell>;
 }
 
+function MobileSarsToChaseRoute() {
+  const { user, loading, can, profile } = useAuth();
+  if (loading) return <MobileBootSplash message="Opening SARs to chase" />;
+  if (!user) return <MobileAccountLogin />;
+  if (profile?.mustChangePassword === true) return <MustChangePassword />;
+  if (!can("mobile.access")) return <MobileAccessDenied />;
+  // The server decides who has anything here (the Practice Manager and line managers) and sends no patient details.
+  return <MobileSessionShell><MobileSarsToChase /></MobileSessionShell>;
+}
+
 function MobileLaptopRoute({ mine = false }) {
   const { user, loading, can, profile } = useAuth();
   if (loading) return <MobileBootSplash message="Opening laptops" />;
@@ -144,6 +155,7 @@ export default function MobileApp() {
       <Route path="/sense/open/:entityType/:entityId" element={<MobileSenseRoute />} />
       <Route path="/governance/concerns" element={<MobileGovernanceConcernsRoute />} />
       <Route path="/governance/sars" element={<MobileGovernanceSARsRoute />} />
+      <Route path="/sars-to-chase" element={<MobileSarsToChaseRoute />} />
       <Route path="/it-equipment" element={<MobileLaptopRoute />} />
       <Route path="/my-laptop" element={<MobileLaptopRoute mine />} />
       <Route path="/my-rota" element={<MobileRotaRoute />} />

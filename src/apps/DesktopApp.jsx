@@ -18,6 +18,7 @@ import QualityOpportunities from "@/pages/QualityOpportunities";
 import MyTimesheet from "@/pages/MyTimesheet";
 import ITEquipment from "@/pages/ITEquipment";
 import ReceptionRota from "@/pages/ReceptionRota";
+import SarsToChase from "@/pages/SarsToChase";
 import MyRota from "@/components/rota/MyRota";
 import AddDocument from "@/pages/AddDocument";
 import MyLaptop from "@/pages/MyLaptop";
@@ -121,6 +122,7 @@ export default function DesktopApp() {
         <Route path="practice-admin" element={<PermissionGate capability="practiceAdmin.read"><PracticeAdministration /></PermissionGate>} />
         <Route path="governance/concerns" element={<PermissionGate anyOf={["governance.read", "governance.concernsInvolved"]}><GovernanceConcerns /></PermissionGate>} />
         <Route path="governance/sars" element={<GovernanceSARs />} />
+        <Route path="sars-to-chase" element={<SarsToChase />} />
         <Route path="governance/significant-events" element={<PermissionGate anyOf={["governance.reportEvents", "governance.seTeam", "governance.partnerAccess"]}><GovernanceSignificantEvents /></PermissionGate>} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="connect" element={<PermissionGate capability="connect.view"><Connect /></PermissionGate>} />

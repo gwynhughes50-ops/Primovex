@@ -1357,4 +1357,21 @@ export const HELP_ARTICLES = [
     tip: "A swap is always your choice: you can say no to a colleague without giving a reason. You never see who is off, only who is on.",
     open: { label: "Open My rota", route: "/my-rota" },
   },
+  {
+    id: "sar-reminder-bell",
+    title: "Remind someone that a SAR needs prioritising",
+    topic: "SARs and concerns",
+    asks: ["how do i remind someone about a sar", "send a reminder about a subject access request", "chase a sar", "the sar bell", "a sar is nearly overdue", "remind my team a sar is due"],
+    keywords: ["sar", "reminder", "bell", "chase", "overdue", "prioritise", "due"],
+    where: "both",
+    steps: [
+      "The Practice Manager, and the line manager of the person a SAR is assigned to, see a small bell by that SAR. On the SARs page it is on each row and on the open SAR. Everyone else does not see it.",
+      "If you manage people but are not on the SAR team, open \"SARs to chase\" (in the menu on the desktop, or the \"SARs to chase\" tile on the phone). It lists the open SARs assigned to the people who report to you, most urgent first, with no patient details.",
+      "The bell is amber in the last week before the due date and red once it is overdue. Press it, check who will be told, and press \"Send reminder\".",
+      "They get a message and the usual alert saying the SAR is due (or overdue) and needs prioritising, and that it is from you. You can't change the wording.",
+      "Only one reminder can be sent for a SAR each day. The SAR shows who last sent one and when, and the SAR's history records it.",
+    ],
+    tip: "\"Reports to\" comes from the organisation chart in Practice Admin, Departments. If you don't see the bell for someone on your team, check who they report to there.",
+    open: { label: "Open SARs to chase", route: "/sars-to-chase" },
+  },
 ];

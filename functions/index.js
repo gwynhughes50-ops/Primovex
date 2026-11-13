@@ -27,6 +27,7 @@ const { createUserAccount, setUserActive, deleteUserAccount, createPasswordLink,
 const { applyExceptions, getEffectiveCapabilities, hasCapability } = require("./services/roleCapabilities");
 const { notifySarAssignment } = require("./services/notificationService");
 const { listStaffDirectory } = require("./services/staffDirectoryService");
+const { listSarsToChase, sendSarReminder } = require("./services/sarReminderService");
 const { listRecipients, sendQualityOpportunity, updateQualityOpportunity } = require("./services/qualityOpportunityService");
 const { sendDueNotifications } = require("./services/dueNotificationService");
 const { sendKitNotification, replaceKitItemBatch } = require("./services/kitCheckService");
@@ -573,6 +574,22 @@ exports.notifySarAssignment = onCall({ region: "europe-west2" }, async (request)
     callerName: callerProfile.displayName || callerProfile.email || "Primovex",
     sarId,
   });
+});
+
+// The SAR reminder bell. The Practice Manager, and the line manager of the person a SAR is assigned to, can remind that person
+// that it needs prioritising. Both calls decide who the caller is from their own account and the organisation chart, never from
+// anything the app sends (see services/sarReminderService.js).
+exports.listSarsToChase = onCall({ region: "europe-west2" }, async (request) => {
+  assertSignedIn(request);
+  const profile = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
+  return listSarsToChase({ db, uid: request.auth.uid, profile });
+});
+
+exports.sendSarReminder = onCall({ region: "europe-west2" }, async (request) => {
+  assertSignedIn(request);
+  const profile = (await db.collection("users").doc(request.auth.uid).get()).data() || {};
+  const { sarId } = request.data || {};
+  return sendSarReminder({ db, uid: request.auth.uid, profile, sarId });
 });
 
 // Tells people about a significant event: the team when one is reported, a lead when assigned,
