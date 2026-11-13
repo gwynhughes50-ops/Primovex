@@ -13,11 +13,13 @@ export const GROUPS = [
   { key: "go", title: "Go", blurb: "Jump straight to a page", how: "tap to go" },
 ];
 
-// group: ask / do / go.  needs: a capability the person must have (none = everyone).  tool: what the assistant routes it to (checked by the test).
+// group: ask / do / go.  needs: a capability the person must have (none = everyone).  onRota: only for someone on the reception rota.  tool: what the assistant routes it to (checked by the test).
 // "do" examples are put in the box for the person to change and send; "ask" and "go" are sent at once (they only look things up or open a page).
 export const STARTERS = [
   { group: "ask", text: "What needs attention today?", tool: "operations.summary" },
   { group: "ask", text: "Brief me", tool: "briefing.daily" },
+  { group: "ask", text: "Who's in today?", needs: "audit.read", tool: "security.whoIsIn" },
+  { group: "ask", text: "Show my shifts", onRota: true, tool: "rota.myShifts" },
   { group: "ask", text: "Which stock is low?", needs: "inventory.read", tool: "inventory.lowStock" },
   { group: "ask", text: "What expires this month?", needs: "inventory.read", tool: "inventory.expiring" },
   { group: "ask", text: "Are all fridges OK today?", needs: "temperature.read", tool: "coldChain.latestStatus" },
@@ -38,13 +40,13 @@ export const STARTERS = [
 ];
 
 // What to show this person: up to `max` in each group, only what they may use, in the order above (so the most useful come first).
-export function startersFor({ can = () => false, max = 3 } = {}) {
+export function startersFor({ can = () => false, onRota = false, max = 3 } = {}) {
   // someone who works the SARs and concerns is shown those first; everyone else gets the order above
   const governance = can("governance.manageSars");
   const rank = (s) => (governance && s.needs === "governance.read" ? 0 : 1);
   return GROUPS.map((group) => ({
     ...group,
-    items: STARTERS.map((s, i) => ({ s, i })).filter(({ s }) => s.group === group.key && (!s.needs || can(s.needs)))
+    items: STARTERS.map((s, i) => ({ s, i })).filter(({ s }) => s.group === group.key && (!s.needs || can(s.needs)) && (!s.onRota || onRota))
       .sort((a, b) => rank(a.s) - rank(b.s) || a.i - b.i).map(({ s }) => s).slice(0, max),
   })).filter((group) => group.items.length > 0);
 }

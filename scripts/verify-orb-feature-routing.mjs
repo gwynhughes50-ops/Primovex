@@ -25,6 +25,16 @@ route("how many open complaints do we have", "governance.concernsOverview");
 const he = route("how many SAR does he have outstanding", "governance.sarOverview", [{ role: "user", content: "when did Craig last login" }]);
 assert.equal(he.input.person, "craig");
 
+// who is in Primovex today, and a team member's own shifts
+route("Who's in today?", "security.whoIsIn");
+route("who has logged in today", "security.whoIsIn");
+route("who hasn't logged in today", "security.whoIsIn");
+route("when did Craig last log in", "security.lastLogin");
+route("Show my shifts", "rota.myShifts");
+route("what are my shifts this week", "rota.myShifts");
+route("when am I working next", "rota.myShifts");
+route("how do I swap a shift?", "help.howTo");
+
 // stock in, and the answer to its question
 route("I have received 20 chlorphenamine ampoules", "stock.inDraft");
 route("we have had a delivery of two boxes of gauze swabs, batch 9921", "stock.inDraft");

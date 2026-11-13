@@ -5,8 +5,8 @@ import { ASSISTANT_PROMISE, sendsAtOnce, startersFor } from '../starters';
 // Shown whenever the conversation is empty, and again from the "What can I do?" button.
 const ICON = { ask: Search, do: Wand2, go: Compass };
 
-export default function AssistantWelcome({ can, onAsk, onFill, compact = false }) {
-  const groups = startersFor({ can, max: compact ? 2 : 3 });
+export default function AssistantWelcome({ can, onRota = false, onAsk, onFill, compact = false }) {
+  const groups = startersFor({ can, onRota, max: compact ? 2 : 3 });
   return (
     <section aria-label="What Ask Primovex can do">
       <div className="primovex-ai-accent-card rounded-2xl p-4">

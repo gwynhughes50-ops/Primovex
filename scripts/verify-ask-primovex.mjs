@@ -41,6 +41,17 @@ t("each person is only offered what their role can use, up to three in a group, 
   assert.ok(startersFor({ can: () => true, max: 2 }).every((g) => g.items.length <= 2));
 });
 
+t("Who's in today? is offered to people who can see the sign-in records, and Show my shifts only to people on the reception rota", () => {
+  const asks = (opts) => startersFor({ max: 9, ...opts }).find((g) => g.key === "ask").items.map((x) => x.text);
+  assert.ok(!asks({ can: () => false }).includes("Who's in today?"));
+  assert.ok(asks({ can: canOf("audit.read") }).includes("Who's in today?"));
+  assert.ok(!asks({ can: canOf("audit.read") }).includes("Show my shifts"));
+  assert.ok(!asks({ can: () => false, onRota: false }).includes("Show my shifts"));
+  assert.ok(asks({ can: () => false, onRota: true }).includes("Show my shifts"));
+  assert.ok(!asks({ can: () => false, onRota: true }).includes("Who's in today?"), "being on the rota does not show who has signed in");
+  assert.match(read("src/ai/components/AskPrimovexPanel.jsx"), /onRota=\{onRota\}/);
+});
+
 t("someone who works the SARs and concerns is shown those first", () => {
   const sar = startersFor({ can: canOf("governance.read", "governance.manageSars", "inventory.read") });
   assert.equal(sar.find((g) => g.key === "ask").items[0].tool, "governance.sarOverview");

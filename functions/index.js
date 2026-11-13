@@ -633,7 +633,8 @@ exports.listStaffDirectory = onCall({ region: "europe-west2" }, async (request) 
       || hasCapability(capabilities, "training.manageClinical")
       || hasCapability(capabilities, "timesheets.manage") // linking timesheet staff to accounts and choosing line managers
       || hasCapability(capabilities, "itAssets.manage") // choosing who a laptop is assigned or lent to
-      || hasCapability(capabilities, "rota.manage"); // choosing the reception team for the rota
+      || hasCapability(capabilities, "rota.manage") // choosing the reception team for the rota
+      || hasCapability(capabilities, "audit.read"); // "Who's in today?" in Ask Primovex lists everyone with an account, with their last sign-in
     if (!allowed) throw new HttpsError("permission-denied", "You need SAR, concerns, fridge, admin or stock-verification access to list staff.");
   }
   return { staff: await listStaffDirectory({ db }) };

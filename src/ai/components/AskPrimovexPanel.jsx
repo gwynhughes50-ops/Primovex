@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowRight, Bot, CheckCircle2, ExternalLink, HelpCircle, Meh, MessageSquarePlus, Mic, MicOff, RotateCcw, ShieldCheck, TriangleAlert, X, XCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import AssistantWelcome from './AssistantWelcome';
+import { useOnRota } from '@/modules/rota/useOnRota';
 import { ASSISTANT_NAME, ASSISTANT_TAGLINE } from '../starters';
 import { useNavigate } from 'react-router-dom';
 import usePrimovexAI from '../hooks/usePrimovexAI';
@@ -92,6 +93,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
   const { isOpen, close, status, messages, ask, addUserMessage, clearConversation, resolveClarification, recordFeedback, confirmProposal, cancelProposal } = usePrimovexAI();
   const orbStatus = useOrbStatus();
   const { can } = useAuth();
+  const onRota = useOnRota();
   const [helpOpen, setHelpOpen] = useState(false); // the "What can I do?" card, shown over the conversation
   const [prompt, setPrompt] = useState('');
   const [report, setReport] = useState(null); // { text } while the "tell the developer" form is open
@@ -471,6 +473,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
           <div>
             <AssistantWelcome
               can={can}
+              onRota={onRota}
               compact={isMobile}
               onAsk={(text) => { setHelpOpen(false); ask(text); }}
               onFill={(text) => { setHelpOpen(false); setPrompt(text); }}

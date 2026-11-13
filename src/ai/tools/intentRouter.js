@@ -15,6 +15,7 @@ import { SE_REFERENCE } from '@/ai/governance/seAnswers';
 import { looksLikeSeReport } from '@/ai/governance/seDraft';
 import { parseUseRequest } from '@/ai/stock/stockUse';
 import { parseManagementQuestion } from '@/ai/management/managementAsk';
+import { parseMyShifts } from '@/ai/rota/rotaAsk';
 import { looksLikeStockIn } from '@/ai/stock/stockIn';
 import { looksLikeStockCount } from '@/ai/stock/stockCount';
 import { looksLikeExpiryRemoval } from '@/ai/stock/expiryRound';
@@ -97,7 +98,11 @@ export function routeApprovedTool(prompt, options = {}) {
     return { toolId: 'governance.seLookup', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.95 } };
   }
 
-  // Management questions: a check last done, water temperatures, someone's last sign-in, SARs and concerns.
+  // "Show my shifts": a member of the reception team asking for their own shifts on the rota.
+  const myShiftsAsk = parseMyShifts(prompt);
+  if (myShiftsAsk) return { toolId: 'rota.myShifts', input: myShiftsAsk, language: { normalised: text, confidence: 0.95 } };
+
+  // Management questions: a check last done, water temperatures, someone's last sign-in, who is in today, SARs and concerns.
   const management = parseManagementQuestion(prompt, options.conversation);
   if (management) return { ...management, language: { normalised: text, confidence: 0.95 } };
 

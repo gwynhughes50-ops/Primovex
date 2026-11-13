@@ -709,6 +709,7 @@ export const HELP_ARTICLES = [
       "For Compliance, ask \"what is due in compliance?\", \"are there any open incidents?\", \"is the fire alarm panel showing a fault?\", \"which appliances are overdue for PAT testing?\" or \"has the kettle been PAT tested?\". For concerns, \"which concerns are with the indemnity insurer?\" says where each outside party has got to. Ask for \"the audit trail\" or \"PAT testing\" to be taken straight there.",
       "It can also get things ready for you to confirm: \"I've taken two gloves from the store cupboard\", \"I've received 20 chlorphenamine, batch 4471, expires March 2028\", \"count the nurses room: gloves 12, syringes 40\", \"take the expired stock off\", \"remind me to check the fridge tomorrow at 9\" or \"tell Ben the vaccine fridge needs checking\". It shows a card and nothing changes until you press Confirm (or say \"yes\").",
       "Say \"go to purchase orders\" or \"open the alerts\" and it takes you there.",
+      "Anyone who can see the sign-in records can ask \"who's in today?\": it lists who has been in Primovex today and, for everyone else, the last time they signed in. If you are on the reception rota, ask \"show my shifts\" (or \"am I working tomorrow?\") to see your own shifts.",
       "Answers show where they came from, and it only tells you and does what your permissions allow.",
     ],
     related: ["talk-to-orb-phone", "record-fridge-temperature", "add-stock-item", "check-kit-phone", "log-temperature"],

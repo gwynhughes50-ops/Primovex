@@ -107,10 +107,27 @@ function daysFromQuestion(text, fallback = 30) {
   return fallback;
 }
 
+// "Who's in today?" means who has been in Primovex, not who is on the rota. Rota and time-off questions are left alone.
+const WHO = String.raw`who(?:'s|s)?\s+(?:is\s+|are\s+|has\s+|have\s+)?`;
+export function looksLikeWhoIsIn(text) {
+  const t = String(text || "").toLowerCase().replace(/[’‘]/g, "'").trim().replace(/[?.!]+$/g, "");
+  if (/\b(?:rota|shifts?|reception|desk|holiday|leave|toil|off|away|absent|sick|patients?|how\s+(?:do|to|can))\b/.test(t)) return false;
+  return [
+    new RegExp(`\\b${WHO}(?:been\\s+)?(?:in|on)\\s+(?:primovex|the\\s+app|the\\s+system)\\b`),
+    new RegExp(`\\b${WHO}(?:not\\s+|n't\\s*)?(?:been\\s+)?(?:logged|signed)\\s*(?:in|on)\\b`),
+    new RegExp(`\\b${WHO}(?:hasn't|hasnt|haven't|havent|isn't|isnt|not)\\s+(?:been\\s+)?(?:logged|signed)\\s*(?:in|on)\\b`),
+    new RegExp(`\\b${WHO}(?:in|online|using\\s+primovex|using\\s+the\\s+app)\\s+(?:today|now|right\\s+now|so\\s+far|this\\s+morning|at\\s+the\\s+moment)\\b`),
+    new RegExp(`^${WHO}in$`),
+  ].some((pattern) => pattern.test(t));
+}
+
 // null when it isn't a management question. Otherwise { toolId, input }.
 export function parseManagementQuestion(prompt, conversation = []) {
   const text = String(prompt || "").toLowerCase().replace(/[’‘]/g, "'").trim();
   if (!text) return null;
+
+  // who is in Primovex today, and when the others last signed in ("who's in today?", "who has logged in?", "who hasn't logged in today?")
+  if (looksLikeWhoIsIn(text)) return { toolId: "security.whoIsIn", input: {} };
 
   // when did <someone> last sign in?
   const loginWord = /\b(?:log(?:ged|ging)?\s*(?:in|on)|sign(?:ed|ing)?\s*(?:in|on)|logins?|logons?|last\s+seen|last\s+(?:been\s+)?(?:active|online)|been\s+(?:in|online|on)\s+(?:primovex|the\s+app|the\s+system))\b/.test(text);
@@ -275,6 +292,47 @@ export function lastLoginAnswer({ name = "", people = [], days = 90, now = new D
   else if (seen && seen - signedIn > 5 * 60000) parts.push(`They were last active at ${timeLabel(seen)}${daysBetween(seen, signedIn) ? ` on ${shortDay(seen)}` : ""}.`);
   if (person.sessionCount > 1) parts.push(`${plural(person.sessionCount, "session")} in the last ${days} days.`);
   return { text: parts.join(" "), found: true, person: person.name };
+}
+
+// Who has been in Primovex today, and for everyone else the last time they signed in.
+//   people: summariseUsers(...) from the sign-in records (the last `days` days); directory: every active account as { id, label, role }
+//   (null when the list of accounts couldn't be read, in which case only people seen in the records are listed)
+const MAX_LISTED = 30;
+export function whoIsInAnswer({ people = [], directory = null, now = new Date(), days = 90 }) {
+  const seenBy = new Map(people.map((p) => [p.uid, p]));
+  const roster = Array.isArray(directory) && directory.length
+    ? directory.map((d) => ({ uid: d.id, name: d.label }))
+    : people.map((p) => ({ uid: p.uid, name: p.name }));
+  if (!roster.length) return { text: "I can't see any sign-in records, so I can't say who is in Primovex.", found: false, counts: { in: 0, out: 0, total: 0 } };
+
+  const rows = roster.map(({ uid, name }) => {
+    const p = seenBy.get(uid);
+    const signedIn = p ? asDate(p.lastSignIn) : null;
+    const latest = p?.sessions?.[0];
+    const active = latest?.status === "active";
+    return { uid, name: name || p?.name || "Unnamed", signedIn, seen: p ? asDate(p.lastSeen) : null, active, inToday: Boolean(signedIn && (daysBetween(now, signedIn) === 0 || active)) };
+  });
+  const byName = (a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base" });
+  const inRows = rows.filter((r) => r.inToday).sort((a, b) => a.signedIn - b.signedIn || byName(a, b));
+  const outRows = rows.filter((r) => !r.inToday).sort((a, b) => (b.signedIn ? b.signedIn.getTime() : 0) - (a.signedIn ? a.signedIn.getTime() : 0) || byName(a, b));
+  const counts = { in: inRows.length, out: outRows.length, total: rows.length };
+
+  const inLine = (r) => {
+    const bits = [`since ${timeLabel(r.signedIn)}`];
+    if (r.active) bits.push("in now");
+    else if (r.seen && r.seen - r.signedIn > 5 * 60000) bits.push(`last active ${timeLabel(r.seen)}`);
+    return `${r.name} (${bits.join(", ")})`;
+  };
+  const outLine = (r) => (r.signedIn ? `${r.name}: ${shortDay(r.signedIn)} at ${timeLabel(r.signedIn)} (${agoLabel(r.signedIn, now)})` : `${r.name}: no sign-in in the last ${days} days`);
+  const cut = (list, make) => {
+    const shown = list.slice(0, MAX_LISTED).map(make).join("\n");
+    return list.length > MAX_LISTED ? `${shown}\nand ${list.length - MAX_LISTED} more` : shown;
+  };
+
+  const parts = [counts.in === 0 ? "Nobody has signed in to Primovex today yet." : `${counts.in} of ${plural(counts.total, "person", "people")} ${counts.in === 1 ? "has" : "have"} been in Primovex today.`];
+  if (inRows.length) parts.push(`In today:\n${cut(inRows, inLine)}`);
+  if (outRows.length) parts.push(`Not in today, and when they last signed in:\n${cut(outRows, outLine)}`);
+  return { text: parts.join("\n\n"), found: true, counts };
 }
 
 // ---- SARs ----------------------------------------------------------------------------------------------

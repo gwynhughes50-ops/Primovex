@@ -1,5 +1,5 @@
 import { Timestamp, collection, doc, getDoc, getDocs, limit, orderBy, query, where } from 'firebase/firestore';
-import { caseOutsideLine, concernsOverviewAnswer, lastCheckAnswer, lastLoginAnswer, sarOverviewAnswer, waterTempsAnswer } from '@/ai/management/managementAsk';
+import { caseOutsideLine, concernsOverviewAnswer, lastCheckAnswer, lastLoginAnswer, sarOverviewAnswer, waterTempsAnswer, whoIsInAnswer } from '@/ai/management/managementAsk';
 import { dueNowAnswer, incidentsAnswer, patStatusAnswer } from '@/ai/management/complianceAsk';
 import { isOpen as incidentIsOpen, isPanelFault } from '@/modules/compliance/complianceIncidents';
 import { CONCERN_STEPS_COLLECTION } from '@/modules/governance/services/concernService';
@@ -40,6 +40,8 @@ import { ensureMedicineNames } from '@/ai/stock/medicineNamesLoader';
 import { setProtectedWords } from '@/ai/stock/medicineNames';
 import { loadVisibleSe } from '@/modules/governance/services/seService';
 import { normaliseOrbScope } from '@/lib/orbScope';
+import { listStaffDirectory } from '@/services/staffDirectoryService';
+import { myShiftsAnswer } from '@/ai/rota/rotaAsk';
 import { daysUntilExpiry, expiryStatus, expiryWindowDays, normaliseExpirySettings, stockLevelStatus, summariseStockAlerts } from '@/lib/stockAlerts';
 import {
   alertsAnswer, categoryAnswer, cleaningAnswer, coldChainOverview, coldChainUnitAnswer, complianceAnswer, expiryAnswer, lowStockAnswer,
@@ -898,6 +900,53 @@ export function registerApprovedReadOnlyTools() {
         warnings: answer.counts && (answer.counts.overdue || answer.counts.outOfUse) ? [`${answer.counts.overdue + answer.counts.outOfUse} need attention`] : [],
         sources: [source('PAT register', `${patAssets.length} appliance${patAssets.length === 1 ? '' : 's'}, ${patTests.length} test${patTests.length === 1 ? '' : 's'} · live read ${nowLabel()}`)],
         actions: [{ label: 'Open Compliance', route: '/compliance' }],
+      };
+    },
+  });
+
+  // A member of the reception team's own shifts, from the weeks the coordinator has published to them. Open to anyone (it only ever shows the person
+  // their own shifts), and the database only lets them read weeks that list them, and only while the team's access to the rota is switched on.
+  registerTool({
+    id: 'rota.myShifts', label: 'My shifts on the rota',
+    async execute({ when = 'next' } = {}, context = {}) {
+      const uid = context.userId || '';
+      if (!uid) return { domain: 'rota', data: null, summary: 'I need to know who is asking before I can show your shifts.', confidence: 0.4, sources: [source('Reception rota', 'Not signed in')] };
+      let rows;
+      try {
+        rows = await readRows('reception_rota_published', [where('teamUids', 'array-contains', uid)]);
+      } catch {
+        return { domain: 'rota', data: null, summary: "I can't open the rota for you. It may not be switched on for the reception team's phones yet, or you may not be on it.", confidence: 0.9, sources: [source('Reception rota', 'Access limited by your permissions')] };
+      }
+      const answer = myShiftsAnswer({ weeks: Object.fromEntries(rows.map((row) => [row.id, row])), uid, when });
+      return {
+        domain: 'rota', data: { found: Boolean(answer.found), count: answer.count ?? 0 }, summary: answer.text, confidence: answer.found ? 0.95 : 0.85,
+        sources: [source('Reception rota', `${rows.length} published week${rows.length === 1 ? '' : 's'} that include you · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open My rota', route: '/my-rota' }],
+      };
+    },
+  });
+
+  // Who has been in Primovex today and, for everyone else, the last time they signed in. Same records and same permission as "when did Craig last sign in".
+  registerTool({
+    id: 'security.whoIsIn', label: 'Who is in Primovex today', requiredCapability: 'audit.read',
+    async execute(_input = {}, context = {}) {
+      const days = 90;
+      const practiceId = context.profile?.practiceId || context.profile?.organisationId || context.profile?.organizationId || 'primary';
+      let sessions;
+      try {
+        sessions = await readRows('usage_sessions', [where('practiceId', '==', practiceId), where('startedAt', '>=', Timestamp.fromDate(new Date(Date.now() - days * 86400000))), orderBy('startedAt', 'desc'), limit(2000)]);
+      } catch {
+        return noAccess('security', 'the sign-in records', '/security-centre');
+      }
+      // everyone with an account, so people who have not signed in for a long time are listed too; if that list can't be read, only people seen in the records are
+      let directory = null;
+      try { directory = await listStaffDirectory(); } catch { directory = null; }
+      const answer = whoIsInAnswer({ people: summariseUsers(sessions), directory, days });
+      return {
+        domain: 'security', data: { found: Boolean(answer.found), counts: answer.counts }, summary: answer.text, confidence: answer.found ? 0.95 : 0.7,
+        warnings: directory ? [] : ['The full list of accounts could not be read, so only people who have signed in recently are shown.'],
+        sources: [source('Sign-in records', `${sessions.length} session${sessions.length === 1 ? '' : 's'} in the last ${days} days · live read ${nowLabel()}`)],
+        actions: [{ label: 'Open Security Centre', route: '/security-centre' }],
       };
     },
   });
