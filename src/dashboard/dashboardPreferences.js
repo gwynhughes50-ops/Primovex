@@ -4,6 +4,8 @@ import { db } from "@/lib/firebase";
 export const DASHBOARD_WIDGETS = [
   { id: "healthStrip", label: "Practice health", description: "One tile for each part of the practice: green leave it, amber look soon, red look now." },
   { id: "needsYou", label: "Needs you", description: "Everything waiting on you, most urgent first, each with a button that deals with it." },
+  { id: "comingUp", label: "Coming up", description: "SARs, concerns, certificates, COSHH reviews and time off in the next two weeks." },
+  { id: "inToday", label: "In today", description: "Who is on the reception rota today and who is off." },
   { id: "brief", label: "Morning brief", description: "Practice readiness and the most important operational message." },
   { id: "management", label: "Management overview", description: "Practice-wide priorities, concerns and operational health." },
   { id: "timeline", label: "What changed", description: "A compact timeline of recent operational events." },
@@ -16,12 +18,12 @@ export const DASHBOARD_WIDGETS = [
 ];
 
 const ALL = DASHBOARD_WIDGETS.map((widget) => widget.id);
-const LEADING = ["healthStrip", "needsYou"];
+const LEADING = ["healthStrip", "needsYou", "comingUp", "inToday"];
 
 export function defaultWidgetsForRole(role = "", homeType = "") {
   const value = String(role || "").toLowerCase();
   if (homeType === "manager" || (!homeType && (value.includes("practice manager") || value.includes("system admin")))) {
-    return ["healthStrip", "needsYou", "management", "whoIsWhere", "quickActions", "quickNotes"];
+    return ["healthStrip", "needsYou", "comingUp", "inToday", "management", "whoIsWhere", "quickActions", "quickNotes"];
   }
   if (homeType === "clinical" || homeType === "clinical-lead" || (!homeType && (value.includes("nurse") || value.includes("healthcare") || value.includes("hca") || value.includes("practitioner")))) {
     return ["brief", "issues", "stockSummary", "quickActions", "quickNotes"];
