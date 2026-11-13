@@ -916,7 +916,7 @@ export default function GovernanceSARs() {
 
       <SarFormPanel open={showNew} onClose={() => setShowNew(false)} users={users} usersError={usersError} onRetryUsers={loadStaff} actor={actor} defaultYear={yearFilter === "all" ? null : Number(yearFilter)} onSaved={() => { setFilter("open"); setYearFilter("all"); }} />
       <SarFormPanel open={!!editing} sar={editing} onClose={() => setEditing(null)} users={users} usersError={usersError} onRetryUsers={loadStaff} actor={actor} />
-      <SarDetailPanel sar={selected} actor={actor} isTeam={isTeam} canDelete={canDelete} chase={chase.byId.get(selected.id)} onChased={() => chase.reload()} onEdit={setEditing} onDelete={setDeleteTarget} onClose={() => setSelectedId(null)} />
+      <SarDetailPanel sar={selected} actor={actor} isTeam={isTeam} canDelete={canDelete} chase={selected ? chase.byId.get(selected.id) : undefined} onChased={() => chase.reload()} onEdit={setEditing} onDelete={setDeleteTarget} onClose={() => setSelectedId(null)} />
 
       {deleteTarget && (
         <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4">

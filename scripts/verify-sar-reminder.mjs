@@ -64,6 +64,8 @@ t("the app asks the server and writes nothing itself: no Firestore write in the 
 t("the bell is on the SARs page (table and open SAR), on the phone (open SAR and its own list), and the list is in the menu only for people who have one", () => {
   const desk = read("src/pages/GovernanceSARs.jsx");
   assert.equal((desk.match(/<SarBell /g) || []).length, 2);
+  // the open-SAR panel is always rendered, with nothing selected until one is opened: reading selected.id unguarded blanked the whole page
+  assert.match(desk, /chase=\{selected \? chase\.byId\.get\(selected\.id\) : undefined\}/);
   assert.match(desk, /useSarsToChase\(\)/);
   assert.match(read("src/mobile/MobileGovernanceSARs.jsx"), /<SarBell row=\{chase\}/);
   assert.match(read("src/mobile/MobileSarsToChase.jsx"), /<SarBell row=\{row\}/);
