@@ -3,7 +3,7 @@ import { slotsOfDay } from "@/modules/rota/rotaWeek";
 
 // "Coming up" (the next fortnight, in date order) and "In today" (who is on the reception rota today and who is off) for the Practice
 // Manager's Dashboard. Pure: the Dashboard hands in what the rest of the app already knows. No patient details: a SAR or a concern is
-// its reference, a certificate is its name.
+// its reference.
 
 export const WINDOW_DAYS = 14;
 export const MAX_COMING = 8;
@@ -26,43 +26,46 @@ export function whenLabel(iso, todayIso) {
   return `${SHORT_DAY[d.getDay()]} ${d.getDate()} ${MONTH[d.getMonth()]}`;
 }
 
-// opts: { now, sarRows, concerns, certificates, coshh, absences }
-export function buildComingUp({ now = new Date(), sarRows = [], concerns = [], certificates = [], coshh = [], absences = [] } = {}) {
+// What is NOT already in "Needs you", so nothing is shown twice: SARs due in more than a week (a SAR due sooner is listed there with a Remind
+// button), concerns due in more than five days (sooner ones are counted there), and time off on the rota. Certificates and COSHH reviews are
+// left out altogether: they are listed in "Needs you" from the moment they come into their warning period, which is longer than this window.
+export const SAR_IN_NEEDS_YOU_DAYS = 7;
+export const CONCERN_IN_NEEDS_YOU_DAYS = 5;
+export const COMING_KINDS = [{ key: "SAR", label: "SARs" }, { key: "Concern", label: "Concerns" }, { key: "Off", label: "Time off" }];
+
+// opts: { now, days (7, 14 or 28), hide (kinds left out), sarRows, concerns, absences }
+export function buildComingUp({ now = new Date(), days = WINDOW_DAYS, hide = [], sarRows = [], concerns = [], absences = [] } = {}) {
   const todayIso = isoOf(now);
-  const lastIso = addDays(todayIso, WINDOW_DAYS);
-  const inWindow = (iso) => !!iso && iso >= todayIso && iso <= lastIso;
+  const lastIso = addDays(todayIso, days);
+  const inWindow = (iso, fromDay = 0) => !!iso && iso >= addDays(todayIso, fromDay) && iso <= lastIso;
   const items = [];
 
-  for (const r of sarRows) {
-    const d = asDate(r.dueDate);
-    const iso = d ? isoOf(d) : "";
-    if (inWindow(iso)) items.push({ id: `sar-${r.id}`, iso, kind: "SAR", text: `${r.reference} is due`, detail: r.assignedToName || "Not assigned", to: "/sars-to-chase" });
-  }
-  for (const c of concerns) {
-    if (["closed", "archived"].includes(c.status || "received")) continue;
-    const reference = c.reference || c.id;
-    if (!c.acknowledgedAt) {
-      const ack = asDate(c.acknowledgementDueAt);
-      if (ack && inWindow(isoOf(ack))) items.push({ id: `concern-ack-${c.id}`, iso: isoOf(ack), kind: "Concern", text: `${reference}: acknowledgement due`, detail: "", to: "/governance/concerns" });
+  if (!hide.includes("SAR")) {
+    for (const r of sarRows) {
+      const d = asDate(r.dueDate);
+      const iso = d ? isoOf(d) : "";
+      if (inWindow(iso, SAR_IN_NEEDS_YOU_DAYS + 1)) items.push({ id: `sar-${r.id}`, iso, kind: "SAR", text: `${r.reference} is due`, detail: r.assignedToName || "Not assigned", to: "/sars-to-chase" });
     }
-    const final = asDate(c.finalResponseDueAt);
-    if (final && inWindow(isoOf(final))) items.push({ id: `concern-final-${c.id}`, iso: isoOf(final), kind: "Concern", text: `${reference}: final response due`, detail: "", to: "/governance/concerns" });
   }
-  for (const cert of certificates) {
-    if (cert.active === false || !cert.expiryDate) continue;
-    const iso = String(cert.expiryDate).slice(0, 10);
-    if (inWindow(iso)) items.push({ id: `cert-${cert.id}`, iso, kind: "Certificate", text: `${cert.label || cert.name || "A certificate"} runs out`, detail: "", to: "/compliance" });
+  if (!hide.includes("Concern")) {
+    for (const c of concerns) {
+      if (["closed", "archived"].includes(c.status || "received")) continue;
+      const reference = c.reference || c.id;
+      if (!c.acknowledgedAt) {
+        const ack = asDate(c.acknowledgementDueAt);
+        if (ack && inWindow(isoOf(ack), CONCERN_IN_NEEDS_YOU_DAYS + 1)) items.push({ id: `concern-ack-${c.id}`, iso: isoOf(ack), kind: "Concern", text: `${reference}: acknowledgement due`, detail: "", to: "/governance/concerns" });
+      }
+      const final = asDate(c.finalResponseDueAt);
+      if (final && inWindow(isoOf(final), CONCERN_IN_NEEDS_YOU_DAYS + 1)) items.push({ id: `concern-final-${c.id}`, iso: isoOf(final), kind: "Concern", text: `${reference}: final response due`, detail: "", to: "/governance/concerns" });
+    }
   }
-  for (const s of coshh) {
-    if (s.active === false || !s.reviewDate) continue;
-    const iso = String(s.reviewDate).slice(0, 10);
-    if (inWindow(iso)) items.push({ id: `coshh-${s.id}`, iso, kind: "COSHH", text: `${s.name || "A substance"}: review due`, detail: "", to: "/compliance" });
-  }
-  for (const a of absences) {
-    if (!inWindow(a.from)) continue;
-    const reason = a.reason === "leave" ? "leave" : a.reason === "toil" ? "TOIL" : "";
-    const span = a.to && a.to !== a.from ? ` to ${whenLabel(a.to, todayIso)}` : "";
-    items.push({ id: `off-${a.id || `${a.uid}-${a.from}`}`, iso: a.from, kind: "Off", text: `${a.name || "Someone"} is off${span}`, detail: reason, to: "/reception-rota?tab=off" });
+  if (!hide.includes("Off")) {
+    for (const a of absences) {
+      if (!inWindow(a.from)) continue;
+      const reason = a.reason === "leave" ? "leave" : a.reason === "toil" ? "TOIL" : "";
+      const span = a.to && a.to !== a.from ? ` to ${whenLabel(a.to, todayIso)}` : "";
+      items.push({ id: `off-${a.id || `${a.uid}-${a.from}`}`, iso: a.from, kind: "Off", text: `${a.name || "Someone"} is off${span}`, detail: reason, to: "/reception-rota?tab=off" });
+    }
   }
 
   items.sort((x, y) => x.iso.localeCompare(y.iso) || x.kind.localeCompare(y.kind) || x.text.localeCompare(y.text));

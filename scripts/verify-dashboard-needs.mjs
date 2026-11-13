@@ -2,9 +2,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { MAX_EACH, buildHealth, buildNeedsYou, dueWords } from "@/dashboard/needsYou";
-import { buildComingUp, buildInToday, whenLabel } from "@/dashboard/comingUp";
-import { DASHBOARD_WIDGETS, defaultWidgetsForRole, normaliseDashboardPreferences } from "@/dashboard/dashboardPreferences";
+import { MAX_EACH, NEEDS_CATEGORIES, buildHealth, buildNeedsYou, dueWords, filterNeedsYou } from "@/dashboard/needsYou";
+import { COMING_KINDS, buildComingUp, buildInToday, whenLabel } from "@/dashboard/comingUp";
+import { DASHBOARD_WIDGETS, DEFAULT_SETTINGS, defaultWidgetsForRole, normaliseDashboardPreferences, normaliseSettings } from "@/dashboard/dashboardPreferences";
 
 let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
@@ -59,6 +59,7 @@ t("the health strip colours each area by its worst row", () => {
   assert.equal(tiles.coldchain.level, "red");
   assert.equal(tiles.stock.level, "amber");
   assert.equal(tiles.stock.text, "2 to look at");
+  assert.equal(tiles.coldchain.text, "1 to look at", "a tile says how many, never the same words as the row below it");
   assert.equal(tiles.governance.level, "red");
   assert.equal(tiles.compliance.level, "green");
 });
@@ -83,8 +84,8 @@ t("the Practice Manager gets the new widgets first; other roles are unchanged; a
 
 t("it is wired in: the Dashboard shows the two widgets, the buttons that change something ask first, and the pages open on the tab asked for", () => {
   const dash = read("src/pages/Dashboard.jsx");
-  assert.match(dash, /needsYou: <NeedsYou rows=\{needs\.rows\}/);
-  assert.match(dash, /healthStrip: <HealthStrip tiles=\{needs\.tiles\} \/>/);
+  assert.match(dash, /needsYou: <NeedsYou rows=\{needsShown\.rows\}/);
+  assert.match(dash, /healthStrip: <HealthStrip tiles=\{tiles\} \/>/);
   const comp = read("src/components/dashboard/NeedsYou.jsx");
   assert.match(comp, /armed \? "Sure\?"/);
   assert.match(comp, /decideClaim\(action\.claim, MILEAGE\.approved/);
@@ -97,31 +98,35 @@ const FRI = new Date(2026, 10, 13, 10, 0, 0); // Friday 13 November 2026
 const SAT = new Date(2026, 10, 14, 10, 0, 0);
 const at = (iso) => new Date(`${iso}T12:00:00`).toISOString();
 
-t("coming up: the next two weeks in date order, with SARs, concerns, certificates, COSHH reviews and time off, and nothing outside the window", () => {
+t("coming up shows only what Needs you does not already show: SARs more than a week away, concerns more than five days away, and time off, in date order", () => {
   const out = buildComingUp({
     now: FRI,
-    sarRows: [{ id: "a", reference: "SAR-1", dueDate: at("2026-11-20"), assignedToName: "Craig" }, { id: "b", reference: "SAR-2", dueDate: at("2026-12-20"), assignedToName: "Craig" }, { id: "c", reference: "SAR-3", dueDate: at("2026-11-10"), assignedToName: "Craig" }],
-    concerns: [{ id: "k1", reference: "C-9", status: "received", acknowledgementDueAt: new Date(2026, 10, 16, 9), finalResponseDueAt: new Date(2026, 10, 30, 9) }, { id: "k2", reference: "C-10", status: "closed", finalResponseDueAt: new Date(2026, 10, 18, 9) }],
-    certificates: [{ id: "x", label: "Gas safety certificate", expiryDate: "2026-11-25" }, { id: "y", label: "Old", expiryDate: "2027-05-01" }, { id: "z", label: "Gone", expiryDate: "2026-11-22", active: false }],
-    coshh: [{ id: "h", name: "Bleach", reviewDate: "2026-11-14" }],
+    sarRows: [{ id: "a", reference: "SAR-1", dueDate: at("2026-11-23"), assignedToName: "Craig" }, { id: "b", reference: "SAR-2", dueDate: at("2026-12-20"), assignedToName: "Craig" }, { id: "c", reference: "SAR-3", dueDate: at("2026-11-17"), assignedToName: "Craig" }],
+    concerns: [{ id: "k1", reference: "C-9", status: "received", acknowledgementDueAt: new Date(2026, 10, 16, 9), finalResponseDueAt: new Date(2026, 10, 25, 9) }, { id: "k2", reference: "C-10", status: "closed", finalResponseDueAt: new Date(2026, 10, 22, 9) }],
     absences: [{ id: "o1", uid: "u1", name: "Kim", from: "2026-11-16", to: "2026-11-17", reason: "leave" }, { id: "o2", uid: "u2", name: "Lee", from: "2026-11-02", to: "2026-11-03", reason: "toil" }],
   });
   assert.deepEqual(out.items.map((i) => `${i.iso} ${i.text}`), [
-    "2026-11-14 Bleach: review due",
-    "2026-11-16 C-9: acknowledgement due",
     "2026-11-16 Kim is off to Tue 17 Nov",
-    "2026-11-20 SAR-1 is due",
-    "2026-11-25 Gas safety certificate runs out",
-  ], "the final response is 17 days away, so it is not listed");
-  assert.equal(out.items[0].when, "Tomorrow");
-  assert.equal(out.items[1].when, "Mon 16 Nov");
+    "2026-11-23 SAR-1 is due",
+    "2026-11-25 C-9: final response due",
+  ], "SAR-3 (4 days) and the acknowledgement (3 days) are in Needs you; SAR-2 and the closed concern are out");
+  assert.equal(out.items[0].when, "Mon 16 Nov");
   assert.equal(out.more, 0);
-  assert.ok(!JSON.stringify(out).includes("Secret"));
   assert.equal(buildComingUp({ now: FRI }).items.length, 0);
+  assert.ok(!JSON.stringify(buildComingUp({ now: FRI, certificates: [{ id: "x", label: "Gas safety", expiryDate: "2026-11-25" }] })).includes("Gas safety"), "certificates are in Needs you, not here");
+});
+
+t("coming up: a window of 1, 2 or 4 weeks, and kinds the person has left out", () => {
+  const input = { now: FRI, sarRows: [{ id: "a", reference: "SAR-1", dueDate: at("2026-11-23"), assignedToName: "Craig" }, { id: "b", reference: "SAR-2", dueDate: at("2026-12-08"), assignedToName: "Craig" }], absences: [{ id: "o1", uid: "u1", name: "Kim", from: "2026-11-24", to: "2026-11-24", reason: "leave" }] };
+  assert.deepEqual(buildComingUp({ ...input, days: 7 }).items, []);
+  assert.deepEqual(buildComingUp({ ...input, days: 14 }).items.map((i) => i.text), ["SAR-1 is due", "Kim is off"]);
+  assert.deepEqual(buildComingUp({ ...input, days: 28 }).items.map((i) => i.text), ["SAR-1 is due", "Kim is off", "SAR-2 is due"]);
+  assert.deepEqual(buildComingUp({ ...input, days: 28, hide: ["SAR"] }).items.map((i) => i.text), ["Kim is off"]);
+  assert.deepEqual(COMING_KINDS.map((k) => k.key), ["SAR", "Concern", "Off"]);
 });
 
 t("coming up: no more than eight lines, and it says how many more", () => {
-  const sarRows = Array.from({ length: 11 }, (_, i) => ({ id: String(i), reference: `SAR-${i}`, dueDate: at("2026-11-18"), assignedToName: "Craig" }));
+  const sarRows = Array.from({ length: 11 }, (_, i) => ({ id: String(i), reference: `SAR-${i}`, dueDate: at("2026-11-25"), assignedToName: "Craig" }));
   const out = buildComingUp({ now: FRI, sarRows });
   assert.equal(out.items.length, 8);
   assert.equal(out.more, 3);
@@ -156,10 +161,63 @@ t("the new widgets are offered to the Practice Manager after the first two, and 
   assert.deepEqual(DASHBOARD_WIDGETS.slice(0, 4).map((w) => w.id), ["healthStrip", "needsYou", "comingUp", "inToday"], "the order a new user gets");
   assert.deepEqual(normaliseDashboardPreferences(undefined, "Practice Manager").order.slice(0, 4), ["healthStrip", "needsYou", "comingUp", "inToday"]);
   assert.deepEqual(defaultWidgetsForRole("Practice Manager").slice(0, 4), ["healthStrip", "needsYou", "comingUp", "inToday"]);
+  assert.ok(!defaultWidgetsForRole("Practice Manager").includes("management"), "the MedAI overview repeats Needs you, so it is not on by default");
+  assert.ok(defaultWidgetsForRole("Practice Manager").includes("priorities"), "the inbox is");
   assert.ok(!defaultWidgetsForRole("Nurse").includes("comingUp"));
   const dash = read("src/pages/Dashboard.jsx");
-  assert.match(dash, /comingUp: <ComingUp coming=\{ahead\.coming\} \/>/);
+  assert.match(dash, /comingUp: <ComingUp coming=\{ahead\.coming\}/);
   assert.match(dash, /inToday: <InToday today=\{ahead\.today\} seesRota=\{ahead\.seesRota\} \/>/);
+});
+
+
+t("filtering Needs you: hide the kinds the person never deals with, and keep the first few, saying how many were cut off", () => {
+  const rows = buildNeedsYou({ mileage: [claim("1"), claim("2")], rota: [req("r1")], sheetsWaiting: 2, messages: 1, signals: [{ key: "stock-low", area: "stock", level: "amber", label: "3 running low", route: "/inventory" }] });
+  assert.ok(rows.every((r) => NEEDS_CATEGORIES.some((c) => c.key === r.category)), "every row has a known kind");
+  assert.deepEqual(filterNeedsYou(rows, { hide: ["mileage", "messages"] }).rows.map((r) => r.category).sort(), ["rota", "stock", "timesheets"]);
+  const cut = filterNeedsYou(rows, { max: 3 });
+  assert.equal(cut.rows.length, 3);
+  assert.equal(cut.more, rows.length - 3);
+  assert.deepEqual(filterNeedsYou(rows, { max: 0 }).rows, rows);
+  assert.deepEqual(filterNeedsYou(rows, { hide: ["mileage", "messages", "rota", "stock", "timesheets"] }), { rows: [], more: 0 });
+});
+
+t("settings: only known choices are kept, anything else falls back to the standard, and an old saved layout gets the standard settings", () => {
+  assert.deepEqual(normaliseSettings(undefined), DEFAULT_SETTINGS);
+  assert.deepEqual(normaliseSettings({ layout: "weird", needsYouMax: 7, comingUpDays: 3, needsYouHide: ["stock", "nonsense"], comingUpHide: ["Off", "x"], healthHide: ["stock", "people", "y"] }), { ...DEFAULT_SETTINGS, needsYouHide: ["stock"], comingUpHide: ["Off"], healthHide: ["stock", "people"] });
+  assert.deepEqual(normaliseSettings({ layout: "stacked", needsYouMax: 0, comingUpDays: 28 }), { ...DEFAULT_SETTINGS, layout: "stacked", needsYouMax: 0, comingUpDays: 28 });
+  const old = normaliseDashboardPreferences({ visible: ["brief"], order: ["brief"] }, "Practice Manager");
+  assert.deepEqual(old.settings, DEFAULT_SETTINGS);
+  const kept = normaliseDashboardPreferences({ visible: ["brief"], order: ["brief"], settings: { comingUpDays: 7 } }, "Practice Manager");
+  assert.equal(kept.settings.comingUpDays, 7);
+});
+
+t("the old quick actions widget is gone: its buttons are in the page header for everyone, and a saved layout that still lists it is not upset", () => {
+  assert.ok(!DASHBOARD_WIDGETS.some((w) => w.id === "quickActions"));
+  const saved = normaliseDashboardPreferences({ visible: ["quickActions", "brief"], order: ["quickActions", "brief"] }, "Nurse");
+  assert.ok(!saved.visible.includes("quickActions") && !saved.order.includes("quickActions"));
+  assert.ok(saved.visible.includes("brief"));
+  const header = read("src/components/dashboard/DashboardHeader.jsx");
+  assert.match(header, /Use stock/);
+  assert.match(header, /Customise/);
+});
+
+t("Customise offers the settings and a reset that puts the order and the settings back as well", () => {
+  const c = read("src/dashboard/DashboardCustomizer.jsx");
+  for (const text of ["Show up to", "Look ahead", "Show tiles for", "Arrangement", "Reset to the standard Home"]) assert.ok(c.includes(text), text);
+  assert.match(c, /normaliseDashboardPreferences\(\{ visible: defaultWidgetsForRole\(role, homeType\), settings: DEFAULT_SETTINGS \}/);
+  assert.match(read("src/dashboard/dashboardPreferences.js"), /dashboardPreferences: \{ \.\.\.preferences, settings: normaliseSettings\(preferences\?\.settings\) \}/, "the settings are saved with the layout");
+});
+
+t("the Dashboard applies the settings, shows the inbox on its own, and does not show it twice", () => {
+  const dash = read("src/pages/Dashboard.jsx");
+  assert.match(dash, /filterNeedsYou\(needs\.rows, \{ hide: settings\.needsYouHide, max: settings\.needsYouMax \}\)/);
+  assert.match(dash, /settings\.healthHide\.includes\(tile\.area\)/);
+  assert.match(dash, /useAhead\(.*days: settings\.comingUpDays, hide: settings\.comingUpHide/);
+  assert.match(dash, /management: <OperationsCentre part=\{visible\.has\("priorities"\) \? "overview" : "all"\} \/>/);
+  assert.match(dash, /priorities: <OperationsCentre part="priorities" \/>/);
+  const centre = read("src/components/dashboard/OperationsCentre.jsx");
+  assert.match(centre, /part !== "priorities" && </);
+  assert.match(centre, /part !== "overview" && \(/);
 });
 
 console.log(`\n${n} passed`);

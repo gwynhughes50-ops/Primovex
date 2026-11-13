@@ -26,7 +26,8 @@ function getPulseTone(score) {
   return { label: "Action needed", status: "critical", ring: "text-rose-300", border: "border-rose-400/30", bg: "bg-rose-500/10" };
 }
 
-export default function OperationsCentre() {
+// part: "all" (as it always was), "overview" (everything except Today's priorities) or "priorities" (only Today's priorities, the person's inbox).
+export default function OperationsCentre({ part = "all" }) {
   const navigate = useNavigate();
   const { user, displayName, role } = useAuth();
   const { summary, snooze, complete, loading } = useNotifications(user?.uid);
@@ -67,6 +68,7 @@ export default function OperationsCentre() {
 
   return (
     <div className="space-y-5">
+      {part !== "priorities" && <>
       <section className="rounded-3xl border border-slate-800/70 bg-slate-900/70 p-5 text-slate-100 shadow-xl backdrop-blur">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -222,6 +224,9 @@ export default function OperationsCentre() {
         </div>
       </SectionCard>
 
+      </>}
+
+      {part !== "overview" && (
       <SectionCard
         title="Today's priorities"
         description="Items assigned to you. Snoozed items stay hidden until their reminder time, but overdue items still escalate."
@@ -252,6 +257,7 @@ export default function OperationsCentre() {
           </div>
         )}
       </SectionCard>
+      )}
     </div>
   );
 }
