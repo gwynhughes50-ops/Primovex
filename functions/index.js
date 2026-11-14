@@ -28,6 +28,7 @@ const { applyExceptions, getEffectiveCapabilities, hasCapability } = require("./
 const { notifySarAssignment } = require("./services/notificationService");
 const { listStaffDirectory } = require("./services/staffDirectoryService");
 const { listSarsToChase, sendSarReminder } = require("./services/sarReminderService");
+const { checkText: checkPatientText } = require("./services/patientGuard");
 const { listRecipients, sendQualityOpportunity, updateQualityOpportunity } = require("./services/qualityOpportunityService");
 const { sendDueNotifications } = require("./services/dueNotificationService");
 const { sendKitNotification, replaceKitItemBatch } = require("./services/kitCheckService");
@@ -666,6 +667,30 @@ exports.sendKitNotification = onCall({ region: "europe-west2" }, async (request)
   });
 });
 
+// The patient-identity guard for everything that goes to an AI: text that looks like it names a patient (or carries an NHS number, phone number,
+// email, postcode or address) is refused before it is sent, whatever the app did. Colleagues' names are allowed. Audited by kind and count only,
+// never the text. The rules are shared with the app (src/ai/guard/patientGuard.js, bundled to services/patientGuard.cjs).
+let guardStaffCache = { at: 0, names: [] };
+async function staffNamesForGuard() {
+  if (Date.now() - guardStaffCache.at > 5 * 60 * 1000) {
+    try { guardStaffCache = { at: Date.now(), names: (await listStaffDirectory({ db })).map((row) => row.label) }; } catch { /* keep the old list */ }
+  }
+  return guardStaffCache.names;
+}
+async function refuseIdentifiers({ request, profile, text, path }) {
+  const guard = checkPatientText(String(text || ""), { allow: await staffNamesForGuard() });
+  if (guard.ok) return false;
+  appendGovernedAuditEvent({
+    db, auth: request.auth, profile,
+    data: {
+      action: "orb.ai.blocked", module: "orb", targetType: "orb_request", classification: "operational",
+      summary: "Ask Primovex refused text that looked like it could identify a patient",
+      metadata: { path, kinds: [...new Set(guard.problems.map((p) => p.kind))], count: guard.problems.length },
+    },
+  }).catch((error) => console.error("Orb guard audit failed", { message: error?.message }));
+  return true;
+}
+
 // The Orb's language layer: works out which approved read-only lookup a question in
 // ordinary words is asking for. The model sees only the (scrubbed) question and the
 // lookups this person may use, never any practice data; the lookup then runs in the
@@ -685,6 +710,7 @@ exports.orbRoute = onCall(
     const profile = snapshot.data() || {};
     const capabilities = await getOrbCapabilities(db, profile);
     const startedAt = Date.now();
+    if (await refuseIdentifiers({ request, profile, text: request.data?.question, path: "route" })) return { enabled: true, toolId: null, reason: "blocked-identifier", redactions: 0 };
     const result = await routeQuestion({
       db,
       uid: request.auth.uid,
@@ -733,6 +759,7 @@ exports.orbPhrase = onCall(
     const profile = snapshot.data() || {};
     const capabilities = await getEffectiveCapabilities(db, profile.role, profile);
     const startedAt = Date.now();
+    if (await refuseIdentifiers({ request, profile, text: request.data?.question, path: "phrase" })) return { enabled: true, text: null, reason: "blocked-identifier", redactions: 0 };
     const result = await phraseAnswer({
       db,
       uid: request.auth.uid,

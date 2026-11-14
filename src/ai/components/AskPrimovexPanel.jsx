@@ -505,7 +505,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
                 <div className={`rounded-2xl px-4 py-3 text-sm leading-6 ${message.role === 'user' ? 'primovex-ai-user-message' : message.error ? 'primovex-ai-error-message' : 'primovex-ai-assistant-message'}`}>
                   {message.role === 'assistant' && <div className="primovex-ai-accent-text mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em]"><Bot className="h-4 w-4" /> Ask Primovex</div>}
                   <p className="primovex-ai-body" style={{ whiteSpace: 'pre-line' }}>{message.content}</p>
-                  {message.intent !== 'general.unmatched' && Number.isFinite(message.confidence) && (
+                  {message.intent !== 'general.unmatched' && message.intent !== 'privacy.blocked' && Number.isFinite(message.confidence) && (
                     <div className="primovex-ai-message-divider primovex-ai-muted mt-3 flex items-center justify-between pt-2 text-xs"><span>Evidence confidence</span><span>{Math.round(message.confidence * 100)}%</span></div>
                   )}
                 </div>
@@ -563,7 +563,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
                   </div>
                 )}
                 {message.clarification?.resolvedIntent && <p className="mt-2 text-xs text-emerald-500">Learning suggestion recorded for review. Ask Primovex retried the original request.</p>}
-                {message.role === 'assistant' && !message.error && message.intent !== 'general.clarification-required' && <MessageFeedback message={message} onRecord={recordFeedback} />}
+                {message.role === 'assistant' && !message.error && message.intent !== 'general.clarification-required' && message.intent !== 'privacy.blocked' && <MessageFeedback message={message} onRecord={recordFeedback} />}
               </div>
             ))}
             {busy && <div className="primovex-ai-assistant-message primovex-ai-muted mr-12 rounded-2xl px-4 py-3 text-sm">{STATUS_LABELS[status]}…</div>}

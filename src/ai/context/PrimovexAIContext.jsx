@@ -8,6 +8,9 @@ import { proposalProblem } from '@/orb/actionProposals';
 import { applyOrbScope } from '@/lib/orbScope';
 import { mergeUseSentence } from '@/ai/stock/stockUse';
 import { executeProposal } from '@/orb/actionExecutors';
+import { checkAskInput } from '@/ai/guard/askGuard';
+import { redactText } from '@/ai/guard/patientGuard';
+import { loadStaffNames } from '@/ai/guard/staffNames';
 
 export const PrimovexAIContext = createContext(null);
 
@@ -41,6 +44,23 @@ export function PrimovexAIProvider({ children }) {
       if (merged) {
         engineInput = merged;
         setMessages((current) => current.map((item) => (item.id === lastAssistant.id ? { ...item, proposal: { ...item.proposal, status: 'cancelled', result: 'Added to the next card.' } } : item)));
+      }
+    }
+
+    // A patient is named by EMIS number, date of birth and initials, never a name: anything that looks like a name (or an NHS number, phone number,
+    // email, postcode or address) is refused here, before it is classified or sent anywhere, and the person is told why. What stays in the
+    // conversation has what was found blanked out. Nothing is logged.
+    if (!options.forcedIntent) {
+      const staff = await loadStaffNames(profile?.displayName);
+      const guard = checkAskInput(engineInput, { allow: staff, conversation: messages });
+      if (!guard.ok) {
+        setMessages((current) => [
+          ...current,
+          createMessage({ role: 'user', content: redactText(options.displayText || cleanPrompt, guard.problems) }),
+          createMessage({ role: 'assistant', content: guard.message, confidence: 1, intent: 'privacy.blocked' }),
+        ]);
+        setStatus(AI_STATES.IDLE);
+        return;
       }
     }
 

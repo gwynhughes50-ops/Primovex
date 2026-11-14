@@ -710,6 +710,7 @@ export const HELP_ARTICLES = [
       "It can also get things ready for you to confirm: \"I've taken two gloves from the store cupboard\", \"I've received 20 chlorphenamine, batch 4471, expires March 2028\", \"count the nurses room: gloves 12, syringes 40\", \"take the expired stock off\", \"remind me to check the fridge tomorrow at 9\" or \"tell Ben the vaccine fridge needs checking\". It shows a card and nothing changes until you press Confirm (or say \"yes\").",
       "Say \"go to purchase orders\" or \"open the alerts\" and it takes you there.",
       "Anyone who can see the sign-in records can ask \"who's in today?\": it lists who has been in Primovex today and, for everyone else, the last time they signed in. If you are on the reception rota, ask \"show my shifts\" (or \"am I working tomorrow?\") to see your own shifts.",
+      "Never give it a patient's name. If a message looks like it contains a name (or an NHS number, phone number, email address, postcode or address) it won't be processed, and it says what it found. Refer to a patient by EMIS number, date of birth and initials only.",
       "Answers show where they came from, and it only tells you and does what your permissions allow.",
     ],
     related: ["talk-to-orb-phone", "record-fridge-temperature", "add-stock-item", "check-kit-phone", "log-temperature"],
