@@ -78,11 +78,12 @@ export const PAGE_GUIDE = [
   {
     path: "/my-timesheet", title: "Timesheet",
     about: "Send your hours for each pay period. If you manage people, you sign off theirs here too.",
-    can: ["Send your timesheet to your line manager", "If you manage people, sign off theirs under To sign off"], help: ["send-timesheet", "sign-off-timesheets"],
+    can: ["Send your timesheet to your line manager", "If you manage people, sign off theirs under To sign off"],
+    asks: [{ text: "Have I sent my timesheet?" }], tries: [{ text: "Send my timesheet" }], help: ["send-timesheet", "sign-off-timesheets"],
   },
-  { path: "/mileage", title: "Mileage", about: "Claim for work journeys, and approve your team's.", can: ["Add a journey from the places and routes saved", "If you manage people, approve their claims under To approve"], help: ["claim-mileage", "approve-mileage"] },
-  { path: "/annual-leave", title: "Annual leave", about: "Your leave entitlement, worked out from your contract.", can: ["See how much you have and how much is left"], help: ["annual-leave-entitlement"] },
-  { path: "/my-training", title: "My training", about: "Your own training records and when each is due.", can: ["See what is due or running out"], help: ["my-training"] },
+  { path: "/mileage", title: "Mileage", about: "Claim for work journeys, and approve your team's.", can: ["Add a journey from the places and routes saved", "If you manage people, approve their claims under To approve"], asks: [{ text: "How much mileage have I claimed?" }], tries: [{ text: "I drove from Main Surgery to District Hospital and back yesterday" }], help: ["claim-mileage", "approve-mileage"] },
+  { path: "/annual-leave", title: "Annual leave", about: "Your leave entitlement, worked out from your contract.", can: ["See how much you have and how much is left"], asks: [{ text: "How much annual leave do I have?" }], help: ["annual-leave-entitlement"] },
+  { path: "/my-training", title: "My training", about: "Your own training records and when each is due.", can: ["See what is due or running out"], asks: [{ text: "What training is due for me?" }], help: ["my-training"] },
   { path: "/training", title: "Staff training", about: "The training matrix for the whole practice.", can: ["See who is out of date on what", "Import the matrix"], help: ["staff-training-matrix", "import-training-matrix"] },
   {
     path: "/reception-rota", title: "Reception rota",

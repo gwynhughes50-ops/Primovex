@@ -11,7 +11,7 @@ import { listEquipment } from '@/modules/equipment/services/equipmentRegistry';
 import { buildOperationsTimeline, changesSince } from '@/operations/engine/operationsTimeline';
 import { getOperationsSummary } from '@/operations/tools/operationsSummaryTool';
 import { registerTool } from './toolRegistry';
-import { getLatestCheck, listAnaphylaxisBoxes, listEmergencyAssets } from '@/lib/checklistsFirestore';
+import { getLatestCheck, listActiveSites, listAnaphylaxisBoxes, listEmergencyAssets } from '@/lib/checklistsFirestore';
 import { loadSpaceRegistry } from '@/modules/sense/services/sharedSpaceRegistry';
 import { getOperationalEscalations } from '@/operations/escalations/operationalEscalationService';
 import { createReconciliationProposal } from '@/orb/GovernedActionStore';
@@ -44,6 +44,9 @@ import { listStaffDirectory } from '@/services/staffDirectoryService';
 import { myCountsAnswer, myShiftsAnswer, swapCandidates, swapReply, whoIsOnAnswer } from '@/ai/rota/rotaAsk';
 import { askRota } from '@/modules/rota/rotaTeamService';
 import { explainPage } from '@/ai/pageGuide';
+import { journeyReply, leaveAnswer, mileageAnswer, timesheetAnswer, timesheetSendReply, trainingAnswer } from '@/ai/me/myAdmin';
+import { cleanYearSettings, leaveYearFor } from '@/modules/leave/leaveEntitlement';
+import { placeOptions, dateKey as dayKey } from '@/modules/mileage/mileage';
 import { daysUntilExpiry, expiryStatus, expiryWindowDays, normaliseExpirySettings, stockLevelStatus, summariseStockAlerts } from '@/lib/stockAlerts';
 import {
   alertsAnswer, categoryAnswer, cleaningAnswer, coldChainOverview, coldChainUnitAnswer, complianceAnswer, expiryAnswer, lowStockAnswer,
@@ -903,6 +906,87 @@ export function registerApprovedReadOnlyTools() {
         sources: [source('PAT register', `${patAssets.length} appliance${patAssets.length === 1 ? '' : 's'}, ${patTests.length} test${patTests.length === 1 ? '' : 's'} · live read ${nowLabel()}`)],
         actions: [{ label: 'Open Compliance', route: '/compliance' }],
       };
+    },
+  });
+
+  // ---- your own admin: timesheet, mileage, annual leave and training. Each reads only the person's own records, under their own permissions. ----
+  const mineOnly = async (context, run) => {
+    const uid = context.userId || '';
+    if (!uid) return { domain: 'people', data: null, summary: 'I need to know who is asking before I can look at your records.', confidence: 0.4, sources: [source('Your records', 'Not signed in')] };
+    try { return await run(uid); } catch (error) {
+      return { domain: 'people', data: null, summary: error?.code === 'permission-denied' ? "I can't open those records with your permissions." : "I couldn't read your records just now. Try again in a moment.", confidence: 0.6, sources: [source('Your records', 'Access limited by your permissions')] };
+    }
+  };
+  const mineSource = (label, detail) => [source(label, `${detail} · live read ${nowLabel()}`)];
+
+  registerTool({
+    id: 'my.timesheet', label: 'My timesheet',
+    async execute(_input = {}, context = {}) {
+      return mineOnly(context, async (uid) => {
+        const [staff, periods, sheets] = await Promise.all([readRows('timesheet_staff', [where('uid', '==', uid)]), readRows('timesheet_periods'), readRows('timesheets', [where('uid', '==', uid)])]);
+        const answer = timesheetAnswer({ periods, sheets, linked: staff.length > 0 });
+        return { domain: 'people', data: { found: Boolean(answer.found), state: answer.state || null }, summary: answer.text, confidence: answer.found ? 0.95 : 0.8, sources: mineSource('Your timesheet', `${sheets.length} timesheet${sheets.length === 1 ? '' : 's'}`), followUps: answer.found && answer.state && ['draft', 'declined', 'returned'].includes(answer.state) ? [{ label: 'Send it, same hours as usual', ask: 'send my timesheet', color: '#0ea5e9' }] : undefined, actions: [{ label: 'Open Timesheet', route: '/my-timesheet' }] };
+      });
+    },
+  });
+
+  registerTool({
+    id: 'my.timesheetDraft', label: 'Send my timesheet',
+    async execute(_input = {}, context = {}) {
+      return mineOnly(context, async (uid) => {
+        const [staff, periods, sheets] = await Promise.all([readRows('timesheet_staff', [where('uid', '==', uid)]), readRows('timesheet_periods'), readRows('timesheets', [where('uid', '==', uid)])]);
+        const reply = timesheetSendReply({ periods, sheets, me: staff[0] || null, uid });
+        return { domain: 'people', data: { proposed: Boolean(reply.proposal) }, summary: reply.text, proposal: reply.proposal || null, confidence: reply.proposal ? 0.95 : 0.8, sources: mineSource('Your timesheet', 'Nothing is sent until you confirm'), actions: [{ label: 'Open Timesheet', route: '/my-timesheet' }] };
+      });
+    },
+  });
+
+  registerTool({
+    id: 'my.mileage', label: 'My mileage',
+    async execute(_input = {}, context = {}) {
+      return mineOnly(context, async (uid) => {
+        const [claims, ratesSnap] = await Promise.all([readRows('mileage_claims', [where('uid', '==', uid)]), getDoc(doc(db, 'mileage_settings', 'rates')).catch(() => null)]);
+        const answer = mileageAnswer({ claims, rates: ratesSnap?.exists?.() ? ratesSnap.data() : undefined });
+        return { domain: 'people', data: { found: Boolean(answer.found), count: answer.count ?? 0 }, summary: answer.text, confidence: 0.95, sources: mineSource('Your mileage claims', `${claims.length} claim${claims.length === 1 ? '' : 's'}`), actions: [{ label: 'Open Mileage', route: '/mileage' }] };
+      });
+    },
+  });
+
+  registerTool({
+    id: 'my.mileageDraft', label: 'Claim a journey',
+    async execute(input = {}, context = {}) {
+      return mineOnly(context, async (uid) => {
+        const [staff, sites, places, routes] = await Promise.all([readRows('timesheet_staff', [where('uid', '==', uid)]), listActiveSites().catch(() => []), readRows('mileage_places'), readRows('mileage_routes')]);
+        const reply = journeyReply({ question: input.question, options: placeOptions({ sites, places }), routes, me: staff[0] || null, uid });
+        return { domain: 'people', data: { proposed: Boolean(reply.proposal) }, summary: reply.text, proposal: reply.proposal || null, confidence: reply.proposal ? 0.95 : 0.8, sources: mineSource('Your mileage', 'Nothing is sent until you confirm'), actions: [{ label: 'Open Mileage', route: '/mileage' }] };
+      });
+    },
+  });
+
+  registerTool({
+    id: 'my.leave', label: 'My annual leave',
+    async execute(_input = {}, context = {}) {
+      return mineOnly(context, async (uid) => {
+        const year = leaveYearFor(dayKey(new Date()));
+        const lastKey = `${year.startYear - 1}-${String(year.startYear % 100).padStart(2, '0')}`;
+        const [staff, mineSnap, lastSnap] = await Promise.all([readRows('timesheet_staff', [where('uid', '==', uid)]), getDoc(doc(db, 'leave_years', year.key)).catch(() => null), getDoc(doc(db, 'leave_years', lastKey)).catch(() => null)]);
+        const mine = cleanYearSettings(mineSnap?.exists?.() ? mineSnap.data() : {});
+        const last = cleanYearSettings(lastSnap?.exists?.() ? lastSnap.data() : {});
+        const settings = mine.groups.length || !last.groups.length ? mine : { ...mine, groups: last.groups };
+        const answer = leaveAnswer({ person: staff[0] || null, settings });
+        return { domain: 'people', data: { found: Boolean(answer.found) }, summary: answer.text, confidence: answer.found ? 0.9 : 0.75, sources: mineSource('Annual leave', 'Worked out from your record and the practice\'s leave rules'), actions: [{ label: 'Open Annual leave', route: '/annual-leave' }] };
+      });
+    },
+  });
+
+  registerTool({
+    id: 'my.training', label: 'My training',
+    async execute(_input = {}, context = {}) {
+      return mineOnly(context, async (uid) => {
+        const [people, courses, records] = await Promise.all([readRows('training_people', [where('uid', '==', uid)]), readRows('training_courses'), readRows('training_records', [where('ownerUid', '==', uid)])]);
+        const answer = trainingAnswer({ people, courses, records });
+        return { domain: 'people', data: { found: Boolean(answer.found), count: answer.count ?? 0 }, summary: answer.text, confidence: answer.found ? 0.95 : 0.8, sources: mineSource('Your training', `${records.length} record${records.length === 1 ? '' : 's'}`), actions: [{ label: 'Open My training', route: '/my-training' }] };
+      });
     },
   });
 

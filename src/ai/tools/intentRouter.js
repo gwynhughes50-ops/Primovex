@@ -17,6 +17,7 @@ import { parseUseRequest } from '@/ai/stock/stockUse';
 import { parseManagementQuestion } from '@/ai/management/managementAsk';
 import { parseMyCounts, parseMyShifts, parseSwap, parseWhoIsOn } from '@/ai/rota/rotaAsk';
 import { looksLikeExplainPage } from '@/ai/pageGuide';
+import { parseMyAdmin } from '@/ai/me/myAdmin';
 import { looksLikeStockIn } from '@/ai/stock/stockIn';
 import { looksLikeStockCount } from '@/ai/stock/stockCount';
 import { looksLikeExpiryRemoval } from '@/ai/stock/expiryRound';
@@ -111,6 +112,10 @@ export function routeApprovedTool(prompt, options = {}) {
   if (whoOnAsk) return { toolId: 'rota.whoIsOn', input: whoOnAsk, language: { normalised: text, confidence: 0.95 } };
   const myShiftsAsk = parseMyShifts(prompt);
   if (myShiftsAsk) return { toolId: 'rota.myShifts', input: myShiftsAsk, language: { normalised: text, confidence: 0.95 } };
+
+  // Your own admin: "have I sent my timesheet?", "how much mileage have I claimed?", "I drove from ... to ...", "how much annual leave do I have?", "what training is due?".
+  const myAdminAsk = parseMyAdmin(prompt);
+  if (myAdminAsk) return { ...myAdminAsk, language: { normalised: text, confidence: 0.95 } };
 
   // Management questions: a check last done, water temperatures, someone's last sign-in, who is in today, SARs and concerns.
   const management = parseManagementQuestion(prompt, options.conversation);

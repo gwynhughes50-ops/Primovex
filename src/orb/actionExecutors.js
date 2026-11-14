@@ -5,6 +5,8 @@ import { applyStockMovement, createReorderRequest } from "@/services/stockServic
 import { reportEvent } from "@/modules/governance/services/seService";
 import { addQuickNote } from "@/services/quickNotesService";
 import { askRota } from "@/modules/rota/rotaTeamService";
+import { sendTimesheet } from "@/modules/timesheets/timesheetFlowService";
+import { submitClaim } from "@/modules/mileage/mileageService";
 
 // What actually happens when a person presses Confirm on an Orb proposal. Each executor takes the
 // proposal's own params (fixed when the proposal was prepared, never anything typed afterwards),
@@ -40,6 +42,18 @@ const EXECUTORS = {
     if (result?.enabled === false) throw new Error("Swap requests are not switched on for the team yet.");
     if (result?.ok === false) throw new Error(result.problems?.[0] || "That swap could not be sent.");
     return `Asked ${params.withName}. They'll get a message and you'll hear back in My rota.${result?.changesHours ? " It changes someone's hours, so the coordinator also has to agree." : ""}`;
+  },
+
+  // The person's own timesheet, "no changes". The card showed them the declaration and the button said they confirm it; the write is under their own account.
+  "timesheet-send": async (params, { actor }) => {
+    await sendTimesheet({ period: params.period, me: params.me, uid: params.me.uid, actor, existing: params.existing, kind: "no-change", lines: [], send: true });
+    return "Sent to your line manager to sign off. You can follow it on the Timesheet page.";
+  },
+
+  // A journey claim for the person themselves, sent to their line manager. Under their own account, like the Mileage page.
+  "mileage-claim": async (params, { actor }) => {
+    await submitClaim(params.form, { me: params.me, uid: params.me.uid, options: params.options, actor });
+    return "Claim sent to your line manager for approval. You can follow it on the Mileage page.";
   },
 
   // A reminder is a Quick note: the person's own, or a shared practice note.
