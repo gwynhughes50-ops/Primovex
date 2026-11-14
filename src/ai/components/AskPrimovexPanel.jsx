@@ -58,9 +58,8 @@ function MessageFeedback({ message, onRecord }) {
     if (outcome === 'corrected' || outcome === 'wrong') setPendingOutcome(outcome);
     else onRecord(message.id, outcome);
   };
-  return <div className="mt-2 rounded-xl border border-[var(--medtrak-border)] p-2">
-    <p className="primovex-ai-faint mb-2 text-xs font-semibold">Did that help?</p>
-    <div className="flex flex-wrap gap-1.5">{FEEDBACK_OPTIONS.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => choose(id)} className="inline-flex items-center gap-1 rounded-lg border border-[var(--medtrak-border)] px-2 py-1 text-[11px]"><Icon className="h-3 w-3" />{label}</button>)}</div>
+  return <div className="mt-2">
+    <div className="flex flex-wrap items-center gap-1.5"><span className="primovex-ai-faint mr-0.5 text-[11px] font-semibold">Did that help?</span>{FEEDBACK_OPTIONS.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => choose(id)} className="inline-flex items-center gap-1 rounded-lg border border-[var(--medtrak-border)] px-2 py-1 text-[11px]"><Icon className="h-3 w-3" />{label}</button>)}</div>
     {pendingOutcome && <div className="mt-2"><p className="primovex-ai-faint mb-1 text-[11px]">What needed changing?</p><div className="flex flex-wrap gap-1">{CORRECTION_REASONS.map((reason) => <button key={reason} type="button" onClick={() => onRecord(message.id, pendingOutcome, reason)} className="rounded-lg bg-[var(--medtrak-accent)]/10 px-2 py-1 text-[11px] text-[var(--medtrak-accent)]">{reason}</button>)}</div></div>}
   </div>;
 }
@@ -104,6 +103,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     setHelpOpen(false);
     setReport(null);
   }, [pathname]);
+  const [noteOpen, setNoteOpen] = useState(false); // the fuller reminder about patient details, under the box
   const [helpOpen, setHelpOpen] = useState(false); // the "What can I do?" card, shown over the conversation
   const [prompt, setPrompt] = useState('');
   const [report, setReport] = useState(null); // { text } while the "tell the developer" form is open
@@ -447,12 +447,12 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
       className={`${panelClass} primovex-ai-panel flex flex-col overflow-hidden shadow-2xl backdrop-blur-xl ${isMobile ? 'primovex-ai-mobile rounded-t-[2rem]' : 'rounded-3xl'}`}
       aria-label="Ask Primovex"
     >
-      <header className="primovex-ai-divider flex items-center justify-between px-4 py-4">
+      <header className={`primovex-ai-divider flex items-center justify-between px-4 ${isMobile ? 'py-2.5' : 'py-4'}`}>
         <div className="flex items-center gap-3">
           <div className={`relative h-10 w-10 shrink-0 ${busy ? 'primovex-ai-breathe' : ''}`} aria-hidden="true"><PulseOrbFace size={40} active={busy} level={orbStatus.level} /></div>
           <div>
             <h2 className="font-bold">{ASSISTANT_NAME}</h2>
-            <p className="primovex-ai-muted text-xs">{STATUS_LABELS[status]} · {ASSISTANT_TAGLINE}</p>
+            <p className="primovex-ai-muted text-xs">{isMobile ? STATUS_LABELS[status] : `${STATUS_LABELS[status]} · ${ASSISTANT_TAGLINE}`}</p>
           </div>
         </div>
         <div className="flex gap-1">
@@ -583,20 +583,25 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
         )}
       </div>
 
-      <form onSubmit={submit} className="primovex-ai-divider primovex-ai-form p-4">
+      <form onSubmit={submit} className="primovex-ai-divider primovex-ai-form p-3">
         <div className="primovex-ai-composer flex items-end gap-2 rounded-2xl p-2">
           {isMobile && <button type="button" onClick={dictationMode ? dictate : (orbAwake ? sleepOrb : wakeOrb)} className="primovex-ai-mic grid h-10 w-10 shrink-0 place-items-center rounded-xl" aria-label={orbAwake ? 'Stop listening' : 'Talk to Orb'}>{orbAwake ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</button>}
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) submit(event); }} rows={1} placeholder="Ask, tell or go…" className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none" />
           <button type="submit" disabled={!prompt.trim() || busy} className="primovex-ai-submit grid h-10 w-10 place-items-center rounded-xl disabled:cursor-not-allowed disabled:opacity-30"><ArrowRight className="h-4 w-4" /></button>
         </div>
-        <p className="primovex-ai-muted mt-2 flex items-start gap-1.5 text-[11px] leading-4"><ShieldCheck className="mt-px h-3.5 w-3.5 shrink-0" /><span><strong>Do not say or type any patient details to Ask Primovex</strong> (names, numbers, dates of birth). Spoken words are turned into text by a speech service outside Primovex before Primovex can check them.</span></p>
+        <p className="primovex-ai-muted mt-1.5 flex items-center gap-1.5 text-[11px] leading-4">
+          <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1"><strong>No patient names or details.</strong> EMIS number, initials and date of birth only.</span>
+          <button type="button" onClick={() => setNoteOpen((open) => !open)} aria-expanded={noteOpen} className="shrink-0 font-semibold underline">{noteOpen ? 'Less' : 'More'}</button>
+        </p>
+        {noteOpen && <p className="primovex-ai-muted mt-1 text-[11px] leading-4">Anything that looks like a name, an NHS number, a phone number, an email address, a postcode or an address is refused. Spoken words are turned into text by a speech service outside Primovex before Primovex can check them.</p>}
       </form>
 
       {report && <ReportIssueDialog initialText={report.text} onClose={() => setReport(null)} />}
 
       <style>{`
         .primovex-ai-panel { color:var(--medtrak-text); background:color-mix(in srgb,var(--medtrak-panel) 97%,transparent); border:1px solid var(--medtrak-border); }
-        .primovex-ai-mobile { top:max(7rem,18vh); bottom:calc(var(--pvx-mobile-nav-height) + var(--pvx-mobile-safe-bottom)); max-height:calc(100dvh - max(7rem,18vh) - var(--pvx-mobile-nav-height) - var(--pvx-mobile-safe-bottom)); }
+        .primovex-ai-mobile { top:max(4.25rem,calc(env(safe-area-inset-top) + 2.5rem)); bottom:calc(var(--pvx-mobile-nav-height) + var(--pvx-mobile-safe-bottom)); max-height:calc(100dvh - max(4.25rem,calc(env(safe-area-inset-top) + 2.5rem)) - var(--pvx-mobile-nav-height) - var(--pvx-mobile-safe-bottom)); }
         .primovex-ai-divider { border-bottom:1px solid var(--medtrak-border); }
         form.primovex-ai-divider { border-top:1px solid var(--medtrak-border); border-bottom:0; }
         .primovex-ai-form { flex:0 0 auto; padding-bottom:max(1rem,env(safe-area-inset-bottom)); background:var(--medtrak-panel); }
