@@ -24,7 +24,7 @@ test("colleagues' names are allowed, and a message says what was found and what 
 
 test("both server paths that call an AI refuse such text first, and audit only the kind and count", () => {
   const source = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
-  assert.match(source, /const \{ checkText: checkPatientText \} = require\("\.\/services\/patientGuard"\);/);
+  assert.match(source, /const \{ checkText: checkPatientText \} = require\("\.\/services\/patientGuard\.cjs"\);/);
   const route = source.slice(source.indexOf("exports.orbRoute"), source.indexOf("exports.orbPhrase"));
   const phrase = source.slice(source.indexOf("exports.orbPhrase"), source.indexOf("exports.rotaReviewSummary"));
   assert.match(route, /refuseIdentifiers\(\{ request, profile, text: request\.data\?\.question, path: "route" \}\)/);
