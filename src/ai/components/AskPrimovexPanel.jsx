@@ -95,6 +95,15 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
   const orbStatus = useOrbStatus();
   const { can } = useAuth();
   const onRota = useOnRota();
+  // a new page starts the panel afresh: whatever was typed, the "What can I do?" card and a half-written report are put away
+  const lastPage = useRef(pathname);
+  useEffect(() => {
+    if (lastPage.current === pathname) return;
+    lastPage.current = pathname;
+    setPrompt('');
+    setHelpOpen(false);
+    setReport(null);
+  }, [pathname]);
   const [helpOpen, setHelpOpen] = useState(false); // the "What can I do?" card, shown over the conversation
   const [prompt, setPrompt] = useState('');
   const [report, setReport] = useState(null); // { text } while the "tell the developer" form is open

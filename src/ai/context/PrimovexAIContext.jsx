@@ -1,4 +1,4 @@
-import { createContext, useCallback, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { getOrbEngine } from '@/orb';
 import { AI_STATES, assertProviderResponse, createMessage } from '../types/responseContract';
@@ -26,6 +26,18 @@ export function PrimovexAIProvider({ children }) {
   const orb = useMemo(() => getOrbEngine(), []);
   const { pathname } = useLocation(); // the page the person is on, so "explain this page" knows which
 
+  // Going to another page starts Ask Primovex afresh: the conversation was about the page they were on. An answer still on its way when they leave
+  // is dropped (the generation moves on), so it does not turn up on the new page.
+  const generation = useRef(0);
+  const lastPath = useRef(pathname);
+  useEffect(() => {
+    if (lastPath.current === pathname) return;
+    lastPath.current = pathname;
+    generation.current += 1;
+    setMessages([]);
+    setStatus(AI_STATES.IDLE);
+  }, [pathname]);
+
   // The knowledge store subscribes to Firestore lazily on first use — without
   // this, the very first Orb question of a session would race an empty cache
   // (onSnapshot's own callback is always async, even for local writes), so a
@@ -37,6 +49,7 @@ export function PrimovexAIProvider({ children }) {
   const ask = useCallback(async (prompt, options = {}) => {
     const cleanPrompt = String(prompt || '').trim();
     if (!cleanPrompt || status === AI_STATES.SEARCHING || status === AI_STATES.REASONING) return;
+    const startedOn = generation.current;
 
     // A card is waiting for a yes and they name more stock ("and two more gloves"): it all goes on one card.
     let engineInput = cleanPrompt;
@@ -54,6 +67,7 @@ export function PrimovexAIProvider({ children }) {
     // conversation has what was found blanked out. Nothing is logged.
     if (!options.forcedIntent) {
       const staff = await loadStaffNames(profile?.displayName);
+      if (generation.current !== startedOn) return;
       const guard = checkAskInput(engineInput, { allow: staff, conversation: messages });
       if (!guard.ok) {
         setMessages((current) => [
@@ -78,8 +92,10 @@ export function PrimovexAIProvider({ children }) {
       });
       const timeout = new Promise((_, reject) => window.setTimeout(() => reject(new Error('Ask Primovex request timed out')), 14000));
       const raw = await Promise.race([providerRequest, timeout]);
+      if (generation.current !== startedOn) return;
       setStatus(AI_STATES.REASONING);
       await new Promise((resolve) => window.setTimeout(resolve, 220));
+      if (generation.current !== startedOn) return;
       const response = assertProviderResponse(raw);
       // A card still waiting that this answer rebuilds (a count with more items added) is replaced, not left beside it.
       const replaces = lastAssistant?.pending && lastAssistant.proposal?.status === 'proposed' && response.proposal?.kind === lastAssistant.proposal.kind ? lastAssistant.id : null;
@@ -107,6 +123,7 @@ export function PrimovexAIProvider({ children }) {
       window.setTimeout(() => setStatus(AI_STATES.IDLE), 320);
     } catch (error) {
       console.error('Primovex AI request failed:', error);
+      if (generation.current !== startedOn) return;
       setMessages((current) => [
         ...current,
         createMessage({ role: 'assistant', content: 'Ask Primovex could not complete that request. Try again in a moment.', error: true }),

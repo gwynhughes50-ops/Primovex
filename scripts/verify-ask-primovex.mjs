@@ -130,6 +130,16 @@ t("the swap card has something to run: the executor asks the colleague through t
   assert.match(read("src/ai/tools/readOnlyTools.js"), /askRota\(\{ action: 'options'/);
 });
 
+t("going to another page starts Ask Primovex afresh, and an answer still on its way does not turn up on the new page", () => {
+  const ctx = read("src/ai/context/PrimovexAIContext.jsx");
+  assert.match(ctx, /if \(lastPath\.current === pathname\) return;[\s\S]*generation\.current \+= 1;[\s\S]*setMessages\(\[\]\);[\s\S]*setStatus\(AI_STATES\.IDLE\);/);
+  const ask = ctx.slice(ctx.indexOf("const ask = useCallback"), ctx.indexOf("}, [capabilities, messages, orb"));
+  assert.match(ask, /const startedOn = generation\.current;/);
+  assert.equal((ask.match(/if \(generation\.current !== startedOn\) return;/g) || []).length, 4, "checked after each wait: the staff names, the answer, the pause, and the failure");
+  const panel = read("src/ai/components/AskPrimovexPanel.jsx");
+  assert.match(panel, /if \(lastPage\.current === pathname\) return;[\s\S]*setPrompt\(''\);[\s\S]*setHelpOpen\(false\);[\s\S]*setReport\(null\);/);
+});
+
 t("the tips are in the desktop layout and are remembered per person and page", () => {
   assert.match(read("src/layout/Layout.jsx"), /<RouteAskTip \/><Outlet \/>/);
   const tip = read("src/components/ai/RouteAskTip.jsx");
