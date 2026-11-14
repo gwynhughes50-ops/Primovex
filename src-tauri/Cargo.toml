@@ -1,6 +1,6 @@
 [package]
 name = "primovex"
-version = "0.15.146"
+version = "0.15.147"
 description = "Primovex AI Practice Intelligence"
 authors = ["Primovex"]
 license = ""
