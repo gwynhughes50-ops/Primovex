@@ -34,6 +34,14 @@ route("Show my shifts", "rota.myShifts");
 route("what are my shifts this week", "rota.myShifts");
 route("when am I working next", "rota.myShifts");
 route("how do I swap a shift?", "help.howTo");
+route("swap my Tuesday late", "rota.swapDraft");
+route("swap my tuesday late with Kim", "rota.swapDraft");
+route("I want to swap my shift on Thursday", "rota.swapDraft");
+route("How many lates do I have?", "rota.myCounts");
+route("how many earlies do I have this week", "rota.myCounts");
+route("Who's on tomorrow?", "rota.whoIsOn");
+route("who's on with me on Wednesday", "rota.whoIsOn");
+route("Who's in today?", "security.whoIsIn");
 
 // stock in, and the answer to its question
 route("I have received 20 chlorphenamine ampoules", "stock.inDraft");

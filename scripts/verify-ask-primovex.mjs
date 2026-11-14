@@ -52,6 +52,15 @@ t("Who's in today? is offered to people who can see the sign-in records, and Sho
   assert.match(read("src/ai/components/AskPrimovexPanel.jsx"), /onRota=\{onRota\}/);
 });
 
+t("someone on the reception rota is shown the rota examples first: shifts, counts, who is on, and a swap", () => {
+  const groups = startersFor({ can: () => false, onRota: true });
+  const ask = groups.find((g) => g.key === "ask").items.map((x) => x.tool);
+  assert.deepEqual(ask, ["rota.myShifts", "rota.myCounts", "rota.whoIsOn"]);
+  assert.deepEqual(groups.find((g) => g.key === "do").items.map((x) => x.tool).slice(0, 1), ["rota.swapDraft"]);
+  const nobody = startersFor({ can: () => false, onRota: false, max: 20 }).flatMap((g) => g.items.map((x) => x.tool));
+  assert.ok(!nobody.some((tool) => tool.startsWith("rota.")), "no rota examples for someone who is not on it");
+});
+
 t("someone who works the SARs and concerns is shown those first", () => {
   const sar = startersFor({ can: canOf("governance.read", "governance.manageSars", "inventory.read") });
   assert.equal(sar.find((g) => g.key === "ask").items[0].tool, "governance.sarOverview");
@@ -111,6 +120,14 @@ t("a person never reads the old name where they use it: the panel, the ball, the
   const articles = visible("src/ai/help/helpArticles.js").filter((line) => /\bOrb\b/.test(line));
   assert.deepEqual(articles.map((l) => l.trim().slice(0, 90)), ['tip: "The phone app listens when you tap it. It doesn\'t wake up to the word \\"Orb\\".",'], "only the word people might say");
   assert.match(read("src/mobile/RoleAdaptiveMobileHome.jsx"), /aria-label="Ask Primovex"/);
+});
+
+t("the swap card has something to run: the executor asks the colleague through the server, which checks the swap again", () => {
+  const exec = read("src/orb/actionExecutors.js");
+  assert.match(exec, /"rota-swap": async \(params\) => \{/);
+  assert.match(exec, /askRota\(\{ action: "create_swap", from: params\.from, to: params\.to/);
+  assert.match(read("src/ai/rota/rotaAsk.js"), /kind: "rota-swap"/);
+  assert.match(read("src/ai/tools/readOnlyTools.js"), /askRota\(\{ action: 'options'/);
 });
 
 t("the tips are in the desktop layout and are remembered per person and page", () => {

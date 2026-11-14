@@ -19,8 +19,8 @@ t("a patient's name stops the request, whatever it is asking for", () => {
 });
 
 t("commands about a colleague by name still work: with the staff list the name is allowed (and a stranger's is not); without it the look-up decides", () => {
-  const staff = ["Craig Davies", "Sam Price", "Gwyn Hughes"];
-  for (const text of ["Tell Sam the fridge needs checking", "when did Craig last log in", "how many SARs does Craig have outstanding", "tell the HCA team BD blue needles need ordering"]) {
+  const staff = ["Craig Davies", "Sam Price", "Gwyn Hughes", "Kim Bell"];
+  for (const text of ["Tell Sam the fridge needs checking", "when did Craig last log in", "how many SARs does Craig have outstanding", "tell the HCA team BD blue needles need ordering", "swap my Tuesday late with Kim"]) {
     assert.equal(checkAskInput(text, { allow: staff }).ok, true, `with the list: ${text}`);
     assert.equal(checkAskInput(text, { allow: ["Gwyn Hughes"] }).ok, true, `without the list: ${text}`);
   }

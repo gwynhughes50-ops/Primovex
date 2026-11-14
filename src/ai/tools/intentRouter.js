@@ -15,7 +15,7 @@ import { SE_REFERENCE } from '@/ai/governance/seAnswers';
 import { looksLikeSeReport } from '@/ai/governance/seDraft';
 import { parseUseRequest } from '@/ai/stock/stockUse';
 import { parseManagementQuestion } from '@/ai/management/managementAsk';
-import { parseMyShifts } from '@/ai/rota/rotaAsk';
+import { parseMyCounts, parseMyShifts, parseSwap, parseWhoIsOn } from '@/ai/rota/rotaAsk';
 import { looksLikeStockIn } from '@/ai/stock/stockIn';
 import { looksLikeStockCount } from '@/ai/stock/stockCount';
 import { looksLikeExpiryRemoval } from '@/ai/stock/expiryRound';
@@ -98,7 +98,13 @@ export function routeApprovedTool(prompt, options = {}) {
     return { toolId: 'governance.seLookup', input: { question: String(prompt) }, language: { normalised: text, confidence: 0.95 } };
   }
 
-  // "Show my shifts": a member of the reception team asking for their own shifts on the rota.
+  // The reception team and the rota: "swap my Tuesday late", "how many lates do I have?", "who's on tomorrow?", "show my shifts".
+  const swapAsk = parseSwap(prompt);
+  if (swapAsk) return { toolId: 'rota.swapDraft', input: { ...swapAsk, question: String(prompt) }, language: { normalised: text, confidence: 0.95 } };
+  const countsAsk = parseMyCounts(prompt);
+  if (countsAsk) return { toolId: 'rota.myCounts', input: countsAsk, language: { normalised: text, confidence: 0.95 } };
+  const whoOnAsk = parseWhoIsOn(prompt);
+  if (whoOnAsk) return { toolId: 'rota.whoIsOn', input: whoOnAsk, language: { normalised: text, confidence: 0.95 } };
   const myShiftsAsk = parseMyShifts(prompt);
   if (myShiftsAsk) return { toolId: 'rota.myShifts', input: myShiftsAsk, language: { normalised: text, confidence: 0.95 } };
 

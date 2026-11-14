@@ -20,6 +20,8 @@ export const STARTERS = [
   { group: "ask", text: "Brief me", tool: "briefing.daily" },
   { group: "ask", text: "Who's in today?", needs: "audit.read", tool: "security.whoIsIn" },
   { group: "ask", text: "Show my shifts", onRota: true, tool: "rota.myShifts" },
+  { group: "ask", text: "How many lates do I have?", onRota: true, tool: "rota.myCounts" },
+  { group: "ask", text: "Who's on tomorrow?", onRota: true, tool: "rota.whoIsOn" },
   { group: "ask", text: "Which stock is low?", needs: "inventory.read", tool: "inventory.lowStock" },
   { group: "ask", text: "What expires this month?", needs: "inventory.read", tool: "inventory.expiring" },
   { group: "ask", text: "Are all fridges OK today?", needs: "temperature.read", tool: "coldChain.latestStatus" },
@@ -30,6 +32,7 @@ export const STARTERS = [
   { group: "do", text: "I have received 20 chlorphenamine ampoules", needs: "inventory.write", tool: "stock.inDraft" },
   { group: "do", text: "I used one pack of gauze", needs: "inventory.write", tool: "stock.useDraft" },
   { group: "do", text: "Count the gloves, I have 12", needs: "inventory.write", tool: "stock.countDraft" },
+  { group: "do", text: "Swap my Friday shift", onRota: true, tool: "rota.swapDraft" },
   { group: "do", text: "Remind me on Monday to ring the pharmacy", tool: "reminder.draft" },
   { group: "do", text: "Tell Sam the fridge needs checking", tool: "person.messageDraft" },
   { group: "go", text: "Take me to the SARs", needs: "governance.read", tool: "app.navigate" },
@@ -43,7 +46,8 @@ export const STARTERS = [
 export function startersFor({ can = () => false, onRota = false, max = 3 } = {}) {
   // someone who works the SARs and concerns is shown those first; everyone else gets the order above
   const governance = can("governance.manageSars");
-  const rank = (s) => (governance && s.needs === "governance.read" ? 0 : 1);
+  // someone on the reception rota is shown the rota ones first
+  const rank = (s) => ((governance && s.needs === "governance.read") || (onRota && s.onRota) ? 0 : 1);
   return GROUPS.map((group) => ({
     ...group,
     items: STARTERS.map((s, i) => ({ s, i })).filter(({ s }) => s.group === group.key && (!s.needs || can(s.needs)) && (!s.onRota || onRota))

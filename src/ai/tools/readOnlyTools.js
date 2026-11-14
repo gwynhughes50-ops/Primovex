@@ -41,7 +41,8 @@ import { setProtectedWords } from '@/ai/stock/medicineNames';
 import { loadVisibleSe } from '@/modules/governance/services/seService';
 import { normaliseOrbScope } from '@/lib/orbScope';
 import { listStaffDirectory } from '@/services/staffDirectoryService';
-import { myShiftsAnswer } from '@/ai/rota/rotaAsk';
+import { myCountsAnswer, myShiftsAnswer, swapCandidates, swapReply, whoIsOnAnswer } from '@/ai/rota/rotaAsk';
+import { askRota } from '@/modules/rota/rotaTeamService';
 import { daysUntilExpiry, expiryStatus, expiryWindowDays, normaliseExpirySettings, stockLevelStatus, summariseStockAlerts } from '@/lib/stockAlerts';
 import {
   alertsAnswer, categoryAnswer, cleaningAnswer, coldChainOverview, coldChainUnitAnswer, complianceAnswer, expiryAnswer, lowStockAnswer,
@@ -904,24 +905,74 @@ export function registerApprovedReadOnlyTools() {
     },
   });
 
-  // A member of the reception team's own shifts, from the weeks the coordinator has published to them. Open to anyone (it only ever shows the person
-  // their own shifts), and the database only lets them read weeks that list them, and only while the team's access to the rota is switched on.
+  // The reception team and the rota, from the weeks the coordinator has published to the person. Open to anyone (every answer is only what My rota already
+  // shows them: their own shifts, and who is on a shift, never who is off), and the database only lets them read weeks that list them, and only while the
+  // team's access to the rota is switched on.
+  const rotaSource = (answer, extra = {}) => ({ domain: 'rota', data: { found: Boolean(answer.found), count: answer.count ?? 0 }, summary: answer.text, confidence: answer.found ? 0.95 : 0.85, actions: [{ label: 'Open My rota', route: '/my-rota' }], ...extra });
+  const rotaNoAccess = { domain: 'rota', data: null, summary: "I can't open the rota for you. It may not be switched on for the reception team's phones yet, or you may not be on it.", confidence: 0.9, sources: [source('Reception rota', 'Access limited by your permissions')] };
+  const readPublished = async (context) => {
+    const uid = context.userId || '';
+    if (!uid) return { error: { domain: 'rota', data: null, summary: 'I need to know who is asking before I can look at your rota.', confidence: 0.4, sources: [source('Reception rota', 'Not signed in')] } };
+    try {
+      const rows = await readRows('reception_rota_published', [where('teamUids', 'array-contains', uid)]);
+      return { uid, rows, weeks: Object.fromEntries(rows.map((row) => [row.id, row])) };
+    } catch {
+      return { error: rotaNoAccess };
+    }
+  };
+  const publishedSource = (rows) => [source('Reception rota', `${rows.length} published week${rows.length === 1 ? '' : 's'} that include you · live read ${nowLabel()}`)];
+
   registerTool({
     id: 'rota.myShifts', label: 'My shifts on the rota',
     async execute({ when = 'next' } = {}, context = {}) {
-      const uid = context.userId || '';
-      if (!uid) return { domain: 'rota', data: null, summary: 'I need to know who is asking before I can show your shifts.', confidence: 0.4, sources: [source('Reception rota', 'Not signed in')] };
-      let rows;
-      try {
-        rows = await readRows('reception_rota_published', [where('teamUids', 'array-contains', uid)]);
-      } catch {
-        return { domain: 'rota', data: null, summary: "I can't open the rota for you. It may not be switched on for the reception team's phones yet, or you may not be on it.", confidence: 0.9, sources: [source('Reception rota', 'Access limited by your permissions')] };
+      const got = await readPublished(context);
+      if (got.error) return got.error;
+      return rotaSource(myShiftsAnswer({ weeks: got.weeks, uid: got.uid, when }), { sources: publishedSource(got.rows) });
+    },
+  });
+
+  registerTool({
+    id: 'rota.myCounts', label: 'How many lates and earlies I have',
+    async execute({ kind = '', when = 'all' } = {}, context = {}) {
+      const got = await readPublished(context);
+      if (got.error) return got.error;
+      return rotaSource(myCountsAnswer({ weeks: got.weeks, uid: got.uid, kind, when }), { sources: publishedSource(got.rows) });
+    },
+  });
+
+  registerTool({
+    id: 'rota.whoIsOn', label: 'Who is on the rota',
+    async execute({ when = 'today', kind = '', withMe = false } = {}, context = {}) {
+      const got = await readPublished(context);
+      if (got.error) return got.error;
+      return rotaSource(whoIsOnAnswer({ weeks: got.weeks, uid: got.uid, when, kind, withMe }), { sources: publishedSource(got.rows) });
+    },
+  });
+
+  // "Swap my Tuesday late": which of their shifts, then the server's swaps that keep everyone's rules, then a card that asks the colleague. Nothing is
+  // sent until they confirm, and the server checks the swap again when it is made.
+  registerTool({
+    id: 'rota.swapDraft', label: 'Ask a colleague to swap a shift',
+    async execute(input = {}, context = {}) {
+      const got = await readPublished(context);
+      if (got.error) return got.error;
+      const parsed = { day: input.day || '', kind: input.kind || '', withName: input.withName || '', theirDay: input.theirDay || '', theirKind: input.theirKind || '' };
+      const candidates = swapCandidates({ weeks: got.weeks, uid: got.uid, day: parsed.day, kind: parsed.kind });
+      let reply = swapReply({ parsed, candidates });
+      if (reply.stage === 'need-options') {
+        let options = null;
+        try {
+          const result = await askRota({ action: 'options', from: { monday: reply.shift.monday, day: reply.shift.day, key: reply.shift.key } });
+          if (result?.enabled === false) return { domain: 'rota', data: { proposed: false }, summary: "Swap requests aren't switched on for the team yet, so I can't ask anyone. Ask your coordinator.", confidence: 0.9, sources: publishedSource(got.rows), actions: [] };
+          options = Array.isArray(result?.options) ? result.options : [];
+        } catch (error) {
+          return { domain: 'rota', data: { proposed: false }, summary: error?.message ? `I couldn't look for swaps: ${error.message}` : "I couldn't look for swaps just now. Try again in a moment.", confidence: 0.6, sources: publishedSource(got.rows), actions: [] };
+        }
+        reply = swapReply({ parsed, candidates, options });
       }
-      const answer = myShiftsAnswer({ weeks: Object.fromEntries(rows.map((row) => [row.id, row])), uid, when });
       return {
-        domain: 'rota', data: { found: Boolean(answer.found), count: answer.count ?? 0 }, summary: answer.text, confidence: answer.found ? 0.95 : 0.85,
-        sources: [source('Reception rota', `${rows.length} published week${rows.length === 1 ? '' : 's'} that include you · live read ${nowLabel()}`)],
-        actions: [{ label: 'Open My rota', route: '/my-rota' }],
+        domain: 'rota', data: { proposed: Boolean(reply.proposal), stage: reply.stage }, summary: reply.text, followUps: reply.followUps, proposal: reply.proposal || null,
+        confidence: reply.proposal ? 0.95 : 0.8, sources: publishedSource(got.rows), actions: [{ label: 'Open My rota', route: '/my-rota' }],
       };
     },
   });

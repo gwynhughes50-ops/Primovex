@@ -4,6 +4,7 @@ import { db, functions } from "@/lib/firebase";
 import { applyStockMovement, createReorderRequest } from "@/services/stockService";
 import { reportEvent } from "@/modules/governance/services/seService";
 import { addQuickNote } from "@/services/quickNotesService";
+import { askRota } from "@/modules/rota/rotaTeamService";
 
 // What actually happens when a person presses Confirm on an Orb proposal. Each executor takes the
 // proposal's own params (fixed when the proposal was prepared, never anything typed afterwards),
@@ -31,6 +32,14 @@ const EXECUTORS = {
   "person-message": async (params) => {
     const result = await httpsCallable(functions, "orbTeamMessage")({ toUid: params.toUid, text: params.text, actionUrl: params.actionUrl });
     return result?.data?.sent > 0 ? `Sent to ${params.toName}. They'll see it in their Primovex notifications on the desktop app.` : `${params.toName} could not be messaged.`;
+  },
+
+  // Ask a colleague to swap a shift. The server checks again that it is still your shift, that the swap keeps everyone's rules and time off, and tells the colleague.
+  "rota-swap": async (params) => {
+    const result = await askRota({ action: "create_swap", from: params.from, to: params.to, fromLabel: params.fromLabel, toLabel: params.toLabel });
+    if (result?.enabled === false) throw new Error("Swap requests are not switched on for the team yet.");
+    if (result?.ok === false) throw new Error(result.problems?.[0] || "That swap could not be sent.");
+    return `Asked ${params.withName}. They'll get a message and you'll hear back in My rota.${result?.changesHours ? " It changes someone's hours, so the coordinator also has to agree." : ""}`;
   },
 
   // A reminder is a Quick note: the person's own, or a shared practice note.
