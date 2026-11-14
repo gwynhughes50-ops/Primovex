@@ -16,6 +16,7 @@ import { looksLikeSeReport } from '@/ai/governance/seDraft';
 import { parseUseRequest } from '@/ai/stock/stockUse';
 import { parseManagementQuestion } from '@/ai/management/managementAsk';
 import { parseMyCounts, parseMyShifts, parseSwap, parseWhoIsOn } from '@/ai/rota/rotaAsk';
+import { looksLikeExplainPage } from '@/ai/pageGuide';
 import { looksLikeStockIn } from '@/ai/stock/stockIn';
 import { looksLikeStockCount } from '@/ai/stock/stockCount';
 import { looksLikeExpiryRemoval } from '@/ai/stock/expiryRound';
@@ -77,6 +78,9 @@ export function routeApprovedTool(prompt, options = {}) {
 
   // "What needs attention before I leave?": the end-of-day briefing.
   if (looksLikeBriefing(prompt)) return { toolId: 'briefing.daily', input: {}, language: { normalised: text, confidence: 0.95 } };
+
+  // "Explain this page", "what can I do here?": what the page the person is on is for.
+  if (looksLikeExplainPage(prompt)) return { toolId: 'page.explain', input: {}, language: { normalised: text, confidence: 0.95 } };
 
   // "How do I...?" with a matching help article goes to the help lookup, before the data
   // lookups (so "how do I check the anaphylaxis box" gives the steps, not the box's status).

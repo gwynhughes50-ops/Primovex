@@ -43,6 +43,7 @@ import { normaliseOrbScope } from '@/lib/orbScope';
 import { listStaffDirectory } from '@/services/staffDirectoryService';
 import { myCountsAnswer, myShiftsAnswer, swapCandidates, swapReply, whoIsOnAnswer } from '@/ai/rota/rotaAsk';
 import { askRota } from '@/modules/rota/rotaTeamService';
+import { explainPage } from '@/ai/pageGuide';
 import { daysUntilExpiry, expiryStatus, expiryWindowDays, normaliseExpirySettings, stockLevelStatus, summariseStockAlerts } from '@/lib/stockAlerts';
 import {
   alertsAnswer, categoryAnswer, cleaningAnswer, coldChainOverview, coldChainUnitAnswer, complianceAnswer, expiryAnswer, lowStockAnswer,
@@ -901,6 +902,20 @@ export function registerApprovedReadOnlyTools() {
         warnings: answer.counts && (answer.counts.overdue || answer.counts.outOfUse) ? [`${answer.counts.overdue + answer.counts.outOfUse} need attention`] : [],
         sources: [source('PAT register', `${patAssets.length} appliance${patAssets.length === 1 ? '' : 's'}, ${patTests.length} test${patTests.length === 1 ? '' : 's'} · live read ${nowLabel()}`)],
         actions: [{ label: 'Open Compliance', route: '/compliance' }],
+      };
+    },
+  });
+
+  // "Explain this page": written down in the page guide, so no data is read and nothing is sent anywhere.
+  registerTool({
+    id: 'page.explain', label: 'Explain this page',
+    async execute(_input = {}, context = {}) {
+      const answer = explainPage(context.page, {
+        can: (capability) => hasCapability(context.capabilities || [], capability),
+      });
+      return {
+        domain: 'help', data: { found: answer.found }, summary: answer.text, followUps: answer.followUps, confidence: answer.found ? 0.95 : 0.7,
+        sources: [source('Primovex page guide', 'Written guidance for this page; nothing was read from your data', 'system')], actions: [],
       };
     },
   });

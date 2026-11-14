@@ -8,6 +8,7 @@ export class ContextEngine {
       siteId: raw.siteId || profile.siteId || profile.practiceId || 'primary',
       spaceId: raw.spaceId || null,
       module: raw.module || null,
+      page: raw.page || null,
       workflow: raw.workflow || null,
       device: raw.device || null,
       profile,

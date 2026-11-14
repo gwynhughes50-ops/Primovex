@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import AssistantWelcome from './AssistantWelcome';
 import { useOnRota } from '@/modules/rota/useOnRota';
 import { ASSISTANT_NAME, ASSISTANT_TAGLINE } from '../starters';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import usePrimovexAI from '../hooks/usePrimovexAI';
 import PulseOrbFace from '@/components/pulse/PulseOrbFace';
 import ReportIssueDialog from './ReportIssueDialog';
@@ -90,6 +90,7 @@ function speakText(text) {
 
 export default function AskPrimovexPanel({ variant = 'desktop' }) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { isOpen, close, status, messages, ask, addUserMessage, clearConversation, resolveClarification, recordFeedback, confirmProposal, cancelProposal } = usePrimovexAI();
   const orbStatus = useOrbStatus();
   const { can } = useAuth();
@@ -474,6 +475,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
             <AssistantWelcome
               can={can}
               onRota={onRota}
+              pathname={pathname}
               compact={isMobile}
               onAsk={(text) => { setHelpOpen(false); ask(text); }}
               onFill={(text) => { setHelpOpen(false); setPrompt(text); }}

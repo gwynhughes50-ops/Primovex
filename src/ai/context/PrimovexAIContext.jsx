@@ -1,4 +1,5 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { getOrbEngine } from '@/orb';
 import { AI_STATES, assertProviderResponse, createMessage } from '../types/responseContract';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,6 +24,7 @@ export function PrimovexAIProvider({ children }) {
   const [status, setStatus] = useState(AI_STATES.IDLE);
   const [messages, setMessages] = useState([]);
   const orb = useMemo(() => getOrbEngine(), []);
+  const { pathname } = useLocation(); // the page the person is on, so "explain this page" knows which
 
   // The knowledge store subscribes to Firestore lazily on first use — without
   // this, the very first Orb question of a session would race an empty cache
@@ -71,7 +73,7 @@ export function PrimovexAIProvider({ children }) {
       const providerRequest = orb.ask({
         input: engineInput,
         inputType: 'text',
-        context: { capabilities, role, userId: user?.uid || null, profile, forcedIntent: options.forcedIntent || null },
+        context: { capabilities, role, userId: user?.uid || null, profile, page: pathname, forcedIntent: options.forcedIntent || null },
         conversation: messages,
       });
       const timeout = new Promise((_, reject) => window.setTimeout(() => reject(new Error('Ask Primovex request timed out')), 14000));
@@ -111,7 +113,7 @@ export function PrimovexAIProvider({ children }) {
       ]);
       setStatus(AI_STATES.ERROR);
     }
-  }, [capabilities, messages, orb, profile, role, status, user?.uid]);
+  }, [capabilities, messages, orb, pathname, profile, role, status, user?.uid]);
 
   // Something they said that isn't a question (yes, cancel, a choice), kept in the conversation.
   const addUserMessage = useCallback((text) => {
