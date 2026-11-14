@@ -140,6 +140,20 @@ t("going to another page starts Ask Primovex afresh, and an answer still on its 
   assert.match(panel, /if \(lastPage\.current === pathname\) return;[\s\S]*setPrompt\(''\);[\s\S]*setHelpOpen\(false\);[\s\S]*setReport\(null\);/);
 });
 
+t("Ask Primovex has its own colours, worked out from the theme: a palette for dark themes, one for light, and one for High Contrast, used for the whole panel", () => {
+  const panel = read("src/ai/components/AskPrimovexPanel.jsx");
+  for (const name of ["--ai-surface", "--ai-raised", "--ai-card", "--ai-line", "--ai-line-strong", "--ai-ink", "--ai-ink-soft", "--ai-accent", "--ai-glow", "--ai-rim"]) assert.ok(panel.includes(`${name}:`), `${name} is defined`);
+  assert.match(panel, /html\.medtrak-light \.primovex-ai-panel \{/);
+  assert.match(panel, /html\[data-medtrak-theme="high-contrast"\] \.primovex-ai-panel \{/);
+  assert.match(panel, /\.primovex-ai-panel::before \{[^}]*background: var\(--ai-rim\)/);
+  // the panel's parts take their colours from the palette, not straight from the page's
+  const rules = panel.slice(panel.indexOf(".primovex-ai-divider {"), panel.indexOf(".primovex-pulse-voice-orb {"));
+  assert.ok(!/var\(--medtrak-(panel|border|bg)\)/.test(rules), "no page surface or border colour in the panel's rules");
+  assert.ok(!/var\(--medtrak-(panel|border)\)\]/.test(panel.slice(0, panel.indexOf("<style>"))), "nor in its markup");
+  // the text colours stay the theme's own, so readability follows the theme
+  assert.match(panel, /--ai-ink: var\(--medtrak-text\);/);
+});
+
 t("the tips are in the desktop layout and are remembered per person and page", () => {
   assert.match(read("src/layout/Layout.jsx"), /<RouteAskTip \/><Outlet \/>/);
   const tip = read("src/components/ai/RouteAskTip.jsx");

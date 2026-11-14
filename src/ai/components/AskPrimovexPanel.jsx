@@ -59,8 +59,8 @@ function MessageFeedback({ message, onRecord }) {
     else onRecord(message.id, outcome);
   };
   return <div className="mt-2">
-    <div className="flex flex-wrap items-center gap-1.5"><span className="primovex-ai-faint mr-0.5 text-[11px] font-semibold">Did that help?</span>{FEEDBACK_OPTIONS.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => choose(id)} className="inline-flex items-center gap-1 rounded-lg border border-[var(--medtrak-border)] px-2 py-1 text-[11px]"><Icon className="h-3 w-3" />{label}</button>)}</div>
-    {pendingOutcome && <div className="mt-2"><p className="primovex-ai-faint mb-1 text-[11px]">What needed changing?</p><div className="flex flex-wrap gap-1">{CORRECTION_REASONS.map((reason) => <button key={reason} type="button" onClick={() => onRecord(message.id, pendingOutcome, reason)} className="rounded-lg bg-[var(--medtrak-accent)]/10 px-2 py-1 text-[11px] text-[var(--medtrak-accent)]">{reason}</button>)}</div></div>}
+    <div className="flex flex-wrap items-center gap-1.5"><span className="primovex-ai-faint mr-0.5 text-[11px] font-semibold">Did that help?</span>{FEEDBACK_OPTIONS.map(({ id, label, icon: Icon }) => <button key={id} type="button" onClick={() => choose(id)} className="inline-flex items-center gap-1 rounded-lg border border-[var(--ai-line)] px-2 py-1 text-[11px]"><Icon className="h-3 w-3" />{label}</button>)}</div>
+    {pendingOutcome && <div className="mt-2"><p className="primovex-ai-faint mb-1 text-[11px]">What needed changing?</p><div className="flex flex-wrap gap-1">{CORRECTION_REASONS.map((reason) => <button key={reason} type="button" onClick={() => onRecord(message.id, pendingOutcome, reason)} className="rounded-lg bg-[var(--ai-card)] px-2 py-1 text-[11px] text-[var(--ai-accent)]">{reason}</button>)}</div></div>}
   </div>;
 }
 
@@ -528,15 +528,15 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
                   </div>
                 )}
                 {message.proposal && (
-                  <div className="mt-2 rounded-xl border border-[var(--medtrak-accent)]/40 bg-[var(--medtrak-panel)] px-3 py-3 text-sm" aria-label="Action to confirm">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--medtrak-accent)]">{message.proposal.status === 'done' ? 'Done' : message.proposal.status === 'proposed' || message.proposal.status === 'working' ? 'Please confirm' : 'Not done'}</p>
+                  <div className="mt-2 rounded-xl border border-[var(--ai-line-strong)] bg-[var(--ai-raised)] px-3 py-3 text-sm" aria-label="Action to confirm">
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--ai-accent)]">{message.proposal.status === 'done' ? 'Done' : message.proposal.status === 'proposed' || message.proposal.status === 'working' ? 'Please confirm' : 'Not done'}</p>
                     <p className="mt-1 font-semibold">{message.proposal.title}</p>
                     <ul className="mt-1 space-y-0.5 text-xs primovex-ai-muted">{message.proposal.lines.map((line) => <li key={line}>{line}</li>)}</ul>
                     {message.proposal.result && <p className={`mt-2 text-xs ${message.proposal.status === 'done' ? 'text-emerald-500' : 'primovex-ai-muted'}`}>{message.proposal.result}</p>}
                     {(message.proposal.status === 'proposed' || message.proposal.status === 'working') && (
                       <div className="mt-3 flex gap-2">
                         <button type="button" disabled={message.proposal.status === 'working'} onClick={() => confirmProposal(message.id)} className="rounded-lg bg-[var(--medtrak-accent)] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60">{message.proposal.status === 'working' ? 'Working...' : message.proposal.confirmLabel}</button>
-                        <button type="button" disabled={message.proposal.status === 'working'} onClick={() => cancelProposal(message.id)} className="rounded-lg border border-[var(--medtrak-border)] px-3 py-1.5 text-xs">Cancel</button>
+                        <button type="button" disabled={message.proposal.status === 'working'} onClick={() => cancelProposal(message.id)} className="rounded-lg border border-[var(--ai-line)] px-3 py-1.5 text-xs">Cancel</button>
                       </div>
                     )}
                   </div>
@@ -550,7 +550,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
                             className="rounded-xl border-2 px-3 py-2 text-left text-xs disabled:opacity-50"
                             style={{ borderColor: choice.color, background: `${choice.color}24`, color: 'var(--medtrak-text)' }}>
                             <span className="flex items-center gap-1.5 font-bold"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: choice.color }} aria-hidden="true" />{choice.label}</span>
-                            <span className="mt-0.5 block text-[11px] leading-4" style={{ color: 'var(--medtrak-muted)' }}>{choice.hint}</span>
+                            <span className="mt-0.5 block text-[11px] leading-4" style={{ color: 'var(--ai-ink-soft)' }}>{choice.hint}</span>
                           </button>
                         ))}
                       </div>
@@ -570,7 +570,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
                 {message.clarification?.choices?.length > 0 && !message.clarification.resolvedIntent && (
                   <div className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
                     <p className="text-xs font-semibold">Choose the safe action you expected. Ask Primovex will retry now and submit the phrase for manager review.</p>
-                    <div className="mt-2 grid gap-2">{message.clarification.choices.map((choice) => <button key={choice.id} type="button" onClick={() => resolveClarification(message.id, choice.id)} className="rounded-lg border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2 text-left text-xs"><strong className="block">{choice.label}</strong><span className="primovex-ai-muted">{choice.description}</span></button>)}</div>
+                    <div className="mt-2 grid gap-2">{message.clarification.choices.map((choice) => <button key={choice.id} type="button" onClick={() => resolveClarification(message.id, choice.id)} className="rounded-lg border border-[var(--ai-line)] bg-[var(--ai-raised)] px-3 py-2 text-left text-xs"><strong className="block">{choice.label}</strong><span className="primovex-ai-muted">{choice.description}</span></button>)}</div>
                   </div>
                 )}
                 {message.clarification?.resolvedIntent && <p className="mt-2 text-xs text-emerald-500">Learning suggestion recorded for review. Ask Primovex retried the original request.</p>}
@@ -600,19 +600,56 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
       {report && <ReportIssueDialog initialText={report.text} onClose={() => setReport(null)} />}
 
       <style>{`
-        .primovex-ai-panel { color:var(--medtrak-text); background:color-mix(in srgb,var(--medtrak-panel) 97%,transparent); border:1px solid var(--medtrak-border); }
+        /* Ask Primovex has its own colours, worked out from the theme the person picked: the theme's accent tints a surface that is deeper than the page on a dark
+           theme and softly tinted on a light one, with a fine accent line along the top. It reads as a separate place without shouting. */
+        .primovex-ai-panel {
+          --ai-base: color-mix(in srgb, var(--medtrak-bg) 74%, #000);
+          --ai-surface: color-mix(in srgb, var(--medtrak-accent) 7%, var(--ai-base));
+          --ai-raised: color-mix(in srgb, var(--medtrak-accent) 13%, var(--ai-base));
+          --ai-card: color-mix(in srgb, var(--medtrak-accent) 21%, var(--ai-base));
+          --ai-line: color-mix(in srgb, var(--medtrak-accent) 27%, transparent);
+          --ai-line-strong: color-mix(in srgb, var(--medtrak-accent) 48%, transparent);
+          --ai-ink: var(--medtrak-text);
+          --ai-ink-soft: color-mix(in srgb, var(--medtrak-muted) 88%, var(--medtrak-text));
+          --ai-accent: color-mix(in srgb, var(--medtrak-accent) 70%, #ffffff);
+          --ai-glow: color-mix(in srgb, var(--medtrak-accent) 20%, transparent);
+          --ai-rim: linear-gradient(90deg, transparent, var(--medtrak-accent) 22%, var(--medtrak-accent2) 78%, transparent);
+          position: fixed; color: var(--ai-ink); background: var(--ai-surface); border: 1px solid var(--ai-line);
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--medtrak-accent) 10%, transparent), 0 26px 64px rgba(0,0,0,.42), 0 0 56px var(--ai-glow);
+        }
+        .primovex-ai-panel::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--ai-rim); opacity: .85; pointer-events: none; z-index: 1; }
+        .primovex-ai-panel > header { background: linear-gradient(180deg, color-mix(in srgb, var(--medtrak-accent) 14%, transparent), transparent 92%); }
+        html.medtrak-light .primovex-ai-panel {
+          --ai-base: color-mix(in srgb, var(--medtrak-accent) 3%, #fbfcfe);
+          --ai-surface: color-mix(in srgb, var(--medtrak-accent) 5%, #fbfcfe);
+          --ai-raised: color-mix(in srgb, var(--medtrak-accent) 8%, #ffffff);
+          --ai-card: color-mix(in srgb, var(--medtrak-accent) 15%, #ffffff);
+          --ai-line: color-mix(in srgb, var(--medtrak-accent) 22%, #cbd5e1);
+          --ai-line-strong: color-mix(in srgb, var(--medtrak-accent) 50%, #cbd5e1);
+          --ai-ink-soft: color-mix(in srgb, var(--medtrak-muted) 92%, var(--medtrak-text));
+          --ai-accent: color-mix(in srgb, var(--medtrak-accent) 70%, #000000);
+          --ai-glow: color-mix(in srgb, var(--medtrak-accent) 14%, transparent);
+          box-shadow: 0 0 0 1px color-mix(in srgb, var(--medtrak-accent) 10%, transparent), 0 24px 56px rgba(15,23,42,.18), 0 0 44px var(--ai-glow);
+        }
+        html.medtrak-light .primovex-ai-panel > header { background: linear-gradient(180deg, color-mix(in srgb, var(--medtrak-accent) 9%, transparent), transparent 92%); }
+        html[data-medtrak-theme="high-contrast"] .primovex-ai-panel {
+          --ai-base: #000; --ai-surface: #000; --ai-raised: #111; --ai-card: #1c1a00; --ai-line: #ffffff; --ai-line-strong: #facc15; --ai-ink-soft: #ffffff; --ai-accent: #facc15; --ai-glow: transparent;
+          --ai-rim: #facc15; box-shadow: 0 0 0 2px #ffffff;
+        }
+        html[data-medtrak-theme="high-contrast"] .primovex-ai-panel > header { background: none; }
         .primovex-ai-mobile { top:max(4.25rem,calc(env(safe-area-inset-top) + 2.5rem)); bottom:calc(var(--pvx-mobile-nav-height) + var(--pvx-mobile-safe-bottom)); max-height:calc(100dvh - max(4.25rem,calc(env(safe-area-inset-top) + 2.5rem)) - var(--pvx-mobile-nav-height) - var(--pvx-mobile-safe-bottom)); }
-        .primovex-ai-divider { border-bottom:1px solid var(--medtrak-border); }
-        form.primovex-ai-divider { border-top:1px solid var(--medtrak-border); border-bottom:0; }
-        .primovex-ai-form { flex:0 0 auto; padding-bottom:max(1rem,env(safe-area-inset-bottom)); background:var(--medtrak-panel); }
-        .primovex-ai-muted { color:var(--medtrak-muted); }.primovex-ai-faint { color:color-mix(in srgb,var(--medtrak-muted) 72%,transparent); }.primovex-ai-body { color:var(--medtrak-text); }.primovex-ai-accent-text { color:var(--medtrak-accent); }
-        .primovex-ai-orb { color:var(--medtrak-accent); border:1px solid color-mix(in srgb,var(--medtrak-accent) 32%,transparent); background:color-mix(in srgb,var(--medtrak-accent) 14%,var(--medtrak-panel)); }
-        .primovex-ai-icon-button { color:var(--medtrak-muted); }.primovex-ai-icon-button:hover { color:var(--medtrak-text); background:color-mix(in srgb,var(--medtrak-accent) 10%,transparent); }
-        .primovex-ai-accent-card,.primovex-ai-user-message,.primovex-ai-action { border:1px solid color-mix(in srgb,var(--medtrak-accent) 28%,var(--medtrak-border)); background:color-mix(in srgb,var(--medtrak-accent) 10%,var(--medtrak-panel)); }
-        .primovex-ai-suggestion,.primovex-ai-assistant-message,.primovex-ai-source,.primovex-ai-composer { color:var(--medtrak-text); border:1px solid var(--medtrak-border); background:color-mix(in srgb,var(--medtrak-panel) 88%,var(--medtrak-bg)); }
-        .primovex-ai-error-message { border:1px solid rgba(244,63,94,.35); background:rgba(244,63,94,.10); }.primovex-ai-message-divider { border-top:1px solid var(--medtrak-border); }.primovex-ai-action { color:var(--medtrak-accent); }
-        .primovex-ai-composer:focus-within { border-color:color-mix(in srgb,var(--medtrak-accent) 58%,var(--medtrak-border)); box-shadow:0 0 0 3px color-mix(in srgb,var(--medtrak-accent) 12%,transparent); }.primovex-ai-composer textarea { color:var(--medtrak-text)!important; background:transparent!important; border:0!important; }.primovex-ai-composer textarea::placeholder { color:var(--medtrak-muted); }
-        .primovex-ai-submit { color:white; background:var(--medtrak-accent); }.primovex-ai-mic { color:var(--medtrak-accent); background:color-mix(in srgb,var(--medtrak-accent) 10%,var(--medtrak-panel)); }
+        .primovex-ai-divider { border-bottom:1px solid var(--ai-line); }
+        form.primovex-ai-divider { border-top:1px solid var(--ai-line); border-bottom:0; }
+        .primovex-ai-form { flex:0 0 auto; padding-bottom:max(1rem,env(safe-area-inset-bottom)); background:var(--ai-base); }
+        .primovex-ai-muted { color:var(--ai-ink-soft); }.primovex-ai-faint { color:color-mix(in srgb,var(--ai-ink-soft) 78%,transparent); }.primovex-ai-body { color:var(--ai-ink); }.primovex-ai-accent-text { color:var(--ai-accent); }
+        .primovex-ai-orb { color:var(--ai-accent); border:1px solid var(--ai-line); background:var(--ai-card); }
+        .primovex-ai-icon-button { color:var(--ai-ink-soft); }.primovex-ai-icon-button:hover { color:var(--ai-ink); background:var(--ai-raised); }
+        .primovex-ai-accent-card,.primovex-ai-user-message,.primovex-ai-action { border:1px solid var(--ai-line-strong); background:var(--ai-card); }
+        .primovex-ai-suggestion,.primovex-ai-assistant-message,.primovex-ai-source,.primovex-ai-composer { color:var(--ai-ink); border:1px solid var(--ai-line); background:var(--ai-raised); }
+        .primovex-ai-suggestion:hover { border-color:var(--ai-line-strong); background:var(--ai-card); }
+        .primovex-ai-error-message { border:1px solid rgba(244,63,94,.35); background:rgba(244,63,94,.10); }.primovex-ai-message-divider { border-top:1px solid var(--ai-line); }.primovex-ai-action { color:var(--ai-accent); }
+        .primovex-ai-composer:focus-within { border-color:var(--ai-line-strong); box-shadow:0 0 0 3px var(--ai-glow); }.primovex-ai-composer textarea { color:var(--ai-ink)!important; background:transparent!important; border:0!important; }.primovex-ai-composer textarea::placeholder { color:var(--ai-ink-soft); }
+        .primovex-ai-submit { color:white; background:var(--medtrak-accent); }.primovex-ai-mic { color:var(--ai-accent); background:var(--ai-card); }
         .primovex-pulse-voice-orb { position:relative; width:9.5rem; height:9.5rem; padding:0; border:0; border-radius:999px; background:transparent; cursor:pointer; transition:opacity .4s ease, transform .4s ease; }
         .primovex-pulse-voice-orb.state-sleeping { opacity:.7; transform:scale(.86); }
         .primovex-pulse-voice-orb:focus-visible { outline:2px solid var(--medtrak-accent); outline-offset:4px; }
