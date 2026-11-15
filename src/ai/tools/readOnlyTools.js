@@ -27,6 +27,10 @@ import { needsCleaning } from '@/lib/cleaningFrequency';
 import { buildSeAnswer } from '@/ai/governance/seAnswers';
 import { signoffAnswer, signoffReply } from '@/ai/me/signoffs';
 import { concernNext, myCasesNext, sarNext } from '@/ai/governance/nextSteps';
+import { certificatesAnswer, coshhAnswer, laptopsAnswer, trainingOverdueAnswer, wasteAnswer } from '@/ai/compliance/extras';
+import { normaliseCertificate } from '@/modules/certificates/certificates';
+import { normaliseSubstance } from '@/modules/coshh/coshh';
+import { normaliseConsignment } from '@/modules/waste/waste';
 import { buildSeReportDraft } from '@/ai/governance/seDraft';
 import { buildAnyUseDraft } from '@/ai/stock/stockUse';
 import { buildStockInDraft } from '@/ai/stock/stockIn';
@@ -1056,6 +1060,69 @@ export function registerApprovedReadOnlyTools() {
       } catch (error) {
         return { domain: 'governance', data: null, summary: error?.code === 'permission-denied' ? "I can't open those cases with your permissions." : "I couldn't read the case just now. Try again in a moment.", confidence: 0.6, sources: [source('Governance', 'Access limited by your permissions')], actions: back };
       }
+    },
+  });
+
+  // ---- equipment and compliance extras: laptops, certificates, COSHH, clinical waste and the training matrix. Read only; each needs the same permission as its page. ----
+  const needAny = (context, capabilities, topic, route) => (capabilities.some((c) => hasCapability(context.capabilities || [], c)) ? null : noAccess('compliance', topic, route));
+  const extraResult = (domain, answer, label, detail, route, routeLabel) => ({ domain, data: { found: Boolean(answer.found), count: answer.count ?? 0 }, summary: answer.text, confidence: answer.found ? 0.95 : 0.75, sources: [source(label, `${detail} · live read ${nowLabel()}`)], actions: [{ label: routeLabel, route }] });
+  const extraFail = (domain, error, route) => ({ domain, data: null, summary: error?.code === 'permission-denied' ? "I can't open that register with your permissions." : "I couldn't read that just now. Try again in a moment.", confidence: 0.6, sources: [source('Register', 'Access limited by your permissions')], actions: [{ label: 'Open', route }] });
+
+  registerTool({
+    id: 'equipment.laptops', label: 'IT laptops',
+    async execute(input = {}, context = {}) {
+      const denied = needAny(context, ['itAssets.read', 'itAssets.manage'], 'IT equipment', '/it-equipment');
+      if (denied) return denied;
+      try {
+        const laptops = await readRows('it_laptops');
+        return extraResult('compliance', laptopsAnswer({ laptops, ask: input.ask, query: input.query }), 'IT equipment register', `${laptops.length} laptop${laptops.length === 1 ? '' : 's'}`, '/it-equipment', 'Open IT equipment');
+      } catch (error) { return extraFail('compliance', error, '/it-equipment'); }
+    },
+  });
+
+  registerTool({
+    id: 'compliance.certificates', label: 'Certificates', requiredCapability: 'compliance.read',
+    async execute(input = {}) {
+      try {
+        const rows = (await readRows('compliance_certificates')).map((row) => normaliseCertificate(row.id, row));
+        return extraResult('compliance', certificatesAnswer({ certificates: rows, type: input.type || '' }), 'Certificates register', `${rows.length} certificate${rows.length === 1 ? '' : 's'}`, '/compliance', 'Open Compliance');
+      } catch (error) { return extraFail('compliance', error, '/compliance'); }
+    },
+  });
+
+  registerTool({
+    id: 'compliance.coshh', label: 'COSHH register',
+    async execute(input = {}, context = {}) {
+      const denied = needAny(context, ['coshh.read', 'coshh.manage'], 'the COSHH register', '/compliance');
+      if (denied) return denied;
+      try {
+        const rows = (await readRows('coshh_substances')).map((row) => normaliseSubstance(row.id, row));
+        return extraResult('compliance', coshhAnswer({ substances: rows, query: String(input.query || '') }), 'COSHH register', `${rows.length} entr${rows.length === 1 ? 'y' : 'ies'}`, '/compliance', 'Open Compliance');
+      } catch (error) { return extraFail('compliance', error, '/compliance'); }
+    },
+  });
+
+  registerTool({
+    id: 'waste.status', label: 'Clinical waste collections',
+    async execute(_input = {}, context = {}) {
+      const denied = needAny(context, ['waste.read', 'waste.manage'], 'clinical waste records', '/waste');
+      if (denied) return denied;
+      try {
+        const rows = (await readRows('waste_consignments')).map((row) => normaliseConsignment(row.id, row));
+        return extraResult('compliance', wasteAnswer({ consignments: rows }), 'Clinical waste notes', `${rows.length} note${rows.length === 1 ? '' : 's'}`, '/waste', 'Open Clinical waste');
+      } catch (error) { return extraFail('compliance', error, '/waste'); }
+    },
+  });
+
+  registerTool({
+    id: 'training.overdue', label: 'Staff training that is due',
+    async execute(input = {}, context = {}) {
+      const denied = needAny(context, ['training.view', 'training.manage', 'training.manageClinical'], 'staff training', '/training');
+      if (denied) return denied;
+      try {
+        const [people, courses, records] = await Promise.all([readRows('training_people'), readRows('training_courses'), readRows('training_records')]);
+        return extraResult('people', trainingOverdueAnswer({ people: people.filter((p) => p.active !== false), courses, records, course: String(input.course || '') }), 'Staff training matrix', `${people.length} people, ${courses.length} courses`, '/training', 'Open Staff training');
+      } catch (error) { return extraFail('people', error, '/training'); }
     },
   });
 

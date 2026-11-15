@@ -34,6 +34,7 @@ export const STARTERS = [
   { group: "ask", text: "How much mileage have I claimed?", tool: "my.mileage" },
   { group: "ask", text: "How much annual leave do I have?", tool: "my.leave" },
   { group: "ask", text: "What is waiting for me to sign off?", needs: "timesheets.manage", tool: "signoff.waiting" },
+  { group: "ask", text: "Which certificates are running out?", needs: "compliance.read", tool: "compliance.certificates" },
   { group: "ask", text: "How do I sign off timesheets?", tool: "help.howTo" },
   { group: "do", text: "I have received 20 chlorphenamine ampoules", needs: "inventory.write", tool: "stock.inDraft" },
   { group: "do", text: "I used one pack of gauze", needs: "inventory.write", tool: "stock.useDraft" },

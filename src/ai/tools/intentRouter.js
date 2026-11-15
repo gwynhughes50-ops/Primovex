@@ -20,6 +20,7 @@ import { looksLikeExplainPage } from '@/ai/pageGuide';
 import { parseMyAdmin } from '@/ai/me/myAdmin';
 import { parseSignoff } from '@/ai/me/signoffs';
 import { parseNextSteps } from '@/ai/governance/nextSteps';
+import { parseExtras } from '@/ai/compliance/extras';
 import { looksLikeStockIn } from '@/ai/stock/stockIn';
 import { looksLikeStockCount } from '@/ai/stock/stockCount';
 import { looksLikeExpiryRemoval } from '@/ai/stock/expiryRound';
@@ -116,6 +117,8 @@ export function routeApprovedTool(prompt, options = {}) {
   if (myShiftsAsk) return { toolId: 'rota.myShifts', input: myShiftsAsk, language: { normalised: text, confidence: 0.95 } };
 
   // Your own admin: "have I sent my timesheet?", "how much mileage have I claimed?", "I drove from ... to ...", "how much annual leave do I have?", "what training is due?".
+  const extrasAsk = parseExtras(prompt);
+  if (extrasAsk) return { ...extrasAsk, language: { normalised: text, confidence: 0.95 } };
   const nextStepsAsk = parseNextSteps(prompt);
   if (nextStepsAsk) return { ...nextStepsAsk, language: { normalised: text, confidence: 0.95 } };
   const signoffAsk = parseSignoff(prompt);

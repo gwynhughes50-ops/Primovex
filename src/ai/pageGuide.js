@@ -48,7 +48,7 @@ export const PAGE_GUIDE = [
     path: "/compliance", title: "Compliance",
     about: "Safety checks and registers: fire, water, emergency equipment, PAT testing, COSHH and certificates.",
     can: ["Record a check, or scan a tag to start one", "See what is due or overdue", "Open the PAT, COSHH and certificate registers"],
-    asks: [{ text: "When did we last test the fire alarm?", needs: "compliance.read" }, { text: "What is due in compliance?", needs: "compliance.read" }],
+    asks: [{ text: "When did we last test the fire alarm?", needs: "compliance.read" }, { text: "What is due in compliance?", needs: "compliance.read" }, { text: "Which certificates are running out?", needs: "compliance.read" }, { text: "Which COSHH reviews are due?", needs: "coshh.read" }],
     help: ["fire-alarm-test", "do-pat-test", "coshh-register", "certificates-register"],
   },
   {
@@ -84,7 +84,7 @@ export const PAGE_GUIDE = [
   { path: "/mileage", title: "Mileage", about: "Claim for work journeys, and approve your team's.", can: ["Add a journey from the places and routes saved", "If you manage people, approve their claims under To approve"], asks: [{ text: "How much mileage have I claimed?" }, { text: "Any mileage claims to approve?" }], tries: [{ text: "I drove from Main Surgery to District Hospital and back yesterday" }], help: ["claim-mileage", "approve-mileage"] },
   { path: "/annual-leave", title: "Annual leave", about: "Your leave entitlement, worked out from your contract.", can: ["See how much you have and how much is left"], asks: [{ text: "How much annual leave do I have?" }], help: ["annual-leave-entitlement"] },
   { path: "/my-training", title: "My training", about: "Your own training records and when each is due.", can: ["See what is due or running out"], asks: [{ text: "What training is due for me?" }], help: ["my-training"] },
-  { path: "/training", title: "Staff training", about: "The training matrix for the whole practice.", can: ["See who is out of date on what", "Import the matrix"], help: ["staff-training-matrix", "import-training-matrix"] },
+  { path: "/training", title: "Staff training", about: "The training matrix for the whole practice.", can: ["See who is out of date on what", "Import the matrix"], asks: [{ text: "Which staff have overdue training?" }], help: ["staff-training-matrix", "import-training-matrix"] },
   {
     path: "/reception-rota", title: "Reception rota",
     about: "The coordinator's page: the rules for each person, who is off, building the week and publishing it to the team.",
@@ -96,8 +96,9 @@ export const PAGE_GUIDE = [
     can: ["See your shifts and who is on each day", "Swap a shift with a colleague", "Ask for a change: finish early, start late or a day off"],
     asks: [{ text: "Show my shifts" }, { text: "How many lates do I have?" }], tries: [{ text: "Swap my Friday shift" }], help: ["my-rota"],
   },
+  { path: "/it-equipment", title: "IT equipment", about: "The laptops the practice owns: who has each, which are on loan and when each next needs updating.", can: ["See who has a laptop and when it needs an update", "Loan one out, take it back, or mark it updated"], asks: [{ text: "Which laptops need an update?", needs: "itAssets.read" }, { text: "Which laptops are on loan?", needs: "itAssets.read" }], help: [] },
   { path: "/notifications", title: "Notifications", about: "Everything sent to you: tasks, reminders and messages.", can: ["Open, complete or snooze each one"], help: ["find-notifications"] },
-  { path: "/waste", title: "Clinical waste", about: "Waste notes and the quarterly return.", can: ["Keep a waste note", "Check the quarterly return"], help: ["keep-waste-note", "check-waste-quarterly-return"] },
+  { path: "/waste", title: "Clinical waste", about: "Waste notes and the quarterly return.", can: ["Keep a waste note", "Check the quarterly return"], asks: [{ text: "When was the last clinical waste collection?", needs: "waste.read" }], help: ["keep-waste-note", "check-waste-quarterly-return"] },
   { path: "/inspection", title: "Inspection pack", about: "Evidence for an inspection visit, gathered from the rest of Primovex.", can: ["Choose the visit and print the pack"], help: ["inspection-pack"] },
 ];
 
