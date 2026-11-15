@@ -5,8 +5,11 @@ import { applyStockMovement, createReorderRequest } from "@/services/stockServic
 import { reportEvent } from "@/modules/governance/services/seService";
 import { addQuickNote } from "@/services/quickNotesService";
 import { askRota } from "@/modules/rota/rotaTeamService";
-import { sendTimesheet } from "@/modules/timesheets/timesheetFlowService";
-import { submitClaim } from "@/modules/mileage/mileageService";
+import { decideTimesheet, sendTimesheet } from "@/modules/timesheets/timesheetFlowService";
+import { STATE } from "@/modules/timesheets/timesheet";
+import { decideClaim, submitClaim } from "@/modules/mileage/mileageService";
+import { STATUS as CLAIM } from "@/modules/mileage/mileage";
+import { decisionSummary, runDecisions } from "@/ai/me/signoffs";
 
 // What actually happens when a person presses Confirm on an Orb proposal. Each executor takes the
 // proposal's own params (fixed when the proposal was prepared, never anything typed afterwards),
@@ -54,6 +57,26 @@ const EXECUTORS = {
   "mileage-claim": async (params, { actor }) => {
     await submitClaim(params.form, { me: params.me, uid: params.me.uid, options: params.options, actor });
     return "Claim sent to your line manager for approval. You can follow it on the Mileage page.";
+  },
+
+  // A line manager signs off timesheets from the card. Each one is read again first, so one that was taken back since is left alone; the write is under their own account.
+  "timesheet-signoff": async (params, { actor }) => {
+    const result = await runDecisions(params.items || [], {
+      read: async (item) => { const snap = await getDoc(doc(db, "timesheets", item.id)); return snap.exists() ? { id: snap.id, ...snap.data() } : null; },
+      waiting: (sheet) => sheet.state === STATE.submitted,
+      decide: (item, sheet) => decideTimesheet(sheet, STATE.approved, { actor, uid: actor.uid }),
+    });
+    return decisionSummary(result, { one: "timesheet", many: "timesheets", did: "Signed off" });
+  },
+
+  // A line manager approves mileage claims from the card, the same way.
+  "mileage-approve": async (params, { actor }) => {
+    const result = await runDecisions(params.items || [], {
+      read: async (item) => { const snap = await getDoc(doc(db, "mileage_claims", item.id)); return snap.exists() ? { id: snap.id, ...snap.data() } : null; },
+      waiting: (claim) => claim.status === CLAIM.submitted,
+      decide: (item, claim) => decideClaim(claim, CLAIM.approved, "", actor),
+    });
+    return decisionSummary(result, { one: "claim", many: "claims", did: "Approved" });
   },
 
   // A reminder is a Quick note: the person's own, or a shared practice note.

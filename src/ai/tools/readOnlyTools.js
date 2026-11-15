@@ -25,6 +25,7 @@ import { describeSource, findHelp, formatHelpAnswer, relatedQuestions, sampleQue
 import { buildLocateResult, buildReorderDraft, buildTeamDraft } from '@/ai/stock/stockTools';
 import { needsCleaning } from '@/lib/cleaningFrequency';
 import { buildSeAnswer } from '@/ai/governance/seAnswers';
+import { signoffAnswer, signoffReply } from '@/ai/me/signoffs';
 import { buildSeReportDraft } from '@/ai/governance/seDraft';
 import { buildAnyUseDraft } from '@/ai/stock/stockUse';
 import { buildStockInDraft } from '@/ai/stock/stockIn';
@@ -986,6 +987,40 @@ export function registerApprovedReadOnlyTools() {
         const [people, courses, records] = await Promise.all([readRows('training_people', [where('uid', '==', uid)]), readRows('training_courses'), readRows('training_records', [where('ownerUid', '==', uid)])]);
         const answer = trainingAnswer({ people, courses, records });
         return { domain: 'people', data: { found: Boolean(answer.found), count: answer.count ?? 0 }, summary: answer.text, confidence: answer.found ? 0.95 : 0.8, sources: mineSource('Your training', `${records.length} record${records.length === 1 ? '' : 's'}`), actions: [{ label: 'Open My training', route: '/my-training' }] };
+      });
+    },
+  });
+
+  // ---- sign-offs for a line manager: what is waiting, and a card to sign off or approve. Reads only what this login's permissions allow. ----
+  const signoffData = async (context, uid) => {
+    const canManage = hasCapability(context.capabilities || [], 'timesheets.manage');
+    const [sheets, claims, periods, queries] = await Promise.all([
+      readRows('timesheets', canManage ? [] : [where('managerUid', '==', uid)]),
+      readRows('mileage_claims', canManage ? [] : [where('managerUid', '==', uid)]),
+      readRows('timesheet_periods'),
+      readRows('timesheet_queries', [where('toUid', '==', uid), where('to', '==', 'manager')]).catch(() => []),
+    ]);
+    return { sheets, claims, periods, queries, canManage };
+  };
+
+  registerTool({
+    id: 'signoff.waiting', label: 'Waiting for my sign-off',
+    async execute(input = {}, context = {}) {
+      return mineOnly(context, async (uid) => {
+        const data = await signoffData(context, uid);
+        const answer = signoffAnswer({ ...data, uid, what: input.what || 'both' });
+        return { domain: 'people', data: { count: answer.count ?? 0, sheets: answer.sheets ?? 0, claims: answer.claims ?? 0 }, summary: answer.text, confidence: 0.95, sources: mineSource('Sign-offs waiting for you', `${data.sheets.length} timesheet${data.sheets.length === 1 ? '' : 's'}, ${data.claims.length} claim${data.claims.length === 1 ? '' : 's'}`), actions: [{ label: 'Open Timesheet', route: '/my-timesheet' }, { label: 'Open Mileage', route: '/mileage' }] };
+      });
+    },
+  });
+
+  registerTool({
+    id: 'signoff.draft', label: 'Sign off or approve',
+    async execute(input = {}, context = {}) {
+      return mineOnly(context, async (uid) => {
+        const data = await signoffData(context, uid);
+        const reply = signoffReply({ ...data, uid, what: input.what || 'both', name: input.name || '', all: input.all !== false });
+        return { domain: 'people', data: { proposed: Boolean(reply.proposal) }, summary: reply.text, proposal: reply.proposal || null, followUps: reply.followUps, confidence: reply.proposal ? 0.95 : 0.8, sources: mineSource('Sign-offs waiting for you', 'Nothing is signed off until you confirm'), actions: [{ label: 'Open Timesheet', route: '/my-timesheet' }, { label: 'Open Mileage', route: '/mileage' }] };
       });
     },
   });

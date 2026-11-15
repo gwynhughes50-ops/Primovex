@@ -3,7 +3,7 @@ import { routeApprovedTool } from "@/ai/tools/intentRouter";
 
 // What is said to Ask Primovex, checked before it is classified or sent anywhere. A command that is about a colleague by name (a message to them, a look-up
 // of their last sign-in or their SARs) only ever looks the colleague up, so the name in it is not a patient's; every other identifier in it is still checked.
-const STAFF_NAME_TOOLS = new Set(["person.messageDraft", "team.messageDraft", "security.lastLogin", "governance.sarOverview", "rota.myShifts", "rota.swapDraft"]);
+const STAFF_NAME_TOOLS = new Set(["person.messageDraft", "team.messageDraft", "security.lastLogin", "governance.sarOverview", "rota.myShifts", "rota.swapDraft", "signoff.draft"]);
 
 export function checkAskInput(input, { allow = [], conversation = [] } = {}) {
   let toolId = null;
