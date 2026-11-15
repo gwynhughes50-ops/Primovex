@@ -27,6 +27,7 @@ export const STARTERS = [
   { group: "ask", text: "Are all fridges OK today?", needs: "temperature.read", tool: "coldChain.latestStatus" },
   { group: "ask", text: "How many SARs are outstanding?", needs: "governance.read", tool: "governance.sarOverview" },
   { group: "ask", text: "Where are we up to with concerns?", needs: "governance.read", tool: "governance.concernsOverview" },
+  { group: "ask", text: "What should I do next on my concerns?", needs: "governance.read", tool: "governance.nextSteps" },
   { group: "ask", text: "When did we last test the fire alarm?", needs: "compliance.read", tool: "compliance.lastCheck" },
   { group: "ask", text: "Have I sent my timesheet?", tool: "my.timesheet" },
   { group: "ask", text: "What training is due for me?", tool: "my.training" },

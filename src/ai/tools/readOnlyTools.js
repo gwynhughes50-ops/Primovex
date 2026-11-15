@@ -16,7 +16,7 @@ import { loadSpaceRegistry } from '@/modules/sense/services/sharedSpaceRegistry'
 import { getOperationalEscalations } from '@/operations/escalations/operationalEscalationService';
 import { createReconciliationProposal } from '@/orb/GovernedActionStore';
 import { CONCERNS_COLLECTION, friendly, getDeadlineTone } from '@/modules/governance/services/concernService';
-import { SAR_COLLECTION, getSarDeadlineTone, getStatusLabel } from '@/modules/governance/services/sarService';
+import { SAR_CHECKLIST, SAR_COLLECTION, getSarDeadlineTone, getStatusLabel } from '@/modules/governance/services/sarService';
 import { normalizeStockItemCategory } from '@/services/stockService';
 import { STOCK_CATEGORIES, categoryLabel as taxonomyCategoryLabel, subcategoryLabel as taxonomySubcategoryLabel } from '@/data/stockCategories';
 import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
@@ -26,6 +26,7 @@ import { buildLocateResult, buildReorderDraft, buildTeamDraft } from '@/ai/stock
 import { needsCleaning } from '@/lib/cleaningFrequency';
 import { buildSeAnswer } from '@/ai/governance/seAnswers';
 import { signoffAnswer, signoffReply } from '@/ai/me/signoffs';
+import { concernNext, myCasesNext, sarNext } from '@/ai/governance/nextSteps';
 import { buildSeReportDraft } from '@/ai/governance/seDraft';
 import { buildAnyUseDraft } from '@/ai/stock/stockUse';
 import { buildStockInDraft } from '@/ai/stock/stockIn';
@@ -1022,6 +1023,39 @@ export function registerApprovedReadOnlyTools() {
         const reply = signoffReply({ ...data, uid, what: input.what || 'both', name: input.name || '', all: input.all !== false });
         return { domain: 'people', data: { proposed: Boolean(reply.proposal) }, summary: reply.text, proposal: reply.proposal || null, followUps: reply.followUps, confidence: reply.proposal ? 0.95 : 0.8, sources: mineSource('Sign-offs waiting for you', 'Nothing is signed off until you confirm'), actions: [{ label: 'Open Timesheet', route: '/my-timesheet' }, { label: 'Open Mileage', route: '/mileage' }] };
       });
+    },
+  });
+
+  // ---- what to do next on a concern or a SAR: written rules from where the case has got to. Read only. ----
+  registerTool({
+    id: 'governance.nextSteps', label: 'Next steps on a case', requiredCapability: 'governance.read',
+    async execute(input = {}, context = {}) {
+      const kind = input.kind === 'sar' ? 'sar' : 'concern';
+      const back = kind === 'sar' ? [{ label: 'Open SARs', route: '/governance/sars' }] : [{ label: 'Open Concerns', route: '/governance/concerns' }];
+      const stepsOf = (id) => readRows(CONCERN_STEPS_COLLECTION, [where('concernId', '==', id)]).catch(() => []);
+      try {
+        if (input.mine) {
+          const uid = context.userId || '';
+          if (!uid) return { domain: 'governance', data: null, summary: 'I need to know who is asking before I can find your cases.', confidence: 0.4, sources: [source('Governance', 'Not signed in')], actions: back };
+          const cases = await readRows(kind === 'sar' ? SAR_COLLECTION : CONCERNS_COLLECTION, [where(kind === 'sar' ? 'assignedToUid' : 'ownerUid', '==', uid)]);
+          const open = cases.filter((c) => !['closed', 'archived', 'completed'].includes(c.status)).slice(0, 8);
+          const steps = {};
+          if (kind === 'concern') await Promise.all(open.map(async (c) => { steps[c.id] = await stepsOf(c.id); }));
+          const answer = myCasesNext({ kind, cases, deadlineOf: kind === 'sar' ? (c) => getSarDeadlineTone(c) : (c) => getDeadlineTone(c), checklist: SAR_CHECKLIST, steps });
+          return { domain: 'governance', data: { count: answer.count ?? 0 }, summary: answer.text, confidence: 0.95, sources: [source(kind === 'sar' ? 'Governance SARs' : 'Governance concerns', `${cases.length} assigned to you · live read ${nowLabel()}`)], actions: back };
+        }
+        const ref = String(input.reference || '').trim().toUpperCase();
+        if (!ref) return { domain: 'governance', data: null, summary: 'Give me a reference (for example CN-2026-... or SAR-2026-...), or ask about “my concerns” or “my SARs”.', confidence: 0.5, sources: [source('Governance', 'No reference provided')], actions: back };
+        const snap = await getDocs(query(collection(db, kind === 'sar' ? SAR_COLLECTION : CONCERNS_COLLECTION), where('reference', '==', ref)));
+        const found = snap.docs[0] ? { id: snap.docs[0].id, ...snap.docs[0].data() } : null;
+        if (!found) return { domain: 'governance', data: null, summary: `I could not find ${ref}.`, confidence: 0.82, sources: [source(kind === 'sar' ? 'Governance SARs' : 'Governance concerns', `Searched by reference · live read ${nowLabel()}`)], actions: back };
+        const answer = kind === 'sar'
+          ? sarNext({ sar: found, checklist: SAR_CHECKLIST, deadline: getSarDeadlineTone(found) })
+          : concernNext({ concern: found, steps: await stepsOf(found.id), deadline: getDeadlineTone(found) });
+        return { domain: 'governance', data: { reference: ref, status: answer.status || null, done: Boolean(answer.done) }, summary: answer.text, confidence: 0.95, sources: [source(kind === 'sar' ? 'Governance SARs' : 'Governance concerns', `${ref} · live read ${nowLabel()}`)], actions: back };
+      } catch (error) {
+        return { domain: 'governance', data: null, summary: error?.code === 'permission-denied' ? "I can't open those cases with your permissions." : "I couldn't read the case just now. Try again in a moment.", confidence: 0.6, sources: [source('Governance', 'Access limited by your permissions')], actions: back };
+      }
     },
   });
 
