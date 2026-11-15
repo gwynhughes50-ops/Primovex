@@ -133,6 +133,44 @@ export function stockAlertStates(item, { categoryId, settings, now } = {}) {
   return states.map((state) => ({ state, id: stockAlertId(state, item.id) }));
 }
 
+// ---- resolving an alert ------------------------------------------------------
+// Resolving an alert says "this is being dealt with". It must not hide the item for ever: if the same item raises the same kind of alert again, it should come back.
+// So a resolution remembers what the problem looked like (the expiry date, or the stock level), and it stops applying when:
+//   - the expiry date is a different one (a new batch has come in and that has expired or is running out too),
+//   - the stock has gone up since (it was restocked; if it then runs low again, that is a new problem), or
+//   - RESOLVED_HOLD_DAYS have passed and the problem is still there.
+// Resolutions made before this was added have no details; they get the time limit, and an "expired" one also stops applying when the item's expiry date is later
+// than the day it was resolved (it expired after being resolved, so it is a different batch).
+export const RESOLVED_HOLD_DAYS = 30;
+
+const asDate = (value) => (value?.toDate ? value.toDate() : value instanceof Date ? value : value ? new Date(value) : null);
+const dayKeyOf = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+// What to save with the resolution of an alert on this item: { kind, expiry_at_resolve, stock_at_resolve }
+export function resolutionDetails(state, item) {
+  const stock = Number(item?.current_stock);
+  return {
+    kind: state,
+    expiry_at_resolve: state === "expired" || state === "soon" ? String(item?.expiry_date || "") : "",
+    stock_at_resolve: state === "out" || state === "low" ? (Number.isFinite(stock) ? stock : 0) : null,
+  };
+}
+
+// Does this resolution still hide the alert `state` on this item? (false = it has come back)
+export function resolutionApplies(resolution, state, item, now = new Date()) {
+  if (!resolution) return false;
+  const at = asDate(resolution.resolved_at);
+  if (at && !Number.isNaN(at.getTime()) && (now.getTime() - at.getTime()) / 86400000 >= RESOLVED_HOLD_DAYS) return false;
+  if (state === "expired" || state === "soon") {
+    const current = String(item?.expiry_date || "");
+    if (typeof resolution.expiry_at_resolve === "string" && resolution.expiry_at_resolve) return resolution.expiry_at_resolve === current;
+    if (state === "expired" && at && !Number.isNaN(at.getTime()) && current && current > dayKeyOf(at)) return false;
+    return true;
+  }
+  if (typeof resolution.stock_at_resolve === "number") return Number(item?.current_stock ?? 0) <= resolution.stock_at_resolve;
+  return true;
+}
+
 // Counts across a list of items. Archived items never alert. `resolved` is the
 // alert_resolutions map (id -> anything): an alert someone has marked resolved
 // is left out. `categoryOf(item)` gives the item's taxonomy category id.
@@ -142,7 +180,7 @@ export function summariseStockAlerts(items = [], { categoryOf = () => undefined,
   for (const item of items) {
     if (!item || item.archived_at) continue;
     for (const alert of stockAlertStates(item, { categoryId: categoryOf(item), settings, now })) {
-      if (resolved?.[alert.id]) continue;
+      if (resolved?.[alert.id] && resolutionApplies(resolved[alert.id], alert.state, item, now)) continue;
       alerts.push({ ...alert, itemId: item.id });
       counts[alert.state] += 1;
     }

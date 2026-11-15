@@ -168,7 +168,7 @@ export default function DesktopAlertsHost() {
           collection(db, "alert_resolutions"),
           (snap) => {
             const next = {};
-            snap.docs.forEach((d) => { next[d.id] = true; });
+            snap.docs.forEach((d) => { next[d.id] = d.data(); });
             rows.current.resolved = next;
             evaluateRef.current();
           },

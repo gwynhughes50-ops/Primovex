@@ -33,8 +33,11 @@ import { normalizeStockItemCategory } from "@/services/stockService";
 import {
   DEFAULT_CATEGORY_THRESHOLDS,
   DEFAULT_EXPIRY_SOON_DAYS,
+  RESOLVED_HOLD_DAYS,
   daysUntilExpiry,
   expiryStatus,
+  resolutionApplies,
+  resolutionDetails,
   stockAlertId,
   stockLevelStatus,
 } from "@/lib/stockAlerts";
@@ -71,6 +74,11 @@ const DEFAULT_TEMP_RANGES = {
 };
 
 /* -------------------- helpers -------------------- */
+
+// What to tell a person when a read or a save fails: plain words, never the database's own message
+const isPermission = (err) => /permission|insufficient/i.test(String(err?.code || err?.message || err || ""));
+const loadProblem = (message) => (isPermission(message) ? "You don't have permission to see this." : "It couldn't be loaded just now.");
+const saveProblem = (err) => (isPermission(err) ? "You don't have permission to do that." : "Please try again in a moment.");
 
 function firstDefined(obj, keys) {
   for (const k of keys) {
@@ -181,6 +189,7 @@ export default function Alerts() {
   const [tempLogs, setTempLogs] = useState([]);
   const [loadError, setLoadError] = useState("");
   const [tempError, setTempError] = useState("");
+  const [notice, setNotice] = useState("");
 
   // Resolved alerts map: { [alertId]: { resolved_at, resolved_by } }
   const [resolvedMap, setResolvedMap] = useState({});
@@ -303,11 +312,11 @@ export default function Alerts() {
 
   async function savePracticeSettings() {
     if (!authUser) {
-      alert("You must be signed in.");
+      setNotice("Sign in to change the settings.");
       return;
     }
     if (!isAdmin) {
-      alert("Only System Admin can change practice-wide settings.");
+      setNotice("Only an administrator can change the practice's alert settings.");
       return;
     }
 
@@ -327,7 +336,7 @@ export default function Alerts() {
       setSettingsOpen(false);
     } catch (err) {
       console.error("Save settings failed:", err);
-      alert(`Could not save settings (check Firestore rules): ${String(err?.message || err)}`);
+      setNotice(`The settings couldn't be saved. ${saveProblem(err)}`);
     } finally {
       setSavingSettings(false);
     }
@@ -439,6 +448,8 @@ export default function Alerts() {
           list.push({
             id: stockAlertId("expired", item.id),
             source: "stock",
+            state: "expired",
+            item,
             type: "expired",
             severity: "critical",
             title: `${name} expired`,
@@ -452,6 +463,8 @@ export default function Alerts() {
           list.push({
             id: stockAlertId("soon", item.id),
             source: "stock",
+            state: "soon",
+            item,
             type: "expiring",
             severity: "warning",
             title: `${name} expiring soon`,
@@ -469,6 +482,8 @@ export default function Alerts() {
           list.push({
             id: stockAlertId("out", item.id),
             source: "stock",
+            state: "out",
+            item,
             type: "low_stock",
             severity: "critical",
             title: `${name} out of stock`,
@@ -481,6 +496,8 @@ export default function Alerts() {
           list.push({
             id: stockAlertId("low", item.id),
             source: "stock",
+            state: "low",
+            item,
             type: "low_stock",
             severity: "warning",
             title: `${name} low stock`,
@@ -550,14 +567,29 @@ export default function Alerts() {
     return list;
   }, [stockItems, tempLogs, globalExpirySoonDays, categoryThresholds]);
 
+  // A resolved alert hides the problem only while it is the same problem (see resolutionApplies in src/lib/stockAlerts.js); once the expiry date has changed, the
+  // item was restocked or the hold period has passed, it comes back, marked "Back again".
   const activeAlerts = useMemo(() => {
-    return generatedAlerts.filter((a) => !resolvedMap?.[a.id]);
+    const now = new Date();
+    return generatedAlerts
+      .map((a) => {
+        const made = resolvedMap?.[a.id];
+        if (!made) return a;
+        return a.source === "stock" && !resolutionApplies(made, a.state, a.item, now) ? { ...a, backAgain: true } : null;
+      })
+      .filter(Boolean);
   }, [generatedAlerts, resolvedMap]);
 
   const resolvedAlerts = useMemo(() => {
-    const entries = Object.entries(resolvedMap || {}).map(([id, meta]) => ({ id, meta }));
-    const byId = new Map(generatedAlerts.map((a) => [a.id, a]));
     const now = new Date();
+    const byId = new Map(generatedAlerts.map((a) => [a.id, a]));
+    // one that has come back is active again, so it is not listed as resolved
+    const entries = Object.entries(resolvedMap || {})
+      .map(([id, meta]) => ({ id, meta }))
+      .filter(({ id, meta }) => {
+        const gen = byId.get(id);
+        return !(gen && gen.source === "stock" && !resolutionApplies(meta, gen.state, gen.item, now));
+      });
 
     const rows = entries.map(({ id, meta }) => {
       const gen = byId.get(id);
@@ -596,36 +628,40 @@ export default function Alerts() {
     };
   }, [activeAlerts, resolvedAlerts]);
 
-  async function resolveAlert(alertId) {
+  // Saves what the problem looked like (the expiry date or the stock level) with the resolution, so it can come back if it changes
+  async function resolveAlert(alertItem) {
     if (!authUser) {
-      alert("You must be signed in to resolve alerts.");
+      setNotice("Sign in to resolve an alert.");
       return;
     }
+    setNotice("");
     try {
-      await setDoc(doc(db, RESOLUTIONS_COL, alertId), {
+      await setDoc(doc(db, RESOLUTIONS_COL, alertItem.id), {
         resolved_at: serverTimestamp(),
         resolved_by: resolvedByLabel,
+        ...(alertItem.source === "stock" ? resolutionDetails(alertItem.state, alertItem.item) : { kind: "temperature" }),
       });
     } catch (err) {
       console.error("Resolve alert failed:", err);
-      alert(`Could not resolve alert (check Firestore rules): ${String(err?.message || err)}`);
+      setNotice(`That alert couldn't be resolved. ${saveProblem(err)}`);
     }
   }
 
   async function unresolveAlert(alertId) {
     if (!authUser) {
-      alert("You must be signed in.");
+      setNotice("Sign in to do that.");
       return;
     }
     if (!isAdmin) {
-      alert("Only System Admin can unresolve alerts.");
+      setNotice("Only an administrator can un-resolve an alert.");
       return;
     }
+    setNotice("");
     try {
       await deleteDoc(doc(db, RESOLUTIONS_COL, alertId));
     } catch (err) {
       console.error("Unresolve failed:", err);
-      alert(`Could not unresolve alert (check Firestore rules): ${String(err?.message || err)}`);
+      setNotice(`That alert couldn't be un-resolved. ${saveProblem(err)}`);
     }
   }
 
@@ -663,11 +699,11 @@ export default function Alerts() {
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="font-semibold text-slate-50">{alert.title}</p>
-              <p className="mt-1 text-xs leading-relaxed text-slate-100/80">{alert.message}</p>
-              <p className="mt-2 text-[11px] uppercase tracking-wide text-slate-300/70">
-                Source <span className="text-slate-200">{alert.source}</span>
+              <p className="font-semibold text-slate-50">
+                {alert.title}
+                {alert.backAgain ? <span className="ml-2 rounded-full border border-white/15 bg-slate-950/40 px-2 py-0.5 align-middle text-[11px] font-medium text-slate-200">Back again</span> : null}
               </p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-100/80">{alert.message}</p>
             </div>
             {resolved ? (
               <Button
@@ -682,7 +718,7 @@ export default function Alerts() {
               <Button
                 variant="outline"
                 className="rounded-full border-white/10 bg-slate-900/30 text-xs text-slate-200 hover:bg-slate-900/50"
-                onClick={() => resolveAlert(alert.id)}
+                onClick={() => resolveAlert(alert)}
                 disabled={!authUser}
               >
                 Resolve
@@ -709,15 +745,6 @@ export default function Alerts() {
               <p className="mt-1 max-w-3xl text-sm text-slate-400">
                 Stock and temperature alerts, what has been resolved, and the practice's alert settings.
               </p>
-              <div className="mt-2">
-                <span className="mt-pill-muted inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium">
-                  {authLoading
-                    ? "Checking sign-in…"
-                    : authUser
-                      ? `Signed in as ${resolvedByLabel}${isAdmin ? " • System Admin" : ""}`
-                      : "Not signed in"}
-                </span>
-              </div>
             </div>
           </div>
 
@@ -737,9 +764,18 @@ export default function Alerts() {
       {(loadError || tempError || settingsError) && (
         <Card className="border-rose-500/30 bg-rose-500/10 p-4">
           <div className="space-y-1 text-sm text-rose-100">
-            {loadError ? <div>Stock error: <span className="font-semibold text-rose-50">{loadError}</span></div> : null}
-            {tempError ? <div>Temperature error: <span className="font-semibold text-rose-50">{tempError}</span></div> : null}
-            {settingsError ? <div>Settings error: <span className="font-semibold text-rose-50">{settingsError}</span></div> : null}
+            {loadError ? <div>Stock alerts: <span className="font-semibold text-rose-50">{loadProblem(loadError)}</span></div> : null}
+            {tempError ? <div>Temperature alerts: <span className="font-semibold text-rose-50">{loadProblem(tempError)}</span></div> : null}
+            {settingsError ? <div>Alert settings: <span className="font-semibold text-rose-50">{loadProblem(settingsError)}</span></div> : null}
+          </div>
+        </Card>
+      )}
+
+      {notice && (
+        <Card className="border-amber-400/30 bg-amber-500/10 p-4" role="status">
+          <div className="flex items-start justify-between gap-3 text-sm text-amber-50">
+            <span>{notice}</span>
+            <button type="button" className="text-xs font-semibold underline" onClick={() => setNotice("")}>Dismiss</button>
           </div>
         </Card>
       )}
@@ -753,12 +789,9 @@ export default function Alerts() {
             <div>
               <p className="text-sm font-semibold">{intelligence.statusLabel}</p>
               <p className="text-xs opacity-80">
-                MedAI risk scan: {intelligence.riskScore}/100 • {counts.total} active operational item{counts.total === 1 ? "" : "s"}
+                {counts.total === 0 ? "No active alerts" : `${counts.total} active alert${counts.total === 1 ? "" : "s"}${counts.critical ? `, ${counts.critical} critical` : ""}`}
               </p>
             </div>
-          </div>
-          <div className="rounded-full bg-slate-950/25 px-3 py-1 text-xs font-semibold">
-            Updated live from Firestore
           </div>
         </div>
       </section>
@@ -821,9 +854,8 @@ export default function Alerts() {
                   Alert settings
                 </div>
                 <div className="text-xs text-slate-400 mt-1">
-                  These settings are stored <span className="text-slate-200">practice-wide</span> in Firestore (
-                  <span className="text-slate-200">settings/alerts</span>).
-                  {!isAdmin ? " (View only — admin required to edit.)" : ""}
+                  These settings apply to the whole practice.
+                  {!isAdmin ? " You can look, but only an administrator can change them." : ""}
                 </div>
               </div>
               <Button
@@ -942,7 +974,7 @@ export default function Alerts() {
               <Card className="p-4 border-slate-700/40 bg-slate-950/40">
                 <div className="text-sm font-semibold text-slate-50">Resolved alerts</div>
                 <div className="text-xs text-slate-400 mt-1">
-                  Practice-wide. Admin status is read from <span className="text-slate-200">users/{`{uid}`}</span>.
+                  Anyone who can change stock or temperatures can resolve an alert; only an administrator can un-resolve one. A resolved alert comes back after {RESOLVED_HOLD_DAYS} days if the problem is still there, and sooner if the item gets a different expiry date, or is restocked and later runs low again.
                 </div>
               </Card>
             </div>
