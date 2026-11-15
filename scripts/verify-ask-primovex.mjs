@@ -31,7 +31,7 @@ t("each person is only offered what their role can use, up to three in a group, 
   const nobody = startersFor({ can: () => false });
   assert.deepEqual(nobody.map((g) => g.key), ["ask", "do"], "no Go examples without a page they can open");
   assert.ok(nobody.every((g) => g.items.every((s) => !s.needs)));
-  assert.ok(nobody.find((g) => g.key === "do").items.every((s) => ["reminder.draft", "person.messageDraft", "my.timesheetDraft", "my.mileageDraft"].includes(s.tool)), "only what anyone can do: a reminder, a message, their own timesheet and mileage");
+  assert.ok(nobody.find((g) => g.key === "do").items.every((s) => ["reminder.draft", "person.messageDraft", "my.timesheetDraft", "my.mileageDraft", "my.overtimeDraft"].includes(s.tool)), "only what anyone can do: a reminder, a message, their own timesheet and mileage");
   const stock = startersFor({ can: canOf("inventory.read", "inventory.write", "temperature.read") });
   assert.ok(stock.every((g) => g.items.length <= 3));
   assert.ok(stock.find((g) => g.key === "do").items.some((s) => s.tool === "stock.inDraft"));

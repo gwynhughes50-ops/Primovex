@@ -28,6 +28,7 @@ import { buildSeAnswer } from '@/ai/governance/seAnswers';
 import { signoffAnswer, signoffReply } from '@/ai/me/signoffs';
 import { concernNext, myCasesNext, sarNext } from '@/ai/governance/nextSteps';
 import { describeAbilities } from '@/ai/capabilities';
+import { overtimeReply } from '@/ai/me/overtime';
 import { certificatesAnswer, coshhAnswer, laptopsAnswer, trainingOverdueAnswer, wasteAnswer } from '@/ai/compliance/extras';
 import { normaliseCertificate } from '@/modules/certificates/certificates';
 import { normaliseSubstance } from '@/modules/coshh/coshh';
@@ -944,6 +945,17 @@ export function registerApprovedReadOnlyTools() {
         const [staff, periods, sheets] = await Promise.all([readRows('timesheet_staff', [where('uid', '==', uid)]), readRows('timesheet_periods'), readRows('timesheets', [where('uid', '==', uid)])]);
         const reply = timesheetSendReply({ periods, sheets, me: staff[0] || null, uid });
         return { domain: 'people', data: { proposed: Boolean(reply.proposal) }, summary: reply.text, proposal: reply.proposal || null, confidence: reply.proposal ? 0.95 : 0.8, sources: mineSource('Your timesheet', 'Nothing is sent until you confirm'), actions: [{ label: 'Open Timesheet', route: '/my-timesheet' }] };
+      });
+    },
+  });
+
+  registerTool({
+    id: 'my.overtimeDraft', label: 'Add overtime to my timesheet',
+    async execute(input = {}, context = {}) {
+      return mineOnly(context, async (uid) => {
+        const [staff, periods, sheets] = await Promise.all([readRows('timesheet_staff', [where('uid', '==', uid)]), readRows('timesheet_periods'), readRows('timesheets', [where('uid', '==', uid)])]);
+        const reply = overtimeReply({ question: input.question, periods, sheets, me: staff[0] || null, uid });
+        return { domain: 'people', data: { proposed: Boolean(reply.proposal), pending: reply.pending || null }, summary: reply.text, proposal: reply.proposal || null, followUps: reply.followUps, confidence: reply.proposal ? 0.95 : 0.85, sources: mineSource('Your timesheet', 'Nothing is added until you confirm'), actions: [{ label: 'Open Timesheet', route: '/my-timesheet' }] };
       });
     },
   });

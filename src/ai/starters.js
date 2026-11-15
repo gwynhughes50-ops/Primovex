@@ -41,6 +41,7 @@ export const STARTERS = [
   { group: "do", text: "Count the gloves, I have 12", needs: "inventory.write", tool: "stock.countDraft" },
   { group: "do", text: "Swap my Friday shift", onRota: true, tool: "rota.swapDraft" },
   { group: "do", text: "Send my timesheet", tool: "my.timesheetDraft" },
+  { group: "do", text: "I did 2 hours overtime yesterday", tool: "my.overtimeDraft" },
   { group: "do", text: "I drove from Main Surgery to District Hospital and back yesterday", tool: "my.mileageDraft" },
   { group: "do", text: "Sign off the timesheets", needs: "timesheets.manage", tool: "signoff.draft" },
   { group: "do", text: "Remind me on Monday to ring the pharmacy", tool: "reminder.draft" },

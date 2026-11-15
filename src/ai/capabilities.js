@@ -13,10 +13,10 @@ export const ASSISTANT = "Ask Primovex";
 export const AREAS = [
   {
     id: "mine", title: "Your own admin", needs: [],
-    short: "timesheet, mileage, annual leave and your training",
-    line: "see whether your timesheet has gone, send it, claim mileage for a journey, check your annual leave and what training is due",
+    short: "timesheet and overtime, mileage, annual leave, your training",
+    line: "see whether your timesheet has gone, send it, record overtime on it, claim mileage for a journey, check your annual leave and what training is due",
     keywords: ["timesheet", "timesheets", "mileage", "leave", "holiday", "training", "expenses", "my admin"],
-    examples: [{ text: "Have I sent my timesheet?", tool: "my.timesheet" }, { text: "What training is due for me?", tool: "my.training" }, { text: "How much annual leave do I have?", tool: "my.leave" }],
+    examples: [{ text: "Have I sent my timesheet?", tool: "my.timesheet" }, { text: "What training is due for me?", tool: "my.training" }, { text: "How much annual leave do I have?", tool: "my.leave" }, { text: "I did 2 hours overtime yesterday", tool: "my.overtimeDraft" }],
   },
   {
     id: "rota", title: "Your shifts", needs: [], note: "if you are on the reception rota",

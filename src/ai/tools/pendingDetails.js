@@ -1,5 +1,6 @@
 import { looksLikeInDetails, mergeInSentence } from "@/ai/stock/stockIn";
 import { looksLikeCountItems, mergeCountSentence } from "@/ai/stock/stockCount";
+import { acceptsOvertimeAnswer, mergeOvertimeAnswer } from "@/ai/me/overtime";
 
 // Some requests need a second answer ("what's the batch number and expiry date?"). The tool says so by
 // returning data.pending = { toolId, sentence }, which the message keeps. If the next thing said looks like
@@ -10,6 +11,8 @@ const HANDLERS = {
   "stock.inDraft": { accepts: looksLikeInDetails, merge: mergeInSentence },
   // a count keeps its card on screen while more items are added; each answer rebuilds the card
   "stock.countDraft": { accepts: looksLikeCountItems, merge: mergeCountSentence, keepsCard: true },
+  // overtime asks one short question at a time (how much, which day, which rate, approved, why not); `pending.asking` says which one it is waiting for
+  "my.overtimeDraft": { accepts: acceptsOvertimeAnswer, merge: mergeOvertimeAnswer },
 };
 
 export function routePendingDetails(prompt, conversation = []) {
@@ -17,6 +20,6 @@ export function routePendingDetails(prompt, conversation = []) {
   const pending = last?.pending;
   const handler = pending && HANDLERS[pending.toolId];
   if (!handler || (last.proposal && !(handler.keepsCard && last.proposal.status === "proposed"))) return null;
-  if (!handler.accepts(prompt)) return null;
-  return { toolId: pending.toolId, input: { question: handler.merge(pending.sentence, prompt) } };
+  if (!handler.accepts(prompt, pending)) return null;
+  return { toolId: pending.toolId, input: { question: handler.merge(pending.sentence, prompt, pending) } };
 }

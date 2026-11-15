@@ -6,10 +6,11 @@ import { reportEvent } from "@/modules/governance/services/seService";
 import { addQuickNote } from "@/services/quickNotesService";
 import { askRota } from "@/modules/rota/rotaTeamService";
 import { decideTimesheet, sendTimesheet } from "@/modules/timesheets/timesheetFlowService";
-import { STATE } from "@/modules/timesheets/timesheet";
+import { STATE, needsStaff, timesheetId } from "@/modules/timesheets/timesheet";
 import { decideClaim, submitClaim } from "@/modules/mileage/mileageService";
 import { STATUS as CLAIM } from "@/modules/mileage/mileage";
 import { decisionSummary, runDecisions } from "@/ai/me/signoffs";
+import { withOvertimeLine } from "@/ai/me/overtime";
 
 // What actually happens when a person presses Confirm on an Orb proposal. Each executor takes the
 // proposal's own params (fixed when the proposal was prepared, never anything typed afterwards),
@@ -57,6 +58,19 @@ const EXECUTORS = {
   "mileage-claim": async (params, { actor }) => {
     await submitClaim(params.form, { me: params.me, uid: params.me.uid, options: params.options, actor });
     return "Claim sent to your line manager for approval. You can follow it on the Mileage page.";
+  },
+
+  // One overtime line added to the person's own timesheet as a DRAFT. The timesheet is read again first, so a line is never added to one that has been sent since, and
+  // the same line is never added twice. Nothing goes to the line manager: they open Timesheet and press Send.
+  "timesheet-overtime": async (params, { actor }) => {
+    if (!params.me?.uid || params.me.uid !== actor?.uid) throw new Error("That card was prepared for someone else.");
+    const snap = await getDoc(doc(db, "timesheets", timesheetId(params.period.id, params.me.id)));
+    const existing = snap.exists() ? { id: snap.id, ...snap.data() } : null;
+    if (existing && !needsStaff(existing.state)) throw new Error("Your timesheet for this pay period has already been sent, so nothing was added.");
+    const merged = withOvertimeLine(existing?.lines || [], params.line);
+    if (!merged.added) return "That overtime is already on your timesheet, so I did not add it again.";
+    await sendTimesheet({ period: params.period, me: params.me, uid: params.me.uid, actor, existing, kind: "changes", lines: merged.lines, send: false });
+    return "Added to your timesheet as a draft. Open Timesheet to check it, and press Send when you are ready.";
   },
 
   // A line manager signs off timesheets from the card. Each one is read again first, so one that was taken back since is left alone; the write is under their own account.

@@ -19,6 +19,7 @@ import { parseMyCounts, parseMyShifts, parseSwap, parseWhoIsOn } from '@/ai/rota
 import { looksLikeExplainPage } from '@/ai/pageGuide';
 import { parseMyAdmin } from '@/ai/me/myAdmin';
 import { parseSignoff } from '@/ai/me/signoffs';
+import { parseOvertimeAsk } from '@/ai/me/overtime';
 import { parseNextSteps } from '@/ai/governance/nextSteps';
 import { parseIntro } from '@/ai/capabilities';
 import { parseExtras } from '@/ai/compliance/extras';
@@ -126,6 +127,8 @@ export function routeApprovedTool(prompt, options = {}) {
   if (extrasAsk) return { ...extrasAsk, language: { normalised: text, confidence: 0.95 } };
   const nextStepsAsk = parseNextSteps(prompt);
   if (nextStepsAsk) return { ...nextStepsAsk, language: { normalised: text, confidence: 0.95 } };
+  const overtimeAsk = parseOvertimeAsk(prompt);
+  if (overtimeAsk) return { ...overtimeAsk, language: { normalised: text, confidence: 0.95 } };
   const signoffAsk = parseSignoff(prompt);
   if (signoffAsk) return { ...signoffAsk, language: { normalised: text, confidence: 0.95 } };
   const myAdminAsk = parseMyAdmin(prompt);

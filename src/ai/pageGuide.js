@@ -84,7 +84,7 @@ export const PAGE_GUIDE = [
   {
     path: "/my-timesheet", title: "Timesheet",
     about: "Send your hours for each pay period. If you manage people, you sign off theirs here too.",
-    can: ["Send your timesheet to your line manager", "If you manage people, sign off theirs under To sign off"],
+    can: ["Send your timesheet to your line manager", "Record overtime or anything else that was different, on the day it happened (you can also tell Ask Primovex: \"I did 2 hours overtime yesterday\")", "If you manage people, sign off theirs under To sign off"],
     asks: [{ text: "Have I sent my timesheet?" }, { text: "What is waiting for me to sign off?" }], tries: [{ text: "Send my timesheet" }], help: ["send-timesheet", "sign-off-timesheets"],
   },
   { path: "/mileage", title: "Mileage", about: "Claim for work journeys, and approve your team's.", can: ["Add a journey from the places and routes saved", "If you manage people, approve their claims under To approve"], asks: [{ text: "How much mileage have I claimed?" }, { text: "Any mileage claims to approve?" }], tries: [{ text: "I drove from Main Surgery to District Hospital and back yesterday" }], help: ["claim-mileage", "approve-mileage"] },
