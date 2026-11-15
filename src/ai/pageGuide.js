@@ -55,7 +55,7 @@ export const PAGE_GUIDE = [
     path: "/governance/sars", title: "SARs",
     about: "Subject access requests. Each has a due date, an owner and a checklist, and a patient is identified by EMIS number, date of birth and initials only.",
     can: ["Record a new SAR and assign it", "Open one to see its checklist, its activity and how long is left", "Press the bell to remind the person it is assigned to (the Practice Manager and their line manager)"],
-    asks: [{ text: "How many SARs are outstanding?", needs: "governance.read" }, { text: "What do I need to do on my SARs?", needs: "governance.read" }], help: ["new-sar", "sar-reminder-bell"],
+    asks: [{ text: "How many SARs are outstanding?", needs: "governance.read" }, { text: "What do I need to do on my SARs?", needs: "governance.read" }, { text: "Which SAR is the most urgent?", needs: "governance.read" }], help: ["new-sar", "sar-reminder-bell"],
   },
   {
     path: "/sars-to-chase", title: "SARs to chase",
@@ -67,7 +67,7 @@ export const PAGE_GUIDE = [
     path: "/governance/concerns", title: "Concerns",
     about: "Complaints and concerns from first contact to closing, with each deadline and step along the way.",
     can: ["Record a new concern", "Update a case and record what has been done", "Close a case once it is finished"],
-    asks: [{ text: "Where are we up to with concerns?", needs: "governance.read" }, { text: "What should I do next on my concerns?", needs: "governance.read" }], help: ["new-concern", "update-concern-case", "close-concern-case"],
+    asks: [{ text: "Where are we up to with concerns?", needs: "governance.read" }, { text: "What should I do next on my concerns?", needs: "governance.read" }, { text: "Which concern is the most urgent?", needs: "governance.read" }], help: ["new-concern", "update-concern-case", "close-concern-case"],
   },
   {
     path: "/governance/significant-events", title: "Significant events",

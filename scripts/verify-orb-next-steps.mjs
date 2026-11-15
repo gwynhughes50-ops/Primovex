@@ -107,4 +107,47 @@ t("my cases: most urgent first, only open ones, one line each with the first ste
   assert.match(myCasesNext({ kind: "concern", cases: [] }).text, /no open concerns/);
 });
 
+t("asking which is most urgent looks at the whole practice, not only your own", () => {
+  const p = (q) => parseNextSteps(q);
+  assert.deepEqual(p("which concern is the most urgent").input, { kind: "concern", reference: "", mine: false, practice: true });
+  assert.deepEqual(p("what should I deal with first on the SARs").input, { kind: "sar", reference: "", mine: false, practice: true });
+  assert.equal(p("which complaints are closest to their deadline").input.practice, true);
+  assert.equal(p("what's most urgent in stock"), null);
+});
+
+const concern = (reference, extra = {}) => ({ id: reference, reference, status: "listening", ownerUid: "u1", ownerName: "Gwyn", acknowledgedAt: "x", listeningDiscussionOfferedAt: null, ...extra });
+const days = { "CN-A": 18, "CN-B": 13, "CN-C": 5 };
+const dl = (c) => ({ label: `${days[c.reference]} days to final response`, status: days[c.reference] <= 7 ? "info" : "success" });
+const keyOf = (c) => days[c.reference];
+
+t("your own list says when someone else holds a closer deadline, and that some of yours are closed", () => {
+  const a = myCasesNext({ kind: "concern", cases: [concern("CN-A"), concern("CN-X", { status: "closed" })], deadlineOf: dl, keyOf, ownerOf: (c) => c.ownerName, others: [concern("CN-B", { ownerName: "Sam Lee" }), concern("CN-C", { ownerName: "Ann Evans" })], closed: 1 });
+  assert.match(a.text, /^1 open concern is yours, most urgent first:\n• CN-A \(18 days to final response\)/);
+  assert.match(a.text, /1 other concern of yours is already closed\./);
+  assert.match(a.text, /More urgent across the practice, but not yours:\n• CN-C \(5 days to final response\), owned by Ann Evans\n• CN-B \(13 days to final response\), owned by Sam Lee/);
+  assert.equal(a.count, 1);
+});
+
+t("with nothing of yours open, the closest deadlines in the practice are still named", () => {
+  const a = myCasesNext({ kind: "concern", cases: [], deadlineOf: dl, keyOf, ownerOf: (c) => c.ownerName, others: [concern("CN-B", { ownerName: "Sam Lee" })], closed: 0 });
+  assert.match(a.text, /^You have no open concerns to deal with\./);
+  assert.match(a.text, /Closest to a deadline across the practice, but not yours:\n• CN-B \(13 days to final response\), owned by Sam Lee/);
+  assert.match(a.text, /Ask “which concerns are most urgent”/);
+});
+
+t("nobody else is named when none of their cases is closer than yours", () => {
+  const a = myCasesNext({ kind: "concern", cases: [concern("CN-C")], deadlineOf: dl, keyOf, ownerOf: (c) => c.ownerName, others: [concern("CN-A", { ownerName: "Sam Lee" })] });
+  assert.doesNotMatch(a.text, /across the practice/);
+});
+
+t("the practice list shows who has each case, most urgent first, and leaves out closed ones", () => {
+  const a = myCasesNext({ kind: "concern", scope: "practice", cases: [concern("CN-A", { ownerName: "Gwyn" }), concern("CN-B", { ownerName: "Sam Lee" }), concern("CN-C", { ownerName: "Ann Evans", status: "closed" })], deadlineOf: dl, keyOf, ownerOf: (c) => c.ownerName });
+  const lines = a.text.split("\n").filter((l) => l.startsWith("•"));
+  assert.equal(a.count, 2);
+  assert.match(a.text, /^2 open concerns across the practice, most urgent first:/);
+  assert.match(lines[0], /CN-B \(13 days to final response\), owned by Sam Lee/);
+  assert.match(lines[1], /CN-A .*owned by Gwyn/);
+  assert.equal(myCasesNext({ kind: "sar", scope: "practice", cases: [] }).text, "There are no open SARs.");
+});
+
 console.log(`\n${n} tests passed`);

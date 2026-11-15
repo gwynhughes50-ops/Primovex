@@ -15,8 +15,8 @@ import { getLatestCheck, listActiveSites, listAnaphylaxisBoxes, listEmergencyAss
 import { loadSpaceRegistry } from '@/modules/sense/services/sharedSpaceRegistry';
 import { getOperationalEscalations } from '@/operations/escalations/operationalEscalationService';
 import { createReconciliationProposal } from '@/orb/GovernedActionStore';
-import { CONCERNS_COLLECTION, friendly, getDeadlineTone } from '@/modules/governance/services/concernService';
-import { SAR_CHECKLIST, SAR_COLLECTION, getSarDeadlineTone, getStatusLabel } from '@/modules/governance/services/sarService';
+import { CONCERNS_COLLECTION, daysUntilDate as concernDaysUntil, friendly, getDeadlineTone } from '@/modules/governance/services/concernService';
+import { SAR_CHECKLIST, SAR_COLLECTION, daysUntilDate as sarDaysUntil, getSarDeadlineTone, getStatusLabel } from '@/modules/governance/services/sarService';
 import { normalizeStockItemCategory } from '@/services/stockService';
 import { STOCK_CATEGORIES, categoryLabel as taxonomyCategoryLabel, subcategoryLabel as taxonomySubcategoryLabel } from '@/data/stockCategories';
 import { orbKnowledgeStore } from '@/orb/OrbKnowledgeStore';
@@ -1038,15 +1038,36 @@ export function registerApprovedReadOnlyTools() {
       const back = kind === 'sar' ? [{ label: 'Open SARs', route: '/governance/sars' }] : [{ label: 'Open Concerns', route: '/governance/concerns' }];
       const stepsOf = (id) => readRows(CONCERN_STEPS_COLLECTION, [where('concernId', '==', id)]).catch(() => []);
       try {
-        if (input.mine) {
+        if (input.mine || input.practice) {
           const uid = context.userId || '';
-          if (!uid) return { domain: 'governance', data: null, summary: 'I need to know who is asking before I can find your cases.', confidence: 0.4, sources: [source('Governance', 'Not signed in')], actions: back };
-          const cases = await readRows(kind === 'sar' ? SAR_COLLECTION : CONCERNS_COLLECTION, [where(kind === 'sar' ? 'assignedToUid' : 'ownerUid', '==', uid)]);
-          const open = cases.filter((c) => !['closed', 'archived', 'completed'].includes(c.status)).slice(0, 8);
+          if (input.mine && !uid) return { domain: 'governance', data: null, summary: 'I need to know who is asking before I can find your cases.', confidence: 0.4, sources: [source('Governance', 'Not signed in')], actions: back };
+          const collectionName = kind === 'sar' ? SAR_COLLECTION : CONCERNS_COLLECTION;
+          const isOpen = (c) => !['closed', 'archived', 'completed'].includes(c.status);
+          const deadlineOf = kind === 'sar' ? (c) => getSarDeadlineTone(c) : (c) => getDeadlineTone(c);
+          // a number that sorts the most urgent first: how bad the deadline is, then how many days are left
+          const toneRank = { critical: 0, high: 1, warning: 2, info: 3 };
+          const keyOf = (c) => (toneRank[deadlineOf(c)?.status] ?? 4) * 10000 + ((kind === 'sar' ? sarDaysUntil(c.dueDate || c.due_date) : concernDaysUntil(c.finalResponseDueAt)) ?? 9999);
+          const ownerOf = (c) => (kind === 'sar' ? c.assignedToName : c.ownerName) || '';
+          const everything = await readRows(collectionName).catch(() => []);
+          // yours: the ones you own or are assigned, and for a concern the ones you are named on; all of them when you ask about the practice
+          let mine = [];
+          if (input.mine) {
+            const owned = await readRows(collectionName, [where(kind === 'sar' ? 'assignedToUid' : 'ownerUid', '==', uid)]);
+            const named = kind === 'concern' ? await readRows(collectionName, [where('involvedUserIds', 'array-contains', uid)]).catch(() => []) : [];
+            mine = [...new Map([...owned, ...named].map((c) => [c.id, c])).values()];
+          }
+          const cases = input.mine ? mine : everything;
+          const openCases = cases.filter(isOpen);
+          const shownIds = new Set(openCases.sort((a, b) => keyOf(a) - keyOf(b)).slice(0, 8).map((c) => c.id));
           const steps = {};
-          if (kind === 'concern') await Promise.all(open.map(async (c) => { steps[c.id] = await stepsOf(c.id); }));
-          const answer = myCasesNext({ kind, cases, deadlineOf: kind === 'sar' ? (c) => getSarDeadlineTone(c) : (c) => getDeadlineTone(c), checklist: SAR_CHECKLIST, steps });
-          return { domain: 'governance', data: { count: answer.count ?? 0 }, summary: answer.text, confidence: 0.95, sources: [source(kind === 'sar' ? 'Governance SARs' : 'Governance concerns', `${cases.length} assigned to you · live read ${nowLabel()}`)], actions: back };
+          if (kind === 'concern') await Promise.all(openCases.filter((c) => shownIds.has(c.id)).map(async (c) => { steps[c.id] = await stepsOf(c.id); }));
+          const mineIds = new Set(mine.map((c) => c.id));
+          const answer = myCasesNext({
+            kind, cases, deadlineOf, checklist: SAR_CHECKLIST, steps, keyOf, ownerOf, scope: input.mine ? 'mine' : 'practice',
+            others: input.mine ? everything.filter((c) => !mineIds.has(c.id)) : [], closed: input.mine ? cases.filter((c) => !isOpen(c)).length : 0,
+          });
+          const noun = kind === 'sar' ? 'SAR' : 'concern';
+          return { domain: 'governance', data: { count: answer.count ?? 0 }, summary: answer.text, confidence: 0.95, sources: [source(kind === 'sar' ? 'Governance SARs' : 'Governance concerns', `${input.mine ? `${openCases.length} open ${noun}${openCases.length === 1 ? '' : 's'} yours` : `${openCases.length} open ${noun}${openCases.length === 1 ? '' : 's'} in the practice`} · live read ${nowLabel()}`)], actions: back };
         }
         const ref = String(input.reference || '').trim().toUpperCase();
         if (!ref) return { domain: 'governance', data: null, summary: 'Give me a reference (for example CN-2026-... or SAR-2026-...), or ask about “my concerns” or “my SARs”.', confidence: 0.5, sources: [source('Governance', 'No reference provided')], actions: back };

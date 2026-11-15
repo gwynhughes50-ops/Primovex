@@ -22,6 +22,10 @@ export function parseNextSteps(prompt) {
   const t = clean(prompt);
   if (!t) return null;
   if (/\bhow\s+(?:do|to|can|should)\b|\bwhere\s+do\s+i\b/.test(t)) return null;
+  // "which concern is the most urgent?", "what should I deal with first on the SARs?": the whole practice, closest deadline first
+  const urgent = /\b(?:most\s+urgent|more\s+urgent|closest\s+to\s+(?:the\s+|its\s+|their\s+)?deadline|nearest\s+(?:the\s+)?deadline|deal\s+with\s+first|prioriti[sz]e|top\s+priority|needs?\s+dealing\s+with\s+first)\b/.test(t);
+  const caseKind = /\bsars?\b|\bsubject\s+access\b/.test(t) ? "sar" : /\b(?:concerns?|complaints?)\b/.test(t) ? "concern" : "";
+  if (urgent && caseKind && !/\b(?:cn|sar)-\d{4}-\d+\b/i.test(t)) return { toolId: "governance.nextSteps", input: { kind: caseKind, reference: "", mine: false, practice: true } };
   const asking = /\b(?:what(?:'s|\s+is|\s+do\s+i|\s+should\s+i|\s+needs?)|next\s+steps?|next\s+action|what\s+now|where\s+(?:are\s+we|am\s+i)\s+up\s+to|what\s+is\s+left|left\s+to\s+do|to\s+do)\b/.test(t) && /\b(?:next|do|left|todo|to\s+do|needs\s+doing|up\s+to)\b/.test(t);
   if (!asking) return null;
   const ref = /\b(cn|sar)-\d{4}-\d+\b/i.exec(t);
@@ -87,17 +91,39 @@ export function sarNext({ sar = {}, checklist = [], deadline = null }) {
   return { found: true, done: false, status: sar.status, text: `${head}\n\n${urgent}Next:\n${todo.map((s, i) => `${i + 1}. ${s}`).join("\n")}${checklist.length ? `\n\nChecklist: ${checklist.length - left.length} of ${checklist.length} done.` : ""}` };
 }
 
-// ---- "my cases": one line each, closest deadline first ----
-export function myCasesNext({ kind, cases = [], deadlineOf = () => null, checklist = [], steps = {}, now = new Date() }) {
-  const open = cases.filter((c) => !["closed", "archived", "completed"].includes(c.status));
+// ---- a list of cases: closest deadline first ----
+//   scope "mine": the ones this person owns (or, for a concern, is named on); `closed` is how many of theirs are finished; `others` are open cases that are not theirs,
+//   and any that are more urgent than their most urgent one are named after the list, so a closer deadline held by someone else is never hidden.
+//   scope "practice": every open case, with who has it.
+//   keyOf(c) is a number that sorts the most urgent first; ownerOf(c) is who has it, in words.
+const NL = "\n";
+export function myCasesNext({ kind, cases = [], deadlineOf = () => null, checklist = [], steps = {}, now = new Date(), scope = "mine", keyOf = null, ownerOf = () => "", others = [], closed = 0 }) {
+  const isOpen = (c) => !["closed", "archived", "completed"].includes(c.status);
+  const open = cases.filter(isOpen);
   const noun = kind === "sar" ? "SAR" : "concern";
-  if (!open.length) return { found: true, count: 0, text: `You have no open ${noun}s to deal with.` };
+  const holder = kind === "sar" ? "assigned to" : "owned by";
   const rank = (s) => ({ critical: 0, high: 1, warning: 2, info: 3 }[s] ?? 4);
-  const rows = open.map((c) => ({ c, d: deadlineOf(c) })).sort((a, b) => rank(a.d?.status) - rank(b.d?.status));
-  const lines = rows.slice(0, 8).map(({ c, d }) => {
+  const key = keyOf || ((c) => rank(deadlineOf(c)?.status));
+  const sorted = open.map((c) => ({ c, d: deadlineOf(c), k: key(c) })).sort((a, b) => a.k - b.k);
+  const line = ({ c, d }) => {
     const first = kind === "sar" ? sarNext({ sar: c, checklist, deadline: d }) : concernNext({ concern: c, steps: steps[c.id] || [], deadline: d, now });
     const action = /Next:\n1\. (.+)/.exec(first.text)?.[1] || "Open it to see";
-    return `• ${c.reference}${d?.label ? ` (${d.label})` : ""}: ${action}`;
-  });
-  return { found: true, count: open.length, text: `${plural(open.length, `open ${noun}`)} ${open.length === 1 ? "is" : "are"} yours, most urgent first:\n${lines.join("\n")}${open.length > 8 ? `\n…and ${open.length - 8} more.` : ""}\n\nAsk “what's next for ${rows[0].c.reference}” to see all the steps on one.` };
+    const who = scope === "practice" && ownerOf(c) ? `, ${holder} ${ownerOf(c)}` : "";
+    return `• ${c.reference}${d?.label ? ` (${d.label})` : ""}${who}: ${action}`;
+  };
+  const parts = [];
+  const shown = sorted.slice(0, 8).map(line);
+  const head = scope === "practice" ? `${plural(open.length, `open ${noun}`)} across the practice, most urgent first` : `${plural(open.length, `open ${noun}`)} ${open.length === 1 ? "is" : "are"} yours, most urgent first`;
+  if (open.length) parts.push(`${head}:${NL}${shown.join(NL)}${open.length > 8 ? `${NL}…and ${open.length - 8} more.` : ""}`);
+  else if (scope === "mine") parts.push(`You have no open ${noun}s to deal with.`);
+  else parts.push(`There are no open ${noun}s.`);
+  if (scope === "mine" && closed) parts.push(`${plural(closed, `${open.length ? "other " : ""}${noun}`)} of yours ${closed === 1 ? "is" : "are"} already closed.`);
+  if (scope === "mine") {
+    const topMine = sorted.length ? sorted[0].k : Infinity;
+    const closer = others.filter(isOpen).map((c) => ({ c, d: deadlineOf(c), k: key(c) })).filter((x) => x.k < topMine).sort((a, b) => a.k - b.k).slice(0, 3);
+    if (closer.length) parts.push(`${open.length ? "More urgent" : "Closest to a deadline"} across the practice, but not yours:${NL}${closer.map(({ c, d }) => `• ${c.reference}${d?.label ? ` (${d.label})` : ""}${ownerOf(c) ? `, ${holder} ${ownerOf(c)}` : ""}`).join(NL)}`);
+  }
+  if (sorted.length) parts.push(`Ask “what's next for ${sorted[0].c.reference}” to see all the steps on one.`);
+  else if (scope === "mine" && others.some(isOpen)) parts.push(`Ask “which ${noun}s are most urgent” to see them all.`);
+  return { found: true, count: open.length, text: parts.join(NL + NL) };
 }
