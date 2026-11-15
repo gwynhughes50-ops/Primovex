@@ -67,6 +67,51 @@ export const periodProblem = (p, others = []) => {
   return clash ? `That overlaps ${clash.name}.` : "";
 };
 
+// ---- is there a pay period for today? ----
+// Pay periods are set up by hand, so one can run out without anyone noticing. null when today is inside a pay period and nothing is about to run out. Otherwise what is wrong:
+//   { kind: "none" }                                 no pay period has been set up at all
+//   { kind: "ended", lastEnd, from, daysSince }      the last one ended before today and there is no next one (from: the day after it ended, where the next one would start)
+//   { kind: "gap", nextFrom, from }                  today falls between two periods (from: the day after the previous one ended)
+//   { kind: "ending", lastEnd, from, daysLeft }      today is inside the last one, which ends within ENDING_SOON_DAYS days with no next one: time to set it up
+export const ENDING_SOON_DAYS = 7;
+export function payPeriodGap(periods = [], today = dateKey(new Date())) {
+  const list = (periods || []).filter((p) => parseKey(p?.from) && parseKey(p?.to));
+  if (!list.length) return { kind: "none" };
+  if (list.some((p) => p.from <= today && today <= p.to)) {
+    const next = list.some((p) => p.from > today);
+    const lastEnd = list.map((p) => p.to).sort().pop();
+    const daysLeft = Math.round((parseKey(lastEnd) - parseKey(today)) / 86400000);
+    return !next && daysLeft <= ENDING_SOON_DAYS ? { kind: "ending", lastEnd, from: addDays(lastEnd, 1), daysLeft } : null;
+  }
+  const before = list.filter((p) => p.to < today).map((p) => p.to).sort();
+  const after = list.filter((p) => p.from > today).map((p) => p.from).sort();
+  const lastEnd = before.pop() || "";
+  if (after.length) return { kind: "gap", nextFrom: after[0], from: lastEnd ? addDays(lastEnd, 1) : today };
+  return { kind: "ended", lastEnd, from: addDays(lastEnd, 1), daysSince: Math.round((parseKey(today) - parseKey(lastEnd)) / 86400000) };
+}
+
+// the words for a gap: `title` and `detail` for the manager's Needs you row, and `staff` for a member of staff opening their timesheet (who cannot fix it, so is told who can)
+export function payPeriodGapWords(gap) {
+  if (!gap) return null;
+  const plural = (n, one) => `${n} ${n === 1 ? one : `${one}s`}`;
+  if (gap.kind === "none") return { title: "No pay period has been set up", detail: "Staff can't send timesheets until one is added.", staff: "No pay period has been set up yet. Ask the Practice Manager." };
+  if (gap.kind === "ended") return {
+    title: "No pay period covers today",
+    detail: `The last one ended on ${uk(gap.lastEnd)}, ${plural(gap.daysSince, "day")} ago. Staff can't record or send hours from ${uk(gap.from)} until the next is added.`,
+    staff: `No pay period has been set up from ${uk(gap.from)} yet, so hours worked since then can't be recorded. Ask the Practice Manager to add the next one.`,
+  };
+  if (gap.kind === "gap") return {
+    title: "Today falls between two pay periods",
+    detail: `Nothing covers ${uk(gap.from)} to the day before the next one starts (${uk(gap.nextFrom)}). Hours worked in between can't be recorded.`,
+    staff: `Today isn't in any pay period (the next starts on ${uk(gap.nextFrom)}), so hours worked in between can't be recorded. Ask the Practice Manager.`,
+  };
+  return {
+    title: gap.daysLeft === 0 ? "The pay period ends today, and the next isn't set up" : `The pay period ends in ${plural(gap.daysLeft, "day")}, and the next isn't set up`,
+    detail: `It ends on ${uk(gap.lastEnd)}. Add the next one (from ${uk(gap.from)}) so staff can keep recording hours.`,
+    staff: "",
+  };
+}
+
 // What this person was expected to work in the period, from their pattern: the total and each day
 export function expectedFor(patterns, period) {
   const days = expectedDays(patterns, period.from, period.to).map((d) => ({ date: d.date, hours: Math.round(d.hours * 100) / 100, bankHoliday: d.bankHoliday, zeroHours: d.zeroHours }));

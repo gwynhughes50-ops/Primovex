@@ -5,6 +5,8 @@
 //   { kind: "remind-sar" | "approve-mileage" | "agree-rota", ... }  does it there and then, after the usual confirmation.
 // Nothing here holds patient details: a SAR is its reference, who has it and when it is due.
 
+import { payPeriodGapWords } from "../modules/timesheets/timesheet.js";
+
 const RANK = { critical: 0, warning: 1, info: 2 };
 export const MAX_EACH = 3; // how many of one kind are listed one by one before the rest are gathered into one row
 
@@ -25,6 +27,7 @@ const CATEGORY_OF_AREA = { stock: "stock", coldchain: "fridges", compliance: "co
 export const NEEDS_CATEGORIES = [
   { key: "sars", label: "SARs" },
   { key: "timesheets", label: "Timesheets to sign off" },
+  { key: "payperiod", label: "Pay period set-up" },
   { key: "mileage", label: "Mileage claims" },
   { key: "rota", label: "Rota requests" },
   { key: "concerns", label: "Concerns" },
@@ -82,8 +85,11 @@ function rotaRowsFor(requests) {
 }
 
 // opts: { signals, sarRows (null when this person has no SAR list), mileage, rota, sheetsWaiting, messages }
-export function buildNeedsYou({ signals = [], sarRows = null, mileage = [], rota = [], sheetsWaiting = 0, messages = 0 } = {}) {
+// payPeriod: what payPeriodGap says is wrong with the pay periods (the ones nobody set up the next of), or null. Only for whoever manages timesheets, who is the one who can add one.
+export function buildNeedsYou({ signals = [], sarRows = null, mileage = [], rota = [], sheetsWaiting = 0, messages = 0, payPeriod = null } = {}) {
   const rows = [];
+  const gap = payPeriodGapWords(payPeriod);
+  if (gap) rows.push({ id: "payperiod", category: "payperiod", area: "people", tone: payPeriod.kind === "ending" ? "warning" : "critical", text: gap.title, detail: gap.detail, action: { kind: "link", to: "/my-timesheet?tab=periods", label: "Add the next pay period" } });
   if (Array.isArray(sarRows)) rows.push(...sarRowsFor(sarRows));
   rows.push(...rotaRowsFor(rota));
   if (sheetsWaiting > 0) rows.push({ id: "timesheets", category: "timesheets", area: "people", tone: "warning", text: `${plural(sheetsWaiting, "timesheet")} to sign off`, detail: "", action: { kind: "link", to: "/my-timesheet?tab=signoff", label: "Sign off" } });

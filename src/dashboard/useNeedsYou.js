@@ -4,8 +4,9 @@ import { useOrbStatus } from "@/orb/OrbStatusContext";
 import { useSarsToChase } from "@/modules/governance/useSarsToChase";
 import { useClaims } from "@/modules/mileage/mileageService";
 import { STATUS as MILEAGE } from "@/modules/mileage/mileage";
-import { useSheets } from "@/modules/timesheets/timesheetFlowService";
-import { STATE } from "@/modules/timesheets/timesheet";
+import { usePeriods, useSheets } from "@/modules/timesheets/timesheetFlowService";
+import { STATE, payPeriodGap } from "@/modules/timesheets/timesheet";
+import { dateKey } from "@/modules/timesheets/workPattern";
 import { subscribeRequests } from "@/modules/rota/rotaTeamService";
 import { buildHealth, buildNeedsYou } from "@/dashboard/needsYou";
 
@@ -19,6 +20,7 @@ export function useNeedsYou(enabled = true) {
   const claims = useClaims({ scope: "approve", enabled });
   const canManageSheets = can("timesheets.manage");
   const sheets = useSheets(canManageSheets ? "all" : "managed", enabled);
+  const periods = usePeriods();
   const seesRota = can("rota.read") || can("rota.manage");
   const [requests, setRequests] = useState(null);
   useEffect(() => {
@@ -30,7 +32,10 @@ export function useNeedsYou(enabled = true) {
     const mileage = (claims.list || []).filter((c) => c.status === MILEAGE.submitted && c.uid !== uid);
     const rota = (requests || []).filter((r) => r.status === "awaiting_coordinator");
     const sheetsWaiting = (sheets.list || []).filter((t) => t.state === STATE.submitted && t.uid !== uid && (t.managerUid === uid || (!t.managerUid && canManageSheets))).length;
+    // only whoever manages timesheets can add a pay period; "none at all" is left out (a practice that does not use timesheets would be told for ever)
+    const gap = canManageSheets && Array.isArray(periods.list) ? payPeriodGap(periods.list, dateKey(new Date())) : null;
     const rows = buildNeedsYou({
+      payPeriod: gap && gap.kind !== "none" ? gap : null,
       signals: orb.signals || [],
       sarRows: chase.canChase ? chase.rows : null,
       mileage, rota, sheetsWaiting,
@@ -38,5 +43,5 @@ export function useNeedsYou(enabled = true) {
     });
     const areas = [...(orb.scope?.areas || []), ...(mileage.length || rota.length || sheetsWaiting || seesRota || canManageSheets ? ["people"] : [])];
     return { rows, tiles: buildHealth({ areas, rows }), ready: !!orb.ready && (!seesRota || requests !== null), reloadSars: chase.reload };
-  }, [orb.signals, orb.chips, orb.scope, orb.ready, chase.canChase, chase.rows, claims.list, sheets.list, requests, uid, canManageSheets, seesRota]);
+  }, [orb.signals, orb.chips, orb.scope, orb.ready, chase.canChase, chase.rows, claims.list, sheets.list, periods.list, requests, uid, canManageSheets, seesRota]);
 }

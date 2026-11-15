@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useMyStaffRecord } from "@/modules/mileage/mileageService";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
 import { auditHtml, historySteps, stateWords } from "./timesheetAudit";
-import { CODES, STATE, STATE_LABEL, codeLabel, declarationText, dueStatus, expectedFor, lineProblem, needsStaff, periodLabel, periodProblem, submitProblem, suggestPeriod } from "./timesheet";
+import { CODES, STATE, STATE_LABEL, codeLabel, declarationText, dueStatus, expectedFor, lineProblem, needsStaff, payPeriodGap, payPeriodGapWords, periodLabel, periodProblem, submitProblem, suggestPeriod } from "./timesheet";
 import { dateKey, hoursLabel, parseKey } from "./workPattern";
 import { useTimesheetStaff } from "./timesheetService";
 import { SKINS } from "./timesheetSkins";
@@ -70,7 +70,7 @@ const lineList = (s, lines) => lines.map((l, i) => <li key={i} className={s.body
 // ---------------------------------------------------------------------------------------------------------------------------------
 export function MyTimesheetPanel({ skin = "desktop" }) {
   const s = SKINS[skin];
-  const { user, displayName } = useAuth();
+  const { user, displayName, can } = useAuth();
   const actor = { displayName: displayName || user?.email || "" };
   const me = useMyStaffRecord();
   const periods = usePeriods();
@@ -101,6 +101,10 @@ export function MyTimesheetPanel({ skin = "desktop" }) {
   if (!period) return <p className={s.warn}>No pay period has been set up yet. Ask the Practice Manager.</p>;
 
   const due = dueStatus(period, existing?.state || STATE.draft, today());
+  // pay periods are set up by hand, so one can run out: a member of staff is told who can put it right, and whoever manages timesheets is told what to do
+  const manages = can("timesheets.manage");
+  const gapWords = payPeriodGapWords(payPeriodGap(periods.list, today()));
+  const gapText = gapWords ? (manages ? gapWords.detail : gapWords.staff) : "";
   const editable = !existing || needsStaff(existing.state);
   const reason = existing && needsStaff(existing.state) ? (existing.state === STATE.returned ? existing.payroll : existing.decision)?.reason : "";
   const reasonBy = existing?.state === STATE.returned ? existing?.payroll?.by : existing?.decision?.by;
@@ -137,6 +141,7 @@ export function MyTimesheetPanel({ skin = "desktop" }) {
   return (
     <div className="space-y-3">
       <QueriesInbox scope="person" skin={skin} />
+      {gapText && <p className={s.warn} role="alert">{manages ? `${gapWords.title}. ` : ""}{gapText}{manages && skin === "desktop" ? <> <a href="/my-timesheet?tab=periods" className="font-semibold underline">Add the next pay period</a></> : null}</p>}
       <PeriodPicker s={s} periods={periods.list} value={period.id} onChange={setPeriodId} />
       <p className={`text-sm ${s.muted}`}>Due by {uk(period.due)}{due === "overdue" ? " (overdue)" : due === "due-soon" ? " (soon)" : ""}. Your usual hours in this period: <b className={s.strong}>{hoursLabel(expected?.hours || 0)}</b>{expected?.days.some((d) => d.bankHoliday) ? `, including ${expected.days.filter((d) => d.bankHoliday).map((d) => d.bankHoliday).join(" and ")}` : ""}.</p>
       {!expected?.hasPattern && <p className={s.warn}>Your working pattern hasn't been set up yet, so there are no usual hours to compare with. Ask the Practice Manager to set it (Timesheets, People).</p>}

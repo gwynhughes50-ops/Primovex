@@ -139,4 +139,15 @@ t("training: what is out of date and what is running out, from the person's own 
   assert.match(trainingAnswer({ people, courses, records: [records[2]], now: new Date(2026, 10, 13) }).text, /^All 1 course recorded for you is in date\.$/);
 });
 
+t("when no pay period covers today, the timesheet answer says so, so an old period is not taken for this one", () => {
+  const old = [{ id: "pp-oct", from: "2026-10-05", to: "2026-10-30", due: "2026-10-31" }];
+  const a = timesheetAnswer({ periods: old, sheets: [], linked: true, today: "2026-11-15" });
+  assert.match(a.text, /^You haven't sent your timesheet for 5 Oct to 30 Oct 2026\./);
+  assert.match(a.text, /\n\nNo pay period has been set up from 31\/10\/2026 yet, so hours worked since then can't be recorded\. Ask the Practice Manager to add the next one\.$/);
+  assert.equal(a.payPeriodGap, true);
+  const covered = timesheetAnswer({ periods: [...old, { id: "pp-nov", from: "2026-11-02", to: "2026-11-27", due: "2026-11-30" }], sheets: [], linked: true, today: "2026-11-15" });
+  assert.doesNotMatch(covered.text, /No pay period has been set up/);
+  assert.equal(timesheetAnswer({ periods: old, sheets: [], linked: false, today: "2026-11-15" }).payPeriodGap, undefined, "an answer that is not about a timesheet is left alone");
+});
+
 console.log(`\n${n} passed`);

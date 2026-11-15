@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CODES, STATE, canMove, declarationText, describeLines, dueStatus, expectedFor, hasChanges, lineProblem, needsStaff, payrollCsv, periodLabel, periodProblem, submitProblem, suggestPeriod, summary, timesheetId, totalsOf } from "../src/modules/timesheets/timesheet.js";
+import { CODES, ENDING_SOON_DAYS, STATE, canMove, declarationText, describeLines, dueStatus, expectedFor, hasChanges, lineProblem, needsStaff, payrollCsv, periodLabel, payPeriodGap, payPeriodGapWords, periodProblem, submitProblem, suggestPeriod, summary, timesheetId, totalsOf } from "../src/modules/timesheets/timesheet.js";
 import { newPattern } from "../src/modules/timesheets/workPattern.js";
 
 let n = 0;
@@ -125,6 +125,53 @@ t("changes read back in one plain line, and the payroll file has a row per perso
   assert.equal(rows[1], 'October payroll,Ann Example,32,Changes,7.5,2,0,0,0,0,13.50,"Overtime, standard rate 2h on 12/09; Sick leave 7.5h on 14/09 (flu)"');
   assert.equal(rows[2], 'October payroll,"Bea ""B"" Sample",,No changes,0,0,0,0,0,0,0.00,');
   assert.equal(timesheetId("p-oct", "ts-ann"), "p-oct_ts-ann");
+});
+
+const oct = { id: "pp-oct", name: "October payroll", from: "2026-10-05", to: "2026-10-30", due: "2026-10-31" };
+const nov = { id: "pp-nov", name: "November payroll", from: "2026-11-02", to: "2026-11-27", due: "2026-11-30" };
+
+t("today inside a pay period, with the next already set up, is fine", () => {
+  assert.equal(payPeriodGap([oct, nov], "2026-10-12"), null);
+  assert.equal(payPeriodGap([oct, nov], "2026-10-29"), null, "a next one exists, so there is nothing to warn about");
+  assert.equal(payPeriodGap([oct, nov], "2026-11-15"), null);
+});
+
+t("the real case: the last pay period ended on 30 October and today is 15 November", () => {
+  const gap = payPeriodGap([oct], "2026-11-15");
+  assert.deepEqual(gap, { kind: "ended", lastEnd: "2026-10-30", from: "2026-10-31", daysSince: 16 });
+  const words = payPeriodGapWords(gap);
+  assert.equal(words.title, "No pay period covers today");
+  assert.equal(words.detail, "The last one ended on 30/10/2026, 16 days ago. Staff can't record or send hours from 31/10/2026 until the next is added.");
+  assert.equal(words.staff, "No pay period has been set up from 31/10/2026 yet, so hours worked since then can't be recorded. Ask the Practice Manager to add the next one.");
+  assert.equal(payPeriodGap([oct], "2026-10-31").daysSince, 1);
+  assert.equal(payPeriodGapWords(payPeriodGap([oct], "2026-10-31")).detail.includes("1 day ago"), true);
+});
+
+t("no pay period at all, and a day that falls between two", () => {
+  assert.deepEqual(payPeriodGap([], "2026-11-15"), { kind: "none" });
+  assert.deepEqual(payPeriodGap(undefined, "2026-11-15"), { kind: "none" });
+  assert.match(payPeriodGapWords({ kind: "none" }).staff, /No pay period has been set up yet/);
+  const gap = payPeriodGap([oct, nov], "2026-10-31");
+  assert.deepEqual(gap, { kind: "gap", nextFrom: "2026-11-02", from: "2026-10-31" });
+  assert.equal(payPeriodGapWords(gap).title, "Today falls between two pay periods");
+  assert.match(payPeriodGapWords(gap).staff, /the next starts on 02\/11\/2026/);
+});
+
+t("a week before the last pay period runs out, and the next is not set up, the manager is told early", () => {
+  assert.equal(payPeriodGap([oct], "2026-10-22"), null, "more than a week left");
+  const early = payPeriodGap([oct], "2026-10-23");
+  assert.deepEqual(early, { kind: "ending", lastEnd: "2026-10-30", from: "2026-10-31", daysLeft: 7 });
+  assert.equal(payPeriodGapWords(early).title, "The pay period ends in 7 days, and the next isn't set up");
+  assert.equal(payPeriodGapWords(early).detail, "It ends on 30/10/2026. Add the next one (from 31/10/2026) so staff can keep recording hours.");
+  assert.equal(payPeriodGapWords(early).staff, "", "staff are not told yet: they can still send");
+  assert.equal(payPeriodGapWords(payPeriodGap([oct], "2026-10-30")).title, "The pay period ends today, and the next isn't set up");
+  assert.equal(payPeriodGapWords(payPeriodGap([oct], "2026-10-29")).title, "The pay period ends in 1 day, and the next isn't set up");
+});
+
+t("periods with bad dates are ignored, and nothing is said when there is nothing to say", () => {
+  assert.deepEqual(payPeriodGap([{ from: "x", to: "y" }], "2026-11-15"), { kind: "none" });
+  assert.equal(payPeriodGapWords(null), null);
+  assert.equal(ENDING_SOON_DAYS, 7);
 });
 
 console.log(`\n${n} passed`);

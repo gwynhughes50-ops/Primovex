@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Car, ArrowLeftRight, CircleCheck, ClipboardCheck, Clock, FileText, MessageSquare, Package, ShieldAlert, Thermometer } from "lucide-react";
+import { Car, ArrowLeftRight, CalendarPlus, CircleCheck, ClipboardCheck, Clock, FileText, MessageSquare, Package, ShieldAlert, Thermometer } from "lucide-react";
 import SarBell from "@/components/governance/SarBell";
 import { useAuth } from "@/contexts/AuthContext";
 import { decideClaim } from "@/modules/mileage/mileageService";
@@ -11,7 +11,7 @@ import { askRota } from "@/modules/rota/rotaTeamService";
 // A button that changes something asks once more ("Sure?") before it does it; the rest open the exact page and tab.
 const TONE = { critical: "#e11d48", warning: "#d97706", info: "#64748b" };
 const GROUPS = [["critical", "Now"], ["warning", "Soon"], ["info", "When you can"]];
-const ICON = { sars: FileText, timesheets: Clock, mileage: Car, rota: ArrowLeftRight, concerns: ShieldAlert, stock: Package, fridges: Thermometer, compliance: ClipboardCheck, messages: MessageSquare };
+const ICON = { sars: FileText, timesheets: Clock, payperiod: CalendarPlus, mileage: Car, rota: ArrowLeftRight, concerns: ShieldAlert, stock: Package, fridges: Thermometer, compliance: ClipboardCheck, messages: MessageSquare };
 const BTN = "inline-flex min-h-8 items-center justify-center whitespace-nowrap rounded-full border border-[color:var(--medtrak-border)] bg-[color:var(--medtrak-panel)] px-3.5 py-1 text-xs font-bold text-[color:var(--medtrak-text)] transition hover:border-[color:var(--medtrak-accent)] hover:bg-[color:var(--medtrak-accent)]/10 disabled:opacity-60";
 const PRIMARY = "inline-flex min-h-8 items-center justify-center whitespace-nowrap rounded-full bg-[color:var(--medtrak-accent)] px-3.5 py-1 text-xs font-bold text-white shadow-sm disabled:opacity-60";
 

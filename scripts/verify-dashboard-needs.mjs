@@ -220,4 +220,32 @@ t("the Dashboard applies the settings, shows the inbox on its own, and does not 
   assert.match(centre, /part !== "overview" && \(/);
 });
 
+t("when the last pay period has ended, the manager is told, first, with a button that adds the next", () => {
+  const rows = buildNeedsYou({ sheetsWaiting: 2, payPeriod: { kind: "ended", lastEnd: "2026-10-30", from: "2026-10-31", daysSince: 16 } });
+  assert.equal(rows[0].id, "payperiod");
+  assert.equal(rows[0].tone, "critical");
+  assert.equal(rows[0].category, "payperiod");
+  assert.equal(rows[0].text, "No pay period covers today");
+  assert.match(rows[0].detail, /ended on 30\/10\/2026, 16 days ago/);
+  assert.deepEqual(rows[0].action, { kind: "link", to: "/my-timesheet?tab=periods", label: "Add the next pay period" });
+  assert.equal(rows[1].id, "timesheets", "the rest of the list is as before");
+  assert.ok(NEEDS_CATEGORIES.some((c) => c.key === "payperiod" && c.label === "Pay period set-up"), "a person can hide it, like any other kind");
+  assert.equal(filterNeedsYou(rows, { hide: ["payperiod"] }).rows.some((r) => r.id === "payperiod"), false);
+});
+
+t("a week before a pay period runs out it is a 'soon', and when nothing is wrong there is no row", () => {
+  const soon = buildNeedsYou({ payPeriod: { kind: "ending", lastEnd: "2026-10-30", from: "2026-10-31", daysLeft: 5 } });
+  assert.equal(soon[0].tone, "warning");
+  assert.equal(soon[0].text, "The pay period ends in 5 days, and the next isn't set up");
+  assert.equal(buildNeedsYou({ payPeriod: null }).some((r) => r.id === "payperiod"), false);
+  assert.equal(buildNeedsYou({}).length, 0);
+  assert.equal(buildNeedsYou({ payPeriod: { kind: "gap", nextFrom: "2026-11-02", from: "2026-10-31" } })[0].text, "Today falls between two pay periods");
+});
+
+t("only whoever manages timesheets is asked, and a practice with no pay periods at all is not nagged", () => {
+  const src = read("src/dashboard/useNeedsYou.js");
+  assert.match(src, /canManageSheets && Array\.isArray\(periods\.list\) \? payPeriodGap/);
+  assert.match(src, /gap && gap\.kind !== "none" \? gap : null/);
+});
+
 console.log(`\n${n} passed`);

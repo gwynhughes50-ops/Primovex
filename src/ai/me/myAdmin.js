@@ -3,7 +3,7 @@
 // is a card the person confirms first, and the executors check again, under the person's own permissions.
 
 import { addDays as addDaysKey } from "../../modules/rota/rotaModel.js";
-import { STATE, STATE_LABEL, declarationText, dueStatus, expectedFor, needsStaff, periodLabel } from "../../modules/timesheets/timesheet.js";
+import { STATE, STATE_LABEL, declarationText, dueStatus, expectedFor, needsStaff, payPeriodGap, payPeriodGapWords, periodLabel } from "../../modules/timesheets/timesheet.js";
 import { DEFAULT_RATES, PURPOSES, VEHICLES, VISIT_PLACE, claimProblem, dateKey, money, parseKey, priceClaims, routeMiles, STATUS as CLAIM, taxYearOf, totalMiles } from "../../modules/mileage/mileage.js";
 import { calculateEntitlement, leaveYearFor } from "../../modules/leave/leaveEntitlement.js";
 import { LIGHT, STATUS as TRAIN, STATUS_LABEL as TRAIN_LABEL, buildMatrix } from "../../modules/training/training.js";
@@ -39,7 +39,17 @@ export function pickPeriod(periods = [], sheets = [], today = dateKey(new Date()
   return started.find((p) => p.from <= today && today <= p.to) || started[started.length - 1] || null;
 }
 
-export function timesheetAnswer({ periods = [], sheets = [], linked = true, today = dateKey(new Date()) }) {
+// The answer, and when no pay period covers today (nobody has set up the next) a sentence saying so, so an answer about an old period is not taken for this one
+export function timesheetAnswer(args = {}) {
+  const answer = timesheetAnswerFor(args);
+  const today = args.today || dateKey(new Date());
+  const gap = answer.found ? payPeriodGapWords(payPeriodGap(args.periods || [], today))?.staff : "";
+  return gap ? { ...answer, text: `${answer.text}
+
+${gap}`, payPeriodGap: true } : answer;
+}
+
+function timesheetAnswerFor({ periods = [], sheets = [], linked = true, today = dateKey(new Date()) }) {
   if (!linked) return { found: false, text: NOT_LINKED };
   const period = pickPeriod(periods, sheets, today);
   if (!period) return { found: false, text: "No pay period has been set up yet, so there is no timesheet to send. Ask whoever manages timesheets." };
