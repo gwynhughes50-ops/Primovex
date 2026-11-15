@@ -7,7 +7,7 @@ export const ROUTE_MANIFEST = [
   { path: "/spaces", label: "Sense", section: "core", iconKey: "sense", alias: true },
   { path: "/inventory", label: "Inventory", section: "core", iconKey: "inventory", capability: "inventory.read", children: ["Stock", "Emergency Drugs", "Anaphylaxis Boxes"] },
   { path: "/stocktake", label: "Stock take", section: "core", iconKey: "stocktake", capability: "stocktake.manage" },
-  { path: "/alerts", label: "Operations", section: "core", iconKey: "alerts", capability: "operations.read" },
+  { path: "/alerts", label: "Alerts", section: "core", iconKey: "alerts", capability: "operations.read" },
   { path: "/governance/concerns", label: "Concerns", section: "core", iconKey: "governance", capability: "governance.manageConcerns", anyOf: ["governance.manageConcerns", "governance.concernsInvolved"] },
   { path: "/governance/sars", label: "SARs", section: "core", iconKey: "sar", capability: "governance.manageSars" },
   // Anyone can report a significant event, so there is no permission to see this one.

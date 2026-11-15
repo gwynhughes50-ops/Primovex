@@ -5,6 +5,8 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { ROLE_TEMPLATES } from "@/core/identity/capabilities";
 import useStock from "@/hooks/useStock";
+import StockVerificationWidget from "@/components/stock/StockVerificationWidget";
+import StockReviewPanel from "@/components/stock/StockReviewPanel";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
 import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
 import { PLACE_STATUS, TAKE_STATUS, additionLabel, buildPlaces, duplicateOfAddition, planAdditions, reviewLines, reviewTotals, takeProgress, validateTake } from "@/modules/stocktake/stockTake";
@@ -247,7 +249,7 @@ function TakeDetail({ takeId, items }) {
 }
 
 export default function StockTake() {
-  const { can } = useAuth();
+  const { can, user, displayName } = useAuth();
   const { allItems = [] } = useStock({ includeArchived: false });
   const { list, error } = useStockTakes(true);
   const [selectedId, setSelectedId] = useState("");
@@ -264,6 +266,9 @@ export default function StockTake() {
         {canManage && <button type="button" onClick={() => { setCreating(true); setSelectedId(""); }} className={PRIMARY}><Plus className="h-4 w-4" aria-hidden="true" /> Request a stock take</button>}
       </div>
       {error && <p className="text-sm text-rose-300" role="alert">{error}</p>}
+      {/* Between stock takes: small spot checks spread across the year, and the daily review of stock nobody has touched, too much or too little */}
+      {can("inventory.verify") && <StockVerificationWidget items={allItems} actor={{ uid: user?.uid || "", displayName: displayName || user?.displayName || user?.email || "", email: user?.email || "" }} />}
+      {can("inventory.read") && <StockReviewPanel />}
       {creating && canManage && <NewTake items={allItems} onCancel={() => setCreating(false)} onCreated={(id) => { setCreating(false); setSelectedId(id); }} />}
       <div className="grid gap-4 lg:grid-cols-[18rem_1fr]">
         <aside className="space-y-2">

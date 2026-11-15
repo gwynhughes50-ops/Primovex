@@ -641,7 +641,7 @@ export function registerApprovedReadOnlyTools() {
         followUps: tasksAnswer({ titles: tasks.map((item) => item.title), total: tasks.length, high: critical.length }).followUps,
         confidence: 0.94, freshness: { state: 'local-live', observedAt: new Date().toISOString() },
         sources: [source('Operational escalation register', `${tasks.length} open task${tasks.length === 1 ? '' : 's'} checked`)],
-        actions: [{ label: 'Open Operations Centre', route: '/alerts' }],
+        actions: [{ label: 'Open Alerts', route: '/alerts' }],
       };
     },
   });
@@ -665,7 +665,7 @@ export function registerApprovedReadOnlyTools() {
         followUps: alertsAnswer({ stock: stockAlerts.counts, device: deviceAlerts.length, unavailable }).followUps,
         confidence: unavailable ? 0.64 : 0.95, knownState: unavailable ? 'partial' : 'known',
         sources: [source('Inventory alerts', `${low.length} low-stock exception${low.length === 1 ? '' : 's'}`), source('Connected-device alerts', `${deviceAlerts.length} active alert${deviceAlerts.length === 1 ? '' : 's'}`), source('Temperature evidence', temperatureResult.status === 'fulfilled' ? `${temperatureResult.value.size} recent reading${temperatureResult.value.size === 1 ? '' : 's'} available` : 'Unavailable')],
-        warnings: unavailable ? [`${unavailable} alert source${unavailable === 1 ? '' : 's'} unavailable`] : [], actions: [{ label: 'Open Operations Centre', route: '/alerts' }],
+        warnings: unavailable ? [`${unavailable} alert source${unavailable === 1 ? '' : 's'} unavailable`] : [], actions: [{ label: 'Open Alerts', route: '/alerts' }],
       };
     },
   });

@@ -4,7 +4,6 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import {
   AlertTriangle,
-  Calendar,
   Package,
   CheckCircle,
   Thermometer,
@@ -12,14 +11,6 @@ import {
   Mail,
   X,
   Activity,
-  Brain,
-  ClipboardList,
-  Clock,
-  ShieldCheck,
-  Sparkles,
-  TrendingUp,
-  Users,
-  Zap,
 } from "lucide-react";
 
 import {
@@ -38,9 +29,6 @@ import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "../lib/firebase";
 
 import { buildOperationsIntelligence } from "../services/medAiOperationsService";
-import StockVerificationWidget from "../components/stock/StockVerificationWidget";
-import StockReviewPanel from "../components/stock/StockReviewPanel";
-import useConnectedDevices from "@/hooks/useConnectedDevices";
 import { normalizeStockItemCategory } from "@/services/stockService";
 import {
   DEFAULT_CATEGORY_THRESHOLDS,
@@ -51,8 +39,6 @@ import {
   stockLevelStatus,
 } from "@/lib/stockAlerts";
 import { categoryLabel as stockCategoryLabel } from "@/data/stockCategories";
-import { CONCERNS_COLLECTION, CONCERN_STATUSES, getDeadlineTone as getConcernDeadlineTone } from "@/modules/governance/services/concernService";
-import { SAR_COLLECTION, getSarDeadlineTone } from "@/modules/governance/services/sarService";
 
 /**
  * Collections used:
@@ -189,7 +175,6 @@ export default function Alerts() {
     return email || name || "user";
   }, [authUser]);
 
-  const { intelligence: connectIntelligence } = useConnectedDevices();
 
   // Data
   const [stockItems, setStockItems] = useState([]);
@@ -223,8 +208,6 @@ export default function Alerts() {
 
   // Governance activity (concerns + SARs due/overdue) — was previously a
   // hardcoded "Awaiting SAR feed" placeholder that never read real data.
-  const [concernsDueOrOverdue, setConcernsDueOrOverdue] = useState(0);
-  const [sarsDueOrOverdue, setSarsDueOrOverdue] = useState(0);
 
   // -------------------------
   // Auth subscription
@@ -387,38 +370,6 @@ export default function Alerts() {
       }
     );
 
-    return () => unsub();
-  }, []);
-
-  // -------------------------
-  // Subscribe: governance concerns + SARs (due/overdue counts only, for the
-  // "What's Changed Since Yesterday" Governance row)
-  // -------------------------
-  useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, CONCERNS_COLLECTION),
-      (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const open = rows.filter((c) => ![CONCERN_STATUSES.closed, CONCERN_STATUSES.archived].includes(c.status));
-        const dueOrOverdue = open.filter((c) => ["critical", "warning"].includes(getConcernDeadlineTone(c).status));
-        setConcernsDueOrOverdue(dueOrOverdue.length);
-      },
-      (err) => console.error("Alerts governance_concerns subscribe error:", err)
-    );
-    return () => unsub();
-  }, []);
-
-  useEffect(() => {
-    const unsub = onSnapshot(
-      collection(db, SAR_COLLECTION),
-      (snap) => {
-        const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        const open = rows.filter((s) => !["completed", "closed"].includes(String(s.status || "").toLowerCase()));
-        const dueOrOverdue = open.filter((s) => ["critical", "high", "warning"].includes(getSarDeadlineTone(s).status));
-        setSarsDueOrOverdue(dueOrOverdue.length);
-      },
-      (err) => console.error("Alerts governance_sars subscribe error:", err)
-    );
     return () => unsub();
   }, []);
 
@@ -689,38 +640,6 @@ export default function Alerts() {
         ? "border-amber-400/40 bg-amber-500/15 text-amber-50"
         : "border-emerald-400/40 bg-emerald-500/15 text-emerald-50";
 
-  const todaysPriorityCards = [
-    { label: "Critical", value: counts.critical, tone: "rose", icon: AlertTriangle },
-    { label: "Due today", value: counts.warn, tone: "amber", icon: Clock },
-    { label: "Active alerts", value: counts.total, tone: "cyan", icon: Activity },
-    { label: "Resolved", value: counts.resolved, tone: "emerald", icon: CheckCircle },
-  ];
-
-  const governanceDueOrOverdue = concernsDueOrOverdue + sarsDueOrOverdue;
-  const changedSinceYesterday = [
-    { label: "Stock alerts", value: counts.stock, change: counts.stock > 0 ? "+" + counts.stock : "No change", icon: Package },
-    { label: "Temperature", value: counts.temp, change: counts.temp > 0 ? "+" + counts.temp : "Stable", icon: Thermometer },
-    { label: "Governance", value: governanceDueOrOverdue, change: governanceDueOrOverdue > 0 ? "Due or overdue" : "All on track", icon: ShieldCheck },
-    { label: "Purchasing", value: counts.stock, change: counts.stock > 0 ? "Action likely" : "Quiet", icon: ClipboardList },
-  ];
-
-  const myQueue = [
-    { label: "To review", value: counts.total, detail: "Active operational items" },
-    { label: "Stock", value: counts.stock, detail: "Reorder or rotate" },
-    { label: "Temperature", value: counts.temp, detail: "Check latest reading" },
-    { label: "Settings", value: emailEnabled ? "On" : "Off", detail: "Email hooks" },
-  ];
-
-  const liveActivity = [
-    counts.total > 0
-      ? { time: "Now", title: `${counts.total} active alert${counts.total === 1 ? "" : "s"} detected`, detail: "MedAI has refreshed operational priorities." }
-      : { time: "Now", title: "No active alerts detected", detail: "Stock and temperature checks are currently clear." },
-    settingsLoading
-      ? { time: "Live", title: "Loading alert settings", detail: "Practice-wide thresholds are being checked." }
-      : { time: "Live", title: "Alert thresholds loaded", detail: `${globalExpirySoonDays} day global expiry threshold active.` },
-    { time: "Today", title: `${resolvedAlerts.length} resolved alert${resolvedAlerts.length === 1 ? "" : "s"} on record`, detail: "Resolved items remain auditable." },
-  ];
-
   const AlertCard = ({ alert, resolved = false }) => (
     <Card
       key={alert.id}
@@ -785,13 +704,10 @@ export default function Alerts() {
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-2xl font-semibold tracking-tight text-slate-50 sm:text-3xl">Operations Centre</h2>
-                <span className="rounded-full border border-teal-300/25 bg-teal-300/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-teal-100">
-                  Powered by MedAI
-                </span>
+                <h2 className="text-2xl font-semibold tracking-tight text-slate-50 sm:text-3xl">Alerts</h2>
               </div>
               <p className="mt-1 max-w-3xl text-sm text-slate-400">
-                A live operational workspace for stock, temperature, governance, purchasing and daily practice priorities.
+                Stock and temperature alerts, what has been resolved, and the practice's alert settings.
               </p>
               <div className="mt-2">
                 <span className="mt-pill-muted inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium">
@@ -848,188 +764,13 @@ export default function Alerts() {
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <Card className="border-white/10 bg-slate-950/50 p-5 xl:col-span-7">
-          <div className="mb-4 flex items-center gap-2">
-            <Brain className="h-5 w-5 text-teal-200" />
-            <div>
-              <h3 className="font-semibold text-slate-50">MedAI Daily Brief</h3>
-              <p className="text-xs text-slate-400">Rule-based operational intelligence, ready for future LLM integration.</p>
-            </div>
-          </div>
-          <div className="rounded-3xl border border-teal-300/15 bg-teal-300/10 p-4">
-            <p className="text-sm font-semibold text-teal-50">Good morning Gwyn.</p>
-            <div className="mt-3 grid gap-2 text-sm text-slate-100/90">
-              {intelligence.briefLines.map((line, idx) => (
-                <div key={idx} className="flex gap-2">
-                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-teal-200" />
-                  <span>{line}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </Card>
-
-        <Card className="border-white/10 bg-slate-950/50 p-5 xl:col-span-5">
-          <div className="mb-4 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-amber-200" />
-              <h3 className="font-semibold text-slate-50">Today's Priorities</h3>
-            </div>
-            <span className="text-xs text-slate-500">AI-ranked</span>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {todaysPriorityCards.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label} className={`rounded-3xl border p-4 transition-colors ${priorityCardClass(item.label, item.value)}`}>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs uppercase tracking-wide opacity-70">{item.label}</p>
-                    <Icon className="h-4 w-4 opacity-70" />
-                  </div>
-                  <p className="mt-2 text-2xl font-semibold">{item.value}</p>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <Card className="border-white/10 bg-slate-950/50 p-5 xl:col-span-4">
-          <div className="mb-4 flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-cyan-200" />
-            <h3 className="font-semibold text-slate-50">What's Changed Since Yesterday</h3>
-          </div>
-          <div className="space-y-3">
-            {changedSinceYesterday.map((item) => {
-              const Icon = item.icon;
-              return (
-                <div key={item.label} className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-900/40 p-3">
-                  <div className="flex items-center gap-3">
-                    <Icon className="h-4 w-4 text-slate-300" />
-                    <div>
-                      <p className="text-sm font-medium text-slate-100">{item.label}</p>
-                      <p className="text-xs text-slate-500">Current {item.value}</p>
-                    </div>
-                  </div>
-                  <span className="rounded-full bg-slate-800/70 px-2.5 py-1 text-xs text-slate-200">{item.change}</span>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-
-        <Card className="border-white/10 bg-slate-950/50 p-5 xl:col-span-4">
-          <div className="mb-4 flex items-center gap-2">
-            <Brain className="h-5 w-5 text-violet-200" />
-            <h3 className="font-semibold text-slate-50">AI Suggested Actions</h3>
-          </div>
-          <div className="space-y-3">
-            {intelligence.suggestedActions.map((action) => (
-              <div key={action.id} className="rounded-2xl border border-white/10 bg-slate-900/40 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-50">{action.title}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-slate-400">{action.detail}</p>
-                    <p className="mt-2 text-[11px] text-slate-500">Linked to: <span className="text-slate-300">{action.alertTitle}</span></p>
-                  </div>
-                  <div className="text-right">
-                    <span className="rounded-full bg-teal-300/10 px-2 py-1 text-[11px] font-semibold text-teal-100">{action.score}/100</span>
-                    <p className="mt-2 text-[11px] text-slate-500">{action.eta}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card className="border-white/10 bg-slate-950/50 p-5 xl:col-span-4">
-          <div className="mb-4 flex items-center gap-2">
-            <Users className="h-5 w-5 text-emerald-200" />
-            <h3 className="font-semibold text-slate-50">My Queue</h3>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {myQueue.map((item) => (
-              <div key={item.label} className="rounded-2xl border border-white/10 bg-slate-900/40 p-3">
-                <p className="text-xs text-slate-400">{item.label}</p>
-                <p className="mt-1 text-xl font-semibold text-slate-50">{item.value}</p>
-                <p className="mt-1 text-[11px] text-slate-500">{item.detail}</p>
-              </div>
-            ))}
-          </div>
-        </Card>
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <div className="xl:col-span-12">
-          <StockVerificationWidget items={stockItems} actor={authUser} />
-        </div>
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <div className="xl:col-span-12">
-          <StockReviewPanel />
-        </div>
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
         <Card className="border-white/10 bg-slate-950/50 p-5 xl:col-span-12">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-2xl border border-teal-400/20 bg-teal-500/10 text-teal-200">
-                <Thermometer className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-slate-50">Primovex Connect</h3>
-                <p className="mt-1 text-sm text-slate-400">{connectIntelligence.headline}</p>
-                <p className="mt-1 text-xs text-slate-500">Cold-chain readings feed Operations Centre, Practice Pulse and future compliance reports.</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3">
-                <p className="text-[11px] text-slate-500">Connect</p>
-                <p className="text-xl font-black text-slate-50">{connectIntelligence.healthScore}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3">
-                <p className="text-[11px] text-slate-500">Devices</p>
-                <p className="text-xl font-black text-slate-50">{connectIntelligence.devices.length}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3">
-                <p className="text-[11px] text-slate-500">Alerts</p>
-                <p className="text-xl font-black text-slate-50">{connectIntelligence.critical.length + connectIntelligence.offline.length}</p>
-              </div>
-            </div>
-          </div>
-        </Card>
-      </section>
-
-
-      <section className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <Card className="border-white/10 bg-slate-950/50 p-5 xl:col-span-4">
-          <div className="mb-4 flex items-center gap-2">
-            <Activity className="h-5 w-5 text-teal-200" />
-            <h3 className="font-semibold text-slate-50">Live Activity</h3>
-          </div>
-          <div className="space-y-3">
-            {liveActivity.map((item, idx) => (
-              <div key={idx} className="flex gap-3 rounded-2xl border border-white/10 bg-slate-900/40 p-3">
-                <span className="w-12 shrink-0 text-xs font-semibold text-teal-200">{item.time}</span>
-                <div>
-                  <p className="text-sm font-medium text-slate-100">{item.title}</p>
-                  <p className="text-xs text-slate-500">{item.detail}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card className="border-white/10 bg-slate-950/50 p-5 xl:col-span-8">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-200" />
               <div>
-                <h3 className="font-semibold text-slate-50">Alerts Widget</h3>
-                <p className="text-xs text-slate-400">Alerts are now one part of the Operations Centre, not the whole page.</p>
+                <h3 className="font-semibold text-slate-50">Alerts</h3>
+                <p className="text-xs text-slate-400">Made from expiry dates, minimum stock levels and the latest temperature readings. Resolve one to move it to Resolved.</p>
               </div>
             </div>
             <div className="inline-flex gap-1 rounded-full border border-white/10 bg-slate-900/40 p-1">

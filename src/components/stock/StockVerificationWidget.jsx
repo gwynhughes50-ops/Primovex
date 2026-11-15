@@ -38,7 +38,7 @@ export default function StockVerificationWidget({ items = [], actor = null, comp
         actualQty,
         actor,
         reason: "smart_stock_check",
-        notes: "Verified from Operations Centre Smart Stock Check.",
+        notes: "Verified from the Stock take page spot check.",
       });
       const difference = Number(result.discrepancy || 0);
       setMessage(

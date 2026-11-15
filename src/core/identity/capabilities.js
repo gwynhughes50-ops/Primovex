@@ -170,7 +170,7 @@ export const ALL_CAPABILITIES = Object.values(CAPABILITIES).flatMap((group) => O
 
 export const CAPABILITY_CATALOG = [
   { id: "dashboard.read", label: "View dashboard", group: "Core" },
-  { id: "operations.read", label: "View Operations Centre", group: "Core" },
+  { id: "operations.read", label: "View Alerts", group: "Core" },
   { id: "operations.manage", label: "Manage operational work", group: "Core" },
 
   { id: "inventory.read", label: "View inventory", group: "Inventory" },

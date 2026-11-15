@@ -18,7 +18,7 @@ export function getAlertPriority(alert) {
 export function getSuggestedAction(alert) {
   if (!alert) {
     return {
-      label: "Review Operations Centre",
+      label: "Review Alerts",
       detail: "Confirm there are no hidden risks or overdue tasks.",
       eta: "1 min",
     };

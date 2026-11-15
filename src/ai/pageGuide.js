@@ -35,8 +35,14 @@ export const PAGE_GUIDE = [
   {
     path: "/stocktake", title: "Stock take",
     about: "Counting what is on the shelves against what Primovex expects, and putting right any differences.",
-    can: ["Count a place and save the counts", "Review the differences before they change the stock"],
+    can: ["Count a place and save the counts", "Review the differences before they change the stock", "Do the small spot checks between stock takes, and read the daily review of stock nobody has touched, too much or too little"],
     tries: [{ text: "Count the gloves, I have 12", needs: "inventory.write" }], help: ["stock-take"],
+  },
+  {
+    path: "/alerts", title: "Alerts",
+    about: "Stock and temperature alerts, made from expiry dates, minimum stock levels and the latest readings.",
+    can: ["See what needs attention now, and what has been resolved", "Resolve an alert once it is dealt with (it also stops the desktop pop-up for it)", "If you are an administrator, press Alert settings to change the expiry windows"],
+    asks: [{ text: "What needs attention today?" }], help: [],
   },
   {
     path: "/temperature", title: "Temperature",

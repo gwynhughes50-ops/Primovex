@@ -11,7 +11,7 @@ const desktopNavigationConfig = [
   { to: "/governance/concerns", label: "Concerns", iconKey: "governance", group: "governance", capability: "governance.manageConcerns" },
   { to: "/governance/sars", label: "SARs", iconKey: "sar", group: "governance", capability: "governance.manageSars" },
   { to: "/practice-admin", label: "Practice Admin", iconKey: "practiceAdmin", group: "admin", capability: "practiceAdmin.read" },
-  { to: "/alerts", label: "Operations", iconKey: "alerts", group: "operations", capability: "operations.read" },
+  { to: "/alerts", label: "Alerts", iconKey: "alerts", group: "operations", capability: "operations.read" },
   { to: "/facilities", label: "Facilities", iconKey: "facilities", group: "operations" },
   { to: "/spaces", label: "Sense", iconKey: "sense", group: "operations" },
   { to: "/connect", label: "Connect", iconKey: "connect", group: "operations", capability: "connect.view" },

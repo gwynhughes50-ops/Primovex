@@ -620,7 +620,7 @@ function PulseDrawerContent({ pulse, score, tone, band, updateState, navigate, t
           }}
           className="flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-bold mt-pulse-action-secondary"
         >
-          Open Operations Centre <ExternalLink className="h-4 w-4" />
+          Open Alerts <ExternalLink className="h-4 w-4" />
         </button>
       </div>
     </>
