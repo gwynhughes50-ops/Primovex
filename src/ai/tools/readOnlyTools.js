@@ -27,6 +27,7 @@ import { needsCleaning } from '@/lib/cleaningFrequency';
 import { buildSeAnswer } from '@/ai/governance/seAnswers';
 import { signoffAnswer, signoffReply } from '@/ai/me/signoffs';
 import { concernNext, myCasesNext, sarNext } from '@/ai/governance/nextSteps';
+import { describeAbilities } from '@/ai/capabilities';
 import { certificatesAnswer, coshhAnswer, laptopsAnswer, trainingOverdueAnswer, wasteAnswer } from '@/ai/compliance/extras';
 import { normaliseCertificate } from '@/modules/certificates/certificates';
 import { normaliseSubstance } from '@/modules/coshh/coshh';
@@ -1144,6 +1145,18 @@ export function registerApprovedReadOnlyTools() {
         const [people, courses, records] = await Promise.all([readRows('training_people'), readRows('training_courses'), readRows('training_records')]);
         return extraResult('people', trainingOverdueAnswer({ people: people.filter((p) => p.active !== false), courses, records, course: String(input.course || '') }), 'Staff training matrix', `${people.length} people, ${courses.length} courses`, '/training', 'Open Staff training');
       } catch (error) { return extraFail('people', error, '/training'); }
+    },
+  });
+
+  // "What can you do for me?": written down in src/ai/capabilities.js, and only what this person's role can use. No data is read.
+  registerTool({
+    id: 'help.capabilities', label: 'What Ask Primovex can do',
+    async execute(input = {}, context = {}) {
+      const answer = describeAbilities({ can: (capability) => hasCapability(context.capabilities || [], capability), focus: input.focus || '', greeting: Boolean(input.greeting), page: context.page });
+      return {
+        domain: 'help', data: { areas: answer.areas }, summary: answer.text, followUps: answer.followUps, confidence: 0.95,
+        sources: [source('Ask Primovex guide', 'Written guidance; nothing was read from your data', 'system')], actions: [],
+      };
     },
   });
 

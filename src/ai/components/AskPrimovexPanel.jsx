@@ -569,7 +569,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
                 )}
                 {message.clarification?.choices?.length > 0 && !message.clarification.resolvedIntent && (
                   <div className="mt-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3">
-                    <p className="text-xs font-semibold">Choose the safe action you expected. Ask Primovex will retry now and submit the phrase for manager review.</p>
+                    <p className="text-xs font-semibold">Did you mean one of these? Tap it and I'll try it now. The wording you used is also sent to your manager, so I can learn it.</p>
                     <div className="mt-2 grid gap-2">{message.clarification.choices.map((choice) => <button key={choice.id} type="button" onClick={() => resolveClarification(message.id, choice.id)} className="rounded-lg border border-[var(--ai-line)] bg-[var(--ai-raised)] px-3 py-2 text-left text-xs"><strong className="block">{choice.label}</strong><span className="primovex-ai-muted">{choice.description}</span></button>)}</div>
                   </div>
                 )}

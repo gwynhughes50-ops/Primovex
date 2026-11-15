@@ -703,6 +703,7 @@ export const HELP_ARTICLES = [
     keywords: ["orb", "ask", "help", "can", "questions", "use"],
     where: "both",
     steps: [
+      "Not sure where to start? Ask \"what can you do for me?\" and it lists what your role can use, with examples to tap. You can also ask \"what can you do with stock?\" (or the rota, the fridges, concerns, your timesheet) for more on one area.",
       "Ask in your own words about stock (\"is anything low?\", \"what's expiring?\", \"do we have any dressings?\"), fridges (\"are the fridges OK?\"), cleaning (\"which rooms haven't been cleaned?\"), alerts, tasks, maintenance, emergency kits and anaphylaxis boxes, and how the practice is doing overall.",
       "Ask \"how do I...\" for step-by-step help, for example \"how do I move stock into a kit?\".",
       "Managers can ask management questions: \"when was the last fire alarm test?\", \"what are the tap water temps in the last month?\", \"when did Craig last log in?\", \"how many SARs does he have outstanding?\", \"where are we up to with concerns?\", or \"what needs attention before I leave?\" for an end-of-day briefing.",

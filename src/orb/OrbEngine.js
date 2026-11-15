@@ -10,6 +10,8 @@ import { MemoryEngine } from './MemoryEngine';
 import { PermissionGateway } from './PermissionGateway';
 import { createOrbRequest, createOrbResponse, ORB_CORE_VERSION } from './types';
 import { approvedIntentChoices } from './clinicalIntentCatalog';
+import { describeAbilities } from '@/ai/capabilities';
+import { hasCapability } from '@/core/identity/capabilities';
 import { TrustPolicy } from './TrustPolicy';
 import { applyAiPhrasing, applyAiRouting, markAiRouted } from './aiRouting';
 import { getAiRouter } from './AiRouter';
@@ -60,14 +62,18 @@ export class OrbEngine {
     });
     if (!classified.toolId) {
       const clarification = {
-        question: 'I did not understand that safely. What were you trying to do?',
+        question: "I didn't quite understand that, and I haven't changed anything. If it was one of these, tap it. Otherwise ask it another way, or tap “What can you do for me?” to see what I can help with.",
         originalRequest: request.input,
         originalConfidence: classified.confidence,
         candidates: classified.candidates || [],
         choices: approvedIntentChoices(context.capabilities, (classified.candidates || []).map((item) => item.id)),
       };
+      // buttons that suit this person: the full list first, then a couple of things they can try
+      const abilities = describeAbilities({ can: (capability) => hasCapability(context.capabilities || [], capability), page: context.page });
+      const followUps = [{ label: 'What can you do for me?', ask: 'What can you do for me?', color: '#8b5cf6' }, ...abilities.followUps.filter((f) => f.ask !== 'Explain this page').slice(0, 2)];
       let response = createOrbResponse({
         answer: clarification.question,
+        followUps,
         intent: 'general.clarification-required',
         confidence: classified.confidence,
         confidenceBand: this.confidence.band(classified.confidence),

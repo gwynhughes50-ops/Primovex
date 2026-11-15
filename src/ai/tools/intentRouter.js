@@ -20,6 +20,7 @@ import { looksLikeExplainPage } from '@/ai/pageGuide';
 import { parseMyAdmin } from '@/ai/me/myAdmin';
 import { parseSignoff } from '@/ai/me/signoffs';
 import { parseNextSteps } from '@/ai/governance/nextSteps';
+import { parseIntro } from '@/ai/capabilities';
 import { parseExtras } from '@/ai/compliance/extras';
 import { looksLikeStockIn } from '@/ai/stock/stockIn';
 import { looksLikeStockCount } from '@/ai/stock/stockCount';
@@ -85,6 +86,10 @@ export function routeApprovedTool(prompt, options = {}) {
 
   // "Explain this page", "what can I do here?": what the page the person is on is for.
   if (looksLikeExplainPage(prompt)) return { toolId: 'page.explain', input: {}, language: { normalised: text, confidence: 0.95 } };
+
+  // "What can you do for me?", "how could you help me?", "hello", "help": what Ask Primovex can do for this person.
+  const intro = parseIntro(prompt);
+  if (intro) return { toolId: 'help.capabilities', input: intro, language: { normalised: text, confidence: 0.95 } };
 
   // "How do I...?" with a matching help article goes to the help lookup, before the data
   // lookups (so "how do I check the anaphylaxis box" gives the steps, not the box's status).
