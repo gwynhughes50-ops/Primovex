@@ -449,7 +449,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
     >
       <header className={`primovex-ai-divider flex items-center justify-between px-4 ${isMobile ? 'py-2.5' : 'py-4'}`}>
         <div className="flex items-center gap-3">
-          <div className={`relative h-10 w-10 shrink-0 ${busy ? 'primovex-ai-breathe' : ''}`} aria-hidden="true"><PulseOrbFace size={40} active={busy} level={orbStatus.level} /></div>
+          <div className={`relative h-10 w-10 shrink-0 ${busy ? 'primovex-ai-breathe' : ''}`} aria-hidden="true"><PulseOrbFace size={40} active={busy} mode={busy ? 'thinking' : ''} level={orbStatus.level} /></div>
           <div>
             <h2 className="font-bold">{ASSISTANT_NAME}</h2>
             <p className="primovex-ai-muted text-xs">{isMobile ? STATUS_LABELS[status] : `${STATUS_LABELS[status]} · ${ASSISTANT_TAGLINE}`}</p>
@@ -467,7 +467,7 @@ export default function AskPrimovexPanel({ variant = 'desktop' }) {
         {isMobile && (
           <section className={`primovex-voice-stage ${orbAwake ? 'is-awake' : 'is-sleeping'}`} aria-live="polite">
             <button type="button" onClick={dictationMode ? dictate : (orbAwake ? sleepOrb : wakeOrb)} className={`primovex-pulse-voice-orb state-${voiceState}`} aria-label={orbAwake ? 'Stop listening' : 'Start listening'}>
-              <PulseOrbFace level={orbStatus.level} size={150} active={recordingNow || dictation === 'working' || voiceState === VOICE_STATES.LISTENING || voiceState === VOICE_STATES.THINKING || voiceState === VOICE_STATES.WAKING} still={voiceState === VOICE_STATES.SLEEPING && dictation === 'idle'} />
+              <PulseOrbFace level={orbStatus.level} size={150} mode={recordingNow || voiceState === VOICE_STATES.LISTENING || voiceState === VOICE_STATES.WAKING ? 'listening' : (dictation === 'working' || voiceState === VOICE_STATES.THINKING ? 'thinking' : '')} active={recordingNow || dictation === 'working' || voiceState === VOICE_STATES.LISTENING || voiceState === VOICE_STATES.THINKING || voiceState === VOICE_STATES.WAKING} still={voiceState === VOICE_STATES.SLEEPING && dictation === 'idle'} />
             </button>
             <strong>{orbLabel}</strong>
             <span>{voiceError || partialTranscript || (dictationMode ? (recordingNow ? 'Say your question. It stops when you stop talking, or tap the button.' : dictation === 'working' ? 'One moment…' : 'Tap the button, then say your question. It is sent for Ask Primovex to answer.') : voiceSupported ? (orbAwake ? 'Keep talking. Say “that’s all” when you are finished.' : 'Tap the button and talk. It keeps listening until you say “that’s all” or go quiet.') : 'Voice recognition is unavailable on this device. You can still type below.')}</span>

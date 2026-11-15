@@ -1,166 +1,122 @@
-/* The Pulse orb's face: a quiet heartbeat while things are steady, a quicker pulse when
-   there has been a substantial change. Designed at 174px; PulseOrbFace scales it. */
+/* The orb: the Primovex P on a disc, in a ring with a light that orbits it. Designed at 174px; PulseOrbFace scales it. The drawing is in pulseOrbSvg.js.
+
+   Colour. The disc is worked out from the theme the person picked (the page colour, deepened, with a little of the accent), so it sits on the page instead of clashing
+   with it: deeper than the page on a dark theme, softly tinted on a light one, and plain black and white on High Contrast. The P and the ring keep the brand colours.
+   The orbiting light is the traffic light: the brand cyan with none, then green, amber or red. The pulse follows it: calm, a little quicker, and for red quicker and
+   slightly firmer, but never frantic. */
 .pvx-orb {
   --tempo: 4.8s;
+  --beat-up: 1.045;
+  --orbit: calc(var(--tempo) * 2.6);
+  --o-accent: var(--medtrak-accent, #2563eb);
+  --o-base: color-mix(in srgb, var(--medtrak-bg, #020617) 74%, #000);
+  --o-disc: color-mix(in srgb, var(--o-accent) 13%, var(--o-base));
+  --o-edge: color-mix(in srgb, var(--o-accent) 42%, transparent);
+  --o-track: color-mix(in srgb, var(--o-accent) 52%, transparent);
+  --o-plus: #8fe8ff;
+  --o-glow: #5fd4ff;
+  --o-level: #7fe3ff;
   position: absolute;
   left: 50%;
   top: 50%;
   width: 174px;
   height: 174px;
   margin: -87px 0 0 -87px;
-  border-radius: 50%;
   isolation: isolate;
   pointer-events: none;
   transform-origin: center;
 }
 
-.pvx-orb::before,
-.pvx-orb::after,
-.pvx-orb-ring,
-.pvx-orb-core,
-.pvx-orb-light,
-.pvx-orb-spark {
-  position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-}
+.pvx-orb-svg { display: block; width: 100%; height: 100%; overflow: visible; }
 
-.pvx-orb::before,
-.pvx-orb::after {
-  content: "";
-  inset: 9px;
-  border: 1px solid rgba(106, 215, 255, 0.28);
-  animation: pvx-orb-outward var(--tempo) ease-out infinite;
-}
+/* ---- the parts ---- */
+.pvx-orb-track { fill: none; stroke: var(--o-track); stroke-width: 2.5; }
+.pvx-orb-arc { fill: none; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 80 397.5; transition: stroke-dasharray 0.45s ease, stroke-width 0.45s ease; }
+.pvx-orb-dot { fill: var(--o-level); stroke: color-mix(in srgb, var(--o-level) 34%, transparent); stroke-width: 7; transition: opacity 0.3s ease; }
+.pvx-orb-disc { fill: var(--o-disc); stroke: var(--o-edge); stroke-width: 2; }
+.pvx-orb-plus { fill: var(--o-plus); }
+.pvx-orb-plus-glow { fill: var(--o-glow); opacity: 0.3; }
+.pvx-orb-pulse { fill: none; stroke: var(--o-glow); stroke-width: 2.5; opacity: 0; transform-origin: 100px 100px; }
+.pvx-orb-bar { stroke: var(--o-glow); stroke-width: 4; stroke-linecap: round; opacity: 0; transform-origin: 100px 26px; transform: scaleY(0.3); }
+.pvx-orb-orbit, .pvx-orb-beat { transform-origin: 100px 100px; }
 
-.pvx-orb::after {
-  animation-delay: calc(var(--tempo) * -0.5);
-}
+/* ---- movement ---- */
+.pvx-orb-orbit { animation: pvx-orbit var(--orbit) linear infinite; }
+.pvx-orb-beat { animation: pvx-beat var(--tempo) ease-in-out infinite; }
+.pvx-orb-plus-glow { animation: pvx-plus var(--tempo) ease-in-out infinite; }
+.pvx-orb--active { --orbit: calc(var(--tempo) * 1.4); }
 
-.pvx-orb-ring {
-  inset: 18px;
-  border: 1px solid rgba(121, 227, 255, 0.26);
-  box-shadow: 0 0 30px rgba(25, 166, 229, 0.13), inset 0 0 27px rgba(49, 175, 227, 0.16);
-  animation: pvx-orb-breathe var(--tempo) ease-in-out infinite;
+@keyframes pvx-orbit { to { transform: rotate(360deg); } }
+@keyframes pvx-beat {
+  0%, 38%, 100% { transform: scale(0.985); }
+  44% { transform: scale(var(--beat-up)); }
+  51% { transform: scale(0.995); }
+  57% { transform: scale(calc(var(--beat-up) - 0.02)); }
+  65% { transform: scale(0.985); }
 }
+@keyframes pvx-plus { 0%, 38%, 100% { opacity: 0.25; } 44% { opacity: 0.95; } 57% { opacity: 0.65; } }
+@keyframes pvx-bar { 0%, 100% { transform: scaleY(0.3); } 35% { transform: scaleY(1); } 70% { transform: scaleY(0.5); } }
+@keyframes pvx-pulse { 0% { transform: scale(0.86); opacity: 0.6; } 100% { transform: scale(1.32); opacity: 0; } }
 
-.pvx-orb-core {
-  inset: 30px;
-  background: radial-gradient(circle at 34% 28%, #e7ffff 0%, #a0edff 13%, #47bee9 43%, #1873b6 69%, #102e65 100%);
-  box-shadow: inset -12px -17px 22px #10244e9c, inset 7px 8px 19px #edffff4a, 0 0 22px #3bbbe46e, 0 0 58px #1885c352;
-  animation: pvx-orb-heartbeat var(--tempo) ease-in-out infinite;
+/* ---- what it is doing ---- */
+/* Listening: the ring closes and glows, pulse rings spread out and the bars move with the voice */
+.pvx-orb--listening .pvx-orb-orbit { animation: none; }
+.pvx-orb--listening .pvx-orb-arc { stroke-dasharray: 477.5 0; stroke-width: 6; }
+.pvx-orb--listening .pvx-orb-dot { opacity: 0; }
+.pvx-orb--listening .pvx-orb-pulse { animation: pvx-pulse 2.4s ease-out infinite; }
+.pvx-orb--listening .pvx-orb-pulse--b { animation-delay: -1.2s; }
+.pvx-orb--listening .pvx-orb-bar, .pvx-orb--speaking .pvx-orb-bar { opacity: 0.9; animation: pvx-bar 1.2s ease-in-out infinite; animation-delay: calc(var(--i) * -0.173s); }
+/* Thinking: a long arc, quick, with no light */
+.pvx-orb--thinking { --orbit: 1.3s; }
+.pvx-orb--thinking .pvx-orb-arc { stroke-dasharray: 190 287.5; stroke-width: 6; }
+.pvx-orb--thinking .pvx-orb-dot { opacity: 0; }
+/* Speaking: the bars, the ring steady */
+.pvx-orb--speaking .pvx-orb-orbit { animation: none; }
+.pvx-orb--speaking .pvx-orb-arc { stroke-dasharray: 477.5 0; }
+.pvx-orb--speaking .pvx-orb-dot { opacity: 0; }
+
+/* ---- traffic light ---- */
+.pvx-orb--green { --tempo: 4.8s; --beat-up: 1.045; --o-level: #6df2a0; }
+.pvx-orb--amber { --tempo: 3.6s; --beat-up: 1.055; --o-level: #ffc24a; }
+.pvx-orb--red { --tempo: 2.6s; --beat-up: 1.07; --o-level: #ff6b6b; }
+
+/* ---- light themes: a softly tinted disc, a deeper plus, the lights a shade darker so they read on a pale page ---- */
+html.medtrak-light .pvx-orb {
+  --o-base: #ffffff;
+  --o-disc: color-mix(in srgb, var(--o-accent) 9%, #ffffff);
+  --o-edge: color-mix(in srgb, var(--o-accent) 30%, #cbd5e1);
+  --o-track: color-mix(in srgb, var(--o-accent) 26%, #cbd5e1);
+  --o-plus: #4569ec;
+  --o-glow: #6f8bff;
+  --o-level: #2f8fd0;
 }
+html.medtrak-light .pvx-orb-svg { filter: drop-shadow(0 3px 5px rgba(50, 70, 150, 0.2)); }
+html.medtrak-light .pvx-orb--green { --o-level: #1fa463; }
+html.medtrak-light .pvx-orb--amber { --o-level: #b86e00; }
+html.medtrak-light .pvx-orb--red { --o-level: #d6383a; }
 
-.pvx-orb-light {
-  inset: 34px;
-  background: radial-gradient(ellipse at 38% 23%, #ffffffb5 0%, #d5ffff45 13%, transparent 43%);
-  transform: rotate(-16deg);
+/* ---- High Contrast: black and white with the theme's yellow, no gradients and no glow ---- */
+html[data-medtrak-theme="high-contrast"] .pvx-orb {
+  --o-disc: #000; --o-edge: #fff; --o-track: #fff; --o-plus: #facc15; --o-glow: #facc15; --o-level: #facc15;
 }
+html[data-medtrak-theme="high-contrast"] .pvx-orb-bowl, html[data-medtrak-theme="high-contrast"] .pvx-orb-stem { fill: #fff; }
+html[data-medtrak-theme="high-contrast"] .pvx-orb-arc { stroke: #facc15; }
+html[data-medtrak-theme="high-contrast"] .pvx-orb-plus-glow { display: none; }
+html[data-medtrak-theme="high-contrast"] .pvx-orb--green { --o-level: #4ade80; }
+html[data-medtrak-theme="high-contrast"] .pvx-orb--amber { --o-level: #ffb020; }
+html[data-medtrak-theme="high-contrast"] .pvx-orb--red { --o-level: #ff6b6b; }
 
-.pvx-orb-spark {
-  width: 8px;
-  height: 8px;
-  top: 38px;
-  left: 50px;
-  background: #ecffff;
-  filter: blur(5px);
-  opacity: 0.75;
-}
-
-.pvx-orb--active {
-  --tempo: 2.7s;
-  filter: hue-rotate(-6deg);
-}
-
-.pvx-orb--active .pvx-orb-core {
-  box-shadow: inset -12px -17px 22px #10244e9c, inset 7px 8px 19px #edffff5c, 0 0 23px #55d9ff80, 0 0 58px #24a3ee55;
-}
-
-.pvx-orb--active::before,
-.pvx-orb--active::after {
-  border-color: rgba(137, 229, 255, 0.32);
-}
-
-@keyframes pvx-orb-heartbeat {
-  0%, 38%, 100% { transform: scale(0.96); filter: brightness(0.91); }
-  44% { transform: scale(1.045); filter: brightness(1.22); }
-  51% { transform: scale(0.985); filter: brightness(1); }
-  57% { transform: scale(1.026); filter: brightness(1.12); }
-  65% { transform: scale(0.96); filter: brightness(0.91); }
-}
-
-@keyframes pvx-orb-breathe {
-  0%, 100% { transform: scale(0.96); opacity: 0.55; }
-  48% { transform: scale(1.025); opacity: 1; }
-}
-
-@keyframes pvx-orb-outward {
-  0% { transform: scale(0.64); opacity: 0; }
-  38% { opacity: 0.65; }
-  82%, 100% { transform: scale(1.36); opacity: 0; }
-}
-
-/* No movement for anyone who asks for less (the system setting, or the widget's own
-   "reduced motion" option). A substantial change is then shown by a firmer ring instead. */
+/* ---- no movement: for anyone who asks for less (the system setting, or the widget's own "still" option). The light still shows where it is, the colour carries the
+   message, and a firmer ring says how serious it is: none for green, thin for amber, firmer for red. A substantial change is a firmer ring too. ---- */
 @media (prefers-reduced-motion: reduce) {
-  .pvx-orb::before, .pvx-orb::after, .pvx-orb-ring, .pvx-orb-core { animation: none; }
-  .pvx-orb--active .pvx-orb-ring { border: 2px solid #9adfff; }
-  .pvx-orb--active .pvx-orb-core { filter: brightness(1.18); }
+  .pvx-orb-orbit, .pvx-orb-beat, .pvx-orb-plus-glow, .pvx-orb-pulse, .pvx-orb-bar { animation: none !important; }
+  .pvx-orb-bar { transform: scaleY(0.6); }
+  .pvx-orb--amber .pvx-orb-track { stroke-width: 5; }
+  .pvx-orb--red .pvx-orb-track { stroke-width: 8; }
+  .pvx-orb--active .pvx-orb-track { stroke-width: 5; }
 }
-
-.pvx-orb--still::before, .pvx-orb--still::after, .pvx-orb--still .pvx-orb-ring, .pvx-orb--still .pvx-orb-core { animation: none; }
-.pvx-orb--still.pvx-orb--active .pvx-orb-ring { border: 2px solid #9adfff; }
-.pvx-orb--still.pvx-orb--active .pvx-orb-core { filter: brightness(1.18); }
-.pvx-orb--still::before, .pvx-orb--still::after { opacity: 0; }
-
-/* Traffic light. The orb takes its colour from how things stand for the person looking at it: green when what is
-   theirs is in order, amber when something is coming up or just late, red when something has failed or is properly
-   overdue. The pulse follows: calm, a little quicker, and for red quicker and slightly firmer, but never frantic. */
-.pvx-orb { --beat-up: 1.045; --ring-rgb: 121, 227, 255; }
-.pvx-orb--green, .pvx-orb--amber, .pvx-orb--red { filter: none; }
-
-.pvx-orb--green { --tempo: 4.8s; --ring-rgb: 120, 238, 176; }
-.pvx-orb--green.pvx-orb--active { --tempo: 3.9s; }
-.pvx-orb--green .pvx-orb-core {
-  background: radial-gradient(circle at 34% 28%, #eafff2 0%, #a6f0c2 13%, #3fc77f 43%, #16794f 69%, #0b3a2c 100%);
-  box-shadow: inset -12px -17px 22px #0b2e269c, inset 7px 8px 19px #f0fff54a, 0 0 22px #3be39a6e, 0 0 58px #18c37c45;
-}
-
-.pvx-orb--amber { --tempo: 3.5s; --beat-up: 1.055; --ring-rgb: 255, 207, 120; }
-.pvx-orb--amber .pvx-orb-core {
-  background: radial-gradient(circle at 34% 28%, #fff7e2 0%, #ffd98c 13%, #f2aa3a 43%, #b3691a 69%, #4d2b0c 100%);
-  box-shadow: inset -12px -17px 22px #4a260a9c, inset 7px 8px 19px #fff6e44a, 0 0 22px #f2b13c70, 0 0 58px #e0902a45;
-}
-
-.pvx-orb--red { --tempo: 2.4s; --beat-up: 1.07; --ring-rgb: 255, 150, 150; }
-.pvx-orb--red .pvx-orb-core {
-  background: radial-gradient(circle at 34% 28%, #fff0ee 0%, #ffb7b0 13%, #e5605f 43%, #a02b36 69%, #4a1222 100%);
-  box-shadow: inset -12px -17px 22px #4a10209c, inset 7px 8px 19px #fff0ee4a, 0 0 20px #ec636770, 0 0 52px #d3384a40;
-}
-
-.pvx-orb--green .pvx-orb-ring, .pvx-orb--amber .pvx-orb-ring, .pvx-orb--red .pvx-orb-ring {
-  border-color: rgba(var(--ring-rgb), 0.3);
-  box-shadow: 0 0 30px rgba(var(--ring-rgb), 0.12), inset 0 0 27px rgba(var(--ring-rgb), 0.14);
-}
-.pvx-orb--green::before, .pvx-orb--green::after,
-.pvx-orb--amber::before, .pvx-orb--amber::after,
-.pvx-orb--red::before, .pvx-orb--red::after { border-color: rgba(var(--ring-rgb), 0.28); }
-
-.pvx-orb--amber .pvx-orb-core, .pvx-orb--red .pvx-orb-core { animation-name: pvx-orb-heartbeat-lvl; }
-@keyframes pvx-orb-heartbeat-lvl {
-  0%, 38%, 100% { transform: scale(0.96); filter: brightness(0.91); }
-  44% { transform: scale(var(--beat-up)); filter: brightness(1.22); }
-  51% { transform: scale(0.985); filter: brightness(1); }
-  57% { transform: scale(calc(var(--beat-up) - 0.02)); filter: brightness(1.12); }
-  65% { transform: scale(0.96); filter: brightness(0.91); }
-}
-
-/* For anyone who asks for less movement (or the widget's "still" option) the colour carries the message, and a firmer
-   ring says how serious it is: none for green, thin for amber, firmer for red. */
-@media (prefers-reduced-motion: reduce) {
-  .pvx-orb--amber .pvx-orb-ring { border: 2px solid rgba(255, 207, 120, 0.9); }
-  .pvx-orb--red .pvx-orb-ring { border: 3px solid rgba(255, 150, 150, 0.95); }
-}
-.pvx-orb--still.pvx-orb--amber .pvx-orb-ring { border: 2px solid rgba(255, 207, 120, 0.9); }
-.pvx-orb--still.pvx-orb--red .pvx-orb-ring { border: 3px solid rgba(255, 150, 150, 0.95); }
-.pvx-orb--still.pvx-orb--green .pvx-orb-core, .pvx-orb--still.pvx-orb--amber .pvx-orb-core, .pvx-orb--still.pvx-orb--red .pvx-orb-core { animation: none; filter: none; }
+.pvx-orb--still .pvx-orb-orbit, .pvx-orb--still .pvx-orb-beat, .pvx-orb--still .pvx-orb-plus-glow, .pvx-orb--still .pvx-orb-pulse, .pvx-orb--still .pvx-orb-bar { animation: none !important; }
+.pvx-orb--still .pvx-orb-bar { transform: scaleY(0.6); }
+.pvx-orb--still.pvx-orb--amber .pvx-orb-track { stroke-width: 5; }
+.pvx-orb--still.pvx-orb--red .pvx-orb-track { stroke-width: 8; }
+.pvx-orb--still.pvx-orb--active .pvx-orb-track { stroke-width: 5; }

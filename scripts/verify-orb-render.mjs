@@ -25,7 +25,42 @@ t("the pulse quickens from green to amber to red without going frantic, and red 
   assert.ok(tempo("red") >= 2, "never faster than a slow heartbeat");
   const beat = Number(/--beat-up:\s*([\d.]+)/.exec(rule("red"))?.[1]);
   assert.ok(beat > 1.045 && beat <= 1.08, "a little harder, not a thump");
-  assert.match(css, /prefers-reduced-motion[\s\S]*pvx-orb--red \.pvx-orb-ring \{ border: 3px/, "someone who wants no movement still sees a firmer ring for red");
+  assert.match(css, /prefers-reduced-motion[\s\S]*pvx-orb--red \.pvx-orb-track \{ stroke-width: 8/, "someone who wants no movement still sees a firmer ring for red");
+});
+
+t("the orb draws the Primovex P on a disc with a ring and an orbiting light, and says what Ask Primovex is doing", () => {
+  const html = face({ level: "green" });
+  for (const part of ["pvx-orb-bowl", "pvx-orb-stem", "pvx-orb-plus", "pvx-orb-disc", "pvx-orb-track", "pvx-orb-arc", "pvx-orb-dot", "pvx-orb-bar"]) assert.ok(html.includes(part), part);
+  assert.equal((html.match(/pvx-orb-bar"/g) || []).length, 36, "36 voice bars");
+  for (const mode of ["listening", "thinking", "speaking"]) assert.ok(face({ mode }).includes(`pvx-orb--${mode}`), mode);
+  assert.ok(!/pvx-orb--(listening|thinking|speaking)/.test(face({ mode: "dancing" })), "an unknown mode is ignored");
+  assert.ok(face({ still: true }).includes("pvx-orb--still"));
+});
+
+t("each orb has its own gradient and glow ids, so several on one page never borrow from each other", () => {
+  const ids = (html) => [...html.matchAll(/ id="([^"]+)"/g)].map((m) => m[1]);
+  const both = renderToStaticMarkup(React.createElement(React.Fragment, null, React.createElement(PulseOrbFace, {}), React.createElement(PulseOrbFace, {})));
+  const a = ids(both);
+  assert.equal(a.length, 8);
+  assert.equal(new Set(a).size, 8);
+  assert.ok(a.every((id) => !/[^a-zA-Z0-9_-]/.test(id)), "ids that work inside url(#...)");
+});
+
+t("the disc takes its colour from the theme, with plain black and white on High Contrast and a lighter tint on light themes", () => {
+  const css = readFileSync("src/components/pulse/PulseOrbFace.css", "utf8");
+  assert.match(css, /--o-disc:\s*color-mix\(in srgb, var\(--o-accent\) 13%, var\(--o-base\)\)/);
+  assert.match(css, /--o-base:\s*color-mix\(in srgb, var\(--medtrak-bg, #020617\) 74%, #000\)/);
+  assert.match(css, /html\.medtrak-light \.pvx-orb \{[^}]*--o-disc: color-mix\(in srgb, var\(--o-accent\) 9%, #ffffff\)/);
+  assert.match(css, /high-contrast"\] \.pvx-orb \{[^}]*--o-disc: #000; --o-edge: #fff/);
+  assert.match(css, /high-contrast"\] \.pvx-orb-bowl[^{]*\{ fill: #fff; \}/, "no gradient on High Contrast");
+  const level = (name) => /--o-level:\s*(#[0-9a-f]{6})/i.exec(new RegExp(String.raw`\.pvx-orb--${name}\s*\{([^}]*)\}`).exec(css)?.[1] || "")?.[1];
+  assert.deepEqual(["green", "amber", "red"].map(level), ["#6df2a0", "#ffc24a", "#ff6b6b"]);
+});
+
+t("the orb window and the app draw the same orb", () => {
+  assert.match(readFileSync("src/orb-window/orb.js", "utf8"), /face\.innerHTML = orbSvg\(/);
+  assert.match(readFileSync("src/components/pulse/PulseOrbFace.jsx", "utf8"), /orbSvg\(/);
+  assert.ok(!readFileSync("orb.html", "utf8").includes("pvx-orb-core"), "the old markup is gone");
 });
 
 t("the panel says what is wrong and where to go; quiet when green if asked", () => {

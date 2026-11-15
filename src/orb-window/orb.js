@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import "../components/pulse/PulseOrbFace.css";
+import { orbSvg } from "../components/pulse/pulseOrbSvg.js";
 import "./orb.css";
 
 // The Pulse orb window. It knows nothing about the app: the desktop shell hands it a
@@ -10,6 +11,7 @@ import "./orb.css";
 const orb = document.getElementById("orb");
 const face = document.getElementById("face");
 const status = document.getElementById("status");
+face.innerHTML = orbSvg("win");
 
 let lastNote = "";
 

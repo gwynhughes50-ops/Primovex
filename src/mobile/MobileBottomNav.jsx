@@ -20,7 +20,7 @@ export default function MobileBottomNav({ activeKey = "home", onNavigate, onOpen
       <div className="mx-auto grid h-[var(--pvx-mobile-nav-height)] max-w-lg grid-cols-5 items-end">
         {items.slice(0, 2).map(({ key, label, Icon }) => <NavButton key={key} {...{ keyName: key, label, Icon, activeKey, onNavigate }} />)}
         <button type="button" onClick={onOpenAI} className="relative mx-auto -mt-9 h-[4.5rem] w-[4.5rem] rounded-full" aria-label={orbStatus.level === "green" ? "Ask Primovex" : `Ask Primovex. ${orbStatus.headline}`}>
-          <PulseOrbFace size={72} active={busy} level={orbStatus.level} />
+          <PulseOrbFace size={72} active={busy} mode={busy ? "thinking" : ""} level={orbStatus.level} />
           <span className="sr-only">Ask Primovex{orbStatus.level === "green" ? "" : `. ${orbStatus.summary}`}</span>
         </button>
         {items.slice(2).map(({ key, label, Icon }) => <NavButton key={key} {...{ keyName: key, label, Icon, activeKey, onNavigate }} />)}
