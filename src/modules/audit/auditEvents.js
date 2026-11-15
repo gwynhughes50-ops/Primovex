@@ -98,6 +98,12 @@ export function laptopEvent(type, { laptopId = "", assetCode = "", summary = "",
   return event(`it.laptop.${text(type, 30)}`, "it", "it_laptop", laptopId, summary || `${text(assetCode, 40)}: ${text(type, 30)}`, { assetCode: text(assetCode, 40) });
 }
 
+// IT equipment: the PC register. Like the laptops: the summary is the line that is also written to the PC's own history, and it never holds a note or a name.
+export function computerEvent(type, { computerId = "", assetNumber = "", summary = "", count = 0 } = {}) {
+  if (type === "imported") return event("it.pc.imported", "it", "it_computer", null, `${count} ${count === 1 ? "PC" : "PCs"} added from a sheet`, { count });
+  return event(`it.pc.${text(type, 30)}`, "it", "it_computer", computerId, summary || `PC ${text(assetNumber, 40)}: ${text(type, 30)}`, { assetNumber: text(assetNumber, 40) });
+}
+
 // Reception rota. The ledger records that the rota was set up, built or changed, and that an absence was entered or removed. It never holds who was off, or why.
 export function rotaEvent(type, { mondayIso = "" } = {}) {
   const week = text(mondayIso, 12);

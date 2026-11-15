@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { classifyScan } from "../src/mobile/scanRouter.js";
 import { buildLaptopLink } from "../src/modules/laptops/laptops.js";
+import { buildComputerLink } from "../src/modules/computers/computers.js";
 import { buildAssetQrPayload } from "../src/services/assets/assetLabelService.js";
 import { buildComplianceLink, buildComplianceQrPayload } from "../src/services/compliance/complianceRules.js";
 
@@ -14,6 +15,15 @@ t("a laptop's label opens that laptop, from its link, a link without the address
   assert.equal(classifyScan("/sense/open/laptop/abc123").kind, "laptop");
   assert.equal(classifyScan("MEDTRAK:LAPTOP:abc123").route, "/sense/open/laptop/abc123");
   assert.equal(classifyScan(`${APP}/sense/open/laptop/a%20b`).id, "a b");
+});
+
+t("a PC's label opens that PC, from its link, a link without the address, or the plain text form, and is not mistaken for a laptop", () => {
+  const link = buildComputerLink({ id: "pc77" });
+  assert.deepEqual(classifyScan(link), { kind: "pc", id: "pc77", raw: link, route: "/sense/open/pc/pc77" });
+  assert.equal(classifyScan("/sense/open/pc/pc77").kind, "pc");
+  assert.equal(classifyScan("MEDTRAK:PC:pc77").route, "/sense/open/pc/pc77");
+  assert.equal(classifyScan(`${APP}/sense/open/pc/a%20b`).id, "a b");
+  assert.equal(classifyScan(`${APP}/sense/open/laptop/pc77`).kind, "laptop");
 });
 
 t("a fridge and a chemical cupboard go to their own screens", () => {

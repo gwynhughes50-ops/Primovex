@@ -60,6 +60,12 @@ function LaptopLinkRedirect() {
   return <Navigate to={`/it-equipment?open=${encodeURIComponent(laptopId || "")}`} replace />;
 }
 
+// A PC's own QR label opened on a PC: the register's PCs tab, with that PC open.
+function ComputerLinkRedirect() {
+  const { pcId } = useParams();
+  return <Navigate to={`/it-equipment?tab=pcs&open=${encodeURIComponent(pcId || "")}`} replace />;
+}
+
 export default function DesktopApp() {
   return (
     <Routes>
@@ -71,6 +77,7 @@ export default function DesktopApp() {
       {/* a fire point or water outlet's own tag, opened on a PC: the checks are done on a phone, so show the Compliance page */}
       <Route path="/sense/open/compliance/:assetId" element={<Navigate to="/compliance" replace />} />
       <Route path="/sense/open/laptop/:laptopId" element={<LaptopLinkRedirect />} />
+      <Route path="/sense/open/pc/:pcId" element={<ComputerLinkRedirect />} />
 
       <Route
         path="/sense/open/:entityType/:entityId"

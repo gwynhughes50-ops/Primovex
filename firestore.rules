@@ -738,6 +738,24 @@ match /subject_access_requests/{requestId} {
     }
 
     // -------------------------
+    // IT EQUIPMENT: PCs. The same people and the same shape as the laptops, but there is no "my PC" for anyone else to read: a PC is only for the IT team's register.
+    // -------------------------
+    // Whoever has itAssets.manage (the IT team) adds PCs and records checks and changes; someone with itAssets.read can look at the register. Nobody else can read it.
+    match /it_computers/{computerId} {
+      allow get, list: if signedIn() && itAssetsReader();
+      allow create: if signedIn() && itAssetsManager();
+      allow update: if signedIn() && itAssetsManager();
+      allow delete: if isAdmin();
+    }
+
+    // One line for everything that happens to a PC: never edited or removed, and only ever recorded as yourself.
+    match /it_computer_events/{eventId} {
+      allow get, list: if signedIn() && itAssetsReader();
+      allow create: if signedIn() && itAssetsManager() && request.resource.data.byUid == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    // -------------------------
     // RECEPTION ROTA: the rules for each person, the weeks that have been built, and who is off
     // -------------------------
     // Whoever has rota.manage (the Practice Manager by default, and anyone given the permission as an exception) sets the rules, enters who is off and builds and changes the rota.

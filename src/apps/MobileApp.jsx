@@ -10,7 +10,7 @@ import SenseNfcOpen from "@/pages/SenseNfcOpen";
 import FridgeCheckLanding from "@/mobile/FridgeCheckLanding";
 import CoshhLanding from "@/mobile/CoshhLanding";
 import ComplianceLanding from "@/mobile/ComplianceLanding";
-import { MobileLaptops, LaptopLanding, MobileMyLaptop } from "@/mobile/MobileLaptops";
+import { MobileLaptops, LaptopLanding, MobileMyLaptop, ComputerLanding } from "@/mobile/MobileLaptops";
 import MobileRota from "@/mobile/MobileRota";
 import MobileSarsToChase from "@/mobile/MobileSarsToChase";
 import MobileAddDocument from "@/mobile/MobileAddDocument";
@@ -71,6 +71,8 @@ function MobileSenseRoute() {
   if (entityType === "compliance") return <ComplianceLanding assetId={entityId} />;
   // a laptop's own QR label: the IT team get that laptop open with its actions; anyone else sees their own laptop. Behind the session lock because it names people.
   if (entityType === "laptop") return <MobileSessionShell><LaptopLanding id={entityId} /></MobileSessionShell>;
+  // a PC's own QR label: the IT team get that PC open with its check; anyone else is told it is for the IT team
+  if (entityType === "pc") return <MobileSessionShell><ComputerLanding id={entityId} /></MobileSessionShell>;
   return <SenseNfcOpen />;
 }
 

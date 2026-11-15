@@ -20,19 +20,22 @@ const esc = (value) => String(value ?? "").replace(/&/g, "&amp;").replace(/</g, 
 // a nudge is a small number of millimetres, kept to a sensible range (a typed value never reaches the style unchecked)
 const nudge = (value) => { const n = Number(value); return Number.isFinite(n) ? Math.max(-NUDGE_LIMIT_MM, Math.min(NUDGE_LIMIT_MM, Math.round(n * 10) / 10)) : 0; };
 
+// What a label says and where its QR code goes. Laptops and PCs share the printing; each says its own thing.
+export const LAPTOP_LABEL = { docTitle: "Laptop QR labels", linkOf: buildLaptopLink, titleOf: (laptop) => laptop.assetCode, subtitleOf: () => "Primovex IT equipment", hint: "Scan to loan out, return or record an update" };
+
 // guides: draw each sticker's outline, for a trial print on plain paper held up to a sheet of stickers. Leave off for the real sheet (an outline would print on the sticker's edge).
 // nudgeXMm / nudgeYMm: move everything right / down by that much, to cancel the printer's own offset.
-export function buildLabelsHtml(laptops = [], { origin, guides = false, sheet = DEFAULT_SHEET, nudgeXMm = 0, nudgeYMm = 0 } = {}) {
+export function buildLabelsHtml(laptops = [], { origin, guides = false, sheet = DEFAULT_SHEET, nudgeXMm = 0, nudgeYMm = 0, kind = LAPTOP_LABEL } = {}) {
   const s = SHEETS[sheet] || SHEETS[DEFAULT_SHEET];
   const per = s.columns * s.rows;
   const qr = Math.round((s.heightMm - 5) * 10) / 10;
   const left = Math.round((s.marginLeftMm + nudge(nudgeXMm)) * 100) / 100;
   const top = Math.round((s.marginTopMm + nudge(nudgeYMm)) * 100) / 100;
-  const label = (laptop) => `<div class="label"><img src="${getQrImageUrl(buildLaptopLink(laptop, origin), 300)}" alt=""/><div class="words"><b>${esc(laptop.assetCode)}</b><span>Primovex IT equipment</span><small>Scan to loan out, return or record an update</small></div></div>`;
+  const label = (item) => `<div class="label"><img src="${getQrImageUrl(kind.linkOf(item, origin), 300)}" alt=""/><div class="words"><b>${esc(kind.titleOf(item))}</b><span>${esc(kind.subtitleOf(item))}</span><small>${esc(kind.hint)}</small></div></div>`;
   const pages = [];
   for (let i = 0; i < laptops.length; i += per) pages.push(laptops.slice(i, i + per));
   const body = pages.map((page) => `<section class="page"><div class="grid">${page.map(label).join("")}</div></section>`).join("");
-  return `<!doctype html><html lang="en-GB"><head><meta charset="utf-8"/><title>Laptop QR labels</title><style>
+  return `<!doctype html><html lang="en-GB"><head><meta charset="utf-8"/><title>${esc(kind.docTitle)}</title><style>
 @page{size:A4 portrait;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0}body{font-family:Arial,Helvetica,sans-serif;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .page{position:relative;width:210mm;height:296.8mm;overflow:hidden;break-after:page;page-break-after:always}
 .page:last-child{break-after:auto;page-break-after:auto}

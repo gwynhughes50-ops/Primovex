@@ -2162,6 +2162,59 @@ async function main() {
     for (const who of [holder, borrower, reception, readonly, partner, anon]) await assertFails(getDocs(collection(who, "it_laptop_events")));
   });
 
+  console.log("\n=== 31b. IT equipment: the PC register and its history (it_computers, it_computer_events) ===");
+  const COMPUTERS = "it_computers";
+  const pc = (extra = {}) => ({ assetNumber: "146", status: "in_use", active: true, siteId: "s1", siteName: "Main building", department: "Prescribing", label: "Room 1", printerSerial: "PHCGG13306", currentUserUid: "", currentUserName: "", software: ["emis", "docman"], notes: "", lastCheckedOn: "", lastCheckedByName: "", lastCheckNote: "", ...extra });
+  const pcEvent = (uid, extra = {}) => ({ computerId: "pc-seed", assetNumber: "146", type: "checked", text: "PC 146 checked", onDay: "2026-11-15", byUid: uid, byName: "x", detail: {}, createdAt: serverTimestamp(), ...extra });
+  await seed(async (db) => {
+    await setDoc(doc(db, "roles", "IT Team"), { name: "IT Team", capabilities: ["itAssets.manage", "dashboard.read"], builtIn: false });
+    await setDoc(doc(db, "roles", "IT Viewer"), { name: "IT Viewer", capabilities: ["itAssets.read", "dashboard.read"], builtIn: false });
+    await setDoc(doc(db, "users", "itteam-uid"), { role: "IT Team", displayName: "IT" });
+    await setDoc(doc(db, "users", "itview-uid"), { role: "IT Viewer", displayName: "Viewer" });
+    await setDoc(doc(db, COMPUTERS, "pc-seed"), pc());
+    await setDoc(doc(db, "it_computer_events", "pcev-seed"), pcEvent("itteam-uid", { createdAt: new Date() }));
+  });
+  await check("The IT team (itAssets.manage), the Practice Manager and an administrator CAN list the PCs, add one, and record a check on one", async () => {
+    for (const who of [itTeam, pm, admin]) await assertSucceeds(getDocs(collection(who, COMPUTERS)));
+    await assertSucceeds(setDoc(doc(itTeam, COMPUTERS, "pc-new-1"), pc({ assetNumber: "NEW1" })));
+    await assertSucceeds(setDoc(doc(pm, COMPUTERS, "pc-new-2"), pc({ assetNumber: "NEW2" })));
+    await assertSucceeds(updateDoc(doc(itTeam, COMPUTERS, "pc-seed"), { lastCheckedOn: "2026-11-15", lastCheckedByName: "IT", software: ["emis", "docman", "patches"] }));
+  });
+  await check("Someone with itAssets.read CAN see every PC but CANNOT add, change or remove one", async () => {
+    await assertSucceeds(getDocs(collection(itView, COMPUTERS)));
+    await assertSucceeds(getDoc(doc(itView, COMPUTERS, "pc-seed")));
+    await assertFails(setDoc(doc(itView, COMPUTERS, "pc-x"), pc({ assetNumber: "X" })));
+    await assertFails(updateDoc(doc(itView, COMPUTERS, "pc-seed"), { notes: "tampered" }));
+    await assertFails(deleteDoc(doc(itView, COMPUTERS, "pc-seed")));
+  });
+  await check("Someone with no IT permission CANNOT list the PC register or read a PC, whoever they are, and there is no 'my PC' for anyone to read", async () => {
+    for (const who of [holder, borrower, reception, readonly, partner, caretaker, nurse, anon]) {
+      await assertFails(getDocs(collection(who, COMPUTERS)));
+      await assertFails(getDoc(doc(who, COMPUTERS, "pc-seed")));
+      await assertFails(updateDoc(doc(who, COMPUTERS, "pc-seed"), { notes: "x" }));
+      await assertFails(setDoc(doc(who, COMPUTERS, "pc-y"), pc({ assetNumber: "Y" })));
+    }
+  });
+  await check("Only an administrator CAN delete a PC record: not the IT team, not the Practice Manager", async () => {
+    await assertFails(deleteDoc(doc(itTeam, COMPUTERS, "pc-new-1")));
+    await assertFails(deleteDoc(doc(pm, COMPUTERS, "pc-new-2")));
+    await assertSucceeds(deleteDoc(doc(admin, COMPUTERS, "pc-new-1")));
+  });
+  await check("The IT team CAN add lines to a PC's history as themselves, and CAN read it; nobody can edit or remove a line, not even an administrator", async () => {
+    await assertSucceeds(addDoc(collection(itTeam, "it_computer_events"), pcEvent("itteam-uid")));
+    await assertSucceeds(getDocs(collection(itTeam, "it_computer_events")));
+    await assertSucceeds(getDocs(collection(itView, "it_computer_events")));
+    for (const who of [itTeam, admin, pm]) {
+      await assertFails(updateDoc(doc(who, "it_computer_events", "pcev-seed"), { text: "tampered" }));
+      await assertFails(deleteDoc(doc(who, "it_computer_events", "pcev-seed")));
+    }
+  });
+  await check("A line in a PC's history CANNOT be written as someone else, by someone without the permission, or read by someone without it", async () => {
+    await assertFails(addDoc(collection(itTeam, "it_computer_events"), pcEvent("admin-uid")));
+    for (const who of [itView, holder, borrower, reception, readonly, partner, anon]) await assertFails(addDoc(collection(who, "it_computer_events"), pcEvent("x")));
+    for (const who of [holder, borrower, reception, readonly, partner, anon]) await assertFails(getDocs(collection(who, "it_computer_events")));
+  });
+
   console.log("\n=== 32. Fridge readings: archive with a reason, never delete (temperature_logs) ===");
   const fridgeLead = testEnv.authenticatedContext("fridgelead-uid").firestore(); // a custom role with temperature.archive only
   const TL = "temperature_logs";
