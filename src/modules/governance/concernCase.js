@@ -332,3 +332,18 @@ export function buildClosePatch({ closing = {}, concern = {}, steps = [], learni
     dutyOfCandourNote: closing.candourTriggered ? text(closing.candourNote, 300) : "",
   };
 }
+
+// ---- how many concerns came in ----
+
+// How many concerns were received in the last `months` months, closed ones included (a year's count is for the annual return and for seeing how busy it has been). A concern
+// counts from the same day of the month a year ago up to and including today; one with no received date is not counted. `receivedAt` may be a Firestore timestamp, a Date or a
+// date string.
+export function receivedInLastMonths(concerns = [], months = 12, now = new Date()) {
+  const from = new Date(now.getFullYear(), now.getMonth() - months, now.getDate());
+  const to = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  return concerns.filter((c) => {
+    const v = c?.receivedAt;
+    const d = v?.toDate ? v.toDate() : v instanceof Date ? v : v ? new Date(v) : null;
+    return d && !Number.isNaN(d.getTime()) && d >= from && d <= to;
+  }).length;
+}

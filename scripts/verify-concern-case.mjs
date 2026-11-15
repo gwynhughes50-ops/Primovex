@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  CLOSE_STEPS, PARTIES, otherKey, partyOf, buildClosePatch, buildStep, buildWithdrawal, closeProblems, closeStepProblems, closeStepsFor, involvedParties, isStatementOnly, liveSteps, orderedSteps, partyState, reviewStatus, sentCount, ukDay, updateChoices, withdrawalOf,
+  CLOSE_STEPS, PARTIES, receivedInLastMonths, otherKey, partyOf, buildClosePatch, buildStep, buildWithdrawal, closeProblems, closeStepProblems, closeStepsFor, involvedParties, isStatementOnly, liveSteps, orderedSteps, partyState, reviewStatus, sentCount, ukDay, updateChoices, withdrawalOf,
 } from "../src/modules/governance/concernCase.js";
 
 let n = 0;
@@ -249,6 +249,20 @@ t("the Health Board is a party like the insurer, and anyone else is typed in by 
   const w = { ...buildWithdrawal({ step: second, steps: [...steps, second], reason: "wrong case", now: NOW }), id: "w" };
   assert.equal(w.partyName, "Other practice");
   assert.deepEqual(involvedParties({}, [...steps, second, w]), ["healthboard", "other-the-clinical-expert"]);
+});
+
+t("concerns received in the last 12 months are counted, closed ones too, from the same day a year ago to today", () => {
+  const at = (y, m, d, h = 12) => ({ receivedAt: new Date(y, m, d, h) });
+  const list = [
+    at(2026, 9, 1), at(2026, 9, 20, 9), { ...at(2026, 2, 3), status: "closed" }, at(2025, 9, 21), // inside: this month, today, a closed one, the day after a year ago
+    at(2025, 9, 20), at(2025, 9, 19), at(2024, 5, 1), // 20 October 2025 is the same day a year ago and counts; the day before and older do not
+    at(2026, 9, 21), // tomorrow: not received yet
+    {}, { receivedAt: "nonsense" }, { receivedAt: null },
+  ];
+  assert.equal(receivedInLastMonths(list, 12, NOW), 5);
+  assert.equal(receivedInLastMonths(list, 1, NOW), 2);
+  assert.equal(receivedInLastMonths([], 12, NOW), 0);
+  assert.equal(receivedInLastMonths([{ receivedAt: { toDate: () => new Date(2026, 5, 1) } }, { receivedAt: "2026-04-15" }], 12, NOW), 2, "a Firestore timestamp or a date string works");
 });
 
 console.log(`\n${n} passed`);

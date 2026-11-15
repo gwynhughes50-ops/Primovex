@@ -24,7 +24,7 @@ import { concernEvent } from "@/modules/audit/auditEvents";
 import { AUDIT_TYPE, auditEntry, cleanChanges } from "@/modules/governance/concernAudit";
 import { cleanContact, contactFromForm, hasContact, legacyContact } from "@/modules/governance/concernContact";
 import { cancelFields, cancelProblem, cancelTimelineMessage, isCancelled } from "@/modules/governance/concernMeetings";
-import { STEP_ACTIONS, WITHDRAWN, buildClosePatch, buildStep, buildWithdrawal, otherKey, partyOf, sentCount, ukDay } from "@/modules/governance/concernCase";
+import { STEP_ACTIONS, WITHDRAWN, buildClosePatch, buildStep, buildWithdrawal, otherKey, partyOf, receivedInLastMonths, sentCount, ukDay } from "@/modules/governance/concernCase";
 import { demoGovernanceCases, demoConcernTimeline, demoLearningActions } from "@/data/demoDataset";
 
 export const CONCERNS_COLLECTION = "governance_concerns";
@@ -873,7 +873,7 @@ export function getConcernMetrics(concerns = []) {
   const high = open.filter((c) => c.priority === CONCERN_PRIORITIES.high);
   const listeningMissing = open.filter((c) => !c.listeningDiscussionOfferedAt);
   const avgHealth = open.length ? Math.round(open.reduce((sum, c) => sum + calculateCaseHealth(c), 0) / open.length) : 100;
-  return { open: open.length, overdue: overdue.length, dueWeek: dueWeek.length, high: high.length, listeningMissing: listeningMissing.length, avgHealth };
+  return { open: open.length, overdue: overdue.length, dueWeek: dueWeek.length, high: high.length, listeningMissing: listeningMissing.length, receivedLastYear: receivedInLastMonths(concerns, 12), avgHealth };
 }
 
 // ---------------------------------------------------------------------------

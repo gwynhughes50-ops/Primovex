@@ -730,7 +730,7 @@ export default function GovernanceConcerns() {
           <MetricCard label="Open cases" value={metrics.open} tone="sky" />
           <MetricCard label="High priority" value={metrics.high} tone="rose" />
           <MetricCard label="Due this week" value={metrics.dueWeek} tone="amber" />
-          <MetricCard label="Listening missing" value={metrics.listeningMissing} tone="slate" />
+          <MetricCard label="Received, last 12 months" value={metrics.receivedLastYear} tone="slate" />
           <MetricCard label="Case health" value={`${metrics.avgHealth}%`} tone="emerald" />
         </section>
 
