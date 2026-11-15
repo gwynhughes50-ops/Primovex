@@ -8,7 +8,6 @@ import {
   CheckCircle,
   Thermometer,
   Settings,
-  Mail,
   X,
   Activity,
 } from "lucide-react";
@@ -205,12 +204,10 @@ export default function Alerts() {
   const [settingsError, setSettingsError] = useState("");
 
   // Live values (used by alerts generation)
-  const [emailEnabled, setEmailEnabled] = useState(false);
   const [globalExpirySoonDays, setGlobalExpirySoonDays] = useState(DEFAULT_EXPIRY_SOON_DAYS);
   const [categoryThresholds, setCategoryThresholds] = useState(DEFAULT_CATEGORY_THRESHOLDS);
 
   // Draft values (edited in modal; only saved when clicking Save)
-  const [draftEmailEnabled, setDraftEmailEnabled] = useState(false);
   const [draftGlobalExpirySoonDays, setDraftGlobalExpirySoonDays] = useState(DEFAULT_EXPIRY_SOON_DAYS);
   const [draftCategoryThresholds, setDraftCategoryThresholds] = useState(DEFAULT_CATEGORY_THRESHOLDS);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -265,11 +262,9 @@ export default function Alerts() {
         const data = snap.exists() ? snap.data() : {};
 
         // Merge with defaults so the UI always has keys
-        const mergedEmail = data?.email_enabled ?? false;
         const mergedGlobal = safeNumber(data?.global_expiry_days);
         const mergedCats = data?.category_expiry_days || {};
 
-        const liveEmail = Boolean(mergedEmail);
         const liveGlobal = mergedGlobal === null ? DEFAULT_EXPIRY_SOON_DAYS : Math.max(0, mergedGlobal);
 
         const liveCats = {
@@ -277,14 +272,12 @@ export default function Alerts() {
           ...(typeof mergedCats === "object" && mergedCats ? mergedCats : {}),
         };
 
-        setEmailEnabled(liveEmail);
         setGlobalExpirySoonDays(liveGlobal);
         setCategoryThresholds(liveCats);
 
         // If modal isn't open, keep draft in sync with live
         // (so user always starts editing current values)
         if (!settingsOpen) {
-          setDraftEmailEnabled(liveEmail);
           setDraftGlobalExpirySoonDays(liveGlobal);
           setDraftCategoryThresholds(liveCats);
         }
@@ -303,7 +296,6 @@ export default function Alerts() {
   // When opening the modal, copy live -> draft
   useEffect(() => {
     if (settingsOpen) {
-      setDraftEmailEnabled(emailEnabled);
       setDraftGlobalExpirySoonDays(globalExpirySoonDays);
       setDraftCategoryThresholds(categoryThresholds);
     }
@@ -325,7 +317,6 @@ export default function Alerts() {
       await setDoc(
         doc(db, SETTINGS_DOC_PATH),
         {
-          email_enabled: Boolean(draftEmailEnabled),
           global_expiry_days: Math.max(0, Number(draftGlobalExpirySoonDays || 0)),
           category_expiry_days: draftCategoryThresholds || DEFAULT_CATEGORY_THRESHOLDS,
           updated_at: serverTimestamp(),
@@ -871,30 +862,6 @@ export default function Alerts() {
 
             <div className="mt-5 space-y-4">
               <Card className="p-4 border-slate-700/40 bg-slate-950/40">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-50">Email hooks (placeholder)</div>
-                    <div className="text-xs text-slate-400 mt-1">
-                      Turning this on doesn’t send emails yet — it’s the switch we’ll connect to Power Automate / Cloud Functions.
-                    </div>
-                  </div>
-                  <Button
-                    variant="outline"
-                    disabled={!isAdmin || savingSettings}
-                    className={`rounded-full text-xs ${
-                      draftEmailEnabled
-                        ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
-                        : "border-white/10 bg-slate-900/40 text-slate-200"
-                    }`}
-                    onClick={() => setDraftEmailEnabled((v) => !v)}
-                  >
-                    <Mail className="h-4 w-4 mr-2" />
-                    {draftEmailEnabled ? "Enabled" : "Disabled"}
-                  </Button>
-                </div>
-              </Card>
-
-              <Card className="p-4 border-slate-700/40 bg-slate-950/40">
                 <div className="text-sm font-semibold text-slate-50">Expiry thresholds</div>
                 <div className="text-xs text-slate-400 mt-1">
                   Global threshold applies unless a category override is set above 0.
@@ -947,7 +914,6 @@ export default function Alerts() {
                     disabled={savingSettings}
                     onClick={() => {
                       // Reset draft to current live values
-                      setDraftEmailEnabled(emailEnabled);
                       setDraftGlobalExpirySoonDays(globalExpirySoonDays);
                       setDraftCategoryThresholds(categoryThresholds);
                     }}

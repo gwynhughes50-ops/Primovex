@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { BadgeCheck, ClipboardCheck, RotateCcw, Sparkles, UserPlus } from "lucide-react";
+import { BadgeCheck, ClipboardCheck, Sparkles } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   buildSmartVerificationPlan,
@@ -102,7 +102,7 @@ export default function StockVerificationWidget({ items = [], actor = null, comp
           <p className="text-xs text-teal-100/70">Estimated time: {plan.estimatedMinutes} min</p>
         </div>
         <p className="mt-2 text-xs leading-relaxed text-teal-50/80">
-          Assigned to the nursing/HCA team by default. Any suitable user can accept, reassign or snooze later when task workflows are connected.
+          A quick count by whoever is nearby: enter what is actually on the shelf and press Verify. If it differs, the stock is adjusted and the difference is recorded.
         </p>
       </div>
 
@@ -145,12 +145,6 @@ export default function StockVerificationWidget({ items = [], actor = null, comp
                   >
                     <BadgeCheck className="mr-2 h-4 w-4" />
                     {savingId === row.itemId ? "Saving…" : "Verify"}
-                  </Button>
-                  <Button type="button" variant="outline" className="rounded-full border-white/10 bg-slate-950/40 text-xs text-slate-200" disabled>
-                    <UserPlus className="mr-2 h-4 w-4" /> Reassign
-                  </Button>
-                  <Button type="button" variant="outline" className="rounded-full border-white/10 bg-slate-950/40 text-xs text-slate-200" disabled>
-                    <RotateCcw className="mr-2 h-4 w-4" /> Snooze
                   </Button>
                 </div>
               </div>
