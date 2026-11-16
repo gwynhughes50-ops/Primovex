@@ -117,6 +117,10 @@ export function rotaEvent(type, { mondayIso = "" } = {}) {
     team_access_off: "Reception rota: the team's access on their phones was switched off",
     absence_added: "Reception rota: an absence was entered",
     absence_removed: "Reception rota: an absence was removed",
+    absence_changed: "Reception rota: an absence was changed",
+    closure_changed: "Reception rota: a surgery closure was changed",
+    closure_added: "Reception rota: a surgery closure was entered",
+    closure_removed: "Reception rota: a surgery closure was removed",
   };
   return event(`rota.${text(type, 30)}`, "rota", "reception_rota", week || null, lines[type] || "Reception rota changed", week ? { week } : {});
 }

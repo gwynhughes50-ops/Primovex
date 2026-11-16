@@ -481,7 +481,7 @@ t("time off is entered and shown with times: the form, the saved fields and the 
   assert.match(panel, /fromTime, toTime, reason/);
   const service = readFileSync(new URL("../src/modules/rota/rotaService.js", import.meta.url), "utf8");
   assert.match(service, /\.\.\.\(fromTime \? \{ fromTime \} : \{\}\), \.\.\.\(toTime \? \{ toTime \} : \{\}\)/);
-  assert.match(service, /The time they are back must be after the time they go/);
+  assert.match(readFileSync(new URL("../src/modules/rota/rotaModel.js", import.meta.url), "utf8"), /The time they are back must be after the time they go/);
   const weekPanel = readFileSync(new URL("../src/components/rota/RotaWeekPanel.jsx", import.meta.url), "utf8");
   assert.match(weekPanel, /offText\(absences, p\.uid, iso\)/);
   assert.match(weekPanel, /availabilityOn\(absences, uid/);

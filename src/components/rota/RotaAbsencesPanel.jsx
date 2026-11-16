@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
-import { ArrowRight, Plus, Trash2 } from "lucide-react";
+import { ArrowRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { ABSENCE_REASONS, TIME_CHOICES, addDays, dateOf, isoOf, mondayOf, timeLabel } from "@/modules/rota/rotaModel";
-import { addAbsence, removeAbsence } from "@/modules/rota/rotaService";
+import { addAbsence, removeAbsence, updateAbsence } from "@/modules/rota/rotaService";
 import { initials, personColour, tint } from "./rotaStyle";
 
 // Who is off. The person is picked from the people on the rota, the days from the calendar, the times and the reason from lists: nothing is typed. Sickness is entered as "Off": the rota does not
@@ -41,6 +41,7 @@ export default function RotaAbsencesPanel({ rules, absences, actor, canManage })
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sure, setSure] = useState("");
+  const [editing, setEditing] = useState(""); // the id of the absence being changed, "" when adding a new one
   const people = rules.people || [];
   const upcoming = useMemo(() => absences.filter((a) => (a.to || a.from) >= addDays(mondayOf(new Date()), -7)), [absences]);
   const past = useMemo(() => absences.filter((a) => (a.to || a.from) < addDays(mondayOf(new Date()), -7)), [absences]);
@@ -50,9 +51,18 @@ export default function RotaAbsencesPanel({ rules, absences, actor, canManage })
     const person = people.find((p) => p.uid === uid);
     if (!person) { setError("Choose who is off."); return; }
     setBusy(true);
-    try { await addAbsence({ uid, name: person.name, from, to: to < from ? from : to, fromTime, toTime, reason }, actor); setUid(""); setFromTime(""); setToTime(""); } catch (e) { setError(e?.message || "That could not be saved."); }
+    try {
+      const row = { uid, name: person.name, from, to: to < from ? from : to, fromTime, toTime, reason };
+      if (editing) await updateAbsence(editing, row, actor); else await addAbsence(row, actor);
+      setUid(""); setFromTime(""); setToTime(""); setEditing("");
+    } catch (e) { setError(e?.message || "That could not be saved."); }
     setBusy(false);
   }
+  function startEdit(a) {
+    setError(""); setSure(""); setEditing(a.id); setUid(a.uid); setFrom(a.from); setTo(a.to || a.from); setFromTime(a.fromTime || ""); setToTime(a.toTime || ""); setReason(a.reason || "leave");
+    if (typeof window !== "undefined") window.scrollTo?.({ top: 0, behavior: "smooth" });
+  }
+  function cancelEdit() { setEditing(""); setUid(""); setFromTime(""); setToTime(""); setError(""); }
   async function remove(id) { setBusy(true); try { await removeAbsence(id); } catch (e) { setError(e?.message || "That could not be removed."); } setBusy(false); setSure(""); }
 
   const row = (a) => {
@@ -67,6 +77,7 @@ export default function RotaAbsencesPanel({ rules, absences, actor, canManage })
         </div>
         <span className="rounded-full px-2.5 py-1 text-xs font-semibold" style={{ background: tint(colour, 16), color: colour }}>{REASON_SHORT[a.reason] || "Off"}</span>
         {days > 1 && <span className="rounded-full px-2.5 py-1 text-xs font-semibold text-[var(--medtrak-muted)]" style={{ background: tint("#64748b", 14) }}>{days} days</span>}
+        {canManage && sure !== a.id && <button type="button" className={BTN} onClick={() => startEdit(a)} aria-label={`Change ${a.name}'s time off`}><Pencil className="h-4 w-4" aria-hidden="true" /></button>}
         {canManage && (sure === a.id
           ? <span className="flex gap-2"><button type="button" className={PRIMARY} disabled={busy} onClick={() => remove(a.id)}>Yes, remove</button><button type="button" className={BTN} onClick={() => setSure("")}>Keep</button></span>
           : <button type="button" className={BTN} onClick={() => setSure(a.id)} aria-label={`Remove ${a.name}'s absence`}><Trash2 className="h-4 w-4" aria-hidden="true" /></button>)}
@@ -78,7 +89,7 @@ export default function RotaAbsencesPanel({ rules, absences, actor, canManage })
     <div className="space-y-5">
       {canManage && (
         <section className={`${CARD} p-5`}>
-          <h2 className="text-lg font-black text-slate-50">Add someone being off</h2>
+          <h2 className="text-lg font-black text-slate-50">{editing ? "Change this time off" : "Add someone being off"}</h2>
           <div className="mt-4 grid gap-4 md:grid-cols-2">
             <label className="text-xs font-bold text-[var(--medtrak-text)]">Who<select value={uid} onChange={(e) => setUid(e.target.value)} className={`${FIELD} mt-1`}><option value="">Choose from the rota team</option>{people.map((p) => <option key={p.uid} value={p.uid}>{p.name}</option>)}</select></label>
             <label className="text-xs font-bold text-[var(--medtrak-text)]">Reason<select value={reason} onChange={(e) => setReason(e.target.value)} className={`${FIELD} mt-1`}>{Object.entries(ABSENCE_REASONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></label>
@@ -91,12 +102,13 @@ export default function RotaAbsencesPanel({ rules, absences, actor, canManage })
             <label className="text-xs font-bold text-[var(--medtrak-text)]">Back at<select value={toTime} onChange={(e) => setToTime(e.target.value)} className={`${FIELD} mt-1`}><option value="">End of the day</option>{TIME_CHOICES.map((t) => <option key={t} value={t}>{timeLabel(t)}</option>)}</select></label>
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <button type="button" className={PRIMARY} disabled={busy || !uid} onClick={add}><Plus className="h-4 w-4" aria-hidden="true" />Add</button>
+            <button type="button" className={PRIMARY} disabled={busy || !uid} onClick={add}>{editing ? null : <Plus className="h-4 w-4" aria-hidden="true" />}{editing ? "Save the changes" : "Add"}</button>
+            {editing && <button type="button" className={BTN} onClick={cancelEdit}>Cancel</button>}
             {error && <span className="text-sm text-rose-300">{error}</span>}
           </div>
           <details className="mt-4 text-xs text-[var(--medtrak-muted)]">
             <summary className="cursor-pointer font-semibold">How the times work</summary>
-            <p className="mt-1 max-w-3xl">Leave the times alone for whole days. For a half day or finishing early, set the first day and "Off from" (for example 12.00): they are in until then. For starting late, set "Back at" (for example 13.00): they are in from then. For a day or more with part days at each end, set both. Someone in for less than an hour of a day is treated as off that day. After adding, go to the Rota tab: weeks that now have someone off are marked, and you can rebuild them.</p>
+            <p className="mt-1 max-w-3xl">Leave the times alone for whole days. For a half day or finishing early, set the first day and "Off from" (for example 12.00): they are in until then. For starting late, set "Back at" (for example 13.00): they are in from then. For a day or more with part days at each end, set both. Someone in for less than an hour of a day is treated as off that day. After adding or changing time off, go to the Rota tab: weeks that now have someone off are marked, and you can rebuild them (a week where time off was shortened or removed needs rebuilding too).</p>
           </details>
         </section>
       )}

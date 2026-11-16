@@ -96,7 +96,7 @@ export function buildInToday({ now = new Date(), weeks = {}, rules = null, absen
   const names = Object.fromEntries((rules.people || []).map((p) => [p.uid, p.name]));
   const day = week.days?.[dayKey] || { slots: {} };
   const on = [];
-  for (const slot of slotsOfDay(rules, dayKey)) {
+  for (const slot of slotsOfDay(rules, dayKey, day.closed)) {
     const a = day.slots?.[slot.key];
     if (!a || !a.uid) continue;
     on.push({ uid: a.uid, name: names[a.uid] || a.name || "Someone", shift: slot.shift?.label || "Shift", start: a.from || slot.shift?.start || "", end: a.until || slot.shift?.end || "" });

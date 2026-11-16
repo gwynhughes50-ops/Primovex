@@ -3,7 +3,7 @@
 // (anonymise / restore below), and the findings are the same with or without it.
 import { DAYS, DAY_LABELS, absentOn, addDays, availabilityOn, groupLabel, isOwned, offText, ruleCoversShift, timeLabel, weekDates, weekLabel } from "./rotaModel.js";
 import { canDo, weekCounters } from "./rotaEngine.js";
-import { shiftById } from "./rotaModel.js";
+import { shiftById, toMinutes } from "./rotaModel.js";
 import { checkWeek, slotsOfDay } from "./rotaWeek.js";
 
 const SEVERITY_ORDER = { fix: 0, watch: 1, info: 2 };
@@ -33,7 +33,8 @@ function reviewWeek(rules, week, absences) {
   for (const day of DAYS) {
     for (const [key, place] of Object.entries(week.days?.[day]?.slots || {})) {
       if (!place.from && !place.until) continue;
-      const shift = shiftById(rules, key.split("#")[0]);
+      const shift = slotsOfDay(rules, day, week.days?.[day]?.closed).find((x) => x.key === key)?.shift || shiftById(rules, key.split("#")[0]);
+      if ((!place.from || toMinutes(place.from) <= toMinutes(shift.start)) && (!place.until || toMinutes(place.until) >= toMinutes(shift.end))) continue; // only cut by a closure, not by the person
       const p = (rules.people || []).find((x) => x.uid === place.uid);
       const rule = p?.dayRules?.[day];
       if (!shift?.essential || (rule && ruleCoversShift(rule.shift, shift) && !place.from && place.until === (rule.until || place.until))) continue;
@@ -53,7 +54,7 @@ function reviewWeek(rules, week, absences) {
   // thin cover: days with no spare person, so one more absence would leave an essential shift uncovered
   const thin = [];
   for (const { day, iso } of weekDates(week.mondayIso)) {
-    const essentialRotating = slotsOfDay(rules, day).filter((s) => s.shift.essential && !isOwned(rules, s.shift)).length;
+    const essentialRotating = slotsOfDay(rules, day, week.days?.[day]?.closed).filter((s) => s.shift.essential && !isOwned(rules, s.shift)).length;
     if (!essentialRotating) continue;
     const spare = poolPresent(rules, absences, day, iso).length - essentialRotating;
     const gapThatDay = issues.some((x) => x.day === day && x.severity === "gap");

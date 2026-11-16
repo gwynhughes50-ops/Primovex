@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
-import { AlertTriangle, CalendarRange, CheckCircle2, ChevronLeft, ChevronRight, Download, Info, Pin, Printer, ShieldCheck, Smartphone, UserMinus } from "lucide-react";
+import { AlertTriangle, Building2, CalendarRange, CheckCircle2, ChevronLeft, ChevronRight, Download, Info, Pin, Printer, ShieldCheck, Smartphone, UserMinus } from "lucide-react";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
-import { DAYS, DAY_LABELS, addDays, availabilityOn, dateOf, isoOf, offText, partTimes, ruleCoversShift, timeLabel, weekDates, weekLabel } from "@/modules/rota/rotaModel";
+import { CLOSURE_REASONS, DAYS, DAY_LABELS, ROTA_SITES, addDays, availabilityOn, closedSites, closedText, dateOf, dayClosures, isoOf, offText, partTimes, mayTakeShift, ruleCoversShift, timeLabel, weekDates, weekLabel } from "@/modules/rota/rotaModel";
 import { generateWeek, weekCounters } from "@/modules/rota/rotaEngine";
-import { checkWeek, historyBefore, lockedOf, setPlace, slotsOfDay, withNames } from "@/modules/rota/rotaWeek";
+import { checkWeek, closuresChangedSince, historyBefore, lockedOf, setPlace, slotsOfDay, withNames } from "@/modules/rota/rotaWeek";
 import { buildRotaHtml, buildRotaXlsx, counterColumns, runningCounters } from "@/modules/rota/rotaExport";
 import { saveWeek } from "@/modules/rota/rotaService";
 import { publishWeeks } from "@/modules/rota/rotaTeamService";
@@ -45,7 +45,7 @@ function Avatar({ uid, name, size = "h-6 w-6 text-[10px]" }) {
   return <span className={`grid shrink-0 place-items-center rounded-full font-bold text-white ${size}`} style={{ background: personColour(uid) }} aria-hidden="true">{initials(name)}</span>;
 }
 
-export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage, startMonday, published = {}, teamAccess = false }) {
+export default function RotaWeekPanel({ rules, weeks, absences, closures = [], actor, canManage, startMonday, published = {}, teamAccess = false }) {
   const [monday, setMonday] = useState(startMonday);
   const [span, setSpan] = useState(4);
   const [busy, setBusy] = useState(false);
@@ -59,8 +59,10 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
   const people = rules.people || [];
   const today = isoOf(new Date());
 
-  // weeks from this one on that now have someone on who is off (an absence was added after they were built)
-  const stale = useMemo(() => Object.values(weeks).filter((w) => w.mondayIso >= startMonday && checkWeek(rules, w, absences).some((i) => /but is off/.test(i.text))).map((w) => w.mondayIso).sort(), [weeks, rules, absences, startMonday]);
+  // weeks from this one on that now have someone on who is off, or whose surgery closures have changed (an absence or a closure was entered after they were built)
+  const stale = useMemo(() => Object.values(weeks).filter((w) => w.mondayIso >= startMonday && (checkWeek(rules, w, absences).some((i) => /but is off|is closed then/.test(i.text)) || closuresChangedSince(w, closures))).map((w) => w.mondayIso).sort(), [weeks, rules, absences, closures, startMonday]);
+  // a day's closures: as the week was built, or (before it is built) as the closures now stand
+  const closedOn = (day, iso) => week?.days?.[day]?.closed ?? dayClosures(closures, iso);
 
   const rows = useMemo(() => {
     const seen = new Set(); const list = [];
@@ -75,7 +77,7 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
     try {
       const local = { ...weeks };
       for (const m of mondays) {
-        const result = generateWeek({ rules, mondayIso: m, absences, history: historyBefore(local, m, rules), locked: lockedOf(local[m]) });
+        const result = generateWeek({ rules, mondayIso: m, absences, closures, history: historyBefore(local, m, rules), locked: lockedOf(local[m]) });
         const edited = {};
         for (const day of DAYS) for (const [key, a] of Object.entries(result.days[day].slots)) if (a.source === "locked") edited[`${day}|${key}`] = true;
         const built = { mondayIso: m, days: result.days, issues: result.issues, edited };
@@ -123,9 +125,9 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
   // the numbers at the top
   const cover = useMemo(() => {
     let total = 0; let covered = 0;
-    for (const { day } of weekDates(monday)) for (const s of slotsOfDay(rules, day)) if (s.shift.essential) { total += 1; if (week?.days?.[day]?.slots?.[s.key]) covered += 1; }
+    for (const { day, iso } of weekDates(monday)) for (const s of slotsOfDay(rules, day, closedOn(day, iso))) if (s.shift.essential) { total += 1; if (week?.days?.[day]?.slots?.[s.key]) covered += 1; }
     return { total, covered };
-  }, [rules, week, monday]);
+  }, [rules, week, monday, closures]);
   const gaps = issues.filter((i) => i.severity === "gap");
   const notes = issues.filter((i) => i.severity !== "gap");
   const offPeople = people.filter((p) => dates.some(({ iso }) => offText(absences, p.uid, iso)));
@@ -173,11 +175,11 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
           {confirmBuild
             ? <><span className="text-sm text-amber-200">Weeks already built will be built again. Places you fixed by hand stay.</span><button type="button" className={PRIMARY} disabled={busy} onClick={() => build(targets)}>Yes, build</button><button type="button" className={BTN} onClick={() => setConfirmBuild(false)}>Cancel</button></>
             : <button type="button" className={PRIMARY} disabled={busy || !people.length} onClick={() => (alreadyBuilt ? setConfirmBuild(true) : build(targets))}>{busy ? "Building…" : "Build the rota"}</button>}
-          {stale.length > 0 && !confirmBuild && <button type="button" className={BTN} disabled={busy} onClick={() => build(stale)}>Rebuild the {stale.length} week{stale.length === 1 ? "" : "s"} where someone is now off</button>}
+          {stale.length > 0 && !confirmBuild && <button type="button" className={BTN} disabled={busy} onClick={() => build(stale)}>Rebuild the {stale.length} week{stale.length === 1 ? "" : "s"} that are out of date</button>}
           <span className="ml-auto text-xs text-[var(--medtrak-muted)]">Click any name in the rota to change it. Places you change are kept when it is built again.</span>
         </div>
       )}
-      {stale.length > 0 && <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-sm text-amber-100">Someone is now off in {stale.length === 1 ? "a week that was built before the absence was entered" : `${stale.length} weeks that were built before the absences were entered`}: {stale.map((m) => weekLabel(m)).join(", ")}. {canManage ? "Rebuild them (above)." : "Ask whoever builds the rota."}</p>}
+      {stale.length > 0 && <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-sm text-amber-100">{stale.length === 1 ? "A week was" : `${stale.length} weeks were`} built before some time off or a surgery closure was entered: {stale.map((m) => weekLabel(m)).join(", ")}. {canManage ? "Rebuild them (above)." : "Ask whoever builds the rota."}</p>}
       {error && <p className="rounded-xl border border-rose-400/20 bg-rose-500/10 p-3 text-sm text-rose-100">{error}</p>}
       {!week && <p className={`${CARD} p-4 text-sm text-[var(--medtrak-muted)]`}>No rota has been built for this week yet.{canManage ? " Press Build the rota." : ""}</p>}
 
@@ -194,6 +196,7 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
                       <span className={`grid h-8 w-8 place-items-center rounded-lg text-base font-black ${isToday ? "bg-[var(--medtrak-accent)] text-slate-950" : "bg-[color:color-mix(in_srgb,var(--medtrak-text)_8%,transparent)] text-[var(--medtrak-text)]"}`}>{dayNumber(iso)}</span>
                       <span><span className="block text-sm font-bold text-[var(--medtrak-text)]">{DAY_LABELS[day]}</span><span className="block text-[11px] font-normal text-[var(--medtrak-muted)]">{dateOf(iso).toLocaleDateString("en-GB", { month: "short" })}{isToday ? " · today" : ""}</span></span>
                     </span>
+                    {closedSites(closedOn(day, iso)).map((site) => <span key={site} className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold" style={{ background: tint("#f59e0b", 18), color: "#d97706" }} title={[...new Set(closedOn(day, iso).filter((c) => c.site === site).map((c) => CLOSURE_REASONS[c.reason]))].join(", ")}><Building2 className="h-2.5 w-2.5" aria-hidden="true" />{ROTA_SITES[site].replace(" surgery", "")} closed {closedText(closedOn(day, iso), site)}</span>)}
                   </th>
                 );
               })}
@@ -212,6 +215,7 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
                   </th>
                   {dates.map(({ day, iso }) => {
                     const isToday = iso === today;
+                    if (slotsOfDay(rules, day).some((s) => s.key === slot.key) && !slotsOfDay(rules, day, closedOn(day, iso)).some((s) => s.key === slot.key)) return <td key={day} className={`border-b border-[var(--medtrak-border)] p-1.5 ${isToday ? "bg-[color:color-mix(in_srgb,var(--medtrak-accent)_5%,transparent)]" : ""}`}><div className="rounded-xl px-2.5 py-1.5 text-sm font-semibold text-[var(--medtrak-muted)]" style={{ background: tint("#f59e0b", 10) }}>Closed</div></td>;
                     if (!slotsOfDay(rules, day).some((s) => s.key === slot.key)) return <td key={day} className={`border-b border-[var(--medtrak-border)] p-2 text-center text-[var(--medtrak-muted)] ${isToday ? "bg-[color:color-mix(in_srgb,var(--medtrak-accent)_5%,transparent)]" : ""}`}>–</td>;
                     const place = week?.days?.[day]?.slots?.[slot.key];
                     const person = place && people.find((p) => p.uid === place.uid);
@@ -219,7 +223,7 @@ export default function RotaWeekPanel({ rules, weeks, absences, actor, canManage
                     const bad = place && issues.some((i) => i.day === day && i.severity === "gap" && i.text.includes(person?.name || place.name || "\u0000"));
                     const fixed = week?.edited?.[`${day}|${slot.key}`];
                     const times = [place?.from ? `from ${timeLabel(place.from)}` : "", place?.until ? `until ${timeLabel(place.until)}` : ""].filter(Boolean).join(" ");
-                    const options = people.filter((p) => (p.days || []).includes(day) || p.uid === place?.uid);
+                    const options = people.filter((p) => ((p.days || []).includes(day) && mayTakeShift(rules, p, slot.shift)) || p.uid === place?.uid);
                     return (
                       <td key={day} className={`border-b border-[var(--medtrak-border)] p-1.5 ${isToday ? "bg-[color:color-mix(in_srgb,var(--medtrak-accent)_5%,transparent)]" : ""}`}>
                         <div className="group relative">

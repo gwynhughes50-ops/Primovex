@@ -17,7 +17,7 @@ Run it after **every** change to `firestore.rules` or `storage.rules`.
    The suite expects Firestore on `127.0.0.1:8080` and Storage on `127.0.0.1:9199`.
 4. Run: `npm test`
 
-A healthy run ends with `0 failed` (483 checks pass as of 2026-11-15, including the PC register; 457 on 2026-11-05; it was 450 on 2026-11-04, then 441 and 430 earlier that day, 248 on 2026-10-11 and 94 when the storage.rules
+A healthy run ends with `0 failed` (486 checks pass as of 2026-11-16, including surgery closures and changing an absence; 483 on 2026-11-15 with the PC register; 457 on 2026-11-05; it was 450 on 2026-11-04, then 441 and 430 earlier that day, 248 on 2026-10-11 and 94 when the storage.rules
 coverage for stock item photos was added). A failure means the rules now
 allow something that should be refused (or refuse something a legitimate role
 needs).

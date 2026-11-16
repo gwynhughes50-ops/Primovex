@@ -70,6 +70,11 @@ var TIME_CHOICES = (() => {
 })();
 var ownersOnDay = (rules, shift, day) => (rules?.people || []).filter((p) => (p.days || []).includes(day) && ((p.mode === "fixed" || p.mode === "usual") && p.shift === shift.id || p.mode === "only" && (p.onlyShifts || []).includes(shift.id)));
 var isOwned = (rules, shift) => (rules?.people || []).some((p) => (p.mode === "fixed" || p.mode === "usual") && p.shift === shift.id || p.mode === "only" && (p.onlyShifts || []).includes(shift.id));
+var onlyOwnersOf = (rules, shift) => (rules?.people || []).filter((p) => p.mode === "only" && (p.onlyShifts || []).includes(shift?.id));
+var mayTakeShift = (rules, person, shift) => {
+  const owners = onlyOwnersOf(rules, shift);
+  return !owners.length || owners.some((o) => o.uid === person?.uid);
+};
 var shiftById = (rules, id) => (rules?.shifts || []).find((s) => s.id === id) || null;
 var GROUP_PREFIX = "group:";
 var ruleCoversShift = (spec, shift) => Boolean(spec && shift) && (spec === shift.id || spec === `${GROUP_PREFIX}${shift.group}`);
@@ -132,6 +137,64 @@ function partTimes(avail, shift) {
   const [s, e] = shiftSpan(shift);
   return { from: avail && avail.from > s ? hhmm(avail.from) : null, until: avail && avail.until < e ? hhmm(avail.until) : null };
 }
+var ROTA_SITES = { main: "Main surgery", branch: "Branch surgery" };
+var CLOSURE_REASONS = { bank: "Bank holiday", training: "Training or protected learning", building: "Building, power or other problem", other: "Other reason" };
+var siteOfShift = (shift) => shift?.site === "main" || shift?.site === "branch" ? shift.site : shift?.id === "tyelan" ? "branch" : "main";
+var mergedWindows = (list) => {
+  const raw = list.map((c) => [c.from, c.until]).sort((x, y) => x[0] - y[0]);
+  const merged = [];
+  for (const w of raw) {
+    const prev = merged[merged.length - 1];
+    if (prev && w[0] <= prev[1]) prev[1] = Math.max(prev[1], w[1]);
+    else merged.push([...w]);
+  }
+  return merged;
+};
+function openPartOf(dayClosed, shift) {
+  const mine = (dayClosed || []).filter((c) => c.site === siteOfShift(shift));
+  if (!mine.length) return {};
+  const s = toMinutes(shift.start);
+  const e = toMinutes(shift.end);
+  let best = null;
+  let cursor = s;
+  for (const [ws, we] of mergedWindows(mine)) {
+    if (ws > cursor) {
+      const stretch = [cursor, Math.min(ws, e)];
+      if (stretch[1] > stretch[0] && (!best || stretch[1] - stretch[0] > best[1] - best[0])) best = stretch;
+    }
+    cursor = Math.max(cursor, we);
+    if (cursor >= e) break;
+  }
+  if (cursor < e && (!best || e - cursor > best[1] - best[0])) best = [cursor, e];
+  if (!best || best[1] - best[0] < MIN_PART_MINUTES) return null;
+  return { ...best[0] > s ? { from: hhmm(best[0]) } : {}, ...best[1] < e ? { until: hhmm(best[1]) } : {} };
+}
+function closedText(dayClosed, site) {
+  const wins = mergedWindows((dayClosed || []).filter((c) => c.site === site));
+  if (!wins.length) return "";
+  if (wins.length > 1) return wins.map(([a2, b2]) => `${hhmm(a2)}\u2013${b2 === 1440 ? "end" : hhmm(b2)}`).join(", ");
+  const [a, b] = wins[0];
+  if (a === 0 && b === 1440) return "all day";
+  if (a === 0) return `until ${hhmm(b)}`;
+  if (b === 1440) return `from ${hhmm(a)}`;
+  return `${hhmm(a)}\u2013${hhmm(b)}`;
+}
+var closedSites = (dayClosed) => [...new Set((dayClosed || []).map((c) => c.site))];
+function closureNotes(rules, day, iso, dayClosed) {
+  const out = [];
+  for (const site of closedSites(dayClosed)) {
+    const reasons = [...new Set(dayClosed.filter((c) => c.site === site).map((c) => CLOSURE_REASONS[c.reason]))].join(", ");
+    const here = (rules?.shifts || []).filter((x) => (x.days || []).includes(day) && siteOfShift(x) === site);
+    const shut = here.filter((x) => openPartOf(dayClosed, x) === null).map((x) => x.label);
+    const cut = here.filter((x) => {
+      const o = openPartOf(dayClosed, x);
+      return o && (o.from || o.until);
+    }).map((x) => x.label);
+    const effect = [shut.length ? `${shut.join(", ")} ${shut.length === 1 ? "is" : "are"} not staffed` : "", cut.length ? `${cut.join(", ")} ${cut.length === 1 ? "is" : "are"} cut to the open hours` : ""].filter(Boolean).join("; ");
+    out.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: the ${ROTA_SITES[site].toLowerCase()} is closed ${closedText(dayClosed, site)} (${reasons})${effect ? `, so ${effect}` : ""}.` });
+  }
+  return out;
+}
 var absentOn = (absences, uid, iso) => (absences || []).find((a) => a.uid === uid && a.from <= iso && iso <= (a.to || a.from)) || null;
 
 // src/modules/rota/rotaEngine.js
@@ -149,14 +212,19 @@ function canDo(person, shift, day, { until = null, from = null } = {}) {
 }
 
 // src/modules/rota/rotaWeek.js
-function slotsOfDay(rules, day) {
+function slotsOfDay(rules, day, closed = null) {
   const out = [];
   for (const shift of rules.shifts || []) {
     if (!(shift.days || []).includes(day)) continue;
-    for (let i = 0; i < Number(shift.count || 1); i += 1) out.push({ key: slotKeyOf(shift, i), shift });
+    const open = closed && closed.length ? openPartOf(closed, shift) : {};
+    if (open === null) continue;
+    const trimmed = Boolean(open.from || open.until);
+    const cut = trimmed ? { ...shift, start: open.from || shift.start, end: open.until || shift.end } : shift;
+    for (let i = 0; i < Number(shift.count || 1); i += 1) out.push({ key: slotKeyOf(shift, i), shift: cut, ...trimmed ? { trim: open } : {} });
   }
   return out;
 }
+var closedShiftsOn = (rules, day, closed) => closed && closed.length ? (rules.shifts || []).filter((x) => (x.days || []).includes(day) && openPartOf(closed, x) === null) : [];
 function setPlace(week, rules, day, slotKey, uid, times = null) {
   const t = typeof times === "string" ? { until: times } : times || {};
   const names = Object.fromEntries((rules.people || []).map((p) => [p.uid, p.name]));
@@ -165,7 +233,7 @@ function setPlace(week, rules, day, slotKey, uid, times = null) {
   d.slots = d.slots || {};
   if (uid) d.slots[slotKey] = { uid, name: names[uid] || "", source: "locked", ...t.from ? { from: t.from } : {}, ...t.until ? { until: t.until } : {} };
   else delete d.slots[slotKey];
-  const all = slotsOfDay(rules, day).map((s) => s.key);
+  const all = slotsOfDay(rules, day, d.closed).map((s) => s.key);
   d.unfilled = all.filter((k) => !d.slots[k]);
   return { ...week, days, edited: { ...week.edited || {}, [`${day}|${slotKey}`]: true } };
 }
@@ -178,12 +246,18 @@ function checkWeek(rules, week, absences = []) {
     const slots = week.days?.[day]?.slots || {};
     const seen = {};
     const today = {};
-    for (const key of slotsOfDay(rules, day).map((s) => s.key)) {
+    const closed = week.days?.[day]?.closed || null;
+    const daySlots = slotsOfDay(rules, day, closed);
+    if (closed?.length) issues.push(...closureNotes(rules, day, iso, closed));
+    for (const key of Object.keys(slots)) {
+      const shut = !daySlots.some((x) => x.key === key) && closedShiftsOn(rules, day, closed).find((x) => x.id === shiftIdOfKey(key));
+      if (shut) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${people[slots[key].uid]?.name || slots[key].name || "Someone"} is on ${shut.label}, but the ${ROTA_SITES[siteOfShift(shut)].toLowerCase()} is closed then.` });
+    }
+    for (const { key, shift } of daySlots) {
       const a = slots[key];
-      const shift = shiftById(rules, shiftIdOfKey(key));
       if (!a) {
         if (shift.essential) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: nobody is on ${shift.label} (${shift.start}\u2013${shift.end}).` });
-        else if (!(isOwned(rules, shift) && slotsOfDay(rules, day).filter((s) => s.shift.id === shift.id).findIndex((s) => s.key === key) >= ownersOnDay(rules, shift, day).length)) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${shift.label} is not staffed.` });
+        else if (!(isOwned(rules, shift) && daySlots.filter((s) => s.shift.id === shift.id).findIndex((s) => s.key === key) >= ownersOnDay(rules, shift, day).length)) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${shift.label} is not staffed.` });
         continue;
       }
       const p = people[a.uid];
@@ -202,8 +276,9 @@ function checkWeek(rules, week, absences = []) {
       if (!avail) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${who} is on ${shift.label} but is off.` });
       else if (placeStart < avail.from || placeEnd > avail.until) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${who} is on ${shift.label} but is off for part of it (in ${hhmm(avail.from)} to ${hhmm(avail.until)} only).` });
       else if (!(p.days || []).includes(day)) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${who} is on ${shift.label} but does not work on a ${DAY_LABELS[day]}.` });
+      else if (!mayTakeShift(rules, p, shift)) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${who} is on ${shift.label}, which is only for ${onlyOwnersOf(rules, shift).map((o) => o.name).join(" and ")}.` });
       else if (!canDo(p, shift, day, { until: a.until || null, from: a.from || null })) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${who} cannot do ${shift.label} (their hours or their rules).` });
-      if (a.from || a.until && toMinutes(a.until) < toMinutes(shift.end)) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${who} is on ${shift.label} ${a.from ? `from ${a.from}` : ""}${a.from && a.until ? " " : ""}${a.until ? `until ${a.until}` : ""} only, so ${a.from && a.until ? "the rest" : a.from ? "the first part" : "the rest"} of the shift is for the team to absorb.` });
+      if (a.from && toMinutes(a.from) > toMinutes(shift.start) || a.until && toMinutes(a.until) < toMinutes(shift.end)) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${who} is on ${shift.label} ${a.from ? `from ${a.from}` : ""}${a.from && a.until ? " " : ""}${a.until ? `until ${a.until}` : ""} only, so ${a.from && a.until ? "the rest" : a.from ? "the first part" : "the rest"} of the shift is for the team to absorb.` });
       const limit = p.maxPerWeek?.[shift.group];
       if (limit != null && weekCount[a.uid][shift.group] > Number(limit)) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${who} has more than ${limit} ${shift.group} shift${Number(limit) === 1 ? "" : "s"} this week.` });
       if (rules.settings?.avoidLateThenEarly !== false && prev[a.uid] === "late" && shift.group === "early") issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${who} has an early after a late.` });
@@ -252,6 +327,7 @@ function takeProblem(rules, person, shift, day) {
   if (mode === "fixed" && person.shift !== shift.id) return `${person.name} is always on ${label(person.shift)}`;
   if (mode === "usual" && person.shift !== shift.id && !(person.coverShifts || []).includes(shift.id)) return `${person.name} does not step in on ${shift.label}`;
   if (mode === "only" && !(person.onlyShifts || []).includes(shift.id)) return `${person.name} only works particular shifts, and ${shift.label} is not one of them`;
+  if (!mayTakeShift(rules, person, shift)) return `${shift.label} is only for ${onlyOwnersOf(rules, shift).map((o) => o.name).join(" and ")}`;
   const rule = person.dayRules?.[day];
   if (rule && !ruleCoversShift(rule.shift, shift)) return `${person.name} is always on the same kind of shift on a ${DAY_LABELS[day]}`;
   return "";
@@ -367,7 +443,8 @@ function publishedDays(week, rules) {
   for (const { day, iso } of weekDates(week.mondayIso)) {
     const slots = {};
     for (const [key, a] of Object.entries(week.days?.[day]?.slots || {})) slots[key] = { uid: a.uid, name: names[a.uid] || a.name || "", ...a.from ? { from: a.from } : {}, ...a.until ? { until: a.until } : {} };
-    out[day] = { iso, slots };
+    const closed = week.days?.[day]?.closed || [];
+    out[day] = { iso, slots, ...closed.length ? { closed: closed.map((c) => ({ site: c.site, from: c.from, until: c.until, reason: c.reason })) } : {} };
   }
   return out;
 }
@@ -383,7 +460,8 @@ function publishedSlots(rules) {
 function projectPublished(week, rules) {
   return { mondayIso: week.mondayIso, teamUids: (rules.people || []).map((p) => p.uid), slots: publishedSlots(rules), days: publishedDays(week, rules) };
 }
-var isPublishedCurrent = (week, published, rules) => Boolean(published) && JSON.stringify(publishedDays(week, rules)) === JSON.stringify(published.days);
+var stable = (v) => JSON.stringify(v, (k, x) => x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map((key) => [key, x[key]])) : x);
+var isPublishedCurrent = (week, published, rules) => Boolean(published) && stable(publishedDays(week, rules)) === stable(published.days);
 // Annotate the CommonJS export names for ESM import in node:
 0 && (module.exports = {
   ADJUSTMENT_KINDS,

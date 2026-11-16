@@ -34,8 +34,17 @@ export function demoAbsences(monday) {
   ];
 }
 
-export function demoWeeks(rules, absences, monday) {
-  const built = generateWeeks({ rules, firstMonday: monday, weeks: 4, absences });
+// two closures to show: a bank-holiday style day at the branch, and a training afternoon at the main surgery
+export function demoClosures(monday) {
+  const d = (week, day) => addDays(monday, 7 * week + day);
+  return [
+    { id: "demo-c1", site: "branch", from: d(1, 0), to: d(1, 0), reason: "building", createdByName: "Demo" },
+    { id: "demo-c2", site: "main", from: d(2, 2), to: d(2, 2), fromTime: "12:30", reason: "training", createdByName: "Demo" },
+  ];
+}
+
+export function demoWeeks(rules, absences, monday, closures = []) {
+  const built = generateWeeks({ rules, firstMonday: monday, weeks: 4, absences, closures });
   return Object.fromEntries(built.map((w) => [w.mondayIso, { ...withNames(w, rules), edited: {} }]));
 }
 
@@ -51,9 +60,10 @@ export function demoStore() {
   const monday = mondayOf(new Date());
   const rules = demoRules();
   const absences = demoAbsences(monday);
-  const weeks = demoWeeks(rules, absences, monday);
+  const closures = demoClosures(monday);
+  const weeks = demoWeeks(rules, absences, monday, closures);
   const published = Object.fromEntries(Object.values(weeks).slice(0, 2).map((w) => [w.mondayIso, projectPublished(w, rules)]));
-  const state = { rules, weeks, absences, published, requests: demoRequests(monday), teamAccess: { teamAccess: true } };
+  const state = { rules, weeks, absences, closures, published, requests: demoRequests(monday), teamAccess: { teamAccess: true } };
   const listeners = Object.fromEntries(Object.keys(state).map((k) => [k, new Set()]));
   const clone = (v) => JSON.parse(JSON.stringify(v));
   const emit = (kind) => listeners[kind].forEach((cb) => cb(clone(state[kind])));
@@ -64,6 +74,10 @@ export function demoStore() {
     saveWeek(week) { state.weeks = { ...state.weeks, [week.mondayIso]: clone(week) }; emit("weeks"); },
     removeWeek(mondayIso) { const next = { ...state.weeks }; delete next[mondayIso]; state.weeks = next; emit("weeks"); },
     addAbsence(row) { state.absences = [...state.absences, { id: `demo-${Date.now()}`, createdByName: "Demo", ...clone(row) }].sort((x, y) => String(x.from).localeCompare(String(y.from))); emit("absences"); },
+    addClosure(row) { state.closures = [...state.closures, { id: `demo-${Date.now()}`, createdByName: "Demo", ...clone(row) }].sort((x, y) => String(x.from).localeCompare(String(y.from))); emit("closures"); },
+    removeClosure(id) { state.closures = state.closures.filter((c) => c.id !== id); emit("closures"); },
+    updateAbsence(id, row) { const clean = (r) => ({ ...r, ...(r.fromTime ? {} : { fromTime: undefined }), ...(r.toTime ? {} : { toTime: undefined }) }); state.absences = state.absences.map((a) => (a.id === id ? JSON.parse(JSON.stringify({ ...a, ...clean(row) })) : a)).sort((x, y) => String(x.from).localeCompare(String(y.from))); emit("absences"); },
+    updateClosure(id, row) { const clean = (r) => ({ ...r, ...(r.fromTime ? {} : { fromTime: undefined }), ...(r.toTime ? {} : { toTime: undefined }) }); state.closures = state.closures.map((c) => (c.id === id ? JSON.parse(JSON.stringify({ ...c, ...clean(row) })) : c)).sort((x, y) => String(x.from).localeCompare(String(y.from))); emit("closures"); },
     removeAbsence(id) { state.absences = state.absences.filter((a) => a.id !== id); emit("absences"); },
     publish(week) { state.published = { ...state.published, [week.mondayIso]: projectPublished(week, state.rules) }; emit("published"); },
     // What the server does, for demo mode: options, asking, answering. Simplified: nobody else answers, so a swap waits.

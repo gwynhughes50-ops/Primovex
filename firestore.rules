@@ -802,6 +802,16 @@ match /subject_access_requests/{requestId} {
       allow delete: if signedIn() && rotaManager();
     }
 
+    // Surgery closures: which surgery (main, branch or both) is shut, from and to when, and why. Picked from lists, no names and nothing typed, so there is no free text to keep out. The rota is built around them.
+    match /reception_rota_closures/{closureId} {
+      allow get, list: if signedIn() && rotaReader();
+      allow create: if signedIn() && rotaManager() && request.resource.data.site in ["main", "branch", "both"] && request.resource.data.reason in ["bank", "training", "building", "other"] && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.keys().hasOnly(["site", "from", "to", "fromTime", "toTime", "reason", "createdAt", "createdByUid", "createdByName"]);
+      allow update: if signedIn() && rotaManager() && request.resource.data.site in ["main", "branch", "both"] && request.resource.data.reason in ["bank", "training", "building", "other"]
+        && request.resource.data.keys().hasOnly(["site", "from", "to", "fromTime", "toTime", "reason", "createdAt", "createdByUid", "createdByName"]);
+      allow delete: if signedIn() && rotaManager();
+    }
+
 
 
     // -------------------------

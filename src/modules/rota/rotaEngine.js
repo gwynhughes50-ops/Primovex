@@ -9,7 +9,7 @@
 //        - not the same shift two days running, and not an early the morning after a late.
 //   4. If an essential shift is still empty, someone with a usual shift who can cover it steps in, and the shift they leave is shown as empty.
 //   5. Anything still empty is reported. An essential shift that can't be covered is a gap; a non-essential one that is dropped is a note. Nothing is left empty quietly.
-import { DAYS, DAY_LABELS, MIN_PART_MINUTES, addDays, availabilityOn, fitsWhole, isOwned, overlapMinutes, ownersOnDay, partTimes, ruleShiftsOf, shiftById, toMinutes, weekDates } from "./rotaModel.js";
+import { DAYS, DAY_LABELS, MIN_PART_MINUTES, ROTA_SITES, addDays, availabilityOn, closureNotes, dayClosures, fitsWhole, isOwned, mayTakeShift, onlyOwnersOf, openPartOf, overlapMinutes, ownersOnDay, partTimes, ruleShiftsOf, shiftById, siteOfShift, toMinutes, weekDates } from "./rotaModel.js";
 
 const BIG = 1e9;
 const ESSENTIAL_EMPTY = 100000; // leaving an essential shift empty is always worse than anything else
@@ -82,7 +82,8 @@ export function canDo(person, shift, day, { until = null, from = null } = {}) {
 //   lastFriday:  { uid: group }         what they did on the Friday before this week
 // }
 // locked = { mon: { slotKey: uid } }  places fixed by hand, which are kept.
-export function generateWeek({ rules, mondayIso, absences = [], history = {}, locked = {} }) {
+// closures = surgery closures ({ site, from, to, fromTime, toTime, reason }): a shift at a closed surgery is not staffed, and one that runs into a closure is cut to the open hours.
+export function generateWeek({ rules, mondayIso, absences = [], closures = [], history = {}, locked = {} }) {
   const people = rules?.people || [];
   const byUid = Object.fromEntries(people.map((p) => [p.uid, p]));
   const settings = rules?.settings || {};
@@ -103,9 +104,15 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
 
   for (const { day, iso } of weekDates(mondayIso)) {
     const slots = [];
+    const dayClosed = dayClosures(closures, iso); // the surgery closures that fall on this day
+    const closedShifts = []; // shifts at a surgery that is shut for (nearly) all of the shift
     for (const shift of rules.shifts || []) {
       if (!(shift.days || []).includes(day)) continue;
-      for (let i = 0; i < Number(shift.count || 1); i += 1) slots.push({ key: slotKeyOf(shift, i), shift });
+      const open = openPartOf(dayClosed, shift);
+      if (open === null) { closedShifts.push(shift); continue; }
+      // a shift that runs into a closure is cut to the open hours; the cut is kept on the slot so it is shown and saved with the place
+      const cut = open.from || open.until ? { ...shift, start: open.from || shift.start, end: open.until || shift.end } : shift;
+      for (let i = 0; i < Number(shift.count || 1); i += 1) slots.push({ key: slotKeyOf(shift, i), shift: cut, trim: open.from || open.until ? open : null });
     }
     const assigned = {}; // slotKey -> { uid, until, source }
     const used = new Set();
@@ -120,7 +127,10 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
     });
     const presentUids = new Set(present.map((p) => p.uid));
     const firstFree = (shiftId) => slots.find((s) => s.shift.id === shiftId && !assigned[s.key]);
-    const put = (slot, uid, source, { from = null, until = null } = {}) => {
+    const laterOf = (a, b) => (a && b ? (toMinutes(a) >= toMinutes(b) ? a : b) : a || b || null);
+    const put = (slot, uid, source, times = {}) => {
+      const from = laterOf(times.from || null, slot.trim?.from || null);
+      const until = (times.until || null) && slot.trim?.until ? (toMinutes(times.until) <= toMinutes(slot.trim.until) ? times.until : slot.trim.until) : (times.until || slot.trim?.until || null);
       assigned[slot.key] = { uid, name: byUid[uid]?.name || "", source, ...(from ? { from } : {}), ...(until ? { until } : {}) };
       used.add(uid);
       bump(weekCounts, uid, slot.shift.group);
@@ -138,7 +148,15 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
     // 1. places fixed by hand
     for (const [key, uid] of Object.entries(locked[day] || {})) {
       const slot = slots.find((s) => s.key === key);
-      if (!slot) continue;
+      if (!slot) {
+        const shut = closedShifts.find((x) => shiftIdOfKey(key) === x.id);
+        if (shut) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${byUid[uid]?.name || "someone"} was placed on ${shut.label} by hand but the ${ROTA_SITES[siteOfShift(shut)].toLowerCase()} is closed then, so the place was cleared.` });
+        continue;
+      }
+      if (byUid[uid] && !mayTakeShift(rules, byUid[uid], slot.shift)) {
+        issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${byUid[uid].name} was placed on ${slot.shift.label} by hand, but that shift is only for ${onlyOwnersOf(rules, slot.shift).map((o) => o.name).join(" and ")}, so the place was cleared.` });
+        continue;
+      }
       if (!presentUids.has(uid) || used.has(uid) || assigned[key]) {
         issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${byUid[uid]?.name || "someone"} was placed on ${slot.shift.label} by hand but is not available that day, so the place was cleared.` });
         continue;
@@ -234,7 +252,7 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
     // 4. cover for an essential shift that is still empty
     for (const slot of slots) {
       if (assigned[slot.key] || !slot.shift.essential) continue;
-      const coverers = present.filter((p) => p.mode === "usual" && (p.coverShifts || []).includes(slot.shift.id) && fitsWhole(availOf[p.uid], slot.shift) && canDo(p, slot.shift, day) && !(p.maxPerWeek?.[slot.shift.group] != null && (weekCounts[p.uid]?.[slot.shift.group] || 0) >= Number(p.maxPerWeek[slot.shift.group])));
+      const coverers = present.filter((p) => p.mode === "usual" && (p.coverShifts || []).includes(slot.shift.id) && mayTakeShift(rules, p, slot.shift) && fitsWhole(availOf[p.uid], slot.shift) && canDo(p, slot.shift, day) && !(p.maxPerWeek?.[slot.shift.group] != null && (weekCounts[p.uid]?.[slot.shift.group] || 0) >= Number(p.maxPerWeek[slot.shift.group])));
       const free = coverers.find((p) => !used.has(p.uid));
       const stepIn = free || coverers[0];
       if (!stepIn) continue;
@@ -248,6 +266,15 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
         used.delete(stepIn.uid);
       }
       put(slot, stepIn.uid, "cover");
+    }
+
+    // the closures: say what they did to the day, and who has no shift because of one
+    issues.push(...closureNotes(rules, day, iso, dayClosed));
+    for (const p of present) {
+      if (used.has(p.uid) || p.mode === "pool" || !p.mode) continue;
+      const mine = p.mode === "only" ? (p.onlyShifts || []) : [p.shift];
+      const lost = closedShifts.filter((x) => mine.includes(x.id));
+      if (lost.length && lost.length === mine.filter((id) => (rules.shifts || []).some((x) => x.id === id && (x.days || []).includes(day))).length) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${p.name} would be on ${lost.map((x) => x.label).join(" or ")}, which is closed, so has no shift.` });
     }
 
     // 5. whatever is still empty
@@ -267,9 +294,9 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
       }
     }
     const benched = present.filter((p) => !used.has(p.uid) && !tooLittle.has(p.uid) && (p.mode || "pool") === "pool").map((p) => p.uid);
-    for (const uid of benched) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${byUid[uid].name} has no shift (more people than shifts).` });
+    for (const uid of benched) issues.push({ day, iso, severity: "note", text: dayClosed.length ? `${DAY_LABELS[day]}: ${byUid[uid].name} is not needed because of the closure.` : `${DAY_LABELS[day]}: ${byUid[uid].name} has no shift (more people than shifts).` });
 
-    out[day] = { iso, slots: assigned, unfilled };
+    out[day] = { iso, slots: assigned, unfilled, ...(dayClosed.length ? { closed: dayClosed } : {}) };
     const nextPrev = {};
     for (const [key, a] of Object.entries(assigned)) {
       const shift = shiftById(rules, shiftIdOfKey(key));
@@ -282,12 +309,12 @@ export function generateWeek({ rules, mondayIso, absences = [], history = {}, lo
 }
 
 // Build several weeks in a row, each one starting from what the earlier ones already gave out. `existing` holds weeks already saved (with their hand-fixed places) as { mondayIso: week }.
-export function generateWeeks({ rules, firstMonday, weeks, absences = [], history = {}, lockedByWeek = {} }) {
+export function generateWeeks({ rules, firstMonday, weeks, absences = [], closures = [], history = {}, lockedByWeek = {} }) {
   const results = [];
   let hist = { counts: JSON.parse(JSON.stringify(history.counts || {})), friLate: { ...(history.friLate || {}) }, previous: history.previous || {}, lastFriday: history.lastFriday || {} };
   for (let w = 0; w < weeks; w += 1) {
     const mondayIso = addDays(firstMonday, 7 * w);
-    const week = generateWeek({ rules, mondayIso, absences, history: hist, locked: lockedByWeek[mondayIso] || {} });
+    const week = generateWeek({ rules, mondayIso, absences, closures, history: hist, locked: lockedByWeek[mondayIso] || {} });
     results.push(week);
     hist = historyAfter(hist, week, rules);
   }

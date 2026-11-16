@@ -121,6 +121,8 @@
     "test:pin-enter": "node scripts/verify-pin-enter.mjs",
     "test:laptops": "node scripts/verify-laptops.mjs",
     "test:rota": "node scripts/verify-rota.mjs",
+    "test:rota-closures": "node scripts/verify-rota-closures.mjs",
+    "test:rota-only-shifts": "node scripts/verify-rota-only-shifts.mjs",
     "test:rota-review": "node scripts/verify-rota-review.mjs",
     "test:rota-requests": "node scripts/verify-rota-requests.mjs",
     "test:dashboard-needs": "esbuild scripts/verify-dashboard-needs.mjs --bundle --platform=node --format=cjs --alias:firebase/firestore=./scripts/stubs/sarReminderStubs.js --alias:@/lib/firebase=./scripts/stubs/sarReminderStubs.js --alias:@=./src --outfile=work/verify-dashboard-needs.bundle.cjs && node work/verify-dashboard-needs.bundle.cjs",

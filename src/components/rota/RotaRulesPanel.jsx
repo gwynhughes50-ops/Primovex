@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { listStaffDirectory } from "@/services/staffDirectoryService";
-import { DAYS, DAY_LABELS, DAY_SHORT, MODES, TIME_CHOICES, checkRules, groupLabel, groupsOf, inStandardOrder, newPerson, timeLabel } from "@/modules/rota/rotaModel";
+import { DAYS, DAY_LABELS, DAY_SHORT, MODES, ROTA_SITES, TIME_CHOICES, checkRules, groupLabel, groupsOf, inStandardOrder, newPerson, siteOfShift, timeLabel } from "@/modules/rota/rotaModel";
 import { saveRules } from "@/modules/rota/rotaService";
 import { groupColour, initials, personColour, tint } from "./rotaStyle";
 
@@ -119,14 +119,15 @@ function ShiftsEditor({ rules, onChange, canManage }) {
       <h2 className="text-lg font-black text-slate-50">The shifts</h2>
       <p className="text-xs text-[var(--medtrak-muted)]">The order here is the order down the rota, in print and in Excel. Use the arrows to move a shift, or put them all in the usual order in one go. Press "Save the rules" afterwards.</p>
       {canManage && <button type="button" className={`${BTN} mt-2`} onClick={() => onChange({ ...rules, shifts: inStandardOrder(rules.shifts) })}>Put the shifts in the usual order (Early 1, Early 2, Mid, Late, Admin 1, 2, 3, Desk/phones, Desk/phones mornings, Ty Elan)</button>}
-      <p className="text-xs text-[var(--medtrak-muted)]">An essential shift must be covered every day: if it can't be, the rota says so. A shift that is not essential is given up when there are too few people, the lowest "given up" number first.</p>
+      <p className="text-xs text-[var(--medtrak-muted)]">Surgery is where the shift is worked: when that surgery is closed (see Surgery closures), the shift is not staffed. An essential shift must be covered every day: if it can't be, the rota says so. A shift that is not essential is given up when there are too few people, the lowest "given up" number first.</p>
       <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[820px] text-left text-sm">
-          <thead className="text-xs text-[var(--medtrak-muted)]"><tr><th className="p-1">Name</th><th className="p-1">Counted as</th><th className="p-1">Start</th><th className="p-1">Finish</th><th className="p-1">People</th><th className="p-1">Essential</th><th className="p-1">Given up</th><th className="p-1">Days</th><th className="p-1" /></tr></thead>
+        <table className="w-full min-w-[920px] text-left text-sm">
+          <thead className="text-xs text-[var(--medtrak-muted)]"><tr><th className="p-1">Name</th><th className="p-1">Surgery</th><th className="p-1">Counted as</th><th className="p-1">Start</th><th className="p-1">Finish</th><th className="p-1">People</th><th className="p-1">Essential</th><th className="p-1">Given up</th><th className="p-1">Days</th><th className="p-1" /></tr></thead>
           <tbody>
             {rules.shifts.map((s, i) => (
               <tr key={s.id} className="align-top">
                 <td className="p-1"><span className="flex items-center gap-2"><span className="h-6 w-1.5 shrink-0 rounded-full" style={{ background: groupColour(s.group, groupsOf(rules).indexOf(s.group)) }} aria-hidden="true" /><input value={s.label} disabled={!canManage} onChange={(e) => setShift(i, { label: e.target.value })} className={`${FIELD} w-40`} /></span></td>
+                <td className="p-1"><select value={siteOfShift(s)} disabled={!canManage} onChange={(e) => setShift(i, { site: e.target.value })} className={FIELD} aria-label={`${s.label}: which surgery`}>{Object.entries(ROTA_SITES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></td>
                 <td className="p-1"><select value={s.group} disabled={!canManage} onChange={(e) => setShift(i, { group: e.target.value })} className={FIELD}>{[...new Set([...groupsOf(rules), s.group])].map((g) => <option key={g} value={g}>{groupLabel(rules, g)}</option>)}</select></td>
                 <td className="p-1"><TimeSelect value={s.start} blank="" disabled={!canManage} onChange={(v) => v && setShift(i, { start: v })} /></td>
                 <td className="p-1"><TimeSelect value={s.end} blank="" disabled={!canManage} onChange={(v) => v && setShift(i, { end: v })} /></td>

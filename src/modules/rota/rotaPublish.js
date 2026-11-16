@@ -11,7 +11,8 @@ export function publishedDays(week, rules) {
   for (const { day, iso } of weekDates(week.mondayIso)) {
     const slots = {};
     for (const [key, a] of Object.entries(week.days?.[day]?.slots || {})) slots[key] = { uid: a.uid, name: names[a.uid] || a.name || "", ...(a.from ? { from: a.from } : {}), ...(a.until ? { until: a.until } : {}) };
-    out[day] = { iso, slots };
+    const closed = week.days?.[day]?.closed || [];
+    out[day] = { iso, slots, ...(closed.length ? { closed: closed.map((c) => ({ site: c.site, from: c.from, until: c.until, reason: c.reason })) } : {}) };
   }
   return out;
 }
@@ -28,8 +29,9 @@ export function projectPublished(week, rules) {
   return { mondayIso: week.mondayIso, teamUids: (rules.people || []).map((p) => p.uid), slots: publishedSlots(rules), days: publishedDays(week, rules) };
 }
 
-// Has the week changed since it was published?
-export const isPublishedCurrent = (week, published, rules) => Boolean(published) && JSON.stringify(publishedDays(week, rules)) === JSON.stringify(published.days);
+// Has the week changed since it was published? (compared by content, not by the order the database happens to return the fields in)
+const stable = (v) => JSON.stringify(v, (k, x) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map((key) => [key, x[key]])) : x));
+export const isPublishedCurrent = (week, published, rules) => Boolean(published) && stable(publishedDays(week, rules)) === stable(published.days);
 
 // ---- what a person sees ----
 // The person's own shifts from today on, across the published weeks: [{ monday, day, iso, key, label, start, end, from, until }]

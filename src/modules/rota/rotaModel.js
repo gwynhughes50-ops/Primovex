@@ -68,6 +68,9 @@ export const newPerson = (uid, name) => ({
 // should have been on it is not: the morning desk, for instance, is not "not staffed" on a day neither part-timer is due in.
 export const ownersOnDay = (rules, shift, day) => (rules?.people || []).filter((p) => (p.days || []).includes(day) && (((p.mode === "fixed" || p.mode === "usual") && p.shift === shift.id) || (p.mode === "only" && (p.onlyShifts || []).includes(shift.id))));
 export const isOwned = (rules, shift) => (rules?.people || []).some((p) => ((p.mode === "fixed" || p.mode === "usual") && p.shift === shift.id) || (p.mode === "only" && (p.onlyShifts || []).includes(shift.id)));
+// A shift that people on "only these shifts" work is theirs alone: nobody else is put on it (the morning desk, which is a short shift, would not show anyone else's full day).
+export const onlyOwnersOf = (rules, shift) => (rules?.people || []).filter((p) => p.mode === "only" && (p.onlyShifts || []).includes(shift?.id));
+export const mayTakeShift = (rules, person, shift) => { const owners = onlyOwnersOf(rules, shift); return !owners.length || owners.some((o) => o.uid === person?.uid); };
 export const shiftById = (rules, id) => (rules?.shifts || []).find((s) => s.id === id) || null;
 // A day rule names one shift ("early2") or any shift of a kind ("group:early", which is Early 1 or Early 2). These give the shifts a rule can mean.
 export const GROUP_PREFIX = "group:";
@@ -145,6 +148,105 @@ export function offText(absences, uid, iso) {
   if (s === 0) return `until ${hhmm(e)}`;
   if (e === 1440) return `from ${hhmm(s)}`;
   return `${hhmm(s)}–${hhmm(e)}`;
+}
+
+// ---- surgery closures ----
+// The practice has a main surgery and a branch surgery. A closure is a surgery (or both) shut for a stretch of days (a bank holiday, a training afternoon, a burst pipe), with the same first-day and
+// last-day times as an absence: blank means the whole day. The rota is built around it: a shift at a closed surgery is not staffed, and a shift that runs into a closure is cut to the open hours.
+export const ROTA_SITES = { main: "Main surgery", branch: "Branch surgery" };
+export const CLOSURE_SITES = { main: "Main surgery", branch: "Branch surgery", both: "Both surgeries" };
+export const CLOSURE_REASONS = { bank: "Bank holiday", training: "Training or protected learning", building: "Building, power or other problem", other: "Other reason" };
+
+// Which surgery a shift is at. A shift says so in the rules ("main" or "branch"); the Ty Elan shift is the branch's, and everything else the main surgery's, until the rules say otherwise.
+export const siteOfShift = (shift) => (shift?.site === "main" || shift?.site === "branch" ? shift.site : shift?.id === "tyelan" ? "branch" : "main");
+
+export const absenceProblem = ({ uid, from, to, fromTime = "", toTime = "", reason }) => {
+  if (!uid || !from) return "Choose who is off and the first day.";
+  if (to && to < from) return "The last day cannot be before the first day.";
+  if ((fromTime && !CLOSURE_TIME.test(fromTime)) || (toTime && !CLOSURE_TIME.test(toTime))) return "Choose the times from the list.";
+  if ((to || from) === from && fromTime && toTime && toTime <= fromTime) return "The time they are back must be after the time they go.";
+  if (!["leave", "toil", "other"].includes(reason)) return "Choose a reason.";
+  return "";
+};
+
+// What is wrong with a closure about to be saved ("" when nothing is): everything is picked from a list, so this only catches a combination that makes no sense.
+const CLOSURE_TIME = /^[0-9]{2}:[0-9]{2}$/;
+export const closureProblem = ({ site, from, to, fromTime = "", toTime = "", reason }) => {
+  if (!CLOSURE_SITES[site]) return "Choose which surgery is closed.";
+  if (!from) return "Choose the first day.";
+  if (to && to < from) return "The last day cannot be before the first day.";
+  if ((fromTime && !CLOSURE_TIME.test(fromTime)) || (toTime && !CLOSURE_TIME.test(toTime))) return "Choose the times from the list.";
+  if ((to || from) === from && fromTime && toTime && toTime <= fromTime) return "The time it reopens must be after the time it closes.";
+  if (!CLOSURE_REASONS[reason]) return "Choose a reason.";
+  return "";
+};
+
+// A closure's stretches on this date as { site, from, until, reason } (minutes), one for each surgery it shuts. Sorted so the same closures always give the same answer.
+export function dayClosures(closures, iso) {
+  const out = [];
+  for (const c of closures || []) {
+    const last = c.to || c.from;
+    if (!c.from || c.from > iso || iso > last) continue;
+    const start = iso === c.from && c.fromTime ? toMinutes(c.fromTime) : 0;
+    const end = iso === last && c.toTime ? toMinutes(c.toTime) : 1440;
+    if (start === null || end === null || end <= start) continue;
+    for (const site of c.site === "both" ? ["main", "branch"] : [c.site]) if (ROTA_SITES[site]) out.push({ from: start, reason: CLOSURE_REASONS[c.reason] ? c.reason : "other", site, until: end });
+  }
+  return out.sort((x, y) => x.site.localeCompare(y.site) || x.from - y.from || x.until - y.until);
+}
+
+// a short, stable text for a day's closures, to tell whether closures have changed since a week was built
+export const closureSignature = (list) => (list || []).map((c) => `${c.site}|${c.from}|${c.until}|${c.reason}`).sort().join(";");
+
+const mergedWindows = (list) => {
+  const raw = list.map((c) => [c.from, c.until]).sort((x, y) => x[0] - y[0]);
+  const merged = [];
+  for (const w of raw) { const prev = merged[merged.length - 1]; if (prev && w[0] <= prev[1]) prev[1] = Math.max(prev[1], w[1]); else merged.push([...w]); }
+  return merged;
+};
+
+// What a closure leaves of one shift: null when the surgery is shut for (nearly) all of it, {} when the shift is untouched, or { from, until } ("HH:MM", only the end that has moved) for the open part.
+// A closure in the middle of a shift leaves two stretches: the longer one is kept.
+export function openPartOf(dayClosed, shift) {
+  const mine = (dayClosed || []).filter((c) => c.site === siteOfShift(shift));
+  if (!mine.length) return {};
+  const s = toMinutes(shift.start); const e = toMinutes(shift.end);
+  let best = null; let cursor = s;
+  for (const [ws, we] of mergedWindows(mine)) {
+    if (ws > cursor) { const stretch = [cursor, Math.min(ws, e)]; if (stretch[1] > stretch[0] && (!best || stretch[1] - stretch[0] > best[1] - best[0])) best = stretch; }
+    cursor = Math.max(cursor, we);
+    if (cursor >= e) break;
+  }
+  if (cursor < e && (!best || e - cursor > best[1] - best[0])) best = [cursor, e];
+  if (!best || best[1] - best[0] < MIN_PART_MINUTES) return null;
+  return { ...(best[0] > s ? { from: hhmm(best[0]) } : {}), ...(best[1] < e ? { until: hhmm(best[1]) } : {}) };
+}
+
+// how a surgery's closure on a date reads: "all day", "from 12:30", "until 10:00" or "13:00–14:00"
+export function closedText(dayClosed, site) {
+  const wins = mergedWindows((dayClosed || []).filter((c) => c.site === site));
+  if (!wins.length) return "";
+  if (wins.length > 1) return wins.map(([a, b]) => `${hhmm(a)}–${b === 1440 ? "end" : hhmm(b)}`).join(", ");
+  const [a, b] = wins[0];
+  if (a === 0 && b === 1440) return "all day";
+  if (a === 0) return `until ${hhmm(b)}`;
+  if (b === 1440) return `from ${hhmm(a)}`;
+  return `${hhmm(a)}–${hhmm(b)}`;
+}
+export const closedSites = (dayClosed) => [...new Set((dayClosed || []).map((c) => c.site))];
+
+// What a day's closures did to the rota, one note for each surgery that is shut: "Monday: the branch surgery is closed all day (Bank holiday), so Ty Elan is not staffed."
+export function closureNotes(rules, day, iso, dayClosed) {
+  const out = [];
+  for (const site of closedSites(dayClosed)) {
+    const reasons = [...new Set(dayClosed.filter((c) => c.site === site).map((c) => CLOSURE_REASONS[c.reason]))].join(", ");
+    const here = (rules?.shifts || []).filter((x) => (x.days || []).includes(day) && siteOfShift(x) === site);
+    const shut = here.filter((x) => openPartOf(dayClosed, x) === null).map((x) => x.label);
+    const cut = here.filter((x) => { const o = openPartOf(dayClosed, x); return o && (o.from || o.until); }).map((x) => x.label);
+    const effect = [shut.length ? `${shut.join(", ")} ${shut.length === 1 ? "is" : "are"} not staffed` : "", cut.length ? `${cut.join(", ")} ${cut.length === 1 ? "is" : "are"} cut to the open hours` : ""].filter(Boolean).join("; ");
+    out.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: the ${ROTA_SITES[site].toLowerCase()} is closed ${closedText(dayClosed, site)} (${reasons})${effect ? `, so ${effect}` : ""}.` });
+  }
+  return out;
 }
 
 // Is this person off, for the whole of this date? (Part days are handled by availabilityOn.)

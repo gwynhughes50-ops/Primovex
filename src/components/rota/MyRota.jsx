@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight, MessageSquarePlus, Users, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { DAYS, DAY_LABELS, TIME_CHOICES, addDays, dateOf, isoOf, mondayOf, timeLabel } from "@/modules/rota/rotaModel";
+import { CLOSURE_REASONS, DAYS, DAY_LABELS, ROTA_SITES, TIME_CHOICES, addDays, closedSites, closedText, dateOf, isoOf, mondayOf, timeLabel } from "@/modules/rota/rotaModel";
 import { dayRoster, myShifts } from "@/modules/rota/rotaPublish";
 import { ADJUSTMENT_KINDS, ADJUSTMENT_REASONS } from "@/modules/rota/rotaSwap";
 import { askRota, subscribeMyPublished, subscribeMyRequests, subscribeTeamAccess, teamUid } from "@/modules/rota/rotaTeamService";
@@ -188,6 +188,9 @@ export function TeamDay({ published, uid, today }) {
           </button>
         ); })}
       </div>
+      {closedSites(week.days?.[day]?.closed).map((site) => (
+        <p key={site} className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm font-semibold text-[var(--medtrak-text)]">{ROTA_SITES[site]} is closed {closedText(week.days[day].closed, site)} ({[...new Set(week.days[day].closed.filter((c) => c.site === site).map((c) => CLOSURE_REASONS[c.reason]))].join(", ")}).</p>
+      ))}
       <ul className="space-y-1.5">
         {roster.length === 0 && <li className={`${CARD} p-3 text-sm text-[var(--medtrak-muted)]`}>Nobody is on the rota that day.</li>}
         {roster.map((r) => (

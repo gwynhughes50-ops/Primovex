@@ -1,5 +1,5 @@
 import { zipSync, strToU8 } from "fflate";
-import { DAYS, DAY_SHORT, addDays, dateOf, groupLabel, groupsOf, timeLabel } from "./rotaModel.js";
+import { DAYS, DAY_SHORT, ROTA_SITES, addDays, closedSites, closedText, dateOf, groupLabel, groupsOf, timeLabel } from "./rotaModel.js";
 import { weekCounters } from "./rotaEngine.js";
 import { slotsOfDay } from "./rotaWeek.js";
 
@@ -46,8 +46,10 @@ export function weekSheet(week, rules) {
   keys.sort((a, b) => (rules.shifts.indexOf(a.shift) - rules.shifts.indexOf(b.shift)) || a.key.localeCompare(b.key));
   for (const s of keys) {
     const label = `${s.shift.label} ${timeLabel(s.shift.start)}-${timeLabel(s.shift.end)}`;
-    rows.push([label, ...DAYS.map((d) => (slotsOfDay(rules, d).some((x) => x.key === s.key) ? placeText(week.days?.[d]?.slots?.[s.key]) : ""))]);
+    rows.push([label, ...DAYS.map((d) => (!slotsOfDay(rules, d).some((x) => x.key === s.key) ? "" : !slotsOfDay(rules, d, week.days?.[d]?.closed).some((x) => x.key === s.key) ? "CLOSED" : placeText(week.days?.[d]?.slots?.[s.key])))]);
   }
+  // a line of closures under the days, when any surgery is shut on one of them
+  if (DAYS.some((d) => (week.days?.[d]?.closed || []).length)) rows.push(["Surgery closed", ...DAYS.map((d) => closedSites(week.days?.[d]?.closed).map((site) => `${ROTA_SITES[site]} ${closedText(week.days[d].closed, site)}`).join("; "))]);
   const counters = weekCounters(week, rules);
   const cols = counterColumns(rules);
   const counterRows = [["Name", ...cols.map((c) => c.label), "Total"]];
