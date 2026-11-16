@@ -144,6 +144,8 @@
     "test:scan-router": "esbuild scripts/verify-scan-router.mjs --bundle --platform=node --format=esm --external:firebase/* --alias:@/lib/firebase=./scripts/stubs/sarStubs.js --alias:@=./src --outfile=work/verify-scan-router.bundle.mjs && node work/verify-scan-router.bundle.mjs",
     "test:sar-requested-by": "esbuild scripts/verify-sar-requested-by.mjs --bundle --platform=node --format=esm --external:firebase/* --alias:@/lib/firebase=./scripts/stubs/sarStubs.js --alias:@/core/identity/auditService=./scripts/stubs/sarStubs.js --alias:@=./src --outfile=work/verify-sar-requested-by.bundle.mjs && node work/verify-sar-requested-by.bundle.mjs",
     "test:laptop-labels": "esbuild scripts/verify-laptop-labels.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-laptop-labels.bundle.mjs && node work/verify-laptop-labels.bundle.mjs",
+    "test:theme-buttons": "node scripts/verify-theme-buttons.mjs",
+    "test:pat-labels": "esbuild scripts/verify-pat-labels.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-pat-labels.bundle.mjs && node work/verify-pat-labels.bundle.mjs",
     "test:computer-labels": "esbuild scripts/verify-computer-labels.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-computer-labels.bundle.mjs && node work/verify-computer-labels.bundle.mjs",
     "test:firestore-indexes": "node scripts/verify-firestore-indexes.mjs",
     "test:governance-docx": "esbuild scripts/verify-governance-docx.mjs --bundle --platform=node --format=esm --outfile=work/verify-governance-docx.bundle.mjs && node work/verify-governance-docx.bundle.mjs",

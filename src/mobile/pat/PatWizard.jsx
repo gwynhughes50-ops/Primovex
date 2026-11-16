@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronRight, DoorOpen, Plus, ScanLine, Search, XCircle } from "lucide-react";
 import MobileBarcodeScanner from "@/components/ui/MobileBarcodeScanner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -53,7 +53,7 @@ function YesNo({ yes, no, onYes, onNo, yesLabel = "Yes", noLabel = "No", picked 
   );
 }
 
-export default function PatWizard({ assets = [], settings = {}, onClose }) {
+export default function PatWizard({ assets = [], settings = {}, onClose, startAsset = null }) {
   const { user, displayName, email } = useAuth();
   const actor = useMemo(() => ({ uid: user?.uid || "", displayName: displayName || user?.displayName || "", email: email || user?.email || "" }), [user, displayName, email]);
   const sites = useComplianceSites();
@@ -73,6 +73,9 @@ export default function PatWizard({ assets = [], settings = {}, onClose }) {
   const [saved, setSaved] = useState(null);
   const [round, setRound] = useState([]);
   const [message, setMessage] = useState("");
+
+  // opened from an appliance's own label: straight to its test, and Back closes rather than going to the search
+  useEffect(() => { if (startAsset) { choose(startAsset); setTrail([]); } }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const summary = useMemo(() => dueSummary(assets), [assets]);
   const matches = useMemo(() => searchAppliances(assets, typed), [assets, typed]);

@@ -11,6 +11,7 @@ import FridgeCheckLanding from "@/mobile/FridgeCheckLanding";
 import CoshhLanding from "@/mobile/CoshhLanding";
 import ComplianceLanding from "@/mobile/ComplianceLanding";
 import { MobileLaptops, LaptopLanding, MobileMyLaptop, ComputerLanding } from "@/mobile/MobileLaptops";
+import PatLanding from "@/mobile/pat/PatLanding";
 import MobileRota from "@/mobile/MobileRota";
 import MobileSarsToChase from "@/mobile/MobileSarsToChase";
 import MobileAddDocument from "@/mobile/MobileAddDocument";
@@ -73,6 +74,8 @@ function MobileSenseRoute() {
   if (entityType === "laptop") return <MobileSessionShell><LaptopLanding id={entityId} /></MobileSessionShell>;
   // a PC's own QR label: the IT team get that PC open with its check; anyone else is told it is for the IT team
   if (entityType === "pc") return <MobileSessionShell><ComputerLanding id={entityId} /></MobileSessionShell>;
+  // a PAT appliance's own QR label: its details, its test history and a Retest button (like a fire point's tag, it names no one, so it is not behind the session lock)
+  if (entityType === "pat") return <PatLanding id={entityId} />;
   return <SenseNfcOpen />;
 }
 

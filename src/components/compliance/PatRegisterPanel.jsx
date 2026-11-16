@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { deleteDoc, doc } from "firebase/firestore";
-import { AlertTriangle, CheckCircle2, Clock, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Plus, Printer, Trash2 } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { PAT_CATEGORIES, categoryOf, dueSummary, intervalFor, ukDate } from "@/modules/pat/pat";
+import { printHtmlDocument } from "@/modules/governance/services/concernPrint";
+import { PAT_CATEGORIES, categoryOf, dueSummary, intervalFor, readingsLine, testsOf, ukDate } from "@/modules/pat/pat";
+import { DEFAULT_SHEET, SHEETS, buildPatLabelsHtml, perSheet } from "@/components/pat/patLabels";
 import { addPatAsset, PAT_ASSETS, savePatIntervals, subscribePatAssets, subscribePatSettings, subscribePatTests } from "@/modules/pat/patService";
 import { upsertEquipment } from "@/modules/equipment/services/equipmentRegistry";
 import PatImportPanel from "./PatImportPanel";
@@ -22,6 +24,14 @@ const STATE = {
   "due-soon": ["Due soon", "bg-amber-500/15 text-amber-200", Clock],
   ok: ["In date", "bg-emerald-500/15 text-emerald-200", CheckCircle2],
 };
+// the sticker sheet and the nudge are the laptop labels' own settings (IT equipment, Laptops, Label sheet): one printer, one setting for laptops, PCs and appliances
+const SETTINGS_KEY = "primovex.laptopLabels";
+function loadLabelSettings() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+    return { sheet: SHEETS[saved.sheet] ? saved.sheet : DEFAULT_SHEET, nudgeX: Number(saved.nudgeX) || 0, nudgeY: Number(saved.nudgeY) || 0 };
+  } catch { return { sheet: DEFAULT_SHEET, nudgeX: 0, nudgeY: 0 }; }
+}
 const SELECT = "mt-1 w-full rounded-xl border border-white/10 bg-slate-950/50 px-3 py-2 text-sm text-slate-100 [&>option]:bg-slate-900";
 
 function Tile({ label, value, tone = "text-slate-100" }) {
@@ -48,6 +58,9 @@ export default function PatRegisterPanel({ siteId = "", newSiteId = "main_branch
   const [showImport, setShowImport] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [labels] = useState(loadLabelSettings);
+  // the appliance whose details are open: a label scanned on a computer lands here with ?open=<id>
+  const [openId, setOpenId] = useState(() => (typeof window === "undefined" ? "" : new URLSearchParams(window.location.search).get("open") || ""));
   const [form, setForm] = useState({ tag: "", name: "", category: "handheld", cls: "I", location: "", makeModel: "", serialNumber: "" });
 
   const inSite = (row) => !siteId || !row.siteId || row.siteId === siteId;
@@ -73,6 +86,13 @@ export default function PatRegisterPanel({ siteId = "", newSiteId = "main_branch
     } catch (error) {
       setMsg(error?.message || "Could not add it. Check you have permission.");
     } finally { setBusy(false); }
+  }
+
+  // One QR label for each appliance on the register (those shown for the site), printed on the same sticker sheet as the laptop labels. The trial sheet is one page with each sticker outlined.
+  async function printLabels(guides = false) {
+    const list = siteAssets;
+    if (!list.length) { setMsg("There are no appliances to print labels for."); return; }
+    await printHtmlDocument(buildPatLabelsHtml(guides ? list.slice(0, perSheet(labels.sheet)) : list, { guides, sheet: labels.sheet, nudgeXMm: labels.nudgeX, nudgeYMm: labels.nudgeY }));
   }
 
   async function saveIntervals() {
@@ -147,10 +167,12 @@ export default function PatRegisterPanel({ siteId = "", newSiteId = "main_branch
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="font-semibold text-slate-100">Equipment register</div>
-            <div className="text-xs text-slate-400">Add appliances once. The caretaker tests them on his phone, one at a time.</div>
+            <div className="text-xs text-slate-400">Add appliances once. The caretaker tests them on his phone, one at a time. Each appliance can have a QR label: scanning it shows its details and test history, and starts a retest. Labels print on the same sticker sheet and settings as the laptop labels.</div>
           </div>
           {mayManage && (
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => printLabels(false)} className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200"><Printer className="mr-1.5 h-4 w-4" />Print QR labels ({siteAssets.length})</Button>
+              <Button variant="outline" onClick={() => printLabels(true)} title="One sheet with each sticker outlined, to print on plain paper first" className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200">Trial sheet</Button>
               <Button variant="outline" onClick={() => setShowAdd((v) => !v)} className="rounded-full border-white/10 bg-slate-900/40 text-xs text-slate-200"><Plus className="mr-1.5 h-4 w-4" />{showAdd ? "Hide the form" : "Add one"}</Button>
               <Button onClick={() => setShowImport(true)} className="rounded-full border border-teal-400/40 bg-teal-500/15 text-xs font-semibold text-teal-100 hover:bg-teal-500/25">Add many at once</Button>
             </div>
@@ -185,8 +207,9 @@ export default function PatRegisterPanel({ siteId = "", newSiteId = "main_branch
               {summary.rows.map(({ asset, state }) => {
                 const [label, tone, Icon] = STATE[state];
                 return (
-                  <tr key={asset.id} className="border-b border-white/5 align-top">
-                    <td className="whitespace-nowrap px-3 py-2 font-semibold text-slate-100">{asset.tag}</td>
+                  <Fragment key={asset.id}>
+                  <tr className={`border-b border-white/5 align-top ${openId === asset.id ? "bg-white/5" : ""}`}>
+                    <td className="whitespace-nowrap px-3 py-2 font-semibold text-slate-100"><button type="button" onClick={() => setOpenId(openId === asset.id ? "" : asset.id)} aria-expanded={openId === asset.id} title="Show its details and test history" className="underline decoration-dotted underline-offset-4">{asset.tag}</button></td>
                     <td className="px-3 py-2">{asset.name}{asset.makeModel ? <div className="text-xs text-slate-500">{asset.makeModel}{asset.serialNumber ? ` · SN ${asset.serialNumber}` : ""}</div> : null}</td>
                     <td className="px-3 py-2 text-xs text-slate-300">{categoryOf(asset.category).label}<div className="text-slate-500">Class {asset.cls === "II" ? "II" : "I"}</div></td>
                     <td className="px-3 py-2">{asset.location || "—"}</td>
@@ -195,6 +218,33 @@ export default function PatRegisterPanel({ siteId = "", newSiteId = "main_branch
                     <td className="px-3 py-2 text-xs text-slate-300">{asset.lastTestedOn ? `${ukDate(asset.lastTestedOn)} · ${asset.lastResult === "pass" ? "pass" : "fail"}` : "Never"}{asset.lastTestedByName ? <div className="text-slate-500">{asset.lastTestedByName}</div> : null}</td>
                     <td className="px-3 py-2 text-right">{mayManage && <button type="button" onClick={() => remove(asset)} className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2.5 py-1 text-xs text-rose-300 hover:bg-white/5" aria-label={`Delete ${asset.tag}`}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" /></button>}</td>
                   </tr>
+                  {openId === asset.id && (
+                    <tr className="border-b border-white/5 bg-white/5">
+                      <td colSpan={8} className="px-3 py-3">
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <dl className="space-y-1 text-xs text-slate-300">
+                            <div><dt className="inline text-slate-500">Where: </dt><dd className="inline">{asset.location || "Not given"}</dd></div>
+                            <div><dt className="inline text-slate-500">Make and model: </dt><dd className="inline">{asset.makeModel || "Not given"}</dd></div>
+                            <div><dt className="inline text-slate-500">Serial number: </dt><dd className="inline">{asset.serialNumber || "Not given"}</dd></div>
+                            <div><dt className="inline text-slate-500">Retested every: </dt><dd className="inline">{intervalFor(asset.category, settings)} months ({categoryOf(asset.category).label})</dd></div>
+                            {asset.outOfUse === true && <div className="font-semibold text-rose-300">Out of use: it failed its last test.</div>}
+                            <div className="pt-1 text-slate-500">A retest is done on a phone: scan the appliance's QR label, or start PAT testing on the phone.</div>
+                          </dl>
+                          <div>
+                            <p className="text-xs font-bold text-slate-200">Test history</p>
+                            {testsOf(tests, asset.id).length === 0 ? <p className="mt-1 text-xs text-slate-500">No tests recorded on the phone yet.</p> : (
+                              <ul className="mt-1 space-y-1.5 text-xs">
+                                {testsOf(tests, asset.id).slice(0, 8).map((t) => (
+                                  <li key={t.id} className="text-slate-300"><span className="font-semibold text-slate-100">{ukDate(t.testedOn)}</span> {t.result === "pass" ? <span className="text-emerald-300">Pass</span> : <span className="font-semibold text-rose-300">Fail</span>} · {readingsLine(t)}{t.testerName ? <span className="text-slate-500"> · {t.testerName}</span> : null}{t.failReasons?.length ? <span className="text-rose-200"> · {t.failReasons.join(", ")}</span> : null}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>

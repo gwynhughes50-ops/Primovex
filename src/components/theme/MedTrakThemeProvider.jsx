@@ -671,6 +671,14 @@ html:not(.medtrak-light) .medtrak-temperature-card * {
       transform: translateY(-1px);
     }
 
+    /* A primary button is always filled with the theme's accent (the rule above), so its text, and anything inside it, is always the colour made for that fill. Without this, a screen that
+       gave the button pale text for the old dark theme (text-teal-100, text-slate-200...) had that text turned dark navy by the light-theme rules below, on the blue: unreadable. Repeating
+       the attribute makes this heavier than those rules, so it wins whatever order they are in. */
+    html[data-medtrak-theme] [data-mt-button="default"][data-mt-button][data-mt-button],
+    html[data-medtrak-theme] [data-mt-button="default"][data-mt-button][data-mt-button] * {
+      color: var(--mt-on-accent) !important;
+    }
+
     html[data-medtrak-theme] [data-mt-button="outline"],
     html[data-medtrak-theme] [data-mt-button="secondary"] {
       background: color-mix(in srgb, var(--mt-card-strong) 86%, var(--mt-accent) 8%) !important;
@@ -729,6 +737,13 @@ html:not(.medtrak-light) .medtrak-temperature-card * {
     html.medtrak-light [class*="bg-[color:var(--medtrak-accent)]"].text-white,
     html.medtrak-light [class*="bg-[color:var(--medtrak-accent)]"].text-white * {
       color: #ffffff !important;
+    }
+
+    /* The same for the other way the screens write the blue fill (bg-[var(--medtrak-accent)], as most of them do) and for dark text left on it (text-slate-950): on the light themes the fill is a
+       strong blue, so the text on it is the on-accent colour (white), not navy. A fill that is only a pale tint (".../15") or only applies on hover is left alone. */
+    html.medtrak-light :is([class*="bg-[var(--medtrak-accent)]"], [class*="bg-[color:var(--medtrak-accent)]"]):not([class*="--medtrak-accent)]/"], [class*=":bg-[var(--medtrak-accent)]"], [class*=":bg-[color:var(--medtrak-accent)]"]):is(.text-white, .text-slate-950, .text-slate-900, .text-slate-50, .text-black),
+    html.medtrak-light :is([class*="bg-[var(--medtrak-accent)]"], [class*="bg-[color:var(--medtrak-accent)]"]):not([class*="--medtrak-accent)]/"], [class*=":bg-[var(--medtrak-accent)]"], [class*=":bg-[color:var(--medtrak-accent)]"]):is(.text-white, .text-slate-950, .text-slate-900, .text-slate-50, .text-black) * {
+      color: var(--mt-on-accent, #ffffff) !important;
     }
 
     html.medtrak-light .font-black { font-weight: 800 !important; }

@@ -60,6 +60,12 @@ function LaptopLinkRedirect() {
   return <Navigate to={`/it-equipment?open=${encodeURIComponent(laptopId || "")}`} replace />;
 }
 
+// A PAT appliance's own QR label opened on a PC: the PAT register with that appliance open (the retest itself is done on a phone).
+function PatLinkRedirect() {
+  const { assetId } = useParams();
+  return <Navigate to={`/compliance?tab=pat&open=${encodeURIComponent(assetId || "")}`} replace />;
+}
+
 // A PC's own QR label opened on a PC: the register's PCs tab, with that PC open.
 function ComputerLinkRedirect() {
   const { pcId } = useParams();
@@ -78,6 +84,7 @@ export default function DesktopApp() {
       <Route path="/sense/open/compliance/:assetId" element={<Navigate to="/compliance" replace />} />
       <Route path="/sense/open/laptop/:laptopId" element={<LaptopLinkRedirect />} />
       <Route path="/sense/open/pc/:pcId" element={<ComputerLinkRedirect />} />
+      <Route path="/sense/open/pat/:assetId" element={<PatLinkRedirect />} />
 
       <Route
         path="/sense/open/:entityType/:entityId"

@@ -5,6 +5,8 @@
 // The test itself is done with his own tester; he reads the result off its display and enters it here. A pass sets the date
 // the appliance is next due, from its kind; a fail takes it out of use and is raised as an incident.
 
+import { ORIGIN } from "../laptops/laptops.js";
+
 const DAY = 86400000;
 export const DUE_SOON_DAYS = 30;
 
@@ -175,6 +177,34 @@ export function assetPatchAfterTest(test) {
   };
 }
 
+// ---- the QR label ----
+// The link a label holds: it opens that appliance in Primovex (its details, its test history and a Retest button) when a phone's camera or the app's scanner reads it.
+export const buildPatLink = (asset, origin = ORIGIN) => `${String(origin).replace(/\/+$/, "")}/sense/open/pat/${encodeURIComponent(asset?.id || asset?.tag || "")}`;
+export function parsePatLink(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+  try {
+    const m = new URL(value, "https://scan.invalid").pathname.match(/^\/sense\/open\/pat\/([^/]+)\/?$/i);
+    if (m) return { id: decodeURIComponent(m[1]), raw: value };
+  } catch { /* not a link */ }
+  const code = /^MEDTRAK:PAT:(.+)$/i.exec(value);
+  return code ? { id: code[1], raw: value } : null;
+}
+
+// ---- one appliance's history ----
+// the tests of one appliance, newest first
+export const testsOf = (tests = [], assetId) => tests.filter((t) => t && t.assetId === assetId).sort((a, b) => String(b.testedOn).localeCompare(String(a.testedOn)));
+
+// what a test read, in one line: "Visual ok · Earth pass 0.12Ω · Insulation pass 250MΩ · 13A"
+export function readingsLine(t = {}) {
+  return [
+    t.visualOk ? "Visual ok" : "Visual damaged",
+    t.earth && t.earth !== "na" ? `Earth ${t.earth}${t.earthOhms != null ? ` ${t.earthOhms}Ω` : ""}` : "",
+    t.insulation ? `Insulation ${t.insulation}${t.insulationMohms != null ? ` ${t.insulationMohms}MΩ` : ""}` : "",
+    t.fuseRating || "",
+  ].filter(Boolean).join(" · ");
+}
+
 // ---- finding the appliance ----
 
 const norm = (value) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
@@ -183,7 +213,7 @@ const norm = (value) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g,
 export function findAppliance(assets = [], typed) {
   const wanted = String(typed ?? "").trim();
   if (!wanted) return null;
-  const link = /\/sense\/open\/pat\/([^/?#]+)/i.exec(wanted);
+  const link = /\/sense\/open\/pat\/([^/?#]+)/i.exec(wanted) || /^MEDTRAK:PAT:(.+)$/i.exec(wanted);
   const id = link ? decodeURIComponent(link[1]) : wanted;
   const key = norm(id);
   const live = assets.filter((a) => a && a.active !== false);
