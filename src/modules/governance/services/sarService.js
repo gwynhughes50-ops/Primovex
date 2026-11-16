@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -19,6 +20,7 @@ import { httpsCallable } from "firebase/functions";
 import { db, functions } from "@/lib/firebase";
 import { writeAuditEvent } from "@/core/identity/auditService";
 import { identityFields } from "@/modules/governance/patientIdentity";
+import { completionProblem, dayAtNoon, localDay } from "@/modules/governance/sarRegister";
 
 export const SAR_COLLECTION = "governance_sars";
 export const SAR_ACTIVITY_COLLECTION = "governance_sar_activity";
@@ -238,13 +240,22 @@ export function buildSarFields(form) {
   };
 }
 
+// A completion date typed on the form: "" when blank, otherwise the day the SAR was completed. It must be a real day, not in the future and not before the SAR was received.
+export function checkCompletionDate(form) {
+  const problem = completionProblem({ completedDate: form.completedDate || "", receivedDate: String(form.receivedDate || "") });
+  if (problem) throw new Error(problem);
+  return form.completedDate ? dayAtNoon(form.completedDate) : null;
+}
+
 export function buildSarPayload(form, actor = {}) {
   const fields = buildSarFields(form);
+  const completedOn = checkCompletionDate(form);
 
   return {
     reference: form.reference || createSarReference(new Date()),
     ...fields,
-    status: fields.assignedToUid ? SAR_STATUSES.assigned : SAR_STATUSES.new,
+    status: completedOn ? SAR_STATUSES.completed : fields.assignedToUid ? SAR_STATUSES.assigned : SAR_STATUSES.new,
+    ...(completedOn ? { completedAt: Timestamp.fromDate(completedOn), completedByUid: actor.uid || null, completedByName: actor.displayName || actor.email || "Unknown" } : {}),
     checklist: SAR_CHECKLIST.reduce((acc, item) => ({ ...acc, [item.key]: false }), {}),
     createdByUid: actor.uid || null,
     createdByName: actor.displayName || actor.email || "Unknown",
@@ -376,13 +387,14 @@ const SAR_EDIT_LABELS = [
   ["notes", "internal notes"],
 ];
 
-function describeSarChanges(before, fields) {
+function describeSarChanges(before, fields, completedOn) {
   const changed = SAR_EDIT_LABELS
     .filter(([key]) => JSON.stringify(before?.[key] ?? "") !== JSON.stringify(fields[key] ?? ""))
     .map(([, label]) => label);
   const asDay = (value) => { const d = toDate(value); return d ? formatDateInput(d) : ""; };
   if (asDay(before?.receivedDate) !== asDay(fields.receivedDate)) changed.push("date received");
   if (asDay(before?.dueDate) !== asDay(fields.dueDate)) changed.push("due date");
+  if (completedOn && localDay(before?.completedAt) !== localDay(completedOn)) changed.push("completion date");
   if (JSON.stringify(before?.requestOptions || []) !== JSON.stringify(fields.requestOptions || [])) changed.push("request options");
   return changed;
 }
@@ -394,16 +406,27 @@ export async function updateSarDetails(sarId, form, actor = {}, before = {}) {
   if (!sarId) return;
   const fields = buildSarFields(form);
   const updates = { ...fields, updatedAt: serverTimestamp() };
+  // A completion date on the form marks the SAR completed on that day. Leaving it blank changes nothing (to reopen a SAR, use the workflow buttons).
+  const completedOn = checkCompletionDate(form);
+  if (completedOn) {
+    if (localDay(before.completedAt) !== localDay(completedOn) || before.status !== SAR_STATUSES.completed) updates.completedAt = Timestamp.fromDate(completedOn);
+    if (before.status !== SAR_STATUSES.completed) {
+      updates.status = SAR_STATUSES.completed;
+      updates.completedByUid = actor.uid || null;
+      updates.completedByName = actor.displayName || actor.email || "Unknown";
+    }
+  }
 
   // Assigning someone moves a brand-new SAR to "assigned" (and un-assigning
   // returns it); a SAR that's already in progress or beyond keeps its status.
   const status = before.status || SAR_STATUSES.new;
-  if (status === SAR_STATUSES.new && fields.assignedToUid) updates.status = SAR_STATUSES.assigned;
+  if (completedOn) { /* completed: the status is already set above */ } else if (status === SAR_STATUSES.new && fields.assignedToUid) updates.status = SAR_STATUSES.assigned;
   else if (status === SAR_STATUSES.assigned && !fields.assignedToUid) updates.status = SAR_STATUSES.new;
 
   await updateDoc(doc(db, SAR_COLLECTION, sarId), updates);
 
-  const changed = describeSarChanges(before, fields);
+  const changed = describeSarChanges(before, fields, completedOn);
+
   await addSarActivity(sarId, {
     type: "edited",
     title: "SAR details updated",
@@ -463,6 +486,11 @@ export async function updateSarStatus(sarId, status, actor = {}) {
     updates.completedAt = serverTimestamp();
     updates.completedByUid = actor.uid || null;
     updates.completedByName = actor.displayName || actor.email || "Unknown";
+  } else if (status !== SAR_STATUSES.archived) {
+    // reopened: it is no longer completed, so it has no completion date
+    updates.completedAt = deleteField();
+    updates.completedByUid = deleteField();
+    updates.completedByName = deleteField();
   }
 
   await updateDoc(doc(db, SAR_COLLECTION, sarId), updates);

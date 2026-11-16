@@ -125,6 +125,7 @@
     "test:rota-only-shifts": "node scripts/verify-rota-only-shifts.mjs",
     "test:rota-no-cover": "node scripts/verify-rota-no-cover.mjs",
     "test:it-delete": "node scripts/verify-it-delete.mjs",
+    "test:sar-register": "node scripts/verify-sar-register.mjs",
     "test:rota-review": "node scripts/verify-rota-review.mjs",
     "test:rota-requests": "node scripts/verify-rota-requests.mjs",
     "test:dashboard-needs": "esbuild scripts/verify-dashboard-needs.mjs --bundle --platform=node --format=cjs --alias:firebase/firestore=./scripts/stubs/sarReminderStubs.js --alias:@/lib/firebase=./scripts/stubs/sarReminderStubs.js --alias:@=./src --outfile=work/verify-dashboard-needs.bundle.cjs && node work/verify-dashboard-needs.bundle.cjs",

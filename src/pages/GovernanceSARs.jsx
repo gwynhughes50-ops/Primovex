@@ -8,6 +8,7 @@ import StatusBadge from "@/components/common/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { identityLabel, identityProblems } from "@/modules/governance/patientIdentity";
+import { DEFAULT_SORT, SORT_KEYS, completionProblem, duplicateWords, findLikelyDuplicates, localDay, sortSars } from "@/modules/governance/sarRegister";
 import { db } from "@/lib/firebase";
 import { listStaffDirectory } from "@/services/staffDirectoryService";
 import { useAuth } from "@/contexts/AuthContext";
@@ -81,6 +82,7 @@ function getInitialForm(year) {
     dateOfBirth: "",
     receivedDate: formatDateInput(received),
     dueDate: formatDateInput(calculateDueDate(received)),
+    completedDate: "",
     requestedBy: "patient",
     requestedByOther: "",
     receivedVia: "email",
@@ -109,6 +111,7 @@ function getFormFromSar(sar) {
     dateOfBirth: sar.dateOfBirth || "",
     receivedDate: formatDateInput(toDate(sar.receivedDate)),
     dueDate: formatDateInput(toDate(sar.dueDate)),
+    completedDate: localDay(sar.completedAt),
     ...normaliseRequestedBy(sar),
     receivedVia: sar.receivedVia || "email",
     solicitorReference: sar.solicitorReference || "",
@@ -171,16 +174,19 @@ function SarMetric({ label, value, tone = "slate" }) {
   );
 }
 
-function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, actor, onSaved, sar, defaultYear = null }) {
+function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, actor, onSaved, sar, defaultYear = null, rows = [] }) {
   const isEdit = !!sar;
   const [form, setForm] = useState(getInitialForm);
   const [busy, setBusy] = useState(false);
+  const [differentRequest, setDifferentRequest] = useState(false); // ticked when the person says a matching request today really is a different one
+  // another SAR for the same EMIS number entered today, or received the same day: probably the same request entered twice (only asked for a new SAR)
+  const duplicates = useMemo(() => (open && !isEdit ? findLikelyDuplicates(rows, { emisNumber: form.emisNumber, receivedDate: form.receivedDate }) : []), [open, isEdit, rows, form.emisNumber, form.receivedDate]);
 
   // Keyed on the SAR's id, not the object: live snapshots hand back a new
   // object whenever anything on the register changes, which must not wipe
   // what someone is halfway through typing.
   useEffect(() => {
-    if (open) setForm(isEdit ? getFormFromSar(sar) : getInitialForm(defaultYear));
+    if (open) { setForm(isEdit ? getFormFromSar(sar) : getInitialForm(defaultYear)); setDifferentRequest(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, sar?.id]);
 
@@ -236,6 +242,17 @@ function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, act
       return;
     }
 
+    if (duplicates.length && !differentRequest) {
+      alert("There is already a SAR for this EMIS number today. If this really is a different request, tick the box under the EMIS number; otherwise cancel.");
+      return;
+    }
+
+    const dateProblem = completionProblem({ completedDate: form.completedDate, receivedDate: form.receivedDate, today: localDay(new Date()) });
+    if (dateProblem) {
+      alert(dateProblem);
+      return;
+    }
+
     try {
       setBusy(true);
       if (isEdit) await updateSarDetails(sar.id, form, actor, sar);
@@ -274,7 +291,14 @@ function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, act
 
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-slate-200">EMIS Number</label>
-            <Input value={form.emisNumber} onChange={(e) => update({ emisNumber: e.target.value })} placeholder="EMIS number" />
+            <Input value={form.emisNumber} onChange={(e) => { update({ emisNumber: e.target.value }); setDifferentRequest(false); }} placeholder="EMIS number" />
+            {duplicates.length > 0 && (
+              <div className="space-y-2 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-100" role="alert">
+                <p className="font-bold">This looks like a request that has already been entered.</p>
+                {duplicates.map((match) => <p key={match.id}>{duplicateWords(match)}</p>)}
+                <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={differentRequest} onChange={(e) => setDifferentRequest(e.target.checked)} /> This is a different request, add it anyway</label>
+              </div>
+            )}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -297,6 +321,12 @@ function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, act
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-slate-200">Due Date</label>
             <Input type="date" value={form.dueDate} onChange={(e) => update({ dueDate: e.target.value })} />
+          </div>
+
+          <div className="space-y-3">
+            <label className="block text-sm font-semibold text-slate-200">Date Completed</label>
+            <Input type="date" value={form.completedDate} onChange={(e) => update({ completedDate: e.target.value })} min={form.receivedDate || undefined} max={localDay(new Date())} />
+            <p className="text-xs text-slate-500">Leave blank until the response has gone. Filling it in marks the SAR as completed on that day.</p>
           </div>
 
           <div className="space-y-3">
@@ -437,7 +467,7 @@ function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, act
 
         <div className="sticky bottom-0 -mx-5 mt-5 flex flex-col gap-2 border-t border-slate-800 bg-slate-950/95 p-5 backdrop-blur sm:flex-row sm:justify-end">
           <Button type="button" variant="outline" className="rounded-full border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button type="button" className="rounded-full bg-teal-400 px-5 font-bold text-slate-950 hover:bg-teal-300" onClick={submit} disabled={busy}>
+          <Button type="button" className="rounded-full bg-teal-400 px-5 font-bold text-slate-950 hover:bg-teal-300" onClick={submit} disabled={busy || (duplicates.length > 0 && !differentRequest)}>
             {busy ? (isEdit ? "Saving..." : "Creating...") : (isEdit ? "Save changes" : "Create SAR")}
           </Button>
         </div>
@@ -536,6 +566,7 @@ function SarDetailPanel({ sar, actor, isTeam, canDelete, chase, onChased, onEdit
             <div className="grid gap-3 text-sm sm:grid-cols-2">
               <div><span className="text-slate-500">Received</span><div className="font-semibold text-white">{formatDisplayDate(sar.receivedDate)}</div></div>
               <div><span className="text-slate-500">Due</span><div className="font-semibold text-white">{formatDisplayDate(sar.dueDate)}</div></div>
+              {sar.completedAt && <div><span className="text-slate-500">Completed</span><div className="font-semibold text-white">{formatDisplayDate(sar.completedAt)}{sar.completedByName ? ` · ${sar.completedByName}` : ""}</div></div>}
               <div><span className="text-slate-500">Requested by</span><div className="font-semibold text-white">{(() => { const r = getRequestedByDisplay(sar); return r.tag ? `${r.label} (${r.tag.toLowerCase()})` : r.label; })()}</div></div>
               <div><span className="text-slate-500">Received via</span><div className="font-semibold text-white">{friendly(sar.receivedVia)}</div></div>
               <div><span className="text-slate-500">Solicitor ref</span><div className="font-semibold text-white">{sar.solicitorReference || "—"}</div></div>
@@ -639,6 +670,7 @@ export default function GovernanceSARs() {
   const [addingYear, setAddingYear] = useState(false);
   const [newYear, setNewYear] = useState("");
   const [yearError, setYearError] = useState("");
+  const [sort, setSort] = useState(DEFAULT_SORT); // { key, dir } from sarRegister.js; the register has always shown the newest entry first
   const canDelete = isTeam;
   // the reminder bell: the server says which SARs this person may remind about (the Practice Manager: any; a line manager: their team's)
   const chase = useSarsToChase();
@@ -740,7 +772,7 @@ export default function GovernanceSARs() {
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return rows.filter((sar) => {
+    return sortSars(rows, sort).filter((sar) => {
       const status = sar.status || SAR_STATUSES.new;
       const days = daysUntilDate(sar.dueDate);
       const completed = status === SAR_STATUSES.completed || status === SAR_STATUSES.archived;
@@ -754,7 +786,7 @@ export default function GovernanceSARs() {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term));
     });
-  }, [rows, filter, search, yearFilter]);
+  }, [rows, filter, search, yearFilter, sort]);
 
   return (
     <div className="space-y-6">
@@ -844,13 +876,21 @@ export default function GovernanceSARs() {
           ))}
         </div>
 
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="mr-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Sort by</span>
+          <select value={sort.key} onChange={(e) => setSort({ key: e.target.value, dir: e.target.value === "entered" || e.target.value === "completed" ? "desc" : "asc" })} aria-label="Sort the register by" className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-100">
+            {Object.entries(SORT_KEYS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}
+          </select>
+          <button type="button" onClick={() => setSort({ ...sort, dir: sort.dir === "asc" ? "desc" : "asc" })} aria-label="Reverse the order" className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800">{sort.dir === "asc" ? "↑ " : "↓ "}{SORT_KEYS[sort.key][sort.dir]}</button>
+        </div>
+
         {loading ? (
           <div className="rounded-2xl border border-slate-800 bg-slate-950 p-6 text-sm text-slate-400">Loading SARs...</div>
         ) : filtered.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950 p-6 text-sm text-slate-400">No SARs match this view.</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-sm">
+            <table className="w-full min-w-[980px] text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-slate-500">
                 <tr className="border-b border-slate-800">
                   <th className="py-3 pr-3">Reference</th>
@@ -860,6 +900,7 @@ export default function GovernanceSARs() {
                   <th className="py-3 pr-3">Assigned</th>
                   <th className="py-3 pr-3">Due</th>
                   <th className="py-3 pr-3">Countdown</th>
+                  <th className="py-3 pr-3">Completed</th>
                   <th className="py-3 pr-3">Status</th>
                   <th className="py-3 pr-3">Action</th>
                 </tr>
@@ -888,6 +929,7 @@ export default function GovernanceSARs() {
                       <td className="py-3 pr-3">{sar.assignedToName || "Unassigned"}</td>
                       <td className="py-3 pr-3">{formatDisplayDate(sar.dueDate)}</td>
                       <td className={`py-3 pr-3 font-semibold ${tone.className}`}>{tone.label}</td>
+                      <td className="py-3 pr-3">{sar.completedAt && [SAR_STATUSES.completed, SAR_STATUSES.archived].includes(sar.status) ? formatDisplayDate(sar.completedAt) : "—"}</td>
                       <td className="py-3 pr-3"><StatusBadge status={getSarStatusBadge(sar.status)}>{getStatusLabel(sar.status)}</StatusBadge></td>
                       <td className="py-3 pr-3">
                         <div className="flex items-center gap-2">
@@ -914,7 +956,7 @@ export default function GovernanceSARs() {
         )}
       </SectionCard>
 
-      <SarFormPanel open={showNew} onClose={() => setShowNew(false)} users={users} usersError={usersError} onRetryUsers={loadStaff} actor={actor} defaultYear={yearFilter === "all" ? null : Number(yearFilter)} onSaved={() => { setFilter("open"); setYearFilter("all"); }} />
+      <SarFormPanel open={showNew} rows={rows} onClose={() => setShowNew(false)} users={users} usersError={usersError} onRetryUsers={loadStaff} actor={actor} defaultYear={yearFilter === "all" ? null : Number(yearFilter)} onSaved={() => { setFilter("open"); setYearFilter("all"); }} />
       <SarFormPanel open={!!editing} sar={editing} onClose={() => setEditing(null)} users={users} usersError={usersError} onRetryUsers={loadStaff} actor={actor} />
       <SarDetailPanel sar={selected} actor={actor} isTeam={isTeam} canDelete={canDelete} chase={selected ? chase.byId.get(selected.id) : undefined} onChased={() => chase.reload()} onEdit={setEditing} onDelete={setDeleteTarget} onClose={() => setSelectedId(null)} />
 

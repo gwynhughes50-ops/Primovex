@@ -4,6 +4,7 @@ import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/f
 import { ChevronLeft, FileText, Plus, X } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { identityLabel, identityProblems } from '@/modules/governance/patientIdentity';
+import { DEFAULT_SORT, SORT_KEYS, completionProblem, duplicateWords, findLikelyDuplicates, localDay, sortSars } from '@/modules/governance/sarRegister';
 import { useAuth } from '@/contexts/AuthContext';
 import SarBell from '@/components/governance/SarBell';
 import { useSarsToChase } from '@/modules/governance/useSarsToChase';
@@ -59,7 +60,7 @@ function metricsOf(rows) {
 function getInitialForm() {
   const today = new Date();
   return {
-    reference: createSarReference(today), emisNumber: '', patientInitials: '', dateOfBirth: '', receivedDate: formatDateInput(today), dueDate: formatDateInput(calculateDueDate(today)),
+    reference: createSarReference(today), emisNumber: '', patientInitials: '', dateOfBirth: '', receivedDate: formatDateInput(today), dueDate: formatDateInput(calculateDueDate(today)), completedDate: '',
     requestedBy: 'patient', requestedByOther: '', receivedVia: 'email', solicitorReference: '', requestType: 'summary', requestOptions: [],
     informationRequired: '', consentToEmail: false, urgent: false, deliveryMethod: 'email', emailAddress: '',
     assignedToUid: '', assignedToName: 'Unassigned', managerUid: '', managerName: '', notes: '',
@@ -70,7 +71,7 @@ function formFromSar(sar) {
   return {
     ...getInitialForm(),
     reference: sar.reference || '', emisNumber: sar.emisNumber || '', patientInitials: sar.patientInitials || '', dateOfBirth: sar.dateOfBirth || '',
-    receivedDate: formatDateInput(toDate(sar.receivedDate)), dueDate: formatDateInput(toDate(sar.dueDate)),
+    receivedDate: formatDateInput(toDate(sar.receivedDate)), dueDate: formatDateInput(toDate(sar.dueDate)), completedDate: localDay(sar.completedAt),
     ...normaliseRequestedBy(sar), receivedVia: sar.receivedVia || 'email', solicitorReference: sar.solicitorReference || '',
     requestType: sar.requestType || 'summary', requestOptions: sar.requestOptions || [], informationRequired: sar.informationRequired || '',
     consentToEmail: !!sar.consentToEmail, urgent: !!sar.urgent, deliveryMethod: sar.deliveryMethod || 'email', emailAddress: sar.emailAddress || '',
@@ -79,11 +80,14 @@ function formFromSar(sar) {
   };
 }
 
-function SarFormSheet({ sar, actor, staff, onClose }) {
+function SarFormSheet({ sar, actor, staff, onClose, rows = [] }) {
   const isEdit = Boolean(sar);
   const [form, setForm] = useState(() => (isEdit ? formFromSar(sar) : getInitialForm()));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [differentRequest, setDifferentRequest] = useState(false); // ticked when a matching request today really is a different one
+  // another SAR for the same EMIS number entered today, or received the same day: probably the same request entered twice (only asked for a new SAR)
+  const duplicates = useMemo(() => (isEdit ? [] : findLikelyDuplicates(rows, { emisNumber: form.emisNumber, receivedDate: form.receivedDate })), [isEdit, rows, form.emisNumber, form.receivedDate]);
   const update = (patch) => setForm((current) => ({ ...current, ...patch }));
   const staffName = (id) => staff.find((s) => s.id === id)?.label || 'Unassigned';
 
@@ -98,6 +102,9 @@ function SarFormSheet({ sar, actor, staff, onClose }) {
     const problems = identityProblems(form, { emisRequired: true, needed: !isEdit || Boolean(sar.patientInitials || sar.dateOfBirth) });
     if (problems.length) { setError(`${problems[0]} The patient's name is deliberately not stored.`); return; }
     if (form.requestedBy === 'company' && !form.requestedByOther.trim()) { setError('Enter the company name.'); return; }
+    if (duplicates.length && !differentRequest) { setError('There is already a SAR for this EMIS number today. If this really is a different request, tick the box under the EMIS number.'); return; }
+    const dateProblem = completionProblem({ completedDate: form.completedDate, receivedDate: form.receivedDate, today: localDay(new Date()) });
+    if (dateProblem) { setError(dateProblem); return; }
     try {
       setBusy(true);
       setError('');
@@ -126,8 +133,15 @@ function SarFormSheet({ sar, actor, staff, onClose }) {
 
         <div className="mt-4 space-y-3 pb-4">
           <label className={LABEL}>EMIS number
-            <input value={form.emisNumber} onChange={(e) => update({ emisNumber: e.target.value })} inputMode="numeric" className={FIELD} />
+            <input value={form.emisNumber} onChange={(e) => { update({ emisNumber: e.target.value }); setDifferentRequest(false); }} inputMode="numeric" className={FIELD} />
           </label>
+          {duplicates.length > 0 && (
+            <div className="space-y-2 rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-sm" role="alert">
+              <p className="font-bold">This looks like a request that has already been entered.</p>
+              {duplicates.map((match) => <p key={match.id}>{duplicateWords(match)}</p>)}
+              <label className="flex items-center gap-2 font-semibold"><input type="checkbox" checked={differentRequest} onChange={(e) => setDifferentRequest(e.target.checked)} className="h-4 w-4" /> This is a different request, add it anyway</label>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <label className={LABEL}>Patient initials
               <input value={form.patientInitials} onChange={(e) => update({ patientInitials: e.target.value.toUpperCase() })} placeholder="e.g. AB" maxLength={8} autoComplete="off" className={FIELD} />
@@ -144,6 +158,10 @@ function SarFormSheet({ sar, actor, staff, onClose }) {
               <input type="date" value={form.dueDate} onChange={(e) => update({ dueDate: e.target.value })} className={FIELD} />
             </label>
           </div>
+          <label className={LABEL}>Date completed
+            <input type="date" value={form.completedDate} onChange={(e) => update({ completedDate: e.target.value })} min={form.receivedDate || undefined} max={localDay(new Date())} className={FIELD} />
+            <span className="block text-[11px] font-normal normal-case">Leave blank until the response has gone. Filling it in marks the SAR as completed on that day.</span>
+          </label>
           <div className="grid grid-cols-2 gap-2">
             <label className={LABEL}>Requested by
               <select value={form.requestedBy} onChange={(e) => update({ requestedBy: e.target.value })} className={FIELD}>
@@ -183,7 +201,7 @@ function SarFormSheet({ sar, actor, staff, onClose }) {
           </label>
 
           {error && <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-600">{error}</p>}
-          <button type="button" onClick={submit} disabled={busy} className="w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 py-3.5 font-bold text-white disabled:opacity-60">
+          <button type="button" onClick={submit} disabled={busy || (duplicates.length > 0 && !differentRequest)} className="w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 py-3.5 font-bold text-white disabled:opacity-60">
             {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create SAR'}
           </button>
         </div>
@@ -238,6 +256,7 @@ function SarDetailSheet({ sar, actor, isTeam, chase, onChased, onClose, onEdit }
         <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
           <div><dt className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Received</dt><dd>{dateLabel(sar.receivedDate)}</dd></div>
           <div><dt className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Due</dt><dd>{dateLabel(sar.dueDate)}</dd></div>
+          {sar.completedAt && <div><dt className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Completed</dt><dd>{dateLabel(sar.completedAt)}</dd></div>}
           <div><dt className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Requested by</dt><dd>{requestedByText(sar)}</dd></div>
           <div><dt className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Assigned to</dt><dd>{sar.assignedToName || 'Unassigned'}</dd></div>
         </dl>
@@ -319,6 +338,7 @@ export default function MobileGovernanceSARs() {
   const [selectedId, setSelectedId] = useState('');
   const [editing, setEditing] = useState(null); // null = closed, {} = new, sar = edit
   const [error, setError] = useState('');
+  const [sort, setSort] = useState(DEFAULT_SORT); // { key, dir }: the register has always shown the newest entry first
 
   useEffect(() => {
     if (!user?.uid) return undefined;
@@ -337,7 +357,7 @@ export default function MobileGovernanceSARs() {
   const metrics = useMemo(() => metricsOf(rows), [rows]);
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    return rows.filter((r) => {
+    return sortSars(rows, sort).filter((r) => {
       if (term && ![r.reference, r.emisNumber, r.patientInitials, r.assignedToName, requestedByText(r)].some((v) => String(v || '').toLowerCase().includes(term))) return false;
       if (filter === 'all') return true;
       if (filter === 'completed') return !isOpen(r);
@@ -346,7 +366,7 @@ export default function MobileGovernanceSARs() {
       if (filter === 'week') { const d = daysUntilDate(r.dueDate); return d !== null && d >= 0 && d <= 7; }
       return true;
     });
-  }, [rows, filter, search]);
+  }, [rows, filter, search, sort]);
   const selected = rows.find((r) => r.id === selectedId) || null;
 
   if (!seesAll && rows.length === 0) {
@@ -388,6 +408,13 @@ export default function MobileGovernanceSARs() {
           <option value="completed">Completed</option>
           <option value="all">All</option>
         </select>
+        <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+          <select value={sort.key} onChange={(e) => setSort({ key: e.target.value, dir: e.target.value === 'entered' || e.target.value === 'completed' ? 'desc' : 'asc' })} aria-label="Sort by" className="w-full rounded-xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] px-3 py-2.5 text-sm font-semibold">
+            {Object.entries(SORT_KEYS).map(([key, value]) => <option key={key} value={key}>Sort: {value.label}</option>)}
+          </select>
+          <button type="button" onClick={() => setSort({ ...sort, dir: sort.dir === 'asc' ? 'desc' : 'asc' })} aria-label="Reverse the order" className="rounded-xl border border-[var(--medtrak-border)] px-3 text-sm font-semibold">{sort.dir === 'asc' ? '↑' : '↓'}</button>
+        </div>
+        <p className="mt-1 text-[11px] text-[var(--medtrak-muted)]">{SORT_KEYS[sort.key][sort.dir]}</p>
       </section>
 
       {error && <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-600">{error}</p>}
@@ -412,6 +439,7 @@ export default function MobileGovernanceSARs() {
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <span className="rounded-full bg-[var(--medtrak-bg)] px-2 py-0.5 text-[10px] font-bold">{SAR_STATUS_LABELS[sar.status] || friendly(sar.status)}</span>
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${tone.status === 'critical' || tone.status === 'high' ? 'bg-rose-500/10 text-rose-600' : tone.status === 'warning' ? 'bg-amber-500/10 text-amber-600' : 'bg-emerald-500/10 text-emerald-600'}`}>{tone.label}</span>
+                {sar.completedAt && !isOpen(sar) && <span className="rounded-full bg-[var(--medtrak-bg)] px-2 py-0.5 text-[10px] font-bold">Completed {dateLabel(sar.completedAt)}</span>}
               </div>
             </button>
           );
@@ -419,7 +447,7 @@ export default function MobileGovernanceSARs() {
       </div>
 
       {selected && !editing && <SarDetailSheet sar={selected} actor={actor} isTeam={isTeam} chase={chase.byId.get(selected.id)} onChased={() => chase.reload()} onClose={() => setSelectedId('')} onEdit={setEditing} />}
-      {editing && isTeam && <SarFormSheet sar={editing.id ? editing : null} actor={actor} staff={staff} onClose={() => setEditing(null)} />}
+      {editing && isTeam && <SarFormSheet sar={editing.id ? editing : null} actor={actor} staff={staff} rows={rows} onClose={() => setEditing(null)} />}
     </main>
   );
 }
