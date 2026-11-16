@@ -44,7 +44,9 @@ export async function saveWeek(week, actor, { edited = {}, built = false } = {})
   const a = who(actor);
   const body = { mondayIso: week.mondayIso, days: week.days, issues: week.issues || [], edited, updatedAt: serverTimestamp(), updatedByUid: a.uid, updatedByName: a.name };
   if (built) { body.generatedAt = serverTimestamp(); body.generatedByUid = a.uid; body.generatedByName = a.name; }
-  await setDoc(doc(db, WEEKS, week.mondayIso), body, { merge: true });
+  // mergeFields, not merge: with merge, a place that was emptied (or a shift that is now closed) would keep its old name in the database, because the old and new days are merged together.
+  // Naming the fields replaces each of them whole, while the fields not named here (who built it, when) are left as they were.
+  await setDoc(doc(db, WEEKS, week.mondayIso), body, { mergeFields: Object.keys(body) });
   recordAudit(rotaEvent(built ? "week_built" : "week_changed", { mondayIso: week.mondayIso }));
 }
 

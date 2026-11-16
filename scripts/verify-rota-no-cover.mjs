@@ -1,5 +1,6 @@
 // "Nobody, no cover needed": the person building the rota can say a shift needs nobody on a day. It is left empty, is not reported as a gap, and stays empty when the week is built again.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { DAYS, DEFAULT_SETTINGS, DEFAULT_SHIFTS, newPerson } from "../src/modules/rota/rotaModel.js";
 import { generateWeek, generateWeeks, shiftIdOfKey } from "../src/modules/rota/rotaEngine.js";
 import { checkWeek, noCoverOf, setNoCover, setPlace, withNames } from "../src/modules/rota/rotaWeek.js";
@@ -64,6 +65,12 @@ t("it survives the names being put on, shows in the Excel sheet and the printout
   assert.deepEqual(week.days.fri.noCover, ["early2"]);
   const row = weekSheet(week, rules).rows.find((r) => /^Early 2/.test(r[0]));
   assert.equal(row[DAYS.indexOf("fri") + 1], "No cover needed");
+});
+
+t("a week is saved with its fields replaced, not merged, so an emptied place does not keep its old name in the database", () => {
+  const service = readFileSync(new URL("../src/modules/rota/rotaService.js", import.meta.url), "utf8");
+  assert.match(service, /setDoc\(doc\(db, WEEKS, week\.mondayIso\), body, \{ mergeFields: Object\.keys\(body\) \}\)/);
+  assert.doesNotMatch(service, /WEEKS, week\.mondayIso\), body, \{ merge: true \}/);
 });
 
 console.log(`\n${n} checks passed`);
