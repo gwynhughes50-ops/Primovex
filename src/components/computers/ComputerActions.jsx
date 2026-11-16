@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { QrCode } from "lucide-react";
 import { SOFTWARE, STATUS, checkState, isLive, missingSoftware, softwareLabel } from "@/modules/computers/computers";
-import { dayKey, ukDay } from "@/modules/laptops/laptops";
-import { editComputer, markComputerChecked, subscribeComputerEvents } from "@/modules/computers/computerService";
+import { DELETE_REASONS, dayKey, ukDay } from "@/modules/laptops/laptops";
+import { deleteComputer, editComputer, markComputerChecked, subscribeComputerEvents } from "@/modules/computers/computerService";
 
 // What the IT team can do with one PC: record a check (one tap when it is all as listed, or tick what is different), change its details, and read its history. Used on the desktop and on the phone,
 // where it is what opens when a PC's QR label is scanned. The person who uses it is picked from the staff list, never typed. Every change is checked in computers.js and says in words what is wrong.
@@ -71,7 +71,7 @@ export default function ComputerActions({ computer, staff = [], sites = [], depa
 
   async function run(work, message) {
     setBusy(true); setProblem(""); setDone("");
-    try { await work(); setDone(message); setMode(""); setForm({}); setNote(""); onChanged(); } catch (e) { setProblem(e?.message || "That could not be saved. Try again."); } finally { setBusy(false); }
+    try { await work(); setDone(message); setMode(""); setForm({}); setNote(""); onChanged(message); } catch (e) { setProblem(e?.message || "That could not be saved. Try again."); } finally { setBusy(false); }
   }
   const allAsListed = () => run(() => markComputerChecked({ computer, actor }), `PC ${computer.assetNumber} checked.`);
   const recordCheck = () => run(() => markComputerChecked({ computer, software, note, actor }), `PC ${computer.assetNumber} checked.`);
@@ -110,10 +110,11 @@ export default function ComputerActions({ computer, staff = [], sites = [], depa
           <button type="button" className={PRIMARY} disabled={busy} onClick={allAsListed}>Checked: all as listed</button>
           <button type="button" className={BUTTON} onClick={() => { setMode("check"); setDone(""); }}>Something is different</button>
           <button type="button" className={BUTTON} onClick={() => { setMode("edit"); setDone(""); }}>Edit details</button>
+          <button type="button" className={BUTTON} onClick={() => { setMode("delete"); setDone(""); setForm({}); }}>Delete</button>
           <button type="button" className={BUTTON} onClick={() => setMode("history")}>History</button>
         </div>
       )}
-      {canManage && !live && !mode && <div className="flex flex-wrap gap-2"><button type="button" className={BUTTON} onClick={() => setMode("edit")}>Edit details</button><button type="button" className={BUTTON} onClick={() => setMode("history")}>History</button></div>}
+      {canManage && !live && !mode && <div className="flex flex-wrap gap-2"><button type="button" className={BUTTON} onClick={() => setMode("edit")}>Edit details</button><button type="button" className={BUTTON} onClick={() => { setMode("delete"); setForm({}); }}>Delete</button><button type="button" className={BUTTON} onClick={() => setMode("history")}>History</button></div>}
       {!canManage && !mode && <button type="button" className={BUTTON} onClick={() => setMode("history")}>History</button>}
 
       {mode === "check" && (
@@ -136,6 +137,16 @@ export default function ComputerActions({ computer, staff = [], sites = [], depa
           <Label text="Installed"><SoftwareBoxes value={form.software ?? computer.software ?? []} onChange={(v) => set({ software: v })} usual={usual} /></Label>
           <Label text="Notes"><input className={FIELD} value={edit.notes} maxLength={200} onChange={(e) => set({ notes: e.target.value })} /></Label>
           <div className="flex gap-2"><button type="button" className={PRIMARY} disabled={busy} onClick={save}>Save</button><button type="button" className={BUTTON} onClick={() => { setMode(""); setForm({}); }}>Cancel</button></div>
+        </section>
+      )}
+
+      {mode === "delete" && (
+        <section className="space-y-2 rounded-xl border border-rose-400/40 p-3" aria-label="Delete this PC">
+          <p className="font-bold">Delete PC {computer.assetNumber} from the register?</p>
+          <p className="text-xs text-[var(--medtrak-muted)]">It disappears from the list. Its history is kept, with the reason and who deleted it.</p>
+          <Label text="Why is it being deleted"><select className={FIELD} value={form.reason || ""} onChange={(e) => set({ reason: e.target.value })}><option value="">Choose a reason</option>{Object.entries(DELETE_REASONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Label>
+          {problem && <p className="text-sm font-semibold text-rose-600" role="alert">{problem}</p>}
+          <div className="flex gap-2"><button type="button" className={PRIMARY} disabled={busy} onClick={() => run(() => deleteComputer({ computer, reason: form.reason, actor }), `PC ${computer.assetNumber} deleted.`)}>{busy ? "Deleting…" : "Yes, delete it"}</button><button type="button" className={BUTTON} onClick={() => { setMode(""); setForm({}); setProblem(""); }}>Cancel</button></div>
         </section>
       )}
 

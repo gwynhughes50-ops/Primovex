@@ -3,7 +3,7 @@ import { db } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import { recordAudit } from "@/modules/audit/recordAudit";
 import { laptopEvent } from "@/modules/audit/auditEvents";
-import { buildAssign, buildEdit, buildLoanOut, buildNewLaptop, buildReturn, buildUpdated, dayKey } from "./laptops";
+import { buildAssign, buildDelete, buildEdit, buildLoanOut, buildNewLaptop, buildReturn, buildUpdated, dayKey } from "./laptops";
 
 // Reading and writing the laptop records. it_laptops is the register (one record per laptop, with who has it and any loan); it_laptop_events is a line for everything that happens to one,
 // never edited. Every change is one write of both together, so the record and its log cannot disagree.
@@ -60,6 +60,7 @@ export const loanOutLaptop = ({ laptop, borrower, dueBackOn, conditionOut, actor
 export const returnLaptop = ({ laptop, condition, actor }) => apply(laptop, buildReturn({ laptop, condition, actor: who(actor) }), actor);
 export const markLaptopUpdated = ({ laptop, updatedOn, nextDueOn, actor }) => apply(laptop, buildUpdated({ laptop, updatedOn, nextDueOn, actor: who(actor) }), actor);
 export const assignLaptop = ({ laptop, holder, actor }) => apply(laptop, buildAssign({ laptop, holder, actor: who(actor) }), actor);
+export const deleteLaptop = ({ laptop, reason, actor }) => apply(laptop, buildDelete({ laptop, reason, actor: who(actor) }), actor);
 export const editLaptop = ({ laptop, changes, actor }) => apply(laptop, buildEdit({ laptop, changes, actor: who(actor) }), actor);
 
 // A new laptop, or many (the paste import). Each is a record and a line in its log, written in batches.

@@ -39,6 +39,7 @@ export default function ComputerRegisterPanel({ scan = false, initialId = "" }) 
   const [department, setDepartment] = useState("");
   const [software, setSoftware] = useState(""); // "" | "usual" | "missing:key" | "has:key"
   const [openId, setOpenId] = useState(initialId);
+  const [notice, setNotice] = useState("");
   const [panel, setPanel] = useState(""); // "" | "import" | "add"
   const [add, setAdd] = useState({ assetNumber: "", siteId: "", department: "", label: "" });
   const [addProblem, setAddProblem] = useState("");
@@ -93,6 +94,7 @@ export default function ComputerRegisterPanel({ scan = false, initialId = "" }) 
         <label className="relative min-w-0 flex-1"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-[var(--medtrak-muted)]" aria-hidden="true" /><input className={`${FIELD} w-full pl-8`} value={search} onChange={(e) => setSearch(e.target.value)} placeholder="PC number, room, person or printer" aria-label="Find a PC" /></label>
         {scan && <><button type="button" data-pc-scan className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[var(--medtrak-accent)] px-4 text-sm font-bold text-white"><QrCode className="h-4 w-4" aria-hidden="true" /> Scan</button><MobileBarcodeScanner onScan={found} triggerAttribute="data-pc-scan" title="Scan a PC label" helper="Point the camera at the QR label on the PC. You can also type its number." /></>}
       </div>
+      {notice && <p className="text-sm font-semibold text-emerald-600" role="status">{notice}</p>}
       <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Show">
         {FILTERS.map(([key, label]) => <button key={key} type="button" role="tab" aria-selected={filter === key} onClick={() => setFilter(key)} className={`min-h-9 rounded-full border px-3 text-xs font-semibold ${filter === key ? "border-[var(--medtrak-accent)] bg-[var(--medtrak-accent)] text-white" : "border-[var(--medtrak-border)]"}`}>{label} ({count(key)})</button>)}
       </div>
@@ -136,7 +138,7 @@ export default function ComputerRegisterPanel({ scan = false, initialId = "" }) 
                 <span className="flex flex-wrap items-baseline justify-between gap-x-3"><span className="font-bold">PC {c.assetNumber}</span><span className="text-sm text-[var(--medtrak-muted)]">{[c.siteName, c.department, c.label].filter(Boolean).join(" · ")}</span></span>
                 <Chips computer={c} usual={usual} today={today} />
               </button>
-              {openId === c.id && <ComputerActions computer={c} staff={staff} sites={sites} departments={departments} usual={usual} actor={actor} canManage={canManage} />}
+              {openId === c.id && <ComputerActions computer={c} staff={staff} sites={sites} departments={departments} usual={usual} actor={actor} canManage={canManage} onChanged={(message) => setNotice(/deleted\.$/.test(message || "") ? message : "")} />}
             </li>
           ))}
         </ul>

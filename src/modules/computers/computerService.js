@@ -3,7 +3,7 @@ import { db } from "@/lib/firebase";
 import { isSafeSyntheticMode } from "@/config/platformMode";
 import { recordAudit } from "@/modules/audit/recordAudit";
 import { computerEvent } from "@/modules/audit/auditEvents";
-import { buildChecked, buildEditComputer, buildNewComputer } from "./computers";
+import { buildChecked, buildDeleteComputer, buildEditComputer, buildNewComputer } from "./computers";
 import { dayKey } from "../laptops/laptops";
 
 // Reading and writing the PC records. it_computers is the register (one record per PC); it_computer_events is a line for everything that happens to one, never edited. Every change is one write of
@@ -48,6 +48,7 @@ async function apply(computer, { patch, event }, actor) {
 }
 
 export const markComputerChecked = ({ computer, checkedOn, software, note, actor }) => apply(computer, buildChecked({ computer, checkedOn, software, note, today: dayKey(), actor: who(actor) }), actor);
+export const deleteComputer = ({ computer, reason, actor }) => apply(computer, buildDeleteComputer({ computer, reason, actor: who(actor) }), actor);
 export const editComputer = ({ computer, changes, actor }) => apply(computer, buildEditComputer({ computer, changes, today: dayKey(), actor: who(actor) }), actor);
 
 // A new PC, or many (the spreadsheet import). Each is a record and a line in its history, written in batches. inputs carry their own site.

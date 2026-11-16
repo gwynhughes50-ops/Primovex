@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { CONDITION, STATUS, WIN11, addDays, dayKey, holderText, isLive, isOnLoan, loanState, ukDay, updateState } from "@/modules/laptops/laptops";
-import { assignLaptop, editLaptop, loanOutLaptop, markLaptopUpdated, returnLaptop, subscribeLaptopEvents } from "@/modules/laptops/laptopService";
+import { CONDITION, DELETE_REASONS, STATUS, WIN11, addDays, dayKey, holderText, isLive, isOnLoan, loanState, ukDay, updateState } from "@/modules/laptops/laptops";
+import { assignLaptop, deleteLaptop, editLaptop, loanOutLaptop, markLaptopUpdated, returnLaptop, subscribeLaptopEvents } from "@/modules/laptops/laptopService";
 
 // What the IT team can do with one laptop: lend it, take it back, record an update, say who has it, change its facts, and read its log. Used on the desktop and on the phone. The person who
 // has it is always picked from the staff list, never typed. Every change is checked in laptops.js and says in words what is wrong.
@@ -64,7 +64,7 @@ export default function LaptopActions({ laptop, staff = [], actor, canManage = f
   const open = (next, initial = {}) => { setMode(next); setForm(initial); setProblem(""); setDone(""); };
   const run = (task, message) => async () => {
     setBusy(true); setProblem("");
-    try { await task(); setMode(""); setDone(message); onChanged(); } catch (error) { setProblem(error?.message || "That could not be saved. Try again."); } finally { setBusy(false); }
+    try { await task(); setMode(""); setDone(message); onChanged(message); } catch (error) { setProblem(error?.message || "That could not be saved. Try again."); } finally { setBusy(false); }
   };
   const live = isLive(laptop);
   const loaned = isOnLoan(laptop);
@@ -83,9 +83,11 @@ export default function LaptopActions({ laptop, staff = [], actor, canManage = f
             : <button type="button" className={PRIMARY} onClick={() => open("loan", { borrower: null, dueBackOn: addDays(today, 7) })}>Loan out</button>}
           <button type="button" className={BUTTON} onClick={() => open("updated", { updatedOn: today, nextDueOn: addDays(today, 180) })}>Mark updated</button>
           {!loaned && <button type="button" className={BUTTON} onClick={() => open("assign", { holder: laptop.currentUserUid ? staff.find((s) => s.uid === laptop.currentUserUid) || null : null })}>Who has it</button>}
+          <button type="button" className={BUTTON} onClick={() => open("delete", { reason: "" })}>Delete</button>
           <button type="button" className={BUTTON} onClick={() => open("edit", { condition: laptop.condition, win11: laptop.win11, office365: laptop.office365 === true, upgraded: laptop.upgraded === true, nextUpdateDue: laptop.nextUpdateDue || "", notes: laptop.notes || "", status: laptop.status === "on_loan" ? "" : laptop.status })}>Edit</button>
         </div>
       )}
+      {canManage && !live && !mode && <div className="mt-3 flex flex-wrap gap-2"><button type="button" className={BUTTON} onClick={() => open("delete", { reason: "" })}>Delete</button></div>}
       {!mode && <button type="button" className="mt-2 text-xs font-semibold text-[var(--medtrak-accent)] underline" onClick={() => open("history")}>History</button>}
 
       {mode === "loan" && (
@@ -125,6 +127,14 @@ export default function LaptopActions({ laptop, staff = [], actor, canManage = f
           {!loaned && <Label text="Status"><select className={FIELD} value={form.status} onChange={(e) => set({ status: e.target.value })}>{Object.entries(STATUS).filter(([k]) => k !== "on_loan").map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Label>}
           <Label text="A short note (what is wrong with it, for example)"><input className={FIELD} maxLength={200} value={form.notes || ""} onChange={(e) => set({ notes: e.target.value })} /></Label>
           <Footer busy={busy} problem={problem} onCancel={() => setMode("")} onSave={run(() => editLaptop({ laptop, changes: changedFacts(laptop, form), actor }), "Saved.")} label="Save" />
+        </div>
+      )}
+      {mode === "delete" && (
+        <div className="mt-3 space-y-2 rounded-xl border border-rose-400/40 p-3">
+          <p className="text-sm font-bold">Delete {laptop.assetCode} from the register?</p>
+          <p className="text-xs text-[var(--medtrak-muted)]">It disappears from the list and nobody has it any more. Its history is kept, with the reason and who deleted it.{loaned ? " It is out on loan: return it first." : ""}</p>
+          <Label text="Why is it being deleted"><select className={FIELD} value={form.reason || ""} onChange={(e) => set({ reason: e.target.value })}><option value="">Choose a reason</option>{Object.entries(DELETE_REASONS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Label>
+          <Footer busy={busy} problem={problem} onCancel={() => setMode("")} onSave={run(() => deleteLaptop({ laptop, reason: form.reason, actor }), `${laptop.assetCode} deleted.`)} label="Yes, delete it" />
         </div>
       )}
       {mode === "history" && (

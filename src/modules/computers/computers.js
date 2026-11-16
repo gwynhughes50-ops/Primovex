@@ -4,7 +4,7 @@
 // A PC is one record. Where it is comes from the practice's own list of sites (picked, never typed). "Who or what uses it" is kept as written on the practice's sheet ("Room 12", "Phones",
 // "Dave"), and a name that matches one member of staff is also linked to them. Software is a list of fixed keys, so every PC reads the same.
 
-import { ORIGIN, addDays, dayKey, daysBetween, isDay, ukDay } from "../laptops/laptops.js";
+import { DELETE_REASONS, ORIGIN, addDays, dayKey, daysBetween, deletedFacts, isDay, ukDay } from "../laptops/laptops.js";
 
 export const STATUS = { in_use: "In use", spare: "Spare", decommissioned: "Decommissioned" };
 
@@ -67,6 +67,16 @@ export function buildNewComputer(input = {}, { today = dayKey(), actor = {}, imp
     lastCheckedOn: "", lastCheckedByName: "", lastCheckNote: "",
   };
   return { computer, event: line({ assetNumber }, imported ? "imported" : "added", `PC ${assetNumber} ${imported ? "added from a sheet" : "added"}${computer.siteName ? ` at ${computer.siteName}` : ""}`, today, actor) };
+}
+
+// Take a PC off the register, with the reason chosen from the list (the same list as the laptops). The record and its history are kept, hidden.
+export function buildDeleteComputer({ computer, reason, today = dayKey(), actor = {} } = {}) {
+  if (!computer || computer.active === false) throw new Error("That PC has already been deleted.");
+  if (!has(DELETE_REASONS, reason)) throw new Error("Choose why it is being deleted.");
+  return {
+    patch: { ...deletedFacts(reason, today, actor), currentUserUid: "", currentUserName: "" },
+    event: line(computer, "deleted", `PC ${computer.assetNumber || ""} deleted from the register: ${DELETE_REASONS[reason].toLowerCase()}`, today, actor, { reason }),
+  };
 }
 
 // the facts that describe the PC. changes: any of { site, department, label, printerSerial, status, holder, software, notes }

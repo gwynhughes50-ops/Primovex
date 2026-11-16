@@ -124,6 +124,21 @@ export function buildAssign({ laptop, holder, today = dayKey(), actor = {} } = {
   return { patch: { currentUserUid: who.uid, currentUserName: who.name, status: "in_use" }, event: line(laptop, "assigned", `${laptop.assetCode} assigned to ${who.name}`, today, actor, { holderUid: who.uid }) };
 }
 
+// Deleting a laptop or a PC takes it off the register, with the reason chosen from this list. The record and its history are kept (it is hidden, not wiped), so there is always an answer to
+// "what happened to it?". A laptop that is out on loan has to be returned first.
+export const DELETE_REASONS = { duplicate: "Added by mistake, or a duplicate", disposed: "Disposed of or recycled", lost: "Lost or stolen", gone: "Sold, donated or returned to the supplier", other: "Another reason" };
+export const deletedFacts = (reason, today, actor) => ({ active: false, deletedReason: reason, deletedOn: today, deletedByUid: by(actor).byUid, deletedByName: by(actor).byName });
+
+export function buildDelete({ laptop, reason, today = dayKey(), actor = {} } = {}) {
+  if (!laptop || laptop.active === false) throw new Error("That laptop has already been deleted.");
+  if (!has(DELETE_REASONS, reason)) throw new Error("Choose why it is being deleted.");
+  if (isOnLoan(laptop)) throw new Error("Return it from loan first.");
+  return {
+    patch: { ...deletedFacts(reason, today, actor), currentUserUid: "", currentUserName: "", borrowerUid: "", loan: null, nextUpdateDue: "" },
+    event: line(laptop, "deleted", `${laptop.assetCode} deleted from the register: ${DELETE_REASONS[reason].toLowerCase()}`, today, actor, { reason }),
+  };
+}
+
 // the facts that describe the laptop (never its holder or its loan, which have their own changes)
 export function buildEdit({ laptop, changes = {}, today = dayKey(), actor = {} } = {}) {
   const patch = {};
