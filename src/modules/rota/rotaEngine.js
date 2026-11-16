@@ -82,8 +82,9 @@ export function canDo(person, shift, day, { until = null, from = null } = {}) {
 //   lastFriday:  { uid: group }         what they did on the Friday before this week
 // }
 // locked = { mon: { slotKey: uid } }  places fixed by hand, which are kept.
+// noCover = { mon: [slotKey] }  shifts the person building the rota said need nobody that day: they are left empty and are not reported.
 // closures = surgery closures ({ site, from, to, fromTime, toTime, reason }): a shift at a closed surgery is not staffed, and one that runs into a closure is cut to the open hours.
-export function generateWeek({ rules, mondayIso, absences = [], closures = [], history = {}, locked = {} }) {
+export function generateWeek({ rules, mondayIso, absences = [], closures = [], history = {}, locked = {}, noCover = {} }) {
   const people = rules?.people || [];
   const byUid = Object.fromEntries(people.map((p) => [p.uid, p]));
   const settings = rules?.settings || {};
@@ -105,6 +106,7 @@ export function generateWeek({ rules, mondayIso, absences = [], closures = [], h
   for (const { day, iso } of weekDates(mondayIso)) {
     const slots = [];
     const dayClosed = dayClosures(closures, iso); // the surgery closures that fall on this day
+    const left = []; // places the coordinator chose to leave empty
     const closedShifts = []; // shifts at a surgery that is shut for (nearly) all of the shift
     for (const shift of rules.shifts || []) {
       if (!(shift.days || []).includes(day)) continue;
@@ -112,7 +114,11 @@ export function generateWeek({ rules, mondayIso, absences = [], closures = [], h
       if (open === null) { closedShifts.push(shift); continue; }
       // a shift that runs into a closure is cut to the open hours; the cut is kept on the slot so it is shown and saved with the place
       const cut = open.from || open.until ? { ...shift, start: open.from || shift.start, end: open.until || shift.end } : shift;
-      for (let i = 0; i < Number(shift.count || 1); i += 1) slots.push({ key: slotKeyOf(shift, i), shift: cut, trim: open.from || open.until ? open : null });
+      for (let i = 0; i < Number(shift.count || 1); i += 1) {
+        const key = slotKeyOf(shift, i);
+        if ((noCover[day] || []).includes(key)) { left.push(key); continue; }
+        slots.push({ key, shift: cut, trim: open.from || open.until ? open : null });
+      }
     }
     const assigned = {}; // slotKey -> { uid, until, source }
     const used = new Set();
@@ -296,7 +302,7 @@ export function generateWeek({ rules, mondayIso, absences = [], closures = [], h
     const benched = present.filter((p) => !used.has(p.uid) && !tooLittle.has(p.uid) && (p.mode || "pool") === "pool").map((p) => p.uid);
     for (const uid of benched) issues.push({ day, iso, severity: "note", text: dayClosed.length ? `${DAY_LABELS[day]}: ${byUid[uid].name} is not needed because of the closure.` : `${DAY_LABELS[day]}: ${byUid[uid].name} has no shift (more people than shifts).` });
 
-    out[day] = { iso, slots: assigned, unfilled, ...(dayClosed.length ? { closed: dayClosed } : {}) };
+    out[day] = { iso, slots: assigned, unfilled, ...(dayClosed.length ? { closed: dayClosed } : {}), ...(left.length ? { noCover: left } : {}) };
     const nextPrev = {};
     for (const [key, a] of Object.entries(assigned)) {
       const shift = shiftById(rules, shiftIdOfKey(key));
@@ -309,12 +315,12 @@ export function generateWeek({ rules, mondayIso, absences = [], closures = [], h
 }
 
 // Build several weeks in a row, each one starting from what the earlier ones already gave out. `existing` holds weeks already saved (with their hand-fixed places) as { mondayIso: week }.
-export function generateWeeks({ rules, firstMonday, weeks, absences = [], closures = [], history = {}, lockedByWeek = {} }) {
+export function generateWeeks({ rules, firstMonday, weeks, absences = [], closures = [], history = {}, lockedByWeek = {}, noCoverByWeek = {} }) {
   const results = [];
   let hist = { counts: JSON.parse(JSON.stringify(history.counts || {})), friLate: { ...(history.friLate || {}) }, previous: history.previous || {}, lastFriday: history.lastFriday || {} };
   for (let w = 0; w < weeks; w += 1) {
     const mondayIso = addDays(firstMonday, 7 * w);
-    const week = generateWeek({ rules, mondayIso, absences, closures, history: hist, locked: lockedByWeek[mondayIso] || {} });
+    const week = generateWeek({ rules, mondayIso, absences, closures, history: hist, locked: lockedByWeek[mondayIso] || {}, noCover: noCoverByWeek[mondayIso] || {} });
     results.push(week);
     hist = historyAfter(hist, week, rules);
   }

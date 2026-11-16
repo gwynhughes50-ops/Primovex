@@ -56,9 +56,28 @@ export function withNames(week, rules) {
     const src = week.days?.[day] || { slots: {}, unfilled: [] };
     const slots = {};
     for (const [key, a] of Object.entries(src.slots || {})) slots[key] = { ...a, name: names[a.uid] || a.name || "" };
-    days[day] = { iso: src.iso, slots, unfilled: src.unfilled || [], ...(src.closed?.length ? { closed: src.closed } : {}) };
+    days[day] = { iso: src.iso, slots, unfilled: src.unfilled || [], ...(src.closed?.length ? { closed: src.closed } : {}), ...(src.noCover?.length ? { noCover: src.noCover } : {}) };
   }
   return { ...week, days };
+}
+
+// The places left empty on purpose ("nobody needed"): { mon: [slotKey] }, kept when the week is built again.
+export function noCoverOf(week) {
+  const out = {};
+  for (const day of DAYS) { const keys = week?.days?.[day]?.noCover; if (keys?.length) out[day] = [...keys]; }
+  return out;
+}
+
+// Say a place needs nobody (on = true) or put it back (on = false). Any person on it is taken off. It is no gap, and a rebuild leaves it empty.
+export function setNoCover(week, rules, day, slotKey, on) {
+  const next = setPlace(week, rules, day, slotKey, "");
+  const d = next.days[day];
+  const keys = new Set(d.noCover || []);
+  if (on) keys.add(slotKey); else keys.delete(slotKey);
+  d.noCover = [...keys];
+  if (!d.noCover.length) delete d.noCover;
+  d.unfilled = slotsOfDay(rules, day, d.closed).map((s) => s.key).filter((k) => !d.slots[k] && !keys.has(k));
+  return next;
 }
 
 // Set one place by hand. uid "" clears it. Returns the week with the change and `edited` marked.
@@ -68,10 +87,11 @@ export function setPlace(week, rules, day, slotKey, uid, times = null) {
   const days = JSON.parse(JSON.stringify(week.days || {}));
   const d = days[day] = days[day] || { iso: weekDates(week.mondayIso).find((x) => x.day === day).iso, slots: {}, unfilled: [] };
   d.slots = d.slots || {};
+  if (uid && d.noCover) { d.noCover = d.noCover.filter((k) => k !== slotKey); if (!d.noCover.length) delete d.noCover; }
   if (uid) d.slots[slotKey] = { uid, name: names[uid] || "", source: "locked", ...(t.from ? { from: t.from } : {}), ...(t.until ? { until: t.until } : {}) };
   else delete d.slots[slotKey];
   const all = slotsOfDay(rules, day, d.closed).map((s) => s.key);
-  d.unfilled = all.filter((k) => !d.slots[k]);
+  d.unfilled = all.filter((k) => !d.slots[k] && !(d.noCover || []).includes(k));
   return { ...week, days, edited: { ...(week.edited || {}), [`${day}|${slotKey}`]: true } };
 }
 
@@ -93,8 +113,10 @@ export function checkWeek(rules, week, absences = []) {
       const shut = !daySlots.some((x) => x.key === key) && closedShiftsOn(rules, day, closed).find((x) => x.id === shiftIdOfKey(key));
       if (shut) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${people[slots[key].uid]?.name || slots[key].name || "Someone"} is on ${shut.label}, but the ${ROTA_SITES[siteOfShift(shut)].toLowerCase()} is closed then.` });
     }
+    const noCover = new Set(week.days?.[day]?.noCover || []);
     for (const { key, shift } of daySlots) {
       const a = slots[key];
+      if (!a && noCover.has(key)) continue; // left empty on purpose
       if (!a) {
         if (shift.essential) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: nobody is on ${shift.label} (${shift.start}–${shift.end}).` });
         else if (!(isOwned(rules, shift) && daySlots.filter((s) => s.shift.id === shift.id).findIndex((s) => s.key === key) >= ownersOnDay(rules, shift, day).length)) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${shift.label} is not staffed.` });

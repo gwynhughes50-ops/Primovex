@@ -3,7 +3,7 @@ import { AlertTriangle, Building2, CalendarRange, CheckCircle2, ChevronLeft, Che
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
 import { CLOSURE_REASONS, DAYS, DAY_LABELS, ROTA_SITES, addDays, availabilityOn, closedSites, closedText, dateOf, dayClosures, isoOf, offText, partTimes, mayTakeShift, ruleCoversShift, timeLabel, weekDates, weekLabel } from "@/modules/rota/rotaModel";
 import { generateWeek, weekCounters } from "@/modules/rota/rotaEngine";
-import { checkWeek, closuresChangedSince, historyBefore, lockedOf, setPlace, slotsOfDay, withNames } from "@/modules/rota/rotaWeek";
+import { checkWeek, closuresChangedSince, historyBefore, lockedOf, noCoverOf, setNoCover, setPlace, slotsOfDay, withNames } from "@/modules/rota/rotaWeek";
 import { buildRotaHtml, buildRotaXlsx, counterColumns, runningCounters } from "@/modules/rota/rotaExport";
 import { saveWeek } from "@/modules/rota/rotaService";
 import { publishWeeks } from "@/modules/rota/rotaTeamService";
@@ -17,6 +17,7 @@ import RotaReviewPanel from "./RotaReviewPanel";
 const BTN = "inline-flex items-center gap-1.5 rounded-xl border border-[var(--medtrak-border)] px-3 py-2 text-sm font-semibold text-[var(--medtrak-text)] transition hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_10%,transparent)] disabled:opacity-40";
 const PRIMARY = "inline-flex items-center gap-1.5 rounded-xl bg-[var(--medtrak-accent)] px-4 py-2 text-sm font-semibold text-slate-950 shadow-sm transition hover:brightness-110 disabled:opacity-40";
 const CARD = "rounded-2xl border border-[var(--medtrak-border)] bg-[color:color-mix(in_srgb,var(--medtrak-panel,#0f172a)_60%,transparent)]";
+const NONE = "__nobody__"; // the choice that says a place needs nobody
 const shortDay = (iso) => dateOf(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 const dayNumber = (iso) => dateOf(iso).getDate();
 
@@ -77,7 +78,7 @@ export default function RotaWeekPanel({ rules, weeks, absences, closures = [], a
     try {
       const local = { ...weeks };
       for (const m of mondays) {
-        const result = generateWeek({ rules, mondayIso: m, absences, closures, history: historyBefore(local, m, rules), locked: lockedOf(local[m]) });
+        const result = generateWeek({ rules, mondayIso: m, absences, closures, history: historyBefore(local, m, rules), locked: lockedOf(local[m]), noCover: noCoverOf(local[m]) });
         const edited = {};
         for (const day of DAYS) for (const [key, a] of Object.entries(result.days[day].slots)) if (a.source === "locked") edited[`${day}|${key}`] = true;
         const built = { mondayIso: m, days: result.days, issues: result.issues, edited };
@@ -110,7 +111,7 @@ export default function RotaWeekPanel({ rules, weeks, absences, closures = [], a
     const t = avail && slot ? partTimes(avail, slot.shift) : { from: null, until: null };
     const ruleUntil = rule && ruleCoversShift(rule.shift, slot?.shift) ? rule.until || null : null;
     const until = ruleUntil && (!t.until || ruleUntil < t.until) ? ruleUntil : t.until;
-    const next = setPlace(base, rules, day, key, uid, { from: t.from, until });
+    const next = uid === NONE ? setNoCover(base, rules, day, key, true) : setPlace(base, rules, day, key, uid, { from: t.from, until });
     try { await saveWeek(next, actor, { edited: next.edited }); } catch (e) { setError(e?.message || "That change could not be saved."); }
   }
 
@@ -125,7 +126,7 @@ export default function RotaWeekPanel({ rules, weeks, absences, closures = [], a
   // the numbers at the top
   const cover = useMemo(() => {
     let total = 0; let covered = 0;
-    for (const { day, iso } of weekDates(monday)) for (const s of slotsOfDay(rules, day, closedOn(day, iso))) if (s.shift.essential) { total += 1; if (week?.days?.[day]?.slots?.[s.key]) covered += 1; }
+    for (const { day, iso } of weekDates(monday)) for (const s of slotsOfDay(rules, day, closedOn(day, iso))) if (s.shift.essential && !(week?.days?.[day]?.noCover || []).includes(s.key)) { total += 1; if (week?.days?.[day]?.slots?.[s.key]) covered += 1; }
     return { total, covered };
   }, [rules, week, monday, closures]);
   const gaps = issues.filter((i) => i.severity === "gap");
@@ -218,6 +219,7 @@ export default function RotaWeekPanel({ rules, weeks, absences, closures = [], a
                     if (slotsOfDay(rules, day).some((s) => s.key === slot.key) && !slotsOfDay(rules, day, closedOn(day, iso)).some((s) => s.key === slot.key)) return <td key={day} className={`border-b border-[var(--medtrak-border)] p-1.5 ${isToday ? "bg-[color:color-mix(in_srgb,var(--medtrak-accent)_5%,transparent)]" : ""}`}><div className="rounded-xl px-2.5 py-1.5 text-sm font-semibold text-[var(--medtrak-muted)]" style={{ background: tint("#f59e0b", 10) }}>Closed</div></td>;
                     if (!slotsOfDay(rules, day).some((s) => s.key === slot.key)) return <td key={day} className={`border-b border-[var(--medtrak-border)] p-2 text-center text-[var(--medtrak-muted)] ${isToday ? "bg-[color:color-mix(in_srgb,var(--medtrak-accent)_5%,transparent)]" : ""}`}>–</td>;
                     const place = week?.days?.[day]?.slots?.[slot.key];
+                    const noCover = !place && (week?.days?.[day]?.noCover || []).includes(slot.key);
                     const person = place && people.find((p) => p.uid === place.uid);
                     const name = place ? place.name || person?.name || "Someone" : "";
                     const bad = place && issues.some((i) => i.day === day && i.severity === "gap" && i.text.includes(person?.name || place.name || "\u0000"));
@@ -233,14 +235,17 @@ export default function RotaWeekPanel({ rules, weeks, absences, closures = [], a
                               <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--medtrak-text)]">{name}</span>
                               {canManage && <ChevronRight className="h-3.5 w-3.5 rotate-90 text-[var(--medtrak-muted)] opacity-0 transition group-hover:opacity-100" aria-hidden="true" />}
                             </div>
+                          ) : noCover ? (
+                            <div className="rounded-xl border border-dashed px-2.5 py-1.5 text-sm text-[var(--medtrak-muted)]" style={{ borderColor: "var(--medtrak-border)", background: tint("#64748b", 10) }}>No cover needed</div>
                           ) : (
                             <div className={`rounded-xl border border-dashed px-2.5 py-1.5 text-sm ${slot.shift.essential ? "font-semibold" : ""}`} style={slot.shift.essential ? { borderColor: tint("#f43f5e", 55), background: tint("#f43f5e", 9), color: "#f43f5e" } : { borderColor: "var(--medtrak-border)", color: "var(--medtrak-muted)" }}>
                               {slot.shift.essential ? "Nobody" : "Not staffed"}
                             </div>
                           )}
                           {canManage && (
-                            <select value={place?.uid || ""} onChange={(e) => change(day, slot.key, e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer rounded-xl opacity-0 [&>option]:text-slate-900 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--medtrak-accent)]" aria-label={`${slot.shift.label} on ${DAY_LABELS[day]}`}>
-                              <option value="">{slot.shift.essential ? "— nobody —" : "— not staffed —"}</option>
+                            <select value={place?.uid || (noCover ? NONE : "")} onChange={(e) => change(day, slot.key, e.target.value)} className="absolute inset-0 h-full w-full cursor-pointer rounded-xl opacity-0 [&>option]:text-slate-900 focus-visible:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--medtrak-accent)]" aria-label={`${slot.shift.label} on ${DAY_LABELS[day]}`}>
+                              {!place && !noCover && <option value="">— not decided yet —</option>}
+                              <option value={NONE}>— nobody, no cover needed —</option>
                               {options.map((p) => <option key={p.uid} value={p.uid}>{p.name}{offText(absences, p.uid, iso) ? ` (off ${offText(absences, p.uid, iso)})` : ""}</option>)}
                             </select>
                           )}

@@ -231,10 +231,14 @@ function setPlace(week, rules, day, slotKey, uid, times = null) {
   const days = JSON.parse(JSON.stringify(week.days || {}));
   const d = days[day] = days[day] || { iso: weekDates(week.mondayIso).find((x) => x.day === day).iso, slots: {}, unfilled: [] };
   d.slots = d.slots || {};
+  if (uid && d.noCover) {
+    d.noCover = d.noCover.filter((k) => k !== slotKey);
+    if (!d.noCover.length) delete d.noCover;
+  }
   if (uid) d.slots[slotKey] = { uid, name: names[uid] || "", source: "locked", ...t.from ? { from: t.from } : {}, ...t.until ? { until: t.until } : {} };
   else delete d.slots[slotKey];
   const all = slotsOfDay(rules, day, d.closed).map((s) => s.key);
-  d.unfilled = all.filter((k) => !d.slots[k]);
+  d.unfilled = all.filter((k) => !d.slots[k] && !(d.noCover || []).includes(k));
   return { ...week, days, edited: { ...week.edited || {}, [`${day}|${slotKey}`]: true } };
 }
 function checkWeek(rules, week, absences = []) {
@@ -253,8 +257,10 @@ function checkWeek(rules, week, absences = []) {
       const shut = !daySlots.some((x) => x.key === key) && closedShiftsOn(rules, day, closed).find((x) => x.id === shiftIdOfKey(key));
       if (shut) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: ${people[slots[key].uid]?.name || slots[key].name || "Someone"} is on ${shut.label}, but the ${ROTA_SITES[siteOfShift(shut)].toLowerCase()} is closed then.` });
     }
+    const noCover = new Set(week.days?.[day]?.noCover || []);
     for (const { key, shift } of daySlots) {
       const a = slots[key];
+      if (!a && noCover.has(key)) continue;
       if (!a) {
         if (shift.essential) issues.push({ day, iso, severity: "gap", text: `${DAY_LABELS[day]}: nobody is on ${shift.label} (${shift.start}\u2013${shift.end}).` });
         else if (!(isOwned(rules, shift) && daySlots.filter((s) => s.shift.id === shift.id).findIndex((s) => s.key === key) >= ownersOnDay(rules, shift, day).length)) issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${shift.label} is not staffed.` });
