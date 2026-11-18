@@ -11,6 +11,7 @@ import { identityLabel } from "@/modules/governance/patientIdentity";
 import { Icons } from "@/config/medtrakIcons";
 import { useAuth } from "@/contexts/AuthContext";
 import { subscribeUsers } from "@/services/adminUserService";
+import AskPrimovexSummaryField from "@/ai/components/AskPrimovexSummaryField";
 import ConcernAuditTrail from "@/modules/governance/components/ConcernAuditTrail";
 import ConcernMeetings from "@/modules/governance/components/ConcernMeetings";
 import { CaseReviewPanel, ConcernCloseWizard, ConcernUpdateWizard, useCaseSteps } from "@/modules/governance/components/ConcernWizards";
@@ -274,7 +275,7 @@ function ConcernFormModal({ open, onClose, actor, onCreated, users, concern }) {
           )}
           <div className={`space-y-2 lg:col-span-2 ${isEdit ? "lg:col-start-1" : ""}`}><label className="text-sm font-semibold text-slate-200">Named contact for complainant</label><Input value={form.namedContactName} onChange={(e) => update({ namedContactName: e.target.value })} placeholder="Who the person raising this can ask for" /></div>
 
-          <div className="space-y-2 lg:col-span-3"><label className="text-sm font-semibold text-slate-200">Anonymised summary</label><textarea value={form.summary} onChange={(e) => update({ summary: e.target.value })} rows={4} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-3 py-3 text-white" placeholder="Brief factual summary. Do not include patient name." /></div>
+          <AskPrimovexSummaryField value={form.summary} onChange={(summary) => update({ summary })} category={form.category} priority={form.priority} desiredOutcome={form.desiredOutcome} />
           <div className="space-y-2 lg:col-span-3"><label className="text-sm font-semibold text-slate-200">Desired outcome / what would help?</label><textarea value={form.desiredOutcome} onChange={(e) => update({ desiredOutcome: e.target.value })} rows={3} className="w-full rounded-2xl border border-slate-700 bg-slate-900 px-3 py-3 text-white" placeholder="Record what the person wants from the process, where known." /></div>
         </div>
 

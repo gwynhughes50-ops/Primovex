@@ -137,6 +137,7 @@
     "test:patient-guard-sync": "node scripts/build-patient-guard.mjs --check",
     "test:rota-core": "node scripts/build-rota-core.mjs --check",
     "test:concern-meeting-cancel": "node scripts/verify-concern-meeting-cancel.mjs",
+    "test:concern-summary-ai": "node scripts/verify-concern-summary-ai.mjs",
     "test:test-documents": "esbuild scripts/verify-test-documents.mjs --bundle --platform=node --format=esm --external:firebase/* --external:pdf-lib --external:fflate --alias:@/lib/firebase=./scripts/stubs/sarStubs.js --alias:@=./src --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=work/verify-test-documents.bundle.mjs && node work/verify-test-documents.bundle.mjs",
     "test:document-formats": "esbuild scripts/verify-document-formats.mjs --bundle --platform=node --format=esm --external:firebase/* --alias:@/lib/firebase=./scripts/stubs/sarStubs.js --alias:@=./src --outfile=work/verify-document-formats.bundle.mjs && node work/verify-document-formats.bundle.mjs",
     "test:document-intake": "esbuild scripts/verify-document-intake.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-document-intake.bundle.mjs && node work/verify-document-intake.bundle.mjs",
