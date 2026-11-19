@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { collection, limit, onSnapshot, orderBy, query, where } from "firebase/firestore";
-import { FolderOpen, Folder, FolderPlus, Pencil, Trash2, X } from "lucide-react";
+import { FolderOpen, Folder, FolderPlus, Trash2, X } from "lucide-react";
 
 import PageHeader from "@/components/common/PageHeader";
 import SectionCard from "@/components/common/SectionCard";
@@ -174,11 +174,14 @@ function SarMetric({ label, value, tone = "slate" }) {
   );
 }
 
-function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, actor, onSaved, sar, defaultYear = null, rows = [] }) {
+// `embedded`: the form is shown inside the SAR's own page (open a SAR and it is all there to read and change in one place) instead of in a window of its own.
+export function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, actor, onSaved, sar, defaultYear = null, rows = [], embedded = false }) {
   const isEdit = !!sar;
-  const [form, setForm] = useState(getInitialForm);
+  const [form, setForm] = useState(() => (sar ? getFormFromSar(sar) : getInitialForm())); // an existing SAR's own values from the first paint
   const [busy, setBusy] = useState(false);
   const [differentRequest, setDifferentRequest] = useState(false); // ticked when the person says a matching request today really is a different one
+  const [savedNote, setSavedNote] = useState("");
+  const resync = useRef(false); // after a save in the SAR's own page, take the values back from the saved record so "unsaved changes" is honest
   // another SAR for the same EMIS number entered today, or received the same day: probably the same request entered twice (only asked for a new SAR)
   const duplicates = useMemo(() => (open && !isEdit ? findLikelyDuplicates(rows, { emisNumber: form.emisNumber, receivedDate: form.receivedDate }) : []), [open, isEdit, rows, form.emisNumber, form.receivedDate]);
 
@@ -189,6 +192,20 @@ function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, act
     if (open) { setForm(isEdit ? getFormFromSar(sar) : getInitialForm(defaultYear)); setDifferentRequest(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, sar?.id]);
+
+  // In the SAR's own page the status buttons (and the completion date they set) live beside the form: keep the form's completion date in step with the record, so reopening a SAR there cannot
+  // quietly complete it again the next time the form is saved. And after a save, show the record as it was saved.
+  const recordCompleted = isEdit ? localDay(sar.completedAt) : "";
+  useEffect(() => {
+    if (!embedded || !isEdit) return;
+    setForm((current) => (current.completedDate === recordCompleted ? current : { ...current, completedDate: recordCompleted }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordCompleted, sar?.status]);
+  useEffect(() => {
+    if (embedded && isEdit && resync.current) { resync.current = false; setForm(getFormFromSar(sar)); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sar]);
+  const dirty = embedded && isEdit && JSON.stringify(form) !== JSON.stringify(getFormFromSar(sar));
 
   if (!open) return null;
 
@@ -258,7 +275,7 @@ function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, act
       if (isEdit) await updateSarDetails(sar.id, form, actor, sar);
       else await createSar(form, actor);
       onSaved?.();
-      onClose?.();
+      if (embedded) { resync.current = true; setSavedNote("Saved."); window.setTimeout(() => setSavedNote(""), 4000); } else onClose?.();
     } catch (err) {
       console.error(err);
       alert(err?.message || `Failed to ${isEdit ? "save" : "create"} SAR`);
@@ -267,10 +284,9 @@ function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, act
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-[90] flex items-end bg-black/60 p-0 sm:items-center sm:justify-center sm:p-4">
-      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl border border-slate-800 bg-slate-950 p-5 shadow-2xl sm:max-w-4xl sm:rounded-3xl">
-        <div className="mb-5 flex items-start justify-between gap-3">
+  const inner = (
+    <>
+        {!embedded && <div className="mb-5 flex items-start justify-between gap-3">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-teal-400/30 bg-teal-400/10 px-3 py-1 text-xs font-semibold text-teal-200">
               <Icons.governance className="h-3.5 w-3.5" /> Governance
@@ -281,7 +297,7 @@ function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, act
           <button type="button" onClick={onClose} className="rounded-full bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">
             Close
           </button>
-        </div>
+        </div>}
 
         <div className="grid gap-4 lg:grid-cols-2">
           <div className="space-y-3">
@@ -465,18 +481,36 @@ function SarFormPanel({ open, onClose, users, usersError = "", onRetryUsers, act
           </div>
         </div>
 
-        <div className="sticky bottom-0 -mx-5 mt-5 flex flex-col gap-2 border-t border-slate-800 bg-slate-950/95 p-5 backdrop-blur sm:flex-row sm:justify-end">
-          <Button type="button" variant="outline" className="rounded-full border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800" onClick={onClose} disabled={busy}>Cancel</Button>
-          <Button type="button" className="rounded-full bg-teal-400 px-5 font-bold text-slate-950 hover:bg-teal-300" onClick={submit} disabled={busy || (duplicates.length > 0 && !differentRequest)}>
-            {busy ? (isEdit ? "Saving..." : "Creating...") : (isEdit ? "Save changes" : "Create SAR")}
-          </Button>
-        </div>
+        {embedded ? (
+          <div className="sticky bottom-0 mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/95 p-3 backdrop-blur">
+            <Button type="button" className="rounded-full bg-teal-400 px-5 font-bold text-slate-950 hover:bg-teal-300" onClick={submit} disabled={busy || !dirty}>
+              {busy ? "Saving..." : "Save changes"}
+            </Button>
+            {dirty && <Button type="button" variant="outline" className="rounded-full border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800" onClick={() => setForm(getFormFromSar(sar))} disabled={busy}>Undo my changes</Button>}
+            <span className="text-sm text-slate-400" role="status">{savedNote || (dirty ? "You have changes that are not saved yet." : "Everything here is saved.")}</span>
+          </div>
+        ) : (
+          <div className="sticky bottom-0 -mx-5 mt-5 flex flex-col gap-2 border-t border-slate-800 bg-slate-950/95 p-5 backdrop-blur sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" className="rounded-full border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800" onClick={onClose} disabled={busy}>Cancel</Button>
+            <Button type="button" className="rounded-full bg-teal-400 px-5 font-bold text-slate-950 hover:bg-teal-300" onClick={submit} disabled={busy || (duplicates.length > 0 && !differentRequest)}>
+              {busy ? (isEdit ? "Saving..." : "Creating...") : (isEdit ? "Save changes" : "Create SAR")}
+            </Button>
+          </div>
+        )}
+    </>
+  );
+
+  if (embedded) return <div>{inner}</div>;
+  return (
+    <div className="fixed inset-0 z-[90] flex items-end bg-black/60 p-0 sm:items-center sm:justify-center sm:p-4">
+      <div className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl border border-slate-800 bg-slate-950 p-5 shadow-2xl sm:max-w-4xl sm:rounded-3xl">
+        {inner}
       </div>
     </div>
   );
 }
 
-function SarDetailPanel({ sar, actor, isTeam, canDelete, chase, onChased, onEdit, onDelete, onClose }) {
+export function SarDetailPanel({ sar, actor, isTeam, canDelete, chase, onChased, onDelete, onClose, users = [], usersError = "", onRetryUsers }) {
   const [activity, setActivity] = useState([]);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -547,11 +581,6 @@ function SarDetailPanel({ sar, actor, isTeam, canDelete, chase, onChased, onEdit
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <SarBell row={chase} onSent={onChased} />
-            {isTeam && (
-              <button type="button" onClick={() => onEdit?.(sar)} className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:bg-slate-800">
-                <Pencil className="h-4 w-4" /> Edit
-              </button>
-            )}
             {canDelete && (
               <button type="button" onClick={() => onDelete?.(sar)} title="Delete SAR" aria-label="Delete SAR" className="inline-flex items-center rounded-full border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-rose-200 hover:bg-rose-500/20">
                 <Trash2 className="h-4 w-4" />
@@ -562,7 +591,10 @@ function SarDetailPanel({ sar, actor, isTeam, canDelete, chase, onChased, onEdit
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
-          <SectionCard title="Request Summary" className="lg:col-span-2">
+          <SectionCard title={isTeam ? "Details (change anything here and save)" : "Request Summary"} className="lg:col-span-2">
+            {isTeam ? (
+              <SarFormPanel embedded open sar={sar} users={users} usersError={usersError} onRetryUsers={onRetryUsers} actor={actor} />
+            ) : (<>
             <div className="grid gap-3 text-sm sm:grid-cols-2">
               <div><span className="text-slate-500">Received</span><div className="font-semibold text-white">{formatDisplayDate(sar.receivedDate)}</div></div>
               <div><span className="text-slate-500">Due</span><div className="font-semibold text-white">{formatDisplayDate(sar.dueDate)}</div></div>
@@ -591,6 +623,7 @@ function SarDetailPanel({ sar, actor, isTeam, canDelete, chase, onChased, onEdit
             {sar.notes && (
               <div className="mt-3"><span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Internal notes</span><p className="mt-1 whitespace-pre-wrap rounded-xl border border-slate-800 bg-slate-950 p-3 text-sm text-slate-400">{sar.notes}</p></div>
             )}
+            </>)}
           </SectionCard>
 
           <SectionCard title="Workflow">
@@ -660,7 +693,6 @@ export default function GovernanceSARs() {
   const [search, setSearch] = useState("");
   const [showNew, setShowNew] = useState(false);
   const [selectedId, setSelectedId] = useState(null);
-  const [editing, setEditing] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   // Defaults to every year: an overdue SAR from last year must never be
@@ -934,12 +966,7 @@ export default function GovernanceSARs() {
                       <td className="py-3 pr-3">
                         <div className="flex items-center gap-2">
                           <SarBell row={chase.byId.get(sar.id)} onSent={() => chase.reload()} />
-                          <Button type="button" size="sm" variant="outline" onClick={() => setSelectedId(sar.id)} className="rounded-full border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800">Open</Button>
-                          {isTeam && (
-                            <button type="button" onClick={() => setEditing(sar)} title="Edit SAR" aria-label={`Edit ${sar.reference}`} className="rounded-full border border-slate-700 bg-slate-950 p-2 text-slate-200 hover:bg-slate-800">
-                              <Pencil className="h-4 w-4" />
-                            </button>
-                          )}
+                          <Button type="button" size="sm" variant="outline" onClick={() => setSelectedId(sar.id)} title={isTeam ? "Open the SAR: read it and change anything" : "Open the SAR"} className="rounded-full border-slate-700 bg-slate-950 text-slate-100 hover:bg-slate-800">{isTeam ? "Open / edit" : "Open"}</Button>
                           {canDelete && (
                             <button type="button" onClick={() => setDeleteTarget(sar)} title="Delete SAR" aria-label={`Delete ${sar.reference}`} className="rounded-full border border-rose-500/40 bg-rose-500/10 p-2 text-rose-200 hover:bg-rose-500/20">
                               <Trash2 className="h-4 w-4" />
@@ -957,8 +984,7 @@ export default function GovernanceSARs() {
       </SectionCard>
 
       <SarFormPanel open={showNew} rows={rows} onClose={() => setShowNew(false)} users={users} usersError={usersError} onRetryUsers={loadStaff} actor={actor} defaultYear={yearFilter === "all" ? null : Number(yearFilter)} onSaved={() => { setFilter("open"); setYearFilter("all"); }} />
-      <SarFormPanel open={!!editing} sar={editing} onClose={() => setEditing(null)} users={users} usersError={usersError} onRetryUsers={loadStaff} actor={actor} />
-      <SarDetailPanel sar={selected} actor={actor} isTeam={isTeam} canDelete={canDelete} chase={selected ? chase.byId.get(selected.id) : undefined} onChased={() => chase.reload()} onEdit={setEditing} onDelete={setDeleteTarget} onClose={() => setSelectedId(null)} />
+      <SarDetailPanel sar={selected} actor={actor} isTeam={isTeam} canDelete={canDelete} chase={selected ? chase.byId.get(selected.id) : undefined} onChased={() => chase.reload()} onDelete={setDeleteTarget} onClose={() => setSelectedId(null)} users={users} usersError={usersError} onRetryUsers={loadStaff} />
 
       {deleteTarget && (
         <div className="fixed inset-0 z-[95] flex items-center justify-center bg-black/60 p-4">

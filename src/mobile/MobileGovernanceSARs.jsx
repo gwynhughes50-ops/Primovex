@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore';
 import { ChevronLeft, FileText, Plus, X } from 'lucide-react';
@@ -80,16 +80,33 @@ function formFromSar(sar) {
   };
 }
 
-function SarFormSheet({ sar, actor, staff, onClose, rows = [] }) {
+// `embedded`: the form is shown inside the SAR's own sheet (open a SAR and it is all there to read and change in one place) instead of in a sheet of its own.
+function SarFormSheet({ sar, actor, staff, onClose, rows = [], embedded = false }) {
   const isEdit = Boolean(sar);
   const [form, setForm] = useState(() => (isEdit ? formFromSar(sar) : getInitialForm()));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [differentRequest, setDifferentRequest] = useState(false); // ticked when a matching request today really is a different one
+  const [savedNote, setSavedNote] = useState('');
+  const resync = useRef(false); // after a save in the SAR's own sheet, take the values back from the saved record so "unsaved changes" is honest
   // another SAR for the same EMIS number entered today, or received the same day: probably the same request entered twice (only asked for a new SAR)
   const duplicates = useMemo(() => (isEdit ? [] : findLikelyDuplicates(rows, { emisNumber: form.emisNumber, receivedDate: form.receivedDate })), [isEdit, rows, form.emisNumber, form.receivedDate]);
   const update = (patch) => setForm((current) => ({ ...current, ...patch }));
   const staffName = (id) => staff.find((s) => s.id === id)?.label || 'Unassigned';
+
+  // In the SAR's own sheet the status buttons (and the completion date they set) sit beside the form: keep the form's completion date in step with the record, so reopening a SAR there cannot quietly
+  // complete it again the next time the form is saved. And after a save, show the record as it was saved.
+  const recordCompleted = isEdit ? localDay(sar.completedAt) : '';
+  useEffect(() => {
+    if (!embedded || !isEdit) return;
+    setForm((current) => (current.completedDate === recordCompleted ? current : { ...current, completedDate: recordCompleted }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recordCompleted, sar?.status]);
+  useEffect(() => {
+    if (embedded && isEdit && resync.current) { resync.current = false; setForm(formFromSar(sar)); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sar]);
+  const dirty = embedded && isEdit && JSON.stringify(form) !== JSON.stringify(formFromSar(sar));
 
   const setReceived = (value) => {
     const received = value ? new Date(value) : new Date();
@@ -110,7 +127,7 @@ function SarFormSheet({ sar, actor, staff, onClose, rows = [] }) {
       setError('');
       if (isEdit) await updateSarDetails(sar.id, form, actor, sar);
       else await createSar(form, actor);
-      onClose();
+      if (embedded) { resync.current = true; setSavedNote('Saved.'); window.setTimeout(() => setSavedNote(''), 4000); } else onClose();
     } catch (err) {
       setError(err?.message || `Could not ${isEdit ? 'save' : 'create'} the SAR.`);
     } finally {
@@ -118,20 +135,19 @@ function SarFormSheet({ sar, actor, staff, onClose, rows = [] }) {
     }
   }
 
-  return (
-    <div className="pvx-mobile-sheet-backdrop backdrop-blur-sm" style={{ zIndex: 130 }} role="dialog" aria-modal="true">
-      <section className="pvx-mobile-sheet px-5 pt-4 text-[var(--medtrak-text)]">
-        <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-[var(--medtrak-border)]" />
-        <div className="flex items-start justify-between gap-3">
+  const inner = (
+    <>
+        {!embedded && <div className="mx-auto mb-3 h-1.5 w-14 rounded-full bg-[var(--medtrak-border)]" />}
+        {!embedded && <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-[.14em] text-[var(--medtrak-accent)]">Subject access request</p>
             <h2 className="mt-1 text-xl font-bold">{isEdit ? `Edit ${sar.reference}` : 'New SAR'}</h2>
             <p className="mt-1 text-sm text-[var(--medtrak-muted)]">EMIS number only, no patient names.</p>
           </div>
           <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-2xl border border-[var(--medtrak-border)]" aria-label="Close"><X className="h-5 w-5" /></button>
-        </div>
+        </div>}
 
-        <div className="mt-4 space-y-3 pb-4">
+        <div className={embedded ? 'space-y-3' : 'mt-4 space-y-3 pb-4'}>
           <label className={LABEL}>EMIS number
             <input value={form.emisNumber} onChange={(e) => { update({ emisNumber: e.target.value }); setDifferentRequest(false); }} inputMode="numeric" className={FIELD} />
           </label>
@@ -201,16 +217,30 @@ function SarFormSheet({ sar, actor, staff, onClose, rows = [] }) {
           </label>
 
           {error && <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-600">{error}</p>}
-          <button type="button" onClick={submit} disabled={busy || (duplicates.length > 0 && !differentRequest)} className="w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 py-3.5 font-bold text-white disabled:opacity-60">
+          <button type="button" onClick={submit} disabled={busy || (embedded ? !dirty : (duplicates.length > 0 && !differentRequest))} className="w-full rounded-2xl bg-[var(--medtrak-accent)] px-4 py-3.5 font-bold text-white disabled:opacity-60">
             {busy ? 'Saving…' : isEdit ? 'Save changes' : 'Create SAR'}
           </button>
+          {embedded && (
+            <div className="flex items-center gap-3">
+              {dirty && <button type="button" onClick={() => setForm(formFromSar(sar))} disabled={busy} className="rounded-xl border border-[var(--medtrak-border)] px-3 py-2 text-sm font-semibold">Undo my changes</button>}
+              <span className="text-sm text-[var(--medtrak-muted)]" role="status">{savedNote || (dirty ? 'You have changes that are not saved yet.' : 'Everything here is saved.')}</span>
+            </div>
+          )}
         </div>
+    </>
+  );
+
+  if (embedded) return <div>{inner}</div>;
+  return (
+    <div className="pvx-mobile-sheet-backdrop backdrop-blur-sm" style={{ zIndex: 130 }} role="dialog" aria-modal="true">
+      <section className="pvx-mobile-sheet px-5 pt-4 text-[var(--medtrak-text)]">
+        {inner}
       </section>
     </div>
   );
 }
 
-function SarDetailSheet({ sar, actor, isTeam, chase, onChased, onClose, onEdit }) {
+function SarDetailSheet({ sar, actor, isTeam, chase, onChased, onClose, staff = [], rows = [] }) {
   const [activity, setActivity] = useState([]);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -253,6 +283,9 @@ function SarDetailSheet({ sar, actor, isTeam, chase, onChased, onClose, onEdit }
           {sar.urgent && <span className="rounded-full bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold text-rose-600">Urgent</span>}
         </div>
 
+        {isTeam ? (
+          <div className="mt-3"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-[var(--medtrak-muted)]">Details: change anything here and save</p><SarFormSheet embedded sar={sar} actor={actor} staff={staff} rows={rows} onClose={onClose} /></div>
+        ) : (<>
         <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
           <div><dt className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Received</dt><dd>{dateLabel(sar.receivedDate)}</dd></div>
           <div><dt className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Due</dt><dd>{dateLabel(sar.dueDate)}</dd></div>
@@ -274,6 +307,7 @@ function SarDetailSheet({ sar, actor, isTeam, chase, onChased, onClose, onEdit }
           </div>
           {sar.solicitorReference && <div><p className="text-[10px] font-bold uppercase text-[var(--medtrak-muted)]">Solicitor reference</p><p>{sar.solicitorReference}</p></div>}
         </div>
+        </>)}
 
         {isTeam && (
           <div className="mt-4 space-y-3 pb-4">
@@ -301,7 +335,6 @@ function SarDetailSheet({ sar, actor, isTeam, chase, onChased, onClose, onEdit }
               <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="Nothing that names the patient" className={FIELD} />
               <button type="button" disabled={busy || !note.trim()} onClick={() => run(async () => { await addSarNote(sar.id, note, actor); setNote(''); })} className="mt-2 rounded-xl bg-[var(--medtrak-accent)] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50">Add note</button>
             </div>
-            <button type="button" onClick={() => onEdit(sar)} className="w-full rounded-xl border border-[var(--medtrak-border)] px-4 py-2.5 text-sm font-semibold">Edit details</button>
             {error && <p className="rounded-xl border border-rose-400/30 bg-rose-500/10 p-3 text-sm text-rose-600">{error}</p>}
           </div>
         )}
@@ -446,7 +479,7 @@ export default function MobileGovernanceSARs() {
         })}
       </div>
 
-      {selected && !editing && <SarDetailSheet sar={selected} actor={actor} isTeam={isTeam} chase={chase.byId.get(selected.id)} onChased={() => chase.reload()} onClose={() => setSelectedId('')} onEdit={setEditing} />}
+      {selected && !editing && <SarDetailSheet sar={selected} actor={actor} isTeam={isTeam} chase={chase.byId.get(selected.id)} onChased={() => chase.reload()} onClose={() => setSelectedId('')} staff={staff} rows={rows} />}
       {editing && isTeam && <SarFormSheet sar={editing.id ? editing : null} actor={actor} staff={staff} rows={rows} onClose={() => setEditing(null)} />}
     </main>
   );

@@ -127,4 +127,21 @@ t("the screen has the sort control, the completion date field, the completed col
   assert.match(service, /updates\.completedAt = deleteField\(\)/);
 });
 
+t("opening a SAR shows its details as the form: read and change in one place, with no separate Edit step (desktop and phone)", () => {
+  const page = readFileSync(new URL("../src/pages/GovernanceSARs.jsx", import.meta.url), "utf8");
+  const phone = readFileSync(new URL("../src/mobile/MobileGovernanceSARs.jsx", import.meta.url), "utf8");
+  assert.match(page, /<SarFormPanel embedded open sar=\{sar\}/, "the SAR team see the form inside the SAR's own page");
+  assert.doesNotMatch(page, /onClick=\{\(\) => setEditing\(sar\)\}/, "no separate edit button on the register");
+  assert.doesNotMatch(page, /onEdit\?\.\(sar\)/, "no Edit button in the SAR's page");
+  assert.match(page, /Open \/ edit/);
+  assert.match(page, /Undo my changes/);
+  assert.match(page, /You have changes that are not saved yet\./);
+  assert.match(page, /if \(embedded\) \{ resync\.current = true;/, "saving in place keeps the page open");
+  assert.match(page, /recordCompleted/, "reopening a SAR from the status buttons cannot be undone by the form's old completion date");
+  assert.match(phone, /<SarFormSheet embedded sar=\{sar\}/);
+  assert.doesNotMatch(phone, /Edit details/);
+  assert.doesNotMatch(phone, /onEdit/);
+  assert.match(phone, /Undo my changes/);
+});
+
 console.log(`\n${n} checks passed`);
