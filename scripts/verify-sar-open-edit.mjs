@@ -26,7 +26,8 @@ t("the SAR team see every detail as a field they can change, with Save beside it
   assert.ok(out.includes("Smith &amp; Co"), "the company name is filled in");
   assert.ok(out.includes("Include the last two letters."), "the additional details are filled in");
   assert.match(out, /Save changes/);
-  assert.match(out, /Everything here is saved\./);
+  assert.match(out, /No changes to save: everything here is saved\./);
+  assert.doesNotMatch(out, /bg-slate-950\/95/, "the save bar follows the theme instead of being dark on every theme");
   assert.doesNotMatch(out, />\s*Edit\s*</, "there is no separate Edit button");
   assert.doesNotMatch(out, /Edit SAR-2026-1118/, "no window title for a separate edit step");
 });

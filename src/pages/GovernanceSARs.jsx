@@ -482,12 +482,12 @@ export function SarFormPanel({ open, onClose, users, usersError = "", onRetryUse
         </div>
 
         {embedded ? (
-          <div className="sticky bottom-0 mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/95 p-3 backdrop-blur">
-            <Button type="button" className="rounded-full bg-teal-400 px-5 font-bold text-slate-950 hover:bg-teal-300" onClick={submit} disabled={busy || !dirty}>
+          <div className="sticky bottom-0 z-10 mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-[var(--medtrak-border)] bg-[var(--medtrak-panel)] p-3 text-[var(--medtrak-text)] shadow-lg">
+            <button type="button" onClick={submit} disabled={busy || !dirty} className="rounded-full bg-[var(--medtrak-accent)] px-5 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">
               {busy ? "Saving..." : "Save changes"}
-            </Button>
-            {dirty && <Button type="button" variant="outline" className="rounded-full border-slate-700 bg-slate-900 text-slate-100 hover:bg-slate-800" onClick={() => setForm(getFormFromSar(sar))} disabled={busy}>Undo my changes</Button>}
-            <span className="text-sm text-slate-400" role="status">{savedNote || (dirty ? "You have changes that are not saved yet." : "Everything here is saved.")}</span>
+            </button>
+            {dirty && <button type="button" onClick={() => setForm(getFormFromSar(sar))} disabled={busy} className="rounded-full border border-[var(--medtrak-border)] px-4 py-2.5 text-sm font-semibold hover:bg-[color:color-mix(in_srgb,var(--medtrak-accent)_10%,transparent)] disabled:opacity-40">Undo my changes</button>}
+            <span className={`flex items-center gap-2 text-sm ${dirty ? "font-semibold" : "text-[var(--medtrak-muted)]"}`} role="status">{dirty && <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500" aria-hidden="true" />}{savedNote || (dirty ? "You have changes that are not saved yet." : "No changes to save: everything here is saved.")}</span>
           </div>
         ) : (
           <div className="sticky bottom-0 -mx-5 mt-5 flex flex-col gap-2 border-t border-slate-800 bg-slate-950/95 p-5 backdrop-blur sm:flex-row sm:justify-end">
