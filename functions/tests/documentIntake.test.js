@@ -123,7 +123,7 @@ test("the instructions tell the model to quote, never to calculate an expiry, an
   assert.match(text, /No evidence, no value/);
   assert.match(text, /gas_safety: Gas safety certificate/);
   assert.match(text, /flammable: Flammable/);
-  assert.match(text, /"kind" is "certificate", "coshh" or "other"/);
+  assert.match(text, /"kind" is "certificate", "coshh", "delivery" or "other"/);
   assert.doesNotMatch(buildInstructions("certificate", cleanOptions(OPTIONS)), /SAFETY DATA SHEET/);
   assert.doesNotMatch(buildInstructions("coshh", cleanOptions(OPTIONS)), /CERTIFICATE \(a safety/);
 });
@@ -379,4 +379,118 @@ test("the instructions ask for the engineer and the checks, and say when an answ
   assert.match(text, /findings: every pass\/fail or yes\/no RESULT/);
   assert.match(text, /'Boiler safe to use: No'/);
   assert.match(text, /"findings": \[\{"label"/);
+});
+
+// ---------- delivery notes ----------
+const { intakeAccess } = require("../services/documentIntakeService");
+
+const DELIVERY_TEXT = [
+  "MEDSUPPLY UK LTD  DELIVERY NOTE",
+  "Delivery note no: DN-77120   Date: 18/11/2026",
+  "Your order: PO-2026-0412",
+  "Code      Description                         Qty  Unit   Batch     Expiry",
+  "SG1002    Sterile gauze swabs 10x10cm 5s       4   box    LOT7781A  03/2029",
+  "NE2210    Needles 21G green 100               10   pack   B20991    31/05/2028",
+  "AD0001    Adrenaline 1mg/ml ampoules 10        2   box    ",
+  "Delivery charge  4.50",
+].join("\n");
+
+const deliveryParsed = (lines, extra = {}) => ({
+  kind: "delivery",
+  delivery: {
+    supplier: field("MedSupply UK Ltd", "MEDSUPPLY UK LTD  DELIVERY NOTE"),
+    noteNumber: field("DN-77120", "Delivery note no: DN-77120"),
+    deliveryDate: field("2026-11-18", "Date: 18/11/2026"),
+    orderReference: field("PO-2026-0412", "Your order: PO-2026-0412"),
+    lines,
+    ...extra,
+  },
+});
+const GAUZE = { description: "Sterile gauze swabs 10x10cm 5s", code: "SG1002", quantity: 4, unit: "box", batch: "LOT7781A", expiry: "2029-03-31", evidence: "SG1002    Sterile gauze swabs 10x10cm 5s       4   box    LOT7781A  03/2029" };
+const NEEDLES = { description: "Needles 21G green 100", code: "NE2210", quantity: 10, unit: "pack", batch: "B20991", expiry: "2028-05-31", evidence: "NE2210    Needles 21G green 100               10   pack   B20991    31/05/2028" };
+const ADR = { description: "Adrenaline 1mg/ml ampoules 10", code: "AD0001", quantity: 2, unit: "box", batch: null, expiry: null, evidence: "AD0001    Adrenaline 1mg/ml ampoules 10        2   box" };
+
+test("a delivery note is read row by row, and every value is believed only as far as its own row is on the page", () => {
+  const out = verifyExtraction({ parsed: deliveryParsed([GAUZE, NEEDLES, ADR]), ocrText: DELIVERY_TEXT, kind: "delivery", options: OPTIONS });
+  assert.equal(out.kind, "delivery");
+  assert.equal(out.fields.supplier.verified, true);
+  assert.equal(out.fields.noteNumber.value, "DN-77120");
+  assert.equal(out.fields.deliveryDate.verified, true);
+  assert.equal(out.fields.orderReference.value, "PO-2026-0412");
+  assert.equal(out.lines.length, 3);
+  const [g, n, a] = out.lines;
+  assert.deepEqual(g.verified, { description: true, code: true, quantity: true, batch: true, expiry: true }, "a month and year on the page confirms the last day of that month");
+  assert.equal(g.expiry, "2029-03-31");
+  assert.deepEqual(n.verified, { description: true, code: true, quantity: true, batch: true, expiry: true }, "a full date is confirmed as written");
+  assert.equal(a.verified.batch, false, "no batch on the row, none believed");
+  assert.equal(a.verified.expiry, false);
+  assert.equal(a.quantity, 2);
+  assert.deepEqual(out.warnings, []);
+});
+
+test("a row that is not on the page, a quantity that is not in its row, and an invented expiry are all marked unconfirmed", () => {
+  const invented = { ...GAUZE, description: "Imaginary product", evidence: "ZZ9999 Imaginary product 12 box" };
+  const wrongQty = { ...NEEDLES, quantity: 50 };
+  const wrongExpiry = { ...GAUZE, expiry: "2030-01-31" };
+  const out = verifyExtraction({ parsed: deliveryParsed([invented, wrongQty, wrongExpiry]), ocrText: DELIVERY_TEXT, kind: "delivery", options: OPTIONS });
+  assert.equal(out.lines[0].rowFound, false);
+  assert.equal(out.lines[0].evidence, null);
+  assert.equal(out.lines[0].verified.quantity, false);
+  assert.equal(out.lines[1].verified.quantity, false, "50 is not a number on that row");
+  assert.equal(out.lines[1].verified.description, true);
+  assert.equal(out.lines[2].verified.expiry, false, "an expiry that is not written in the row is not confirmed");
+  assert.match(out.warnings.join(" "), /could not be confirmed/);
+});
+
+test("rows without a description or without any quote and quantity are dropped; a row with no quantity is kept but flagged", () => {
+  const noQty = { ...GAUZE, quantity: null };
+  const nothing = { description: "", evidence: "", quantity: 3 };
+  const out = verifyExtraction({ parsed: deliveryParsed([noQty, nothing, { description: "Loose row", evidence: "", quantity: null }]), ocrText: DELIVERY_TEXT, kind: "delivery", options: OPTIONS });
+  assert.equal(out.lines.length, 1);
+  assert.equal(out.lines[0].quantity, null);
+  assert.match(out.warnings.join(" "), /no quantity/);
+  const none = verifyExtraction({ parsed: deliveryParsed([]), ocrText: DELIVERY_TEXT, kind: "delivery", options: OPTIONS });
+  assert.match(none.warnings.join(" "), /could not find any product rows/);
+});
+
+test("quantities are plain numbers: text like 4 is accepted, nonsense, zero and negatives are not", () => {
+  const rows = [{ ...GAUZE, quantity: "4" }, { ...GAUZE, quantity: 0 }, { ...GAUZE, quantity: -3 }, { ...GAUZE, quantity: "lots" }, { ...GAUZE, quantity: 1e9 }];
+  const out = verifyExtraction({ parsed: deliveryParsed(rows), ocrText: DELIVERY_TEXT, kind: "delivery", options: OPTIONS });
+  assert.deepEqual(out.lines.map((l) => l.quantity), [4, null, null, null, null]);
+});
+
+test("at most 80 rows are read, and the instructions for a delivery note say what not to do", () => {
+  const many = Array.from({ length: 95 }, () => GAUZE);
+  const out = verifyExtraction({ parsed: deliveryParsed(many), ocrText: DELIVERY_TEXT, kind: "delivery", options: OPTIONS });
+  assert.equal(out.lines.length, 80);
+  assert.match(out.warnings.join(" "), /first 80 rows/);
+  const text = buildInstructions("delivery", cleanOptions(OPTIONS));
+  assert.match(text, /DELIVERY NOTE/);
+  assert.match(text, /DELIVERED on this note/);
+  assert.match(text, /Never multiply/);
+  assert.match(text, /LAST day of that month/);
+  assert.match(text, /Do not include delivery charges/);
+  assert.doesNotMatch(text, /CERTIFICATE \(/, "a delivery note is not asked about certificates");
+  assert.match(buildInstructions("auto", cleanOptions(OPTIONS)), /"delivery"/, "auto also recognises a delivery note");
+});
+
+test("auto can say a document is a delivery note, and an unknown kind is refused", async () => {
+  const fetchImpl = async () => ({ status: 200, ok: true, json: async () => ({ output: [{ type: "message", content: [{ type: "output_text", text: JSON.stringify(deliveryParsed([GAUZE])) }] }] }) });
+  const out = await extractDocumentFields({ endpoint: "https://x.openai.azure.com", key: "k", deployment: "d", ocrText: DELIVERY_TEXT, kind: "auto", options: OPTIONS, fetchImpl });
+  assert.equal(out.kind, "delivery");
+  assert.equal(out.lines.length, 1);
+  await assert.rejects(() => extractDocumentFields({ endpoint: "https://x.openai.azure.com", key: "k", deployment: "d", ocrText: "x", kind: "invoice", options: OPTIONS, fetchImpl }), /Unknown kind/);
+});
+
+test("who may read what: documents.intake reads any kind; stock access reads a delivery note only; nobody else reads anything", () => {
+  assert.deepEqual(intakeAccess({ kind: "coshh", hasIntake: true }), { allowed: true });
+  assert.deepEqual(intakeAccess({ kind: "auto", hasIntake: true, hasStockWrite: true }), { allowed: true });
+  assert.deepEqual(intakeAccess({ kind: "delivery", hasStockWrite: true }), { allowed: true });
+  for (const kind of ["auto", "certificate", "coshh"]) {
+    const refused = intakeAccess({ kind, hasStockWrite: true });
+    assert.equal(refused.allowed, false, `${kind} is refused for stock access alone`);
+    assert.match(refused.message, /Delivery note/);
+  }
+  assert.equal(intakeAccess({ kind: "delivery" }).allowed, false);
+  assert.match(intakeAccess({ kind: "delivery" }).message, /do not have permission/);
 });

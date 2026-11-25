@@ -26,6 +26,8 @@ export const ROUTE_MANIFEST = [
   { path: "/sars-to-chase", label: "SARs to chase", section: "mywork", iconKey: "sar", dynamicKey: "sarsToChase" },
   { path: "/quality-opportunities", label: "From ClinFlow", section: "mywork", iconKey: "governance" },
   { path: "/add-document", label: "Add a document", section: "operations", iconKey: "documents", capability: "documents.intake" },
+  // Read a supplier's delivery note and book the stock in: for whoever books deliveries in (anyone who can change stock), while Document reading is on for them.
+  { path: "/book-in-delivery", label: "Book in a delivery", section: "operations", iconKey: "purchasing", capability: "documents.deliveryNote" },
   { path: "/reception-rota", label: "Reception rota", section: "operations", iconKey: "annualLeave", capability: "rota.read", anyOf: ["rota.read", "rota.manage"] },
   { path: "/it-equipment", label: "IT equipment", section: "operations", iconKey: "laptop", capability: "itAssets.read", anyOf: ["itAssets.read", "itAssets.manage"] },
   // Reached from the reminder a laptop's holder is sent and from the laptop's QR label, so it is not in everyone's sidebar.

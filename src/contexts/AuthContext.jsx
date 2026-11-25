@@ -6,7 +6,7 @@ import { auth, db } from "@/lib/firebase";
 import { blockedModuleDomains, shouldPurgeClinFlowLocalData } from "@/core/identity/moduleAccess";
 import { purgeClinFlowLocalData } from "@/modules/clinflow/clinflowDocumentCache";
 import { VIEW_AS_KEY, readViewAs, resolveViewAs, writeViewAs } from "@/core/identity/viewAs";
-import { getCapabilitiesForProfile, hasCapability, hasAnyCapability, withLegacyCapabilities, CAPABILITY_CATALOG } from "@/core/identity/capabilities";
+import { getCapabilitiesForProfile, hasCapability, hasAnyCapability, withDerivedCapabilities, withLegacyCapabilities, CAPABILITY_CATALOG } from "@/core/identity/capabilities";
 import { getStoredPlatformMode, isSafeSyntheticMode, setPlatformMode } from "@/config/platformMode";
 import { getActiveDemoProfile } from "@/config/demoMode";
 import { writeAuditEvent } from "@/core/identity/auditService";
@@ -266,10 +266,10 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (purgeClinFlow) purgeClinFlowLocalData().catch(() => {});
   }, [purgeClinFlow]);
-  const capabilities = blockedDomains.size === 0
+  const capabilities = withDerivedCapabilities(blockedDomains.size === 0
     ? rawCapabilities
     : (rawCapabilities.includes("*") ? CAPABILITY_CATALOG.map((item) => item.id) : rawCapabilities)
-        .filter((capability) => !blockedDomains.has(String(capability).split(".")[0]));
+        .filter((capability) => !blockedDomains.has(String(capability).split(".")[0])), { blockedDomains });
   const can = (required) => hasCapability(capabilities, required);
   const canAny = (required = []) => hasAnyCapability(capabilities, required);
   const displayName =

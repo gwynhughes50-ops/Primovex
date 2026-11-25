@@ -2446,6 +2446,52 @@ async function main() {
     await assertFails(getDoc(doc(anon, "settings", "rota")));
   });
 
+  console.log("\n=== 35. Delivery notes booked into stock (stock_deliveries and its PDFs) ===");
+  const SD = "stock_deliveries";
+  const deliveryDoc = (extra = {}) => ({ supplier_id: "s1", supplier_name: "MedSupply UK Ltd", note_number: "DN-77120", delivery_date: "2026-11-18", order_reference: "PO-2026-0412", purchase_order_id: "po1", po_number: "PO-2026-0412", lines: [{ item_id: "item-1", item_name: "Bandages", quantity: 4, movement_id: "m1" }], not_booked: [], file: { name: "dn.pdf", path: "", sha256: "abc", bytes: 10 }, created_by: { uid: "nurse-uid", displayName: "Nurse" }, created_at: new Date(), ...extra });
+  await seed(async (db) => { await setDoc(doc(db, SD, "d-seed"), deliveryDoc({ created_by: { uid: "someone", displayName: "Someone" } })); });
+  await check("Someone who can change stock (inventory.write), the Practice Manager and an administrator CAN book a delivery in, as themselves", async () => {
+    await assertSucceeds(setDoc(doc(nurse, SD, "d-nurse"), deliveryDoc()));
+    await assertSucceeds(setDoc(doc(pm, SD, "d-pm"), deliveryDoc({ created_by: { uid: "pm-uid", displayName: "PM" } })));
+    await assertSucceeds(setDoc(doc(admin, SD, "d-admin"), deliveryDoc({ created_by: { uid: "admin-uid", displayName: "Admin" } })));
+  });
+  await check("A delivery CANNOT be recorded as someone else, by someone who cannot change stock, or by a visitor", async () => {
+    await assertFails(setDoc(doc(nurse, SD, "d-forged"), deliveryDoc({ created_by: { uid: "pm-uid", displayName: "PM" } })));
+    await assertFails(setDoc(doc(readonly, SD, "d-ro"), deliveryDoc({ created_by: { uid: "readonly-uid", displayName: "RO" } })));
+    await assertFails(setDoc(doc(partner, SD, "d-partner"), deliveryDoc({ created_by: { uid: "partner-uid", displayName: "P" } })));
+    await assertFails(setDoc(doc(anon, SD, "d-anon"), deliveryDoc({ created_by: { uid: "x", displayName: "x" } })));
+  });
+  await check("A delivery record is never edited or removed, by anyone, administrators included", async () => {
+    for (const who of [nurse, pm, admin]) {
+      await assertFails(updateDoc(doc(who, SD, "d-seed"), { note_number: "changed" }));
+      await assertFails(updateDoc(doc(who, SD, "d-nurse"), { lines: [] }));
+      await assertFails(deleteDoc(doc(who, SD, "d-seed")));
+    }
+  });
+  await check("A record with more than 100 rows is refused", () => assertFails(setDoc(doc(nurse, SD, "d-big"), deliveryDoc({ lines: Array.from({ length: 101 }, (_, i) => ({ item_id: "i" + i, quantity: 1 })) }))));
+  await check("Whoever sees stock (inventory.read or write, the read-only role included) CAN read the deliveries; a visitor CANNOT", async () => {
+    await assertSucceeds(getDoc(doc(nurse, SD, "d-seed")));
+    await assertSucceeds(getDocs(collection(stockctl, SD)));
+    await assertSucceeds(getDocs(collection(pm, SD)));
+    await assertFails(getDoc(doc(anon, SD, "d-seed")));
+    await assertSucceeds(getDocs(collection(readonly, SD))); // the read-only role can see stock, so it can see what was delivered
+  });
+  const dnPdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);
+  await check("The delivery note's PDF CAN be stored by someone who can change stock, and CANNOT by a read-only user or a visitor", async () => {
+    await assertSucceeds(uploadBytes(ref(nurseStorage, "stock_deliveries/d-nurse/dn.pdf"), dnPdf, { contentType: "application/pdf" }));
+    await assertSucceeds(uploadBytes(ref(adminStorage, "stock_deliveries/d-admin/dn.pdf"), dnPdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(readonlyStorage, "stock_deliveries/d-ro/dn.pdf"), dnPdf, { contentType: "application/pdf" }));
+    await assertFails(uploadBytes(ref(anonStorage, "stock_deliveries/d-anon/dn.pdf"), dnPdf, { contentType: "application/pdf" }));
+  });
+  await check("Only a PDF is accepted for a delivery note, even from someone allowed", () => assertFails(uploadBytes(ref(nurseStorage, "stock_deliveries/d-nurse/dn.jpg"), new Uint8Array([0xff, 0xd8, 0xff, 0xe0]), { contentType: "image/jpeg" })));
+  await check("The stored PDF CAN be read by whoever sees stock and CANNOT by a visitor; only an administrator can delete it", async () => {
+    await assertSucceeds(getBytes(ref(nurseStorage, "stock_deliveries/d-nurse/dn.pdf")));
+    await assertSucceeds(getBytes(ref(stockctlStorage, "stock_deliveries/d-nurse/dn.pdf")));
+    await assertFails(getBytes(ref(anonStorage, "stock_deliveries/d-nurse/dn.pdf")));
+    await assertFails(deleteObject(ref(nurseStorage, "stock_deliveries/d-nurse/dn.pdf")));
+    await assertSucceeds(deleteObject(ref(adminStorage, "stock_deliveries/d-nurse/dn.pdf")));
+  });
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await testEnv.cleanup();
   process.exit(fail > 0 ? 1 : 0);

@@ -701,7 +701,7 @@ export default function Purchasing() {
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h2 className="font-semibold text-white">Deliveries</h2>
-              <p className="text-sm text-slate-400">Orders awaiting receipt. Full goods receiving comes in the next build.</p>
+              <p className="text-sm text-slate-400">Orders awaiting receipt. To book a delivery in, read its delivery note: Primovex finds the order, ticks off what arrived and adds it to stock.</p>
             </div>
             <Truck className="h-5 w-5 text-amber-300" />
           </div>
@@ -736,7 +736,7 @@ export default function Purchasing() {
                   </button>
 
                   <p className="mt-2 text-xs text-slate-500">
-                    This closes the purchase order only. Stock-updating goods receiving will be added in Build 0.9.6.
+                    This closes the purchase order only, without adding anything to stock. To add the stock as well, use Book in a delivery (Operations) with the delivery note.
                   </p>
                 </div>
               ))}

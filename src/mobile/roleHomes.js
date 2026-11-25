@@ -1,4 +1,4 @@
-import { BellRing, CalendarDays, ClipboardCheck, ClipboardList, FilePlus2, FileText, Laptop, FlaskConical, ListChecks, MessageSquare, Mic, NotebookPen, Package, ScanLine, ShieldAlert, GraduationCap, Sparkles, SprayCan, Stethoscope, Thermometer, TriangleAlert, Wrench } from "lucide-react";
+import { BellRing, CalendarDays, ClipboardCheck, ClipboardList, FilePlus2, FileText, Laptop, PackageCheck, FlaskConical, ListChecks, MessageSquare, Mic, NotebookPen, Package, ScanLine, ShieldAlert, GraduationCap, Sparkles, SprayCan, Stethoscope, Thermometer, TriangleAlert, Wrench } from "lucide-react";
 
 // What each kind of person sees on the phone: the home screen's tiles and the bottom bar. Pure data, so
 // it can be tested. A tile marked with a capability is only shown to people who hold it, and a bottom-bar
@@ -171,6 +171,8 @@ export function visibleActions(home, capabilities = [], { hasLaptop = false, has
   if (has(capabilities, "itAssets.read") || has(capabilities, "itAssets.manage")) laptopTiles.push({ key: "it-equipment", label: "IT equipment", helper: "Loan out, take back, update", Icon: Laptop });
   // anyone allowed to add documents (and for whom the practice has switched Document reading on, which removes the permission otherwise) gets the Add a document tile
   if (has(capabilities, "documents.intake")) laptopTiles.push({ key: "add-document", label: "Add a document", helper: "Photo of a certificate or data sheet", Icon: FilePlus2 });
+  // whoever books deliveries in (anyone who can change stock, while Document reading is on for them): photo of the delivery note, check it, book the stock in
+  if (has(capabilities, "documents.deliveryNote")) laptopTiles.push({ key: "book-in-delivery", label: "Book in a delivery", helper: "Photo of the delivery note", Icon: PackageCheck });
   if (hasLaptop) laptopTiles.push({ key: "my-laptop", label: "My laptop", helper: "When it is due an update or back", Icon: Laptop });
   // the Practice Manager and whoever builds the reception rota: see the rota as built and answer the requests that are waiting
   if (has(capabilities, "rota.read") || has(capabilities, "rota.manage")) laptopTiles.push({ key: "reception-rota", label: "Reception rota", helper: "See the rota, answer requests", Icon: CalendarDays });

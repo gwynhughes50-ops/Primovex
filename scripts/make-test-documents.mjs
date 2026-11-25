@@ -145,7 +145,10 @@ for (const d of DOCUMENTS) {
   const e = d.expected || {};
   const detail = d.kind === "coshh" ? `hazards: ${e.notHazardous ? "none (the sheet says not hazardous)" : names(e.hazards)}; protection: ${names(e.ppe)}; first aid: ${names(e.firstAid)}` : "";
   const expiry = e.expiryDate === null ? `none written (form suggests ${e.suggestedExpiry})` : label(e.expiryDate);
-  const kind = d.kind === "coshh" ? "COSHH data sheet" : e.type || (e.kind === "other" ? "not a certificate" : e.refused ? "refused" : e.usesAttachment ? "(as file 07)" : "");
+  const dn = d.kind === "delivery";
+  const dnLines = dn ? (e.lines || []).map((l) => `${l.description}: ${l.quantity ?? "no quantity"}${l.unit ? " " + l.unit : ""}${l.batch ? ", batch " + l.batch : ""}${l.expiry ? ", expiry " + l.expiry : ""}`).join("; ") : "";
+  const kind = dn ? "Delivery note" : d.kind === "coshh" ? "COSHH data sheet" : e.type || (e.kind === "other" ? "not a certificate" : e.refused ? "refused" : e.usesAttachment ? "(as file 07)" : "");
+  if (dn) { rows.push([d.file, d.tests, kind, e.supplier?.value || "", e.noteNumber?.value || "", label(e.deliveryDate), e.orderReference ? `order ${e.orderReference.value}` : "no order number written", `rows: ${dnLines}`, "", "", d.notes || ""]); continue; }
   rows.push([d.file, d.tests, kind, d.kind === "coshh" ? `${e.supplier?.quote?.replace(/^Supplier: /, "") || ""}` : e.provider || "", d.kind === "coshh" ? (e.productName?.quote || "").replace(/^Product name: /, "") : e.reference || "", label(e.completedOn), expiry, detail, e.engineer?.value || "", (e.findings || []).map((c) => `${c.problem ? "PROBLEM: " : ""}${c.label}: ${c.answer}`).join("; "), d.notes || ""]);
 }
 written.push("ANSWERS.csv");
@@ -166,6 +169,7 @@ writeFileSync(path.join(out, "READ ME FIRST.txt"), [
   "  6. 13 to 16 (COSHH data sheets). Each hazard and protective item should show the words from the sheet that back it. Anything not backed is shown but NOT ticked for you.",
   "  7. 09 (a photo), 17 (Word), 21 (Excel), 18 and 19 (emails), 20 (text). 22 (an old .doc) should be refused with what to do.",
   "  8. 23 (a gas record where the tightness test FAILED and the boiler is NOT safe to use). A red warning should appear and both checks should be on the form. After saving, it should be red at the top of the Certificates list, in the compliance needs-attention list, and on the phone.",
+  "  9. 24 to 26 (supplier DELIVERY NOTES). Use Operations > Book in a delivery. Each file says which stock items to create first. Read the guide text in ANSWERS.csv for what each should give. Nothing is added to stock until you tick the rows and the box that says you have checked them.",
   "  Also look at 01 and 08: the engineer and two checks (tightness test: Pass, boiler safe to use: Yes) should be read onto the form, and show as green chips.",
   "",
   "ANSWERS.csv lists what each file should give. Please tell me anything that comes out wrong, missing, or ticked when it should not be.",

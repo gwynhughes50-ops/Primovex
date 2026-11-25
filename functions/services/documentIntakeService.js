@@ -1,6 +1,6 @@
 const crypto = require("crypto");
 
-// Document intake: someone drops a certificate or a COSHH safety data sheet into Primovex, and the registers are pre-filled from it.
+// Document intake: someone drops a certificate, a COSHH safety data sheet or a supplier's delivery note into Primovex, and the registers (or the stock) are pre-filled from it.
 // Two steps run on the server: Azure Document Intelligence reads the page into text (azureDocumentIntelligenceService.js), then Azure OpenAI
 // copies named facts out of that text into JSON (here). The result is only ever a SUGGESTION: the person checks and saves it on the normal form.
 //
@@ -13,6 +13,8 @@ const crypto = require("crypto");
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_INPUT_CHARS = 16000;
+const MAX_DELIVERY_INPUT_CHARS = 26000; // a delivery note can run to many rows
+const MAX_DELIVERY_LINES = 80;
 const MAX_THROTTLE_ATTEMPTS = 6;
 const KEY = /^[a-z0-9_-]{1,40}$/;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -63,6 +65,16 @@ function decodeUpload({ base64, mimeType, fileName } = {}) {
     canLimitPages: kind === "pdf" || kind === "tiff",
     needsTextCopy: NEEDS_TEXT_COPY.has(kind),
   };
+}
+
+// ---------- who may read which kind ----------
+// Reading a certificate or a safety data sheet needs documents.intake (the Practice Manager and admins). A delivery note may also be read by anyone who can change stock (inventory.write), but ONLY as a
+// delivery note: they cannot ask for "let Primovex work out what it is", so a certificate cannot be sent to the outside reader through a stock login. Decided here, on the server, not by the screen.
+function intakeAccess({ kind, hasIntake = false, hasStockWrite = false } = {}) {
+  if (hasIntake) return { allowed: true };
+  if (hasStockWrite && kind === "delivery") return { allowed: true };
+  if (hasStockWrite) return { allowed: false, message: "From stock you can read in a delivery note. Choose Delivery note as the kind of document." };
+  return { allowed: false, message: "You do not have permission to add documents this way." };
 }
 
 // ---------- the choices the model may use ----------
@@ -117,8 +129,19 @@ function buildInstructions(kind, options) {
     );
     shapes.push('"coshh": {"productName": {"value": string|null, "evidence": string|null}, "supplier": {"value": string|null, "evidence": string|null}, "hazards": [{"key": string, "evidence": string}], "notHazardous": {"value": boolean, "evidence": string|null}, "ppe": [{"key": string, "evidence": string}], "firstAid": [{"key": string, "evidence": string}]}');
   }
-  if (kind === "auto") lines.push('Also say what the document is: "kind" is "certificate", "coshh" or "other". Fill in only the section for the kind it is; leave the other out.');
-  lines.push(`Shape: {${kind === "auto" ? '"kind": "certificate"|"coshh"|"other", ' : ""}${shapes.join(", ")}}`);
+  if (kind === "delivery" || kind === "auto") {
+    lines.push(
+      "DELIVERY NOTE (a supplier's delivery note, dispatch note or packing slip for goods delivered to the practice; NOT an invoice or a statement):",
+      "- supplier: the company that sent the goods, as written.",
+      "- noteNumber: the delivery note, dispatch note or packing slip number, as written.",
+      "- deliveryDate: the delivery or dispatch date.",
+      "- orderReference: the practice's own order or purchase order number the note refers to ('Your order', 'Customer order', 'PO', 'Order ref'), as written. null if there is none.",
+      "- lines: one entry for each product row, in the order they are printed. Never combine rows and never invent one. Each has: description (the product as written), code (the supplier's product or catalogue code if printed, else null), quantity (a plain number: how many were DELIVERED on this note. If the note has ordered and delivered columns use the delivered one. If a row says '2 x 10' or '2 boxes of 10', quantity is 2 and the unit is the box. Never multiply), unit (how the quantity is counted, as written: box, pack, each, case, x10; null if not written), batch (the batch or lot number if printed, else null), expiry (the expiry or 'use by' date printed for that row as YYYY-MM-DD; if only a month and year are printed, the LAST day of that month; null if none is printed), and evidence (the whole row exactly as printed, copied character for character, under 240 characters). A row whose quantity is not printed has quantity null. Do not include delivery charges, VAT, totals or notes. At most " + MAX_DELIVERY_LINES + " rows."
+    );
+    shapes.push('"delivery": {"supplier": {"value": string|null, "evidence": string|null}, "noteNumber": {"value": string|null, "evidence": string|null}, "deliveryDate": {"value": "YYYY-MM-DD"|null, "evidence": string|null}, "orderReference": {"value": string|null, "evidence": string|null}, "lines": [{"description": string, "code": string|null, "quantity": number|null, "unit": string|null, "batch": string|null, "expiry": "YYYY-MM-DD"|null, "evidence": string}]}');
+  }
+  if (kind === "auto") lines.push('Also say what the document is: "kind" is "certificate", "coshh", "delivery" or "other". Fill in only the section for the kind it is; leave the others out.');
+  lines.push(`Shape: {${kind === "auto" ? '"kind": "certificate"|"coshh"|"delivery"|"other", ' : ""}${shapes.join(", ")}}`);
   return lines.join("\n");
 }
 
@@ -202,6 +225,54 @@ function shapeChecks(raw, ocrNorm) {
   return out;
 }
 
+// every month and year written in a piece of text, as "YYYY-MM" ("03/2028", "3/28", "Mar 2028", "March 2028")
+function monthYearsIn(text) {
+  const t = String(text || "");
+  const found = new Set();
+  const add = (year, month) => { if (year >= 1990 && year <= 2100 && month >= 1 && month <= 12) found.add(`${year}-${String(month).padStart(2, "0")}`); };
+  for (const m of t.matchAll(/\b(\d{1,2})[/.-](\d{4}|\d{2})\b/g)) add(m[2].length === 2 ? 2000 + +m[2] : +m[2], +m[1]);
+  for (const m of t.matchAll(/\b([A-Za-z]{3,9})\.?\s+(\d{4}|\d{2})\b/g)) add(m[2].length === 2 ? 2000 + +m[2] : +m[2], MONTHS[m[1].toLowerCase()] || 0);
+  return found;
+}
+const lastDayOfMonth = (iso) => { const y = +iso.slice(0, 4); const m = +iso.slice(5, 7); return +iso.slice(8, 10) === new Date(Date.UTC(y, m, 0)).getUTCDate(); };
+
+// every number written in a piece of text (so "2 x 10" holds 2 and 10)
+const numbersIn = (text) => [...String(text || "").matchAll(/\d+(?:[.,]\d+)?/g)].map((m) => Number(m[0].replace(",", ".")));
+const compact = (text) => norm(text).replace(/ /g, "");
+
+// The rows of a delivery note. A row is believed only as far as its own quote (the row as printed) is really on the page: the description, code and batch must be in it, the quantity must be a number in it,
+// and a date must be written in it (a month and year alone is accepted for the last day of that month). Nothing is calculated here except that.
+function shapeDeliveryLines(raw, ocrNorm) {
+  const out = [];
+  for (const item of (Array.isArray(raw) ? raw : []).slice(0, MAX_DELIVERY_LINES)) {
+    const l = asObject(item);
+    const description = clean(l.description, 160);
+    const evidence = clean(l.evidence, 260);
+    const quantityRaw = typeof l.quantity === "number" ? l.quantity : Number(String(l.quantity ?? "").replace(/,/g, ""));
+    const quantity = Number.isFinite(quantityRaw) && quantityRaw > 0 && quantityRaw <= 100000 ? quantityRaw : null;
+    if (!description || (!evidence && quantity === null)) continue;
+    const rowFound = Boolean(evidence) && norm(evidence).length >= 6 && ocrNorm.includes(norm(evidence));
+    const row = rowFound ? evidence : null;
+    const inRow = (value) => Boolean(row) && Boolean(value) && norm(row).includes(norm(value));
+    const code = clean(l.code, 60);
+    const batch = clean(l.batch, 40);
+    const expiryIso = typeof l.expiry === "string" && /^\d{4}-\d{2}-\d{2}$/.test(l.expiry) && isoOf(+l.expiry.slice(0, 4), +l.expiry.slice(5, 7), +l.expiry.slice(8, 10)) ? l.expiry : null;
+    const expiryOk = Boolean(row) && Boolean(expiryIso) && (datesIn(row).includes(expiryIso) || (lastDayOfMonth(expiryIso) && monthYearsIn(row).has(expiryIso.slice(0, 7))));
+    out.push({
+      description, code, quantity, unit: clean(l.unit, 30), batch, expiry: expiryIso, evidence: row,
+      rowFound,
+      verified: {
+        description: inRow(description),
+        code: Boolean(code) && Boolean(row) && compact(row).includes(compact(code)),
+        quantity: Boolean(row) && quantity !== null && numbersIn(row).includes(quantity),
+        batch: Boolean(batch) && Boolean(row) && compact(row).includes(compact(batch)),
+        expiry: expiryOk,
+      },
+    });
+  }
+  return out;
+}
+
 // a list of { key, evidence } picked from the allowed keys only; each is verified by its quote
 function shapePicks(raw, allowed, ocrNorm) {
   const keys = new Set(allowed.map((item) => item.key));
@@ -222,7 +293,7 @@ function shapePicks(raw, allowed, ocrNorm) {
 function verifyExtraction({ parsed, ocrText, kind, options }) {
   const ocrNorm = norm(ocrText);
   const root = asObject(parsed);
-  const guess = ["certificate", "coshh", "other"].includes(root.kind) ? root.kind : null;
+  const guess = ["certificate", "coshh", "delivery", "other"].includes(root.kind) ? root.kind : null;
   const decided = kind === "auto" ? (guess || "other") : kind;
   const warnings = [];
   const out = { kind: decided, kindGuess: guess };
@@ -263,9 +334,24 @@ function verifyExtraction({ parsed, ocrText, kind, options }) {
       firstAid: shapePicks(s.firstAid, options.firstAid, ocrNorm),
     };
     if (s.notHazardous?.value === true && !claimsSafe) warnings.push("The sheet may say the product is not hazardous, but no wording in the document backs that up. Read section 2 yourself.");
+  } else if (decided === "delivery") {
+    const d = asObject(root.delivery);
+    out.fields = {
+      supplier: shapeField(d.supplier, ocrNorm, { max: 120 }),
+      noteNumber: shapeField(d.noteNumber, ocrNorm, { max: 60 }),
+      deliveryDate: shapeField(d.deliveryDate, ocrNorm, { date: true }),
+      orderReference: shapeField(d.orderReference, ocrNorm, { max: 60 }),
+    };
+    out.lines = shapeDeliveryLines(d.lines, ocrNorm);
+    if (!out.lines.length) warnings.push("I could not find any product rows on this delivery note. Check it is the delivery note itself (not an invoice or a statement), or add the stock by hand.");
+    const noQuantity = out.lines.filter((l) => l.quantity === null).length;
+    if (noQuantity) warnings.push(`${noQuantity} row${noQuantity === 1 ? " has" : "s have"} no quantity that could be read. Those rows are not ticked for booking in.`);
+    const unconfirmed = out.lines.filter((l) => l.quantity !== null && !l.verified.quantity).length;
+    if (unconfirmed) warnings.push(`The quantity on ${unconfirmed} row${unconfirmed === 1 ? "" : "s"} could not be confirmed against the words on the page: check ${unconfirmed === 1 ? "it" : "them"} against the delivery note.`);
+    if (out.lines.length >= MAX_DELIVERY_LINES) warnings.push(`Only the first ${MAX_DELIVERY_LINES} rows were read. Book the rest in another go.`);
   } else {
     out.fields = {};
-    warnings.push("This does not look like a certificate or a safety data sheet.");
+    warnings.push("This does not look like a certificate, a safety data sheet or a delivery note.");
   }
   out.warnings = warnings;
   return out;
@@ -287,12 +373,12 @@ function endpointOf(endpoint) {
 }
 
 async function extractDocumentFields({ endpoint, key, deployment, ocrText, kind = "auto", options, fetchImpl = fetch }) {
-  if (!["auto", "certificate", "coshh"].includes(kind)) throw new Error("Unknown kind of document.");
+  if (!["auto", "certificate", "coshh", "delivery"].includes(kind)) throw new Error("Unknown kind of document.");
   if (!String(key || "").trim()) throw new Error("The Azure OpenAI key is missing.");
   if (!String(deployment || "").trim()) throw new Error("The Azure OpenAI deployment name is missing.");
   const url = `${endpointOf(endpoint)}/openai/v1/responses`;
   const choices = cleanOptions(options);
-  const text = String(ocrText || "").slice(0, MAX_INPUT_CHARS);
+  const text = String(ocrText || "").slice(0, kind === "certificate" || kind === "coshh" ? MAX_INPUT_CHARS : MAX_DELIVERY_INPUT_CHARS);
   let response;
   for (let attempt = 0; attempt < MAX_THROTTLE_ATTEMPTS; attempt += 1) {
     response = await fetchImpl(url, {
@@ -305,7 +391,7 @@ async function extractDocumentFields({ endpoint, key, deployment, ocrText, kind 
         input: `Copy the facts as JSON from this document's OCR text:\n\n${text}`,
         text: { format: { type: "json_object" } },
         temperature: 0,
-        max_output_tokens: 2200,
+        max_output_tokens: kind === "delivery" || kind === "auto" ? 7000 : 2200,
       }),
     });
     if (response.status !== 429) break;
@@ -320,4 +406,4 @@ async function extractDocumentFields({ endpoint, key, deployment, ocrText, kind 
   return verifyExtraction({ parsed, ocrText: text, kind, options: choices });
 }
 
-module.exports = { MAX_BYTES, READABLE, judgeCheck, buildInstructions, cleanOptions, datesIn, decodeUpload, extractDocumentFields, norm, verifyExtraction };
+module.exports = { MAX_BYTES, READABLE, intakeAccess, judgeCheck, buildInstructions, cleanOptions, datesIn, decodeUpload, extractDocumentFields, norm, verifyExtraction };

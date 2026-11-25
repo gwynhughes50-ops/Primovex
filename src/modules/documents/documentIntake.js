@@ -14,6 +14,7 @@ export const INTAKE_KINDS = [
   { key: "auto", label: "Let Primovex work out what it is" },
   { key: "certificate", label: "Certificate, test or service record" },
   { key: "coshh", label: "COSHH safety data sheet" },
+  { key: "delivery", label: "Delivery note (to book stock in)" },
 ];
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;

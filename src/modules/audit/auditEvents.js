@@ -104,6 +104,11 @@ export function computerEvent(type, { computerId = "", assetNumber = "", summary
   return event(`it.pc.${text(type, 30)}`, "it", "it_computer", computerId, summary || `PC ${text(assetNumber, 40)}: ${text(type, 30)}`, { assetNumber: text(assetNumber, 40) });
 }
 
+// A delivery note booked into stock (from Add a document / Book in a delivery). The summary holds the supplier, the note's number and how many products: no names and no quantities of anything clinical.
+export function deliveryEvent(type, { deliveryId = "", supplier = "", noteNumber = "", count = 0 } = {}) {
+  return event(`stock.delivery.${text(type, 30)}`, "inventory", "stock_delivery", deliveryId || null, `Delivery note ${text(noteNumber, 40) || "(no number)"} from ${text(supplier, 80) || "a supplier"} booked into stock (${count} product${count === 1 ? "" : "s"})`, { count });
+}
+
 // Reception rota. The ledger records that the rota was set up, built or changed, and that an absence was entered or removed. It never holds who was off, or why.
 export function rotaEvent(type, { mondayIso = "" } = {}) {
   const week = text(mondayIso, 12);

@@ -118,6 +118,47 @@ await t("a perfect reading of every safety data sheet verifies completely, and t
   }
 });
 
+await t("every answer on a delivery note is really written on its page, the quantity is the DELIVERED one, and a perfect reading verifies completely", () => {
+  const notes = withText.filter((x) => x.kind === "delivery");
+  assert.ok(notes.length >= 3, "there are delivery notes to test with");
+  for (const d of notes) {
+    const page = norm(plainText(d));
+    const e = d.expected;
+    const check = (what, quote) => assert.ok(quote && page.includes(norm(quote)), `${d.file}: "${quote}" (${what}) is not on the page`);
+    check("supplier", e.supplier.quote); check("note number", e.noteNumber.quote); check("date", e.deliveryDate.quote);
+    assert.ok(datesIn(e.deliveryDate.quote).includes(e.deliveryDate.iso), `${d.file}: delivery date`);
+    if (e.orderReference) check("order", e.orderReference.quote);
+    for (const l of e.lines) {
+      check(`row ${l.description}`, l.quote);
+      if (l.quantity !== null) assert.ok((l.quote.match(/\d+/g) || []).map(Number).includes(l.quantity), `${d.file}: ${l.description}: ${l.quantity} is a number in its row`);
+    }
+    const model = { delivery: {
+      supplier: { value: e.supplier.value, evidence: e.supplier.quote },
+      noteNumber: { value: e.noteNumber.value, evidence: e.noteNumber.quote },
+      deliveryDate: { value: e.deliveryDate.iso, evidence: e.deliveryDate.quote },
+      orderReference: e.orderReference ? { value: e.orderReference.value, evidence: e.orderReference.quote } : { value: null, evidence: null },
+      lines: e.lines.map((l) => ({ description: l.description, code: l.code, quantity: l.quantity, unit: l.unit, batch: l.batch, expiry: l.expiry, evidence: l.quote })),
+    } };
+    const out = verifyExtraction({ parsed: model, ocrText: plainText(d), kind: "delivery", options: OPTIONS });
+    for (const name of ["supplier", "noteNumber", "deliveryDate"]) assert.equal(out.fields[name].verified, true, `${d.file}: ${name}`);
+    assert.equal(out.fields.orderReference.verified, Boolean(e.orderReference), `${d.file}: order`);
+    assert.equal(out.lines.length, e.lines.length, `${d.file}: every row is kept`);
+    out.lines.forEach((got, i) => {
+      const want = e.lines[i];
+      assert.equal(got.rowFound, true, `${d.file}: row ${i} is on the page`);
+      assert.equal(got.quantity, want.quantity, `${d.file}: row ${i} quantity`);
+      assert.deepEqual([got.verified.description, got.verified.code, got.verified.quantity, got.verified.batch, got.verified.expiry], [true, true, want.quantity !== null, Boolean(want.batch), Boolean(want.expiry)], `${d.file}: row ${i} confirmed as far as the page says`);
+    });
+    const noQty = e.lines.filter((l) => l.quantity === null).length;
+    assert.equal(out.warnings.some((w) => /no quantity/.test(w)), noQty > 0, `${d.file}: warned only about a row with no quantity`);
+  }
+  // the partial delivery: 12 ordered, 8 delivered
+  const partial = notes.find((x) => x.file.startsWith("25-"));
+  assert.equal(partial.expected.lines[0].quantity, 8);
+  assert.match(partial.expected.lines[0].quote, /\| 12 \| 8 \|/);
+  assert.equal(partial.expected.lines[2].quantity, null, "0 delivered is no quantity to book");
+});
+
 // ---------- the files the maker writes ----------
 const dir = mkdtempSync(path.join(os.tmpdir(), "primovex-test-docs-"));
 const run = spawnSync(process.execPath, ["scripts/make-test-documents.mjs", dir], { encoding: "utf8", timeout: 120000 });

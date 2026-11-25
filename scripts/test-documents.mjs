@@ -32,6 +32,28 @@ const pick = (key, quote) => ({ key, quote });
 const chk = (label, answer, problem = false) => ({ label, answer, problem, quote: `${label}: ${answer}` });
 const eng = (value, quote) => ({ value, quote });
 
+// a supplier's delivery note: the header lines, then one text line for each product row (the quote the reader must give for it is that line)
+const delivery = (o) => ({
+  kind: "delivery",
+  blocks: [
+    ...company(o.supplier, ["Unit 12, Riverside Distribution Park, Chester, CH1 4ZZ (invented address)", "Tel 01000 111111 (invented)"]),
+    { t: "h", text: "DELIVERY NOTE" },
+    kv("Delivery note no", o.noteNumber), kv("Date", o.dateText), kv("Your order", o.orderRef), kv("Delivered to", "Main Surgery, 1 High Street, Mold, CH7 1AB"), { t: "gap" },
+    { t: "line", text: o.header },
+    ...o.rows.map((r) => ({ t: "line", text: r.text })),
+    { t: "gap" },
+    { t: "line", text: "Delivery charge: 4.50 (invented)" },
+    { t: "line", text: "Please check goods on receipt and report any shortage within 48 hours (invented wording)." },
+  ],
+  expected: {
+    supplier: { value: o.supplier, quote: o.supplier }, noteNumber: { value: o.noteNumber, quote: `Delivery note no: ${o.noteNumber}` },
+    deliveryDate: { iso: o.dateIso, quote: `Date: ${o.dateText}` }, orderReference: o.orderRef === "None" ? null : { value: o.orderRef, quote: `Your order: ${o.orderRef}` },
+    lines: o.rows.map(({ text, ...rest }) => ({ ...rest, quote: text })),
+  },
+  tests: o.tests,
+  notes: o.notes || "",
+});
+
 // ---------- certificates and service records (PDF) ----------
 export const DOCUMENTS = [
   { file: "01-gas-safety-record-2025-OLD.pdf", ...cert({
@@ -133,6 +155,37 @@ export const DOCUMENTS = [
     protection: ["Hand protection: wear protective gloves.", "Ventilation: use only in a well-ventilated area."],
   }), expected: { productName: q(null, "Product name: FreshGuard Aerosol Disinfectant"), supplier: q(null, "Supplier: Fenwick Hygiene Products Ltd"), hazards: [pick("flammable", "H222 Extremely flammable aerosol"), pick("gas-under-pressure", "H229 Pressurised container"), pick("irritant", "H319 Causes serious eye irritation")], ppe: [pick("gloves", "wear protective gloves"), pick("ventilation", "use only in a well-ventilated area")], firstAid: [pick("inhaled", "Inhalation: move to fresh air"), pick("eyes", "Eye contact: rinse with water")] },
     tests: "An aerosol. Several hazards: any it cannot back with the sheet's words should be shown as 'Check this' and NOT ticked." },
+
+  // ---------- supplier delivery notes (Book in a delivery) ----------
+  { file: "24-delivery-note-CLEAN.pdf", ...delivery({
+    supplier: "Fairview Medical Supplies Ltd", noteNumber: "FMS-DN-50177", dateText: "12/11/2026", dateIso: "2026-11-12", orderRef: "SAMPLE-PO-5001",
+    header: "Code | Description | Qty | Unit | Batch | Expiry",
+    rows: [
+      { text: "GS1010 | Sterile gauze swabs 10x10cm pack of 5 | 4 | pack | SG2201 | 03/2029", code: "GS1010", description: "Sterile gauze swabs 10x10cm pack of 5", quantity: 4, unit: "pack", batch: "SG2201", expiry: "2029-03-31" },
+      { text: "NG0044 | Nitrile gloves medium box of 100 | 10 | box | NG8812 | 30/06/2028", code: "NG0044", description: "Nitrile gloves medium box of 100", quantity: 10, unit: "box", batch: "NG8812", expiry: "2028-06-30" },
+      { text: "AW0301 | Alcohol wipes 100 | 6 | box | | ", code: "AW0301", description: "Alcohol wipes 100", quantity: 6, unit: "box", batch: null, expiry: null },
+    ],
+    tests: "A clean delivery note: three rows, each with a code, quantity and unit; two have a batch and an expiry (one a month and year, one a full date), one has neither. Create stock items called 'Gauze swabs sterile 10x10cm', 'Nitrile gloves medium' and 'Alcohol wipes' first. Each row should be matched, its quantity confirmed, and nothing booked until you tick the box. The order number SAMPLE-PO-5001 will only match if you create a purchase order with that number: otherwise it says no open order was found.",
+  }) },
+  { file: "25-delivery-note-PARTIAL-and-UNKNOWN-PRODUCT.pdf", ...delivery({
+    supplier: "Fairview Medical Supplies Ltd", noteNumber: "FMS-DN-50201", dateText: "19 November 2026", dateIso: "2026-11-19", orderRef: "SAMPLE-PO-5002",
+    header: "Code | Description | Ordered | Delivered | Unit | Batch | Expiry",
+    rows: [
+      { text: "NE2210 | Needles 21G green box of 100 | 12 | 8 | box | B77021 | 31/05/2028", code: "NE2210", description: "Needles 21G green box of 100", quantity: 8, unit: "box", batch: "B77021", expiry: "2028-05-31" },
+      { text: "TQ0077 | Disposable tourniquets | 20 | 20 | each | | ", code: "TQ0077", description: "Disposable tourniquets", quantity: 20, unit: "each", batch: null, expiry: null },
+      { text: "SY0510 | Syringes 5ml box of 100 | 5 | 0 | box | | ", code: "SY0510", description: "Syringes 5ml box of 100", quantity: null, unit: "box", batch: null, expiry: null },
+    ],
+    tests: "A partial delivery with an ORDERED column and a DELIVERED column: the needles are 12 ordered but 8 delivered, so the quantity must be 8, not 12. The syringes show 0 delivered, so they have no quantity and are not ticked. The tourniquets are a product you probably do NOT have in stock: they must show 'Not in your stock list' and nothing is created. If you have an open purchase order for the needles, the order should be left 'part delivered'.",
+  }) },
+  { file: "26-delivery-note-BOX-SIZES-and-LOT-NUMBERS.pdf", ...delivery({
+    supplier: "Fairview Medical Supplies Ltd", noteNumber: "FMS-DN-50230", dateText: "24/11/2026", dateIso: "2026-11-24", orderRef: "None",
+    header: "Item | Description | Qty | Unit | Lot | Use by",
+    rows: [
+      { text: "EP0001 | Adrenaline 1mg/ml ampoules, box of 10 | 2 | box | LOT L99812 | 08/2027", code: "EP0001", description: "Adrenaline 1mg/ml ampoules, box of 10", quantity: 2, unit: "box", batch: "L99812", expiry: "2027-08-31" },
+      { text: "HS0500 | Hand sanitiser 500ml, case of 12 | 3 | case | LOT HS3300 | 14 February 2029", code: "HS0500", description: "Hand sanitiser 500ml, case of 12", quantity: 3, unit: "case", batch: "HS3300", expiry: "2029-02-14" },
+    ],
+    tests: "No order number is written on this note, so no purchase order is found by number. The units are boxes and cases: if your stock item for the adrenaline counts single ampoules and has a box size of 10 set, Primovex should work out 2 boxes = 20 and SHOW the working, for you to change. The lot numbers are written 'LOT L99812': the batch should be read as L99812. One expiry is month and year only (08/2027, which should become 31 August 2027), one is a full date written in words.",
+  }) },
 
   // ---------- other formats (made by the maker from these) ----------
   { file: "17-fire-risk-assessment-review-WORD.docx", format: "docx", ...cert({

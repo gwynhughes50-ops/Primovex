@@ -126,6 +126,7 @@
     "test:rota-no-cover": "node scripts/verify-rota-no-cover.mjs",
     "test:it-delete": "node scripts/verify-it-delete.mjs",
     "test:sar-register": "node scripts/verify-sar-register.mjs",
+    "test:delivery-note": "esbuild scripts/verify-delivery-note.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-delivery-note.bundle.mjs && node work/verify-delivery-note.bundle.mjs",
     "test:sar-open-edit": "esbuild scripts/verify-sar-open-edit.mjs --bundle --platform=node --format=esm --jsx=automatic --loader:.jsx=jsx --external:firebase/* --external:react --external:react-dom --external:react-dom/server --alias:@/lib/firebase=./scripts/stubs/pageStubs.js --alias:@=./src --banner:js=\"import { createRequire as __cr } from 'node:module'; const require = __cr(import.meta.url);\" --outfile=work/verify-sar-open-edit.bundle.mjs && node work/verify-sar-open-edit.bundle.mjs",
     "test:rota-review": "node scripts/verify-rota-review.mjs",
     "test:rota-requests": "node scripts/verify-rota-requests.mjs",

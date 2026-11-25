@@ -125,7 +125,7 @@ async function requireClinFlowCapture(request) {
 
 // Document intake: the practice's switch (Practice Admin > Module Access > Document reading, off unless deliberately turned on) and the documents.intake permission are both enforced here,
 // because the document goes to an outside processor (Azure) and must not depend on a screen hiding the button.
-async function requireDocumentIntake(request) {
+async function requireDocumentIntake(request, kind = "auto") {
   assertSignedIn(request);
   const config = await db.collection("practice_config").doc("main").get();
   if (!documentsEnabledFor(config.data(), request.auth.uid)) {
@@ -135,16 +135,16 @@ async function requireDocumentIntake(request) {
   const profile = snapshot.data() || {};
   if (profile.role !== "System Admin") {
     const capabilities = await getEffectiveCapabilities(db, profile.role, profile);
-    if (!hasCapability(capabilities, "documents.intake")) {
-      throw new HttpsError("permission-denied", "You do not have permission to add documents this way.");
-    }
+    // documents.intake reads any kind; whoever can change stock (inventory.write) may read a delivery note and nothing else (see intakeAccess)
+    const access = documentIntake.intakeAccess({ kind, hasIntake: hasCapability(capabilities, "documents.intake"), hasStockWrite: hasCapability(capabilities, "inventory.write") });
+    if (!access.allowed) throw new HttpsError("permission-denied", access.message);
   }
   return profile;
 }
 
 const DOCUMENT_INTAKE_DAILY_LIMIT = 60; // a few a day is normal; this only stops a runaway
 
-// Reads a dropped certificate or COSHH safety data sheet and suggests the register fields from it. Suggestion only: the person checks and saves on the normal form.
+// Reads a dropped certificate, COSHH safety data sheet or delivery note and suggests the register fields (or the stock to book in) from it. Suggestion only: the person checks and saves on the normal form.
 // Stored: who, when, what kind, the file's size and fingerprint, and whether it worked. NOT stored: the document or anything read from it.
 exports.readDocumentForRegister = onCall(
   {
@@ -156,9 +156,9 @@ exports.readDocumentForRegister = onCall(
     secrets: [AZURE_DOCUMENT_INTELLIGENCE_KEY, AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT, AZURE_OPENAI_KEY, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT],
   },
   async (request) => {
-    await requireDocumentIntake(request);
     const wanted = String(request.data?.kind || "auto");
-    if (!["auto", "certificate", "coshh"].includes(wanted)) throw new HttpsError("invalid-argument", "Unknown kind of document.");
+    if (!["auto", "certificate", "coshh", "delivery"].includes(wanted)) throw new HttpsError("invalid-argument", "Unknown kind of document.");
+    await requireDocumentIntake(request, wanted);
     let upload;
     try { upload = documentIntake.decodeUpload(request.data || {}); } catch (problem) { throw new HttpsError("invalid-argument", problem.message); }
 

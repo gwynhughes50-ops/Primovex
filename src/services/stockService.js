@@ -596,6 +596,8 @@ export async function applyStockMovement(itemId, movement) {
           supplier_name: cleanString(movement?.supplier_name),
           purchase_order_id: cleanString(movement?.purchase_order_id),
           po_number: cleanString(movement?.po_number),
+          delivery_note_id: cleanString(movement?.delivery_note_id),
+          delivery_note_number: cleanString(movement?.delivery_note_number),
         }
       : null;
 

@@ -31,7 +31,7 @@ await t("the lists sent to the server are the register forms' own, and every key
   assert.deepEqual(o.ppe.map((x) => x.key), PPE_OPTIONS.map((x) => x.key));
   assert.deepEqual(o.firstAid.map((x) => x.key), FIRST_AID_OPTIONS.map((x) => x.key));
   for (const x of [...o.certTypes, ...o.hazards, ...o.ppe, ...o.firstAid]) assert.match(x.key, /^[a-z0-9_-]{1,40}$/, x.key);
-  assert.deepEqual(INTAKE_KINDS.map((k) => k.key), ["auto", "certificate", "coshh"]);
+  assert.deepEqual(INTAKE_KINDS.map((k) => k.key), ["auto", "certificate", "coshh", "delivery"]);
 });
 
 await t("a certificate pre-fills the register form, matching your own supplier and site names", () => {

@@ -21,6 +21,7 @@ import ReceptionRota from "@/pages/ReceptionRota";
 import SarsToChase from "@/pages/SarsToChase";
 import MyRota from "@/components/rota/MyRota";
 import AddDocument from "@/pages/AddDocument";
+import BookInDelivery from "@/pages/BookInDelivery";
 import MyLaptop from "@/pages/MyLaptop";
 import AnnualLeave from "@/pages/AnnualLeave";
 import MyTrainingPage from "@/pages/MyTrainingPage";
@@ -123,6 +124,7 @@ export default function DesktopApp() {
         <Route path="it-equipment" element={<PermissionGate anyOf={["itAssets.read", "itAssets.manage"]}><ITEquipment /></PermissionGate>} />
         <Route path="my-laptop" element={<MyLaptop />} />
         <Route path="add-document" element={<PermissionGate capability="documents.intake"><AddDocument /></PermissionGate>} />
+        <Route path="book-in-delivery" element={<PermissionGate capability="documents.deliveryNote"><BookInDelivery /></PermissionGate>} />
         <Route path="annual-leave" element={<AnnualLeave />} />
         <Route path="my-training" element={<MyTrainingPage />} />
         <Route path="mileage" element={<Mileage />} />

@@ -191,6 +191,16 @@ service cloud.firestore {
         && request.resource.data.reversed_by.uid == request.auth.uid;
       allow delete: if false;
     }
+    // A delivery note that has been booked into stock: who, which supplier and note number, which order, and what went in (each row with the stock movement it made). One record per delivery,
+    // made once by whoever books it in (inventory.write) as themselves, and never edited or removed: the stock movements it points to are the audit trail, and this says what the paper said.
+    // Read by whoever sees stock or purchasing.
+    match /stock_deliveries/{deliveryId} {
+      allow get, list: if signedIn() && (hasPermission("inventory", "read") || hasPermission("inventory", "write") || hasPermission("purchasing", "read") || isAdmin());
+      allow create: if signedIn() && (hasPermission("inventory", "write") || isAdmin())
+        && request.resource.data.created_by.uid == request.auth.uid
+        && request.resource.data.lines is list && request.resource.data.lines.size() <= 100;
+      allow update, delete: if false;
+    }
     match /stock_barcodes/{barcodeId} {
   allow read: if signedIn();
   allow create, update: if hasPermission("inventory", "write") || isAdmin();

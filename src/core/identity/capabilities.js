@@ -207,6 +207,7 @@ export const CAPABILITY_CATALOG = [
   { id: "temperature.resolveIncident", label: "Resolve temperature incidents", group: "Compliance" },
   { id: "temperature.archive", label: "Archive fridge temperature readings (with a reason)", group: "Compliance" },
   { id: "documents.intake", label: "Add documents by dropping them in (the AI reads certificates and safety data sheets into the registers; you check before saving)", group: "Compliance" },
+  { id: "documents.deliveryNote", label: "Read in a delivery note and book the stock in (given automatically to anyone who can change stock, while Document reading is switched on for them)", group: "Inventory" },
   { id: "compliance.read", label: "View compliance", group: "Compliance" },
   { id: "compliance.write", label: "Update compliance", group: "Compliance" },
   { id: "compliance.recordChecks", label: "Record QR/NFC compliance checks", group: "Compliance" },
@@ -635,6 +636,14 @@ export function getCapabilitiesForProfile(profile, customRoleCapabilities = {}, 
   allow.forEach((capability) => merged.add(capability));
   deny.forEach((capability) => merged.delete(capability));
   return Array.from(merged);
+}
+
+// Capabilities worked out from others rather than given in a role. Whoever can change stock (inventory.write) may read in a delivery note and book it in (documents.deliveryNote), unless the practice's
+// Document reading switch is off for them (a switched-off module takes its capabilities away first, so this is only added when "documents" is not blocked). The server applies the same rule.
+export function withDerivedCapabilities(capabilities = [], { blockedDomains = [] } = {}) {
+  const blocked = blockedDomains instanceof Set ? blockedDomains : new Set(blockedDomains);
+  if (blocked.has("documents") || capabilities.includes("documents.deliveryNote")) return capabilities;
+  return capabilities.includes("*") || capabilities.includes("inventory.write") ? [...capabilities, "documents.deliveryNote"] : capabilities;
 }
 
 export function hasCapability(capabilities = [], required) {

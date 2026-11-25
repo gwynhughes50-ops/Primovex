@@ -395,6 +395,9 @@ export default function MobileLayout({ initialTab = "home" }) {
       case "add-document":
         navigate("/add-document");
         break;
+      case "book-in-delivery":
+        navigate("/book-in-delivery");
+        break;
       case "significant-events":
         navigate("/governance/significant-events");
         break;

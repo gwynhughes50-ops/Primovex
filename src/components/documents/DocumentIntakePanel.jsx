@@ -7,6 +7,7 @@ import { isSafeSyntheticMode } from "@/config/platformMode";
 import useSiteSpaceNames from "@/hooks/useSiteSpaceNames";
 import { CertificateForm, RenewForm } from "@/components/compliance/CertificatesRegister";
 import { SubstanceForm } from "@/components/compliance/CoshhRegister";
+import DeliveryNoteReview from "@/components/documents/DeliveryNoteReview";
 import { INTAKE_KINDS, cardFor, describeProblem, findRenewalTarget, ukDay } from "@/modules/documents/documentIntake";
 import { ACCEPT, DROP_HINT, fileProblem, prepareFile, readDocument, recordAfterReading } from "@/modules/documents/documentIntakeService";
 import { certLabel } from "@/modules/certificates/certificates";
@@ -19,13 +20,14 @@ import { useCertificates } from "@/modules/certificates/certificateService";
 const BTN = "inline-flex items-center gap-1.5 rounded-lg border border-white/15 px-3 py-2 text-sm font-semibold text-slate-100 hover:bg-white/5 disabled:opacity-40";
 const FIELD = "mt-1 w-full rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-teal-300/60 [&>option]:bg-slate-900";
 
-export default function DocumentIntakePanel({ phone = false }) {
+// `onlyKind`: the panel reads one kind of document only (the stock team's "Book in a delivery" reads delivery notes and nothing else), so there is no choice of kind and no "let Primovex work it out".
+export default function DocumentIntakePanel({ phone = false, onlyKind = "" }) {
   const navigate = useNavigate();
   const demo = isSafeSyntheticMode();
   const { siteNames } = useSiteSpaceNames(true);
   const { list: certificates } = useCertificates(true);
   const [supplierDocs, setSupplierDocs] = useState([]);
-  const [kind, setKind] = useState("auto");
+  const [kind, setKind] = useState(onlyKind || "auto");
   const [stage, setStage] = useState("pick"); // pick | reading | card | other | done
   const [pdf, setPdf] = useState(null); // the PDF that will be kept as the record
   const [original, setOriginal] = useState(null); // the file as it was dropped, so it can be read again as another kind
@@ -65,7 +67,7 @@ export default function DocumentIntakePanel({ phone = false }) {
       setSourceNote(prepared.note);
       setResult(found);
       setChoice("");
-      setStage(found.kind === "certificate" || found.kind === "coshh" ? "card" : "other");
+      setStage(found.kind === "certificate" || found.kind === "coshh" ? "card" : found.kind === "delivery" ? "delivery" : "other");
     } catch (problemFound) {
       setError(problemFound?.code ? describeProblem(problemFound) : problemFound?.message || describeProblem(problemFound));
       setStage("pick");
@@ -97,6 +99,10 @@ export default function DocumentIntakePanel({ phone = false }) {
     );
   }
 
+  if (stage === "delivery" && result) {
+    return <DeliveryNoteReview result={result} pdf={pdf} phone={phone} onCancel={reset} onAnother={reset} />;
+  }
+
   if (stage === "other") {
     return (
       <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-5 text-slate-100">
@@ -106,6 +112,7 @@ export default function DocumentIntakePanel({ phone = false }) {
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="button" className={BTN} onClick={() => read(original, "certificate")}>Read it as a certificate</button>
           <button type="button" className={BTN} onClick={() => read(original, "coshh")}>Read it as a COSHH data sheet</button>
+          <button type="button" className={BTN} onClick={() => read(original, "delivery")}>Read it as a delivery note</button>
           <button type="button" className={BTN} onClick={reset}>Start again</button>
         </div>
       </div>
@@ -139,9 +146,9 @@ export default function DocumentIntakePanel({ phone = false }) {
   return (
     <div className="space-y-4 text-slate-100">
       {demo && <p className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-3 text-sm font-semibold text-amber-100">Demo mode: whatever you drop in, a made-up sample is read. Nothing is sent anywhere.</p>}
-      <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">What is it?
+      {!onlyKind && <label className="block text-xs font-semibold uppercase tracking-wide text-slate-400">What is it?
         <select className={FIELD} value={kind} onChange={(e) => setKind(e.target.value)}>{INTAKE_KINDS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}</select>
-      </label>
+      </label>}
       <div
         onDragOver={(e) => { e.preventDefault(); setOver(true); }}
         onDragLeave={() => setOver(false)}
@@ -149,7 +156,7 @@ export default function DocumentIntakePanel({ phone = false }) {
         className={`rounded-2xl border-2 border-dashed p-8 text-center ${over ? "border-teal-300 bg-teal-500/10" : "border-white/20 bg-slate-900/60"}`}
       >
         <UploadCloud className="mx-auto h-10 w-10 text-teal-300" aria-hidden="true" />
-        <p className="mt-2 font-semibold">{phone ? "Take a photo of the document, or choose a file" : "Drop a certificate or safety data sheet here"}</p>
+        <p className="mt-2 font-semibold">{onlyKind === "delivery" ? (phone ? "Take a photo of the delivery note, or choose a file" : "Drop the delivery note here") : phone ? "Take a photo of the document, or choose a file" : "Drop a certificate, safety data sheet or delivery note here"}</p>
         <p className="mt-1 text-sm text-slate-400">{DROP_HINT} Primovex reads it and fills in the form; you check it before anything is saved.</p>
         <div className="mt-4 flex flex-wrap justify-center gap-2">
           {phone && <button type="button" className="inline-flex min-h-12 items-center gap-2 rounded-xl bg-teal-500/90 px-5 font-bold text-slate-950" onClick={() => photoInput.current?.click()}><Camera className="h-5 w-5" aria-hidden="true" /> Take a photo</button>}

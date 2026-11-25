@@ -190,6 +190,16 @@ service firebase.storage {
       allow delete: if hasPermission("compliance", "manageAssets") || isAdmin();
     }
 
+    // Delivery notes booked into stock (the supplier's PDF), one folder per delivery: stock_deliveries/{deliveryId}/{fileName}. Read by whoever sees stock or purchasing; written by whoever books
+    // stock in (inventory.write). PDFs only, up to 15MB. Only an administrator deletes one.
+    match /stock_deliveries/{deliveryId}/{fileName} {
+      allow read: if hasPermission("inventory", "read") || hasPermission("inventory", "write") || hasPermission("purchasing", "read") || isAdmin();
+      allow write: if (hasPermission("inventory", "write") || isAdmin())
+        && request.resource.size < 15 * 1024 * 1024
+        && request.resource.contentType == "application/pdf";
+      allow delete: if isAdmin();
+    }
+
     // Clinical waste consignment notes (the Stericycle PDF), one folder per note: waste_notes/{noteId}/{fileName}.
     // Read by whoever sees the waste records (waste.read or waste.manage); written by whoever keeps them (waste.manage).
     // PDFs only, up to 15MB. Only an administrator deletes one.

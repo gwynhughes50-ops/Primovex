@@ -15,6 +15,7 @@ import PatLanding from "@/mobile/pat/PatLanding";
 import MobileRota from "@/mobile/MobileRota";
 import MobileSarsToChase from "@/mobile/MobileSarsToChase";
 import MobileAddDocument from "@/mobile/MobileAddDocument";
+import MobileBookInDelivery from "@/mobile/MobileBookInDelivery";
 import MobileBootSplash from "@/mobile/auth/MobileBootSplash";
 import MobileAccountLogin from "@/mobile/auth/MobileAccountLogin";
 import FirstRunSetupGate from "@/setup/FirstRunSetupGate";
@@ -143,6 +144,16 @@ function MobileAddDocumentRoute() {
   return <MobileSessionShell><MobileAddDocument /></MobileSessionShell>;
 }
 
+function MobileBookInDeliveryRoute() {
+  const { user, loading, can, profile } = useAuth();
+  if (loading) return <MobileBootSplash message="Opening Book in a delivery" />;
+  if (!user) return <MobileAccountLogin />;
+  if (profile?.mustChangePassword === true) return <MustChangePassword />;
+  if (!can("mobile.access") || !can("documents.deliveryNote")) return <MobileAccessDenied />;
+  // Behind the session lock: the stock is being changed from what is read.
+  return <MobileSessionShell><MobileBookInDelivery /></MobileSessionShell>;
+}
+
 function MobileSignificantEventsRoute() {
   const { user, loading, can, profile } = useAuth();
   if (loading) return <MobileBootSplash message="Opening Significant events" />;
@@ -166,6 +177,7 @@ export default function MobileApp() {
       <Route path="/my-rota" element={<MobileRotaRoute />} />
       <Route path="/reception-rota" element={<MobileRotaRoute coordinator />} />
       <Route path="/add-document" element={<MobileAddDocumentRoute />} />
+      <Route path="/book-in-delivery" element={<MobileBookInDeliveryRoute />} />
       <Route path="/governance/significant-events" element={<MobileSignificantEventsRoute />} />
       <Route path="/spaces" element={<MobileBootController initialTab="sense" />} />
       <Route path="/temperature" element={<MobileBootController initialTab="temperature" />} />

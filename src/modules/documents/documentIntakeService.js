@@ -169,6 +169,24 @@ function toBase64(file) {
 // (a file name containing "unsafe" or "fail" gives a certificate that records a failed result, to show how that looks)
 export function sampleResult(kind = "auto", fileName = "") {
   const textCopy = "SAMPLE TEXT\nThis is made-up text standing in for what would be read from the document.";
+  if (kind === "delivery") {
+    const all = { description: true, code: true, quantity: true, batch: true, expiry: true };
+    return {
+      ok: true, sample: true, kind: "delivery", kindGuess: "delivery", fileName: "Sample delivery note.pdf", fileSha256: "sample-delivery-note", textCopy,
+      fields: {
+        supplier: { value: "Sample Medical Supplies Ltd", evidence: "SAMPLE MEDICAL SUPPLIES LTD  DELIVERY NOTE", verified: true },
+        noteNumber: { value: "DN-DEMO-001", evidence: "Delivery note no: DN-DEMO-001", verified: true },
+        deliveryDate: { value: "2026-11-24", evidence: "Date: 24/11/2026", verified: true },
+        orderReference: { value: null, evidence: null, verified: false },
+      },
+      lines: [
+        { description: "Gauze Swabs 10x10 pack of 5", code: "GS-1010", quantity: 3, unit: "packs", batch: "G-4471", expiry: "2029-03-31", evidence: "GS-1010  Gauze Swabs 10x10 pack of 5   3  packs  G-4471  03/2029", rowFound: true, verified: all },
+        { description: "Hand Sanitiser 500ml", code: "", quantity: 2, unit: "box", batch: "HS-220", expiry: "2028-08-31", evidence: "Hand Sanitiser 500ml   2  box  HS-220  31/08/2028", rowFound: true, verified: { description: true, code: false, quantity: true, batch: true, expiry: true } },
+        { description: "Disposable tourniquets", code: "DT-77", quantity: 10, unit: "each", batch: null, expiry: null, evidence: "DT-77  Disposable tourniquets   10  each", rowFound: true, verified: { description: true, code: true, quantity: true, batch: false, expiry: false } },
+      ],
+      warnings: [],
+    };
+  }
   if (kind === "coshh") {
     return {
       ok: true, sample: true, kind: "coshh", kindGuess: "coshh", fileName: "Sample safety data sheet.pdf", warnings: [], textCopy,
@@ -207,7 +225,7 @@ export function sampleResult(kind = "auto", fileName = "") {
   };
 }
 
-// Reads a document. `file` is what prepareFile chose to send. `kind` is "auto" (let the AI say what it is), "certificate" or "coshh". Throws a plain sentence on failure.
+// Reads a document. `file` is what prepareFile chose to send. `kind` is "auto" (let the AI say what it is), "certificate", "coshh" or "delivery". Throws a plain sentence on failure.
 export async function readDocument(file, kind = "auto") {
   if (isSafeSyntheticMode()) {
     await new Promise((resolve) => setTimeout(resolve, 600));
