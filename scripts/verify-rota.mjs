@@ -233,11 +233,14 @@ t("history: the next week does not repeat the last one's pattern, and the Friday
   assert.equal(hist.lastFriday[a.days.fri.slots.late.uid], "late");
 });
 
-t("more people than shifts: the extra person is told they have no shift, not lost", () => {
+t("more people than shifts: the extra person takes the morning desk where a place is open, and is told they have no shift where it is not, never lost", () => {
   const bigger = { ...rules, people: [...rules.people, person("extra", "Extra")] };
   const week = generateWeek({ rules: bigger, mondayIso: FIRST });
   const noShift = week.issues.filter((i) => /has no shift \(more people than shifts\)/.test(i.text));
-  assert.equal(noShift.length, 5, "one person each day");
+  const spare = week.issues.filter((i) => / is on Desk\/phones \(morning\) because they are in and have no other shift/.test(i.text));
+  // Karen B (Wed to Fri) and Debbie (Tue to Thu) always have the morning desk: it is full on Wednesday and Thursday, so there the extra person has no shift; on Monday, Tuesday and Friday a place is open and someone who is in with no other shift takes it
+  assert.deepEqual(noShift.map((i) => i.day), ["wed", "thu"]);
+  assert.deepEqual(spare.map((i) => i.day), ["mon", "tue", "fri"]);
 });
 
 t("saved weeks: history for a new week comes from the weeks before it, and places fixed by hand are found again", () => {

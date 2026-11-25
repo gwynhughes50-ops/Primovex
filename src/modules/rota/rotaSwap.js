@@ -1,6 +1,6 @@
 // Swapping shifts and asking for adjustments, for the reception team on their phones. Pure logic (no screens, no database), run on the server: it can see everyone's rules and time off, which the
 // team's phones never can. A swap is checked against the rules before it is offered and again when it is made, and says whether it changes anyone's hours (which is when the coordinator has to approve it).
-import { DAYS, DAY_LABELS, availabilityOn, addDays, hhmm, isOwned, mayTakeShift, onlyOwnersOf, partTimes, ruleCoversShift, shiftById, timeLabel, toMinutes, weekDates } from "./rotaModel.js";
+import { DAYS, DAY_LABELS, availabilityOn, addDays, hhmm, isLastResort, isOwned, mayTakeShift, onlyOwnersOf, partTimes, ruleCoversShift, shiftById, timeLabel, toMinutes, weekDates } from "./rotaModel.js";
 import { shiftIdOfKey } from "./rotaEngine.js";
 import { checkWeek, setPlace } from "./rotaWeek.js";
 
@@ -46,7 +46,7 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 export function takeProblem(rules, person, shift, day) {
   const mode = person.mode || "pool";
   const label = (id) => shiftById(rules, id)?.label || "their shift";
-  if (mode === "pool" && isOwned(rules, shift)) return `${person.name} does not do ${shift.label}: it belongs to others on the rota`;
+  if (mode === "pool" && isOwned(rules, shift) && !isLastResort(shift)) return `${person.name} does not do ${shift.label}: it belongs to others on the rota`;
   if (mode === "fixed" && person.shift !== shift.id) return `${person.name} is always on ${label(person.shift)}`;
   if (mode === "usual" && person.shift !== shift.id && !(person.coverShifts || []).includes(shift.id)) return `${person.name} does not step in on ${shift.label}`;
   if (mode === "only" && !(person.onlyShifts || []).includes(shift.id)) return `${person.name} only works particular shifts, and ${shift.label} is not one of them`;

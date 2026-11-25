@@ -32,7 +32,7 @@ export const DEFAULT_SHIFTS = [
   { id: "admin2", label: "Admin 2", group: "admin2", start: "08:30", end: "17:00", essential: false, count: 1, days: DAYS, dropOrder: 2 },
   { id: "admin3", label: "Admin 3", group: "admin3", start: "08:30", end: "17:00", essential: false, count: 1, days: DAYS, dropOrder: 1 },
   { id: "desk", label: "Desk/phones", group: "desk", start: "08:30", end: "17:00", essential: false, count: 1, days: DAYS, dropOrder: 3 },
-  { id: "desk2", label: "Desk/phones (morning)", group: "desk", start: "08:30", end: "10:00", essential: false, count: 2, days: DAYS, dropOrder: 4 },
+  { id: "desk2", label: "Desk/phones (morning)", group: "desk", start: "08:30", end: "10:00", essential: false, count: 2, days: DAYS, dropOrder: 4, lastResort: true },
   { id: "tyelan", label: "Ty Elan", group: "tyelan", start: "08:30", end: "17:00", essential: true, count: 1, days: DAYS },
 ];
 
@@ -69,8 +69,11 @@ export const newPerson = (uid, name) => ({
 export const ownersOnDay = (rules, shift, day) => (rules?.people || []).filter((p) => (p.days || []).includes(day) && (((p.mode === "fixed" || p.mode === "usual") && p.shift === shift.id) || (p.mode === "only" && (p.onlyShifts || []).includes(shift.id))));
 export const isOwned = (rules, shift) => (rules?.people || []).some((p) => ((p.mode === "fixed" || p.mode === "usual") && p.shift === shift.id) || (p.mode === "only" && (p.onlyShifts || []).includes(shift.id)));
 // A shift that people on "only these shifts" work is theirs alone: nobody else is put on it (the morning desk, which is a short shift, would not show anyone else's full day).
+// A shift that is filled LAST: only the people whose rules give it to them (Debbie and Karen, who work only this) always have it, and anyone else is put on it only when they are in and there is no other shift for
+// them, once every other shift has been filled. A shift says so itself ("lastResort"); an older saved rota that never had the setting treats the morning desk this way.
+export const isLastResort = (shift) => shift?.lastResort === true || (shift?.lastResort === undefined && shift?.id === "desk2");
 export const onlyOwnersOf = (rules, shift) => (rules?.people || []).filter((p) => p.mode === "only" && (p.onlyShifts || []).includes(shift?.id));
-export const mayTakeShift = (rules, person, shift) => { const owners = onlyOwnersOf(rules, shift); return !owners.length || owners.some((o) => o.uid === person?.uid); };
+export const mayTakeShift = (rules, person, shift) => { if (isLastResort(shift)) return true; const owners = onlyOwnersOf(rules, shift); return !owners.length || owners.some((o) => o.uid === person?.uid); };
 export const shiftById = (rules, id) => (rules?.shifts || []).find((s) => s.id === id) || null;
 // A day rule names one shift ("early2") or any shift of a kind ("group:early", which is Early 1 or Early 2). These give the shifts a rule can mean.
 export const GROUP_PREFIX = "group:";

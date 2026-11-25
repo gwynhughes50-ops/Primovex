@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { listStaffDirectory } from "@/services/staffDirectoryService";
-import { DAYS, DAY_LABELS, DAY_SHORT, MODES, ROTA_SITES, TIME_CHOICES, checkRules, groupLabel, groupsOf, inStandardOrder, newPerson, siteOfShift, timeLabel } from "@/modules/rota/rotaModel";
+import { DAYS, DAY_LABELS, DAY_SHORT, MODES, ROTA_SITES, TIME_CHOICES, checkRules, groupLabel, groupsOf, inStandardOrder, newPerson, siteOfShift, timeLabel, isLastResort } from "@/modules/rota/rotaModel";
 import { saveRules } from "@/modules/rota/rotaService";
 import { groupColour, initials, personColour, tint } from "./rotaStyle";
 
@@ -119,10 +119,10 @@ function ShiftsEditor({ rules, onChange, canManage }) {
       <h2 className="text-lg font-black text-slate-50">The shifts</h2>
       <p className="text-xs text-[var(--medtrak-muted)]">The order here is the order down the rota, in print and in Excel. Use the arrows to move a shift, or put them all in the usual order in one go. Press "Save the rules" afterwards.</p>
       {canManage && <button type="button" className={`${BTN} mt-2`} onClick={() => onChange({ ...rules, shifts: inStandardOrder(rules.shifts) })}>Put the shifts in the usual order (Early 1, Early 2, Mid, Late, Admin 1, 2, 3, Desk/phones, Desk/phones mornings, Ty Elan)</button>}
-      <p className="text-xs text-[var(--medtrak-muted)]">Surgery is where the shift is worked: when that surgery is closed (see Surgery closures), the shift is not staffed. An essential shift must be covered every day: if it can't be, the rota says so. A shift that is not essential is given up when there are too few people, the lowest "given up" number first.</p>
+      <p className="text-xs text-[var(--medtrak-muted)]">Surgery is where the shift is worked: when that surgery is closed (see Surgery closures), the shift is not staffed. "Spare staff only" is for a shift that is filled last (the morning desk): whoever the rules give it to always has it, and anyone else is put on it only when they are in and have no other shift, after every other shift is filled. An essential shift must be covered every day: if it can't be, the rota says so. A shift that is not essential is given up when there are too few people, the lowest "given up" number first.</p>
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[920px] text-left text-sm">
-          <thead className="text-xs text-[var(--medtrak-muted)]"><tr><th className="p-1">Name</th><th className="p-1">Surgery</th><th className="p-1">Counted as</th><th className="p-1">Start</th><th className="p-1">Finish</th><th className="p-1">People</th><th className="p-1">Essential</th><th className="p-1">Given up</th><th className="p-1">Days</th><th className="p-1" /></tr></thead>
+          <thead className="text-xs text-[var(--medtrak-muted)]"><tr><th className="p-1">Name</th><th className="p-1">Surgery</th><th className="p-1">Counted as</th><th className="p-1">Start</th><th className="p-1">Finish</th><th className="p-1">People</th><th className="p-1">Essential</th><th className="p-1" title="Filled last: only people who are in with no other shift, after everything else is filled">Spare staff only</th><th className="p-1">Given up</th><th className="p-1">Days</th><th className="p-1" /></tr></thead>
           <tbody>
             {rules.shifts.map((s, i) => (
               <tr key={s.id} className="align-top">
@@ -133,6 +133,7 @@ function ShiftsEditor({ rules, onChange, canManage }) {
                 <td className="p-1"><TimeSelect value={s.end} blank="" disabled={!canManage} onChange={(v) => v && setShift(i, { end: v })} /></td>
                 <td className="p-1"><select value={s.count} disabled={!canManage} onChange={(e) => setShift(i, { count: Number(e.target.value) })} className={FIELD}>{[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}</select></td>
                 <td className="p-1"><input type="checkbox" checked={Boolean(s.essential)} disabled={!canManage} onChange={(e) => setShift(i, { essential: e.target.checked })} aria-label={`${s.label} is essential`} /></td>
+                <td className="p-1"><input type="checkbox" checked={isLastResort(s)} disabled={!canManage || Boolean(s.essential)} onChange={(e) => setShift(i, { lastResort: e.target.checked })} aria-label={`${s.label} is filled last, by spare staff`} /></td>
                 <td className="p-1">{s.essential ? "—" : <select value={s.dropOrder || 5} disabled={!canManage} onChange={(e) => setShift(i, { dropOrder: Number(e.target.value) })} className={FIELD}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}{n === 1 ? " (first)" : ""}</option>)}</select>}</td>
                 <td className="p-1"><div className="flex gap-1.5">{DAYS.map((d) => <label key={d} className="text-xs"><input type="checkbox" checked={(s.days || []).includes(d)} disabled={!canManage} onChange={(e) => setShift(i, { days: DAYS.filter((x) => (x === d ? e.target.checked : (s.days || []).includes(x))) })} /> {DAY_SHORT[d]}</label>)}</div></td>
                 <td className="p-1 whitespace-nowrap">{canManage && <><button type="button" className={BTN} disabled={i === 0} aria-label={`Move ${s.label} up`} onClick={() => move(i, -1)}>↑</button> <button type="button" className={BTN} disabled={i === rules.shifts.length - 1} aria-label={`Move ${s.label} down`} onClick={() => move(i, 1)}>↓</button> </>}{canManage && <button type="button" className={BTN} aria-label={`Remove ${s.label}`} onClick={() => { if (used(s.id)) { setProblem(`${s.label} is used in someone's rules. Change their rules first.`); return; } setProblem(""); onChange({ ...rules, shifts: rules.shifts.filter((_, k) => k !== i) }); }}><Trash2 className="h-4 w-4" /></button>}</td>

@@ -9,7 +9,7 @@
 //        - not the same shift two days running, and not an early the morning after a late.
 //   4. If an essential shift is still empty, someone with a usual shift who can cover it steps in, and the shift they leave is shown as empty.
 //   5. Anything still empty is reported. An essential shift that can't be covered is a gap; a non-essential one that is dropped is a note. Nothing is left empty quietly.
-import { DAYS, DAY_LABELS, MIN_PART_MINUTES, ROTA_SITES, addDays, availabilityOn, closureNotes, dayClosures, fitsWhole, isOwned, mayTakeShift, onlyOwnersOf, openPartOf, overlapMinutes, ownersOnDay, partTimes, ruleShiftsOf, shiftById, siteOfShift, toMinutes, weekDates } from "./rotaModel.js";
+import { DAYS, DAY_LABELS, MIN_PART_MINUTES, ROTA_SITES, addDays, availabilityOn, closureNotes, dayClosures, fitsWhole, isLastResort, isOwned, mayTakeShift, onlyOwnersOf, openPartOf, overlapMinutes, ownersOnDay, partTimes, ruleShiftsOf, shiftById, siteOfShift, toMinutes, weekDates } from "./rotaModel.js";
 
 const BIG = 1e9;
 const ESSENTIAL_EMPTY = 100000; // leaving an essential shift empty is always worse than anything else
@@ -212,7 +212,7 @@ export function generateWeek({ rules, mondayIso, absences = [], closures = [], h
     }
 
     // 3. everyone else rotates through the shifts nobody owns
-    const rotating = slots.filter((s) => !assigned[s.key] && !reserved.has(s.shift.id));
+    const rotating = slots.filter((s) => !assigned[s.key] && !reserved.has(s.shift.id) && !isLastResort(s.shift));
     const pool = present.filter((p) => !used.has(p.uid) && (p.mode || "pool") === "pool");
     if (rotating.length && pool.length) {
       const rows = rotating.length, cols = pool.length;
@@ -272,6 +272,20 @@ export function generateWeek({ rules, mondayIso, absences = [], closures = [], h
         used.delete(stepIn.uid);
       }
       put(slot, stepIn.uid, "cover");
+    }
+
+    // 4b. the last-resort shifts (the morning desk): whoever the rules give it to (Debbie and Karen) took it in step 2. A place still open goes to someone who is in and has no other shift, only now that
+    // every other shift has been filled, so it is never filled at the cost of another. Whoever has had it least goes first, and not someone who finished on a late yesterday.
+    for (const slot of slots.filter((s) => !assigned[s.key] && isLastResort(s.shift))) {
+      const group = slot.shift.group;
+      const options = present
+        .filter((p) => !used.has(p.uid) && !tooLittle.has(p.uid) && (p.mode || "pool") === "pool" && fitsWhole(availOf[p.uid], slot.shift) && canDo(p, slot.shift, day)
+          && !(p.maxPerWeek?.[group] != null && (weekCounts[p.uid]?.[group] || 0) >= Number(p.maxPerWeek[group])))
+        .map((p) => ({ p, score: (counts[p.uid]?.[group] || 0) + 2 * (weekCounts[p.uid]?.[group] || 0) + (prevGroups[p.uid] === "late" ? 5 : 0) + jitter(`${p.uid}|${slot.key}|${iso}`) / 10 }))
+        .sort((a, b) => a.score - b.score || String(a.p.uid).localeCompare(String(b.p.uid)));
+      if (!options.length) continue;
+      put(slot, options[0].p.uid, "spare");
+      issues.push({ day, iso, severity: "note", text: `${DAY_LABELS[day]}: ${options[0].p.name} is on ${slot.shift.label} because they are in and have no other shift: more people are in than the other shifts need.` });
     }
 
     // the closures: say what they did to the day, and who has no shift because of one

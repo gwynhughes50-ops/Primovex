@@ -124,6 +124,7 @@
     "test:rota-closures": "node scripts/verify-rota-closures.mjs",
     "test:rota-only-shifts": "node scripts/verify-rota-only-shifts.mjs",
     "test:rota-no-cover": "node scripts/verify-rota-no-cover.mjs",
+    "test:rota-last-resort": "node scripts/verify-rota-last-resort.mjs",
     "test:it-delete": "node scripts/verify-it-delete.mjs",
     "test:sar-register": "node scripts/verify-sar-register.mjs",
     "test:delivery-note": "esbuild scripts/verify-delivery-note.mjs --bundle --platform=node --format=esm --alias:@=./src --outfile=work/verify-delivery-note.bundle.mjs && node work/verify-delivery-note.bundle.mjs",

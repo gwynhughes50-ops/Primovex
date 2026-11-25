@@ -10,7 +10,8 @@ let n = 0;
 const t = (name, fn) => { fn(); n += 1; console.log(`ok  ${name}`); };
 const person = (uid, name, extra = {}) => ({ ...newPerson(uid, name), ...extra });
 const rules = {
-  shifts: DEFAULT_SHIFTS.map((s) => ({ ...s })),
+  // the morning desk is set NOT to be a last-resort shift here, so these tests keep proving the "theirs alone" rule for a shift that people on "only these shifts" work (the last-resort behaviour is in verify-rota-last-resort.mjs)
+  shifts: DEFAULT_SHIFTS.map((s) => ({ ...s, ...(s.id === "desk2" ? { lastResort: false } : {}) })),
   settings: { ...DEFAULT_SETTINGS },
   people: [
     person("dave", "Dave", { mode: "usual", shift: "desk", coverShifts: ["early1", "early2", "mid", "late", "desk2"] }),
