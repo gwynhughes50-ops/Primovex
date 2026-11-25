@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, Building2, CalendarRange, CheckCircle2, ChevronLeft, ChevronRight, Download, Info, Pin, Printer, ShieldCheck, Smartphone, UserMinus } from "lucide-react";
 import { printHtmlDocument } from "@/lib/printHtmlDocument";
-import { CLOSURE_REASONS, DAYS, DAY_LABELS, ROTA_SITES, addDays, availabilityOn, closedSites, closedText, dateOf, dayClosures, isoOf, offText, partTimes, mayTakeShift, ruleCoversShift, timeLabel, weekDates, weekLabel } from "@/modules/rota/rotaModel";
+import { CLOSURE_REASONS, DAYS, DAY_LABELS, daysWithNoShift, ROTA_SITES, addDays, availabilityOn, closedSites, closedText, dateOf, dayClosures, isoOf, offText, partTimes, mayTakeShift, ruleCoversShift, timeLabel, weekDates, weekLabel } from "@/modules/rota/rotaModel";
 import { generateWeek, weekCounters } from "@/modules/rota/rotaEngine";
 import { checkWeek, closuresChangedSince, historyBefore, lockedOf, noCoverOf, setNoCover, setPlace, slotsOfDay, withNames } from "@/modules/rota/rotaWeek";
 import { buildRotaHtml, buildRotaXlsx, counterColumns, runningCounters } from "@/modules/rota/rotaExport";
@@ -46,7 +46,7 @@ function Avatar({ uid, name, size = "h-6 w-6 text-[10px]" }) {
   return <span className={`grid shrink-0 place-items-center rounded-full font-bold text-white ${size}`} style={{ background: personColour(uid) }} aria-hidden="true">{initials(name)}</span>;
 }
 
-export default function RotaWeekPanel({ rules, weeks, absences, closures = [], actor, canManage, startMonday, published = {}, teamAccess = false }) {
+export default function RotaWeekPanel({ rules, weeks, absences, closures = [], actor, canManage, startMonday, published = {}, teamAccess = false, onOpenRules = null }) {
   const [monday, setMonday] = useState(startMonday);
   const [span, setSpan] = useState(4);
   const [busy, setBusy] = useState(false);
@@ -165,6 +165,13 @@ export default function RotaWeekPanel({ rules, weeks, absences, closures = [], a
         <Tile icon={gaps.length ? AlertTriangle : CheckCircle2} tone={!week ? "info" : gaps.length ? "bad" : notes.length ? "warn" : "good"} label="Needs attention" value={!week ? "—" : gaps.length ? `${gaps.length} to fix` : "Nothing to fix"} note={week ? `${notes.length} note${notes.length === 1 ? "" : "s"} to know about` : ""} />
         <Tile icon={UserMinus} tone={offPeople.length ? "warn" : "info"} label="Off this week" value={offPeople.length ? `${offPeople.length} ${offPeople.length === 1 ? "person" : "people"}` : "Nobody"} note={offPeople.map((p) => p.name).join(", ")} />
       </div>
+
+      {daysWithNoShift(rules).length > 0 && (
+        <p className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-[var(--medtrak-text)]" role="alert">
+          <strong>No shift runs on {daysWithNoShift(rules).map((d) => DAY_LABELS[d]).join(", ")}</strong> in the rules, so nothing can be built for {daysWithNoShift(rules).length === 1 ? "that day" : "those days"}: the cells show a dash. If {daysWithNoShift(rules).length === 1 ? "it is" : "they are"} meant to be worked, tick {daysWithNoShift(rules).length === 1 ? "that day" : "those days"} under Days for each shift in the shifts table, save the rules, then build the weeks again.
+          {onOpenRules && <> <button type="button" className="font-semibold underline" onClick={onOpenRules}>Open the shifts</button></>}
+        </p>
+      )}
 
       <RotaReviewPanel rules={rules} weeks={weeks} absences={absences} startMonday={startMonday} canManage={canManage} onGoToWeek={setMonday} />
 

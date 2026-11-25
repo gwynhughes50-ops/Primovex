@@ -1,7 +1,7 @@
 // Covers the reception rota engine (src/modules/rota): the rules from the current rota are entered as rules, and the weeks it builds are checked against them.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { ABSENCE_REASONS, DAYS, DEFAULT_SHIFTS, availabilityOn, fitsWhole, inStandardOrder, offText, partTimes, ruleCoversShift, DEFAULT_SETTINGS, checkRules, mondayOf, addDays, newPerson, shiftById, toMinutes } from "../src/modules/rota/rotaModel.js";
+import { ABSENCE_REASONS, DAYS, DEFAULT_SHIFTS, daysWithNoShift, availabilityOn, fitsWhole, inStandardOrder, offText, partTimes, ruleCoversShift, DEFAULT_SETTINGS, checkRules, mondayOf, addDays, newPerson, shiftById, toMinutes } from "../src/modules/rota/rotaModel.js";
 import { assignMin, canDo, generateWeek, generateWeeks, historyAfter, shiftIdOfKey, weekCounters } from "../src/modules/rota/rotaEngine.js";
 import { checkWeek, historyBefore, lockedOf, setPlace, withNames } from "../src/modules/rota/rotaWeek.js";
 import { buildRotaHtml, buildRotaXlsx, counterColumns, placeText, runningCounters, totalRows, weekSheet } from "../src/modules/rota/rotaExport.js";
@@ -504,6 +504,21 @@ t("notes are only for what matters: the morning desk is not 'not staffed' on a d
 
 t("the counter columns read as on the current rota: Early (Early 1 and 2 together), Mid, Late, Admin 1, Admin 2, Admin 3, Desk/phones, Ty Elan", () => {
   assert.deepEqual(counterColumns(rules).map((c) => c.label), ["Early", "Mid", "Late", "Admin 1", "Admin 2", "Admin 3", "Desk/phones", "Ty Elan"]);
+});
+
+t("a weekday on which no shift runs is said out loud: nothing can be built for it, and the dashes in the grid are explained", () => {
+  assert.deepEqual(daysWithNoShift(rules), [], "every day has a shift");
+  const noFriday = { ...rules, shifts: rules.shifts.map((s) => ({ ...s, days: (s.days || []).filter((d) => d !== "fri") })) };
+  assert.deepEqual(daysWithNoShift(noFriday), ["fri"]);
+  const week = generateWeek({ rules: noFriday, mondayIso: FIRST });
+  assert.deepEqual(Object.keys(week.days.fri.slots), [], "nothing is built for a day no shift runs");
+  assert.deepEqual(Object.keys(week.days.mon.slots).length > 0, true);
+  assert.deepEqual(daysWithNoShift({ shifts: [] }), ["mon", "tue", "wed", "thu", "fri"]);
+  assert.deepEqual(daysWithNoShift(undefined), ["mon", "tue", "wed", "thu", "fri"]);
+  const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
+  assert.match(read("../src/components/rota/RotaWeekPanel.jsx"), /No shift runs on \{daysWithNoShift\(rules\)/);
+  assert.match(read("../src/components/rota/RotaRulesPanel.jsx"), /No shift runs on \{daysWithNoShift\(rules\)/);
+  assert.match(read("../src/pages/ReceptionRota.jsx"), /onOpenRules=\{\(\) => setTab\("rules"\)\}/);
 });
 
 console.log(`\n${n} passed`);

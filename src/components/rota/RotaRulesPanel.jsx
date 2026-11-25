@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { listStaffDirectory } from "@/services/staffDirectoryService";
-import { DAYS, DAY_LABELS, DAY_SHORT, MODES, ROTA_SITES, TIME_CHOICES, checkRules, groupLabel, groupsOf, inStandardOrder, newPerson, siteOfShift, timeLabel, isLastResort } from "@/modules/rota/rotaModel";
+import { DAYS, DAY_LABELS, DAY_SHORT, MODES, ROTA_SITES, TIME_CHOICES, checkRules, groupLabel, groupsOf, inStandardOrder, newPerson, siteOfShift, timeLabel, isLastResort, daysWithNoShift } from "@/modules/rota/rotaModel";
 import { saveRules } from "@/modules/rota/rotaService";
 import { groupColour, initials, personColour, tint } from "./rotaStyle";
 
@@ -142,6 +142,7 @@ function ShiftsEditor({ rules, onChange, canManage }) {
           </tbody>
         </table>
       </div>
+      {daysWithNoShift(rules).length > 0 && <p className="mt-2 rounded-xl border border-amber-400/40 bg-amber-500/10 p-2.5 text-sm text-[var(--medtrak-text)]" role="alert"><strong>No shift runs on {daysWithNoShift(rules).map((d) => DAY_LABELS[d]).join(", ")}.</strong> Nothing can be built for {daysWithNoShift(rules).length === 1 ? "that day" : "those days"}. Tick {daysWithNoShift(rules).length === 1 ? "it" : "them"} under Days (the last column, which you may need to scroll across to) for each shift that runs.</p>}
       {problem && <p className="mt-2 text-sm text-rose-200">{problem}</p>}
       {canManage && <button type="button" className={`${BTN} mt-3`} onClick={() => { let n = rules.shifts.length + 1; while (rules.shifts.some((s) => s.id === `shift${n}`)) n += 1; onChange({ ...rules, shifts: [...rules.shifts, { id: `shift${n}`, label: `Shift ${n}`, group: `shift${n}`, start: "09:00", end: "17:00", essential: false, count: 1, days: DAYS, dropOrder: 5 }] }); }}><Plus className="mr-1 inline h-4 w-4" />Add a shift</button>}
     </section>

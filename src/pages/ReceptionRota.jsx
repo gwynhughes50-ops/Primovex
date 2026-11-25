@@ -73,7 +73,7 @@ export default function ReceptionRota() {
           {noTeam && tab !== "rules" && (
             <p className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-sm text-amber-100">No one is on the rota yet. {canManage ? <>Add the reception team under <button type="button" className="underline" onClick={() => setTab("rules")}>People and rules</button>.</> : "Ask whoever builds the rota to add the team."}</p>
           )}
-          {tab === "rota" && <RotaWeekPanel rules={rules} weeks={weeks} absences={absences} closures={closures} actor={actor} canManage={canManage} startMonday={startMonday} published={published} teamAccess={teamAccess} />}
+          {tab === "rota" && <RotaWeekPanel rules={rules} weeks={weeks} absences={absences} closures={closures} actor={actor} canManage={canManage} startMonday={startMonday} published={published} teamAccess={teamAccess} onOpenRules={() => setTab("rules")} />}
           {tab === "requests" && <RotaRequestsPanel requests={requests} teamAccess={teamAccess} canSwitch={canSwitch} actor={actor} />}
           {tab === "off" && <RotaAbsencesPanel rules={rules} absences={absences} actor={actor} canManage={canManage} />}
           {tab === "closures" && <RotaClosuresPanel closures={closures} actor={actor} canManage={canManage} />}

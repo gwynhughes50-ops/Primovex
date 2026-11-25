@@ -69,6 +69,10 @@ export const newPerson = (uid, name) => ({
 export const ownersOnDay = (rules, shift, day) => (rules?.people || []).filter((p) => (p.days || []).includes(day) && (((p.mode === "fixed" || p.mode === "usual") && p.shift === shift.id) || (p.mode === "only" && (p.onlyShifts || []).includes(shift.id))));
 export const isOwned = (rules, shift) => (rules?.people || []).some((p) => ((p.mode === "fixed" || p.mode === "usual") && p.shift === shift.id) || (p.mode === "only" && (p.onlyShifts || []).includes(shift.id)));
 // A shift that people on "only these shifts" work is theirs alone: nobody else is put on it (the morning desk, which is a short shift, would not show anyone else's full day).
+// The weekdays on which no shift runs at all (the shifts' Days are all unticked for that day): nothing can be built for that day. Said out loud on the rota and the shifts table, because an empty column
+// with dashes looks like a rota that has not been filled when it is the rules that say nobody is needed.
+export const daysWithNoShift = (rules) => DAYS.filter((day) => !(rules?.shifts || []).some((s) => (s.days || []).includes(day)));
+
 // A shift that is filled LAST: only the people whose rules give it to them (Debbie and Karen, who work only this) always have it, and anyone else is put on it only when they are in and there is no other shift for
 // them, once every other shift has been filled. A shift says so itself ("lastResort"); an older saved rota that never had the setting treats the morning desk this way.
 export const isLastResort = (shift) => shift?.lastResort === true || (shift?.lastResort === undefined && shift?.id === "desk2");
